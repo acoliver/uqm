@@ -88,8 +88,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     fn communicate(&mut self, conversation: u32) {
         let mut game = self.game.borrow_mut();
         let mut io = self.io.borrow_mut();
-        // SAFETY: this host retains both supplied owners for the synchronous encounter.
-        unsafe { crate::comm::dispatch::init_communication(&mut game, &mut io, conversation) };
+        crate::comm::dispatch::init_communication(&mut game, &mut io, conversation);
     }
 
     fn load_report(&self, system: &mut SolarSys<'_>, strings: &CStr, report: u16) {

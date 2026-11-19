@@ -137,7 +137,6 @@ mod api {
 
         use crate::planets::cargo::draw_cargo;
 
-        use crate::threading::pacing::linked::sleep_thread as SleepThread;
         impl MelnormApi for Host<'_, '_, Handler> {
             fn ship(&self) -> CSisState {
                 self.cx.borrow().world.data.flagship
@@ -170,10 +169,8 @@ mod api {
                 draw_cargo(cx.kernel, cx.world, old, new);
             }
             fn sleep(&mut self, ticks: u32) {
-                // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    SleepThread(ticks);
-                })
+                let runtime = self.cx.borrow().kernel.input_runtime();
+                runtime.sleep(&mut self.cx.borrow_mut(), ticks);
             }
             fn now(&mut self) -> u32 {
                 self.cx

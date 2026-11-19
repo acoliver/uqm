@@ -175,13 +175,8 @@ pub fn reset_clear_subtitles(comm: &mut Comm) {
     comm.display.clear_subtitles = false;
 }
 
-/// # Safety
-/// The game thread must have an active published communication context.
-pub unsafe fn alien_talk_segue(
-    comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    track: u16,
-) {
+/// Run the conversation's speech segue for `track` on the supplied game owners.
+pub fn alien_talk_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, track: u16) {
     {
         let runtime = cx.kernel.input_runtime();
         let mut observer = runtime.observer();
@@ -270,10 +265,7 @@ mod owner_tests {
         assert_eq!(second.display.subtitle.baseline.y, 0);
         crate::comm::with_test_context(|cx| {
             crate::comm::input::fixture::install(cx);
-            // SAFETY: the fixture installed its input driver in the supplied exclusive Cx.
-            unsafe {
-                alien_talk_segue(&mut first, cx, 1);
-            }
+            alien_talk_segue(&mut first, cx, 1);
         });
         assert!(!first.first_talk_call);
     }

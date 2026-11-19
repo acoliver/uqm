@@ -13,187 +13,8 @@ mod speech;
 pub use response_commands::{do_response_phrase, rust_clear_responses};
 
 // ============================================================================
-// Initialization
-// ============================================================================
-
-/// Initialize the communication system
-pub fn rust_init_communication(comm: &mut Comm) -> c_int {
-    match comm.init() {
-        Ok(()) => 1,
-        Err(_) => 0,
-    }
-}
-
-/// Uninitialize the communication system
-pub fn rust_uninit_communication(comm: &mut Comm) {
-    comm.uninit();
-}
-
-/// Check if communication is initialized
-pub fn rust_is_comm_initialized(comm: &mut Comm) -> c_int {
-    if comm.is_initialized() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Clear communication state
-pub fn rust_clear_communication(comm: &mut Comm) {
-    comm.clear();
-}
-
-// ============================================================================
-// Track Management
-// ============================================================================
-
-/// Start the speech track
-pub fn rust_start_track(comm: &mut Comm) -> c_int {
-    match comm.start_track() {
-        Ok(()) => 1,
-        Err(_) => 0,
-    }
-}
-
-/// Stop the speech track
-pub fn rust_stop_track(comm: &mut Comm) {
-    comm.stop_track();
-}
-
-/// Rewind the track to the beginning
-pub fn rust_rewind_track(comm: &mut Comm) {
-    comm.track_mut().rewind();
-}
-
-/// Jump to end of current phrase (skip current speech).
-/// No offset parameter — JumpTrack advances to end of current phrase only (TP-REQ-005).
-pub fn rust_jump_track(comm: &mut Comm) {
-    comm.track_mut().jump(0.0);
-}
-
-/// Seek to absolute position in track
-pub fn rust_seek_track(comm: &mut Comm, position: f32) {
-    comm.track_mut().seek(position);
-}
-
-/// Commit track position (for save/restore)
-pub fn rust_commit_track(comm: &mut Comm) -> f32 {
-    comm.track_mut().commit()
-}
-
-/// Wait for track to finish (returns 1 when done)
-pub fn rust_wait_track(comm: &mut Comm) -> c_int {
-    if comm.wait_track() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Get track position
-pub fn rust_get_track_position(comm: &mut Comm) -> f32 {
-    comm.track().position()
-}
-
-/// Get track length
-pub fn rust_get_track_length(comm: &mut Comm) -> f32 {
-    comm.track().length()
-}
-
-/// Clear the track
-pub fn rust_clear_track(comm: &mut Comm) {
-    comm.track_mut().clear();
-}
-
-/// Check if a track is currently playing.
-pub fn rust_playing_track(comm: &mut Comm) -> c_uint {
-    if comm.track().is_playing() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Fast-forward by one page (subtitle page skip).
-pub fn rust_fast_forward_page(comm: &mut Comm) {
-    comm.track_mut().fast_forward_page();
-}
-
-/// Smooth fast-forward (increase playback rate).
-pub fn rust_fast_forward_smooth(comm: &mut Comm) {
-    comm.track_mut().fast_forward_smooth();
-}
-
-/// Reverse by one page.
-pub fn rust_fast_reverse_page(comm: &mut Comm) {
-    comm.track_mut().fast_reverse_page();
-}
-
-/// Smooth reverse (decrease playback rate / rewind).
-pub fn rust_fast_reverse_smooth(comm: &mut Comm) {
-    comm.track_mut().fast_reverse_smooth();
-}
-
-// ============================================================================
-// Subtitle Management
-// ============================================================================
-
-/// Enable/disable subtitles
-pub fn rust_set_subtitles_enabled(comm: &mut Comm, enabled: c_int) {
-    comm.subtitles_mut().set_enabled(enabled != 0);
-}
-
-/// Check if subtitles are enabled
-pub fn rust_are_subtitles_enabled(comm: &mut Comm) -> c_int {
-    if comm.subtitles().is_enabled() {
-        1
-    } else {
-        0
-    }
-}
-
-// ============================================================================
 // Response System
 // ============================================================================
-
-/// Display response choices
-pub fn rust_display_responses(comm: &mut Comm) {
-    comm.display_responses();
-}
-
-/// Select next response
-pub fn rust_select_next_response(comm: &mut Comm) -> c_int {
-    if comm.select_next_response() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Select previous response
-pub fn rust_select_prev_response(comm: &mut Comm) -> c_int {
-    if comm.select_prev_response() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Get selected response index
-pub fn rust_get_selected_response(comm: &mut Comm) -> c_int {
-    comm.selected_response()
-}
-
-/// Select an exact response index for semantic automation.
-///
-/// Returns 1 only when the index is valid for the current response list.
-pub fn rust_select_response_index(comm: &mut Comm, index: c_int) -> c_int {
-    if comm.responses_mut().select(index) {
-        1
-    } else {
-        0
-    }
-}
 
 /// Resolve a phrase name against the offered list on the game thread.
 pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices {
@@ -207,11 +28,6 @@ pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices 
             .name
             .map(|name| name.to_string_lossy().into_owned())
     })
-}
-
-/// Get number of responses
-pub fn rust_get_response_count(comm: &mut Comm) -> c_int {
-    comm.responses().count() as c_int
 }
 
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
@@ -238,126 +54,6 @@ pub fn rust_execute_response(comm: &mut Comm, cx: &mut crate::engine::battle::Cx
 }
 
 // ============================================================================
-// Encounter Lifecycle
-// @plan PLAN-20260314-COMM.P08
-// ============================================================================
-
-/// Begin an encounter (marks active, records init callback).
-pub fn rust_begin_encounter(comm: &mut Comm) -> c_int {
-    match super::encounter::begin_encounter(comm) {
-        Ok(()) => 1,
-        Err(_) => 0,
-    }
-}
-
-/// End encounter normally (post + uninit callbacks, resource teardown).
-pub fn rust_end_encounter_normal(comm: &mut Comm) -> c_int {
-    match super::encounter::end_encounter_normal(comm) {
-        Ok(()) => 1,
-        Err(_) => 0,
-    }
-}
-
-/// End encounter on abort/load (uninit only, skip post).
-pub fn rust_end_encounter_abort(comm: &mut Comm) -> c_int {
-    match super::encounter::end_encounter_abort(comm) {
-        Ok(()) => 1,
-        Err(_) => 0,
-    }
-}
-
-/// End encounter for attack-without-hail (post + uninit, no init).
-pub fn rust_end_encounter_attack(comm: &mut Comm) -> c_int {
-    match super::encounter::end_encounter_attack(comm) {
-        Ok(()) => 1,
-        Err(_) => 0,
-    }
-}
-
-/// Check if encounter is active.
-pub fn rust_is_encounter_active(comm: &mut Comm) -> c_int {
-    super::encounter::is_encounter_active(comm) as c_int
-}
-
-// ============================================================================
-// Oscilloscope
-// ============================================================================
-
-/// Add samples to the oscilloscope
-/// # Safety
-///
-/// A non-null `samples` must be readable for `count` samples.
-pub unsafe fn rust_add_oscilloscope_samples(comm: &mut Comm, samples: *const i16, count: c_uint) {
-    if samples.is_null() || count == 0 {
-        return;
-    }
-
-    let samples_slice = unsafe { std::slice::from_raw_parts(samples, count as usize) };
-    comm.add_oscilloscope_samples(samples_slice);
-}
-
-/// Update the oscilloscope display
-pub fn rust_update_oscilloscope(comm: &mut Comm) {
-    comm.oscilloscope_mut().update();
-}
-
-/// Get oscilloscope Y value at position
-pub fn rust_get_oscilloscope_y(comm: &mut Comm, x: c_uint) -> u8 {
-    comm.oscilloscope().get_y(x as usize)
-}
-
-/// Clear the oscilloscope
-pub fn rust_clear_oscilloscope(comm: &mut Comm) {
-    comm.oscilloscope_mut().clear();
-}
-
-// ============================================================================
-// State Queries
-// ============================================================================
-
-/// Check if alien is talking
-pub fn rust_is_talking(comm: &mut Comm) -> c_int {
-    if comm.is_talking() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Check if talking has finished
-pub fn rust_is_talking_finished(comm: &mut Comm) -> c_int {
-    if comm.is_talking_finished() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Set talking finished flag
-pub fn rust_set_talking_finished(comm: &mut Comm, finished: c_int) {
-    comm.set_talking_finished(finished != 0);
-}
-
-/// Check if input is paused
-pub fn rust_is_comm_input_paused(comm: &mut Comm) -> c_int {
-    if comm.is_input_paused() {
-        1
-    } else {
-        0
-    }
-}
-
-/// Set input paused
-pub fn rust_set_comm_input_paused(comm: &mut Comm, paused: c_int) {
-    comm.set_input_paused(paused != 0);
-}
-
-/// Update communication state
-pub fn rust_update_communication(comm: &mut Comm, delta_time: f32) {
-    comm.update(delta_time);
-}
-
-// ============================================================================
 // Segue (P04)
 // @plan PLAN-20260314-COMM.P04
 // ============================================================================
@@ -367,29 +63,16 @@ pub fn rust_set_segue(comm: &mut Comm, segue: c_uint) {
     comm.set_segue(Segue::from(segue));
 }
 
-/// Get segue state (0=Peace, 1=Hostile, 2=Victory, 3=Defeat).
-pub fn rust_get_segue(comm: &mut Comm) -> c_uint {
-    u32::from(comm.get_segue())
-}
-
-/// Get BATTLE_SEGUE value for current segue (0=peace, 1=combat).
-pub fn rust_get_battle_segue(comm: &mut Comm) -> c_uint {
-    comm.get_segue().to_battle_segue()
-}
-
 // ============================================================================
 // Talk Segue & Main Loop (P09)
 // @plan PLAN-20260314-COMM.P09
 // ============================================================================
 
 /// Run one iteration of the alien talk segue for the given wait-track.
-/// # Safety
-///
-/// Must run on the game thread with an active communication context.
 ///
 /// Matches C `AlienTalkSegue(comm, wait_track)`.
 /// Returns 1 if talking finished (reached end), 0 otherwise.
-pub unsafe fn rust_alien_talk_segue(
+pub fn rust_alien_talk_segue(
     comm: &mut Comm,
     input: &crate::engine::input::InputSession,
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -635,19 +318,6 @@ pub fn rust_update_speech_graphics(comm: &mut Comm) {
 }
 
 // ============================================================================
-// Response UI (P10)
-// @plan PLAN-20260314-COMM.P10
-// ============================================================================
-
-/// Refresh the response list display.
-///
-/// Matches C `RefreshResponses`. Delegates rendering to C bridge; Rust
-/// updates scroll state.
-pub fn rust_refresh_responses(comm: &mut Comm, world: &crate::engine::World) {
-    comm.refresh_response_ui(world.activity());
-}
-
-// ============================================================================
 // Subtitle Display (P10)
 // @plan PLAN-20260314-COMM.P10
 // ============================================================================
@@ -657,24 +327,6 @@ pub fn rust_refresh_responses(comm: &mut Comm, world: &crate::engine::World) {
 /// Matches C `ClearSubtitles`.
 pub fn rust_clear_subtitles(comm: &mut Comm) {
     comm.subtitle_display_mut().clear();
-}
-
-/// Check subtitle timing and update display if the text has changed.
-///
-/// Matches C `CheckSubtitles`.
-pub fn rust_check_subtitles(comm: &mut Comm) {
-    let state = &mut *comm;
-    let current = state.current_subtitle().map(|s| s.to_owned());
-    state
-        .subtitle_display_mut()
-        .check_subtitle(current.as_deref());
-}
-
-/// Redraw the current subtitle text.
-///
-/// Matches C `RedrawSubtitles`.
-pub fn rust_redraw_subtitles(comm: &mut Comm, input: &crate::engine::input::InputSession) {
-    super::subtitle_display::SubtitleDisplay::redraw(comm, input.preferences().subtitles != 0);
 }
 
 // ============================================================================
@@ -880,7 +532,7 @@ mod tests {
     }
 
     fn reset_state(comm: &mut Comm) {
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -890,11 +542,11 @@ mod tests {
         let comm = &mut owner;
         reset_state(comm);
 
-        assert_eq!(rust_init_communication(comm), 1);
-        assert_eq!(rust_is_comm_initialized(comm), 1);
+        assert!(comm.init().is_ok());
+        assert!(comm.is_initialized());
 
-        rust_uninit_communication(comm);
-        assert_eq!(rust_is_comm_initialized(comm), 0);
+        comm.uninit();
+        assert!(!comm.is_initialized());
     }
 
     #[test]
@@ -903,19 +555,19 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
         let text = CString::new("Hello world").unwrap();
         comm.track_mut()
             .splice_track(1, Some(text.to_str().unwrap()), 0.0, 2.0);
 
-        assert_eq!(rust_start_track(comm), 1);
-        assert_eq!(rust_is_talking(comm), 1);
+        assert!(comm.start_track().is_ok());
+        assert!(comm.is_talking());
 
-        rust_stop_track(comm);
-        assert_eq!(rust_is_talking(comm), 0);
+        comm.stop_track();
+        assert!(!comm.is_talking());
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -924,7 +576,7 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
         let text1 = CString::new("Option A").unwrap();
         let text2 = CString::new("Option B").unwrap();
@@ -932,18 +584,18 @@ mod tests {
         assert_eq!(do_response_phrase(comm, 1, Some(text1.as_c_str()), None), 1);
         assert_eq!(do_response_phrase(comm, 2, Some(text2.as_c_str()), None), 1);
 
-        assert_eq!(rust_get_response_count(comm), 2);
+        assert_eq!(comm.responses().count() as c_int, 2);
 
-        rust_display_responses(comm);
-        assert_eq!(rust_get_selected_response(comm), 0);
+        comm.display_responses();
+        assert_eq!(comm.selected_response(), 0);
 
-        rust_select_next_response(comm);
-        assert_eq!(rust_get_selected_response(comm), 1);
+        comm.select_next_response();
+        assert_eq!(comm.selected_response(), 1);
 
         rust_clear_responses(comm);
-        assert_eq!(rust_get_response_count(comm), 0);
+        assert_eq!(comm.responses().count() as c_int, 0);
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -952,17 +604,17 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
-        assert_eq!(rust_are_subtitles_enabled(comm), 1);
+        assert!(comm.subtitles().is_enabled());
 
-        rust_set_subtitles_enabled(comm, 0);
-        assert_eq!(rust_are_subtitles_enabled(comm), 0);
+        comm.subtitles_mut().set_enabled(0 != 0);
+        assert!(!comm.subtitles().is_enabled());
 
-        rust_set_subtitles_enabled(comm, 1);
-        assert_eq!(rust_are_subtitles_enabled(comm), 1);
+        comm.subtitles_mut().set_enabled(1 != 0);
+        assert!(comm.subtitles().is_enabled());
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -970,21 +622,19 @@ mod tests {
     fn test_ffi_oscilloscope() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        unsafe {
-            reset_state(comm);
-            rust_init_communication(comm);
+        reset_state(comm);
+        assert!(comm.init().is_ok());
 
-            let samples: [i16; 4] = [100, 200, 300, 400];
-            rust_add_oscilloscope_samples(comm, samples.as_ptr(), 4);
-            rust_update_oscilloscope(comm);
+        let samples: [i16; 4] = [100, 200, 300, 400];
+        comm.add_oscilloscope_samples(&samples);
+        comm.oscilloscope_mut().update();
 
-            // Should return a value without panicking.
-            let _ = rust_get_oscilloscope_y(comm, 0);
+        // Should return a value without panicking.
+        let _ = comm.oscilloscope().get_y(0);
 
-            rust_clear_oscilloscope(comm);
+        comm.oscilloscope_mut().clear();
 
-            rust_uninit_communication(comm);
-        }
+        comm.uninit();
     }
 
     #[test]
@@ -993,11 +643,11 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
-        assert_eq!(rust_is_talking_finished(comm), 0);
-        rust_set_talking_finished(comm, 1);
-        assert_eq!(rust_is_talking_finished(comm), 1);
+        assert!(!comm.is_talking_finished());
+        comm.set_talking_finished(1 != 0);
+        assert!(comm.is_talking_finished());
 
         comm.set_intro_mode(super::super::CommIntroMode::from(2));
         assert_eq!(comm.intro_mode() as u32, 2);
@@ -1005,11 +655,11 @@ mod tests {
         comm.set_fade_time(30);
         assert_eq!(comm.fade_time(), 30);
 
-        assert_eq!(rust_is_comm_input_paused(comm), 0);
-        rust_set_comm_input_paused(comm, 1);
-        assert_eq!(rust_is_comm_input_paused(comm), 1);
+        assert!(!comm.is_input_paused());
+        comm.set_input_paused(1 != 0);
+        assert!(comm.is_input_paused());
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -1018,16 +668,16 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
         let text = CString::new("Subtitle only").unwrap();
         comm.track_mut()
             .splice_text(text.to_str().unwrap(), 0.0, 2.0);
 
         // Track should have a chunk
-        assert!(rust_get_track_length(comm) > 0.0);
+        assert!(comm.track().length() > 0.0);
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -1036,23 +686,23 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
         let text = CString::new("Test").unwrap();
         comm.track_mut()
             .splice_track(1, Some(text.to_str().unwrap()), 0.0, 5.0);
 
-        rust_start_track(comm);
-        rust_seek_track(comm, 2.5);
-        assert!((rust_get_track_position(comm) - 2.5).abs() < 0.01);
+        assert!(comm.start_track().is_ok());
+        comm.track_mut().seek(2.5);
+        assert!((comm.track().position() - 2.5).abs() < 0.01);
 
-        rust_jump_track(comm);
+        comm.track_mut().jump(0.0);
         // JumpTrack skips to end of current phrase — position depends on track state
 
-        rust_rewind_track(comm);
-        assert!((rust_get_track_position(comm) - 0.0).abs() < 0.01);
+        comm.track_mut().rewind();
+        assert!((comm.track().position() - 0.0).abs() < 0.01);
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -1061,20 +711,20 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
         let text = CString::new("Test").unwrap();
         comm.track_mut()
             .splice_track(1, Some(text.to_str().unwrap()), 0.0, 1.0);
 
-        rust_start_track(comm);
-        rust_update_communication(comm, 0.5);
-        assert!((rust_get_track_position(comm) - 0.5).abs() < 0.01);
+        assert!(comm.start_track().is_ok());
+        comm.update(0.5);
+        assert!((comm.track().position() - 0.5).abs() < 0.01);
 
-        rust_update_communication(comm, 1.0);
-        assert_eq!(rust_is_talking_finished(comm), 1);
+        comm.update(1.0);
+        assert!(comm.is_talking_finished());
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 
     #[test]
@@ -1082,18 +732,15 @@ mod tests {
     fn test_ffi_null_safety() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        unsafe {
-            reset_state(comm);
-            rust_init_communication(comm);
+        reset_state(comm);
+        assert!(comm.init().is_ok());
 
-            // Should handle null pointers gracefully
-            comm.track_mut().splice_track(1, None, 0.0, 1.0);
-            assert!(comm.current_subtitle().is_none());
-            assert_eq!(do_response_phrase(comm, 1, None, None), 0);
-            rust_add_oscilloscope_samples(comm, std::ptr::null(), 0);
+        // Should handle null pointers gracefully
+        comm.track_mut().splice_track(1, None, 0.0, 1.0);
+        assert!(comm.current_subtitle().is_none());
+        assert_eq!(do_response_phrase(comm, 1, None, None), 0);
 
-            rust_uninit_communication(comm);
-        }
+        comm.uninit();
     }
 
     /// The Rust-ported `VisitStarBase` sets the intro mode for the Commander
@@ -1105,7 +752,7 @@ mod tests {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
-        rust_init_communication(comm);
+        assert!(comm.init().is_ok());
 
         comm.set_intro_transition(super::super::CommIntroMode::from(3), 1680);
         assert_eq!(comm.intro_mode() as u32, 3);
@@ -1115,7 +762,7 @@ mod tests {
         assert_eq!(comm.intro_mode() as u32, 3);
         assert_eq!(comm.fade_time(), 1680);
 
-        rust_uninit_communication(comm);
+        comm.uninit();
     }
 }
 
