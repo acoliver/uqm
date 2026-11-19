@@ -750,7 +750,6 @@ impl ProofResult {
 
 #[cfg(unix)]
 mod os {
-    #[cfg(target_os = "macos")]
     use std::fs::{File, OpenOptions};
     use std::io::{self, ErrorKind, Read, Write};
     use std::os::fd::AsFd;

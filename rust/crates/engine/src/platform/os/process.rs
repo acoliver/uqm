@@ -281,10 +281,6 @@ mod tests {
     use super::*;
     use std::process::Stdio;
 
-    fn current_pid() -> libc::pid_t {
-        libc::pid_t::try_from(std::process::id()).unwrap()
-    }
-
     fn sleeping_child() -> std::process::Child {
         Command::new("/bin/sleep")
             .arg("30")
@@ -437,6 +433,10 @@ mod tests {
     #[cfg(target_os = "macos")]
     mod macos {
         use super::*;
+
+        fn current_pid() -> libc::pid_t {
+            libc::pid_t::try_from(std::process::id()).unwrap()
+        }
 
         #[test]
         fn the_kernel_record_describes_this_process() {
