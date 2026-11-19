@@ -7,13 +7,12 @@ mod native_process;
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
     let mut game = uqm_rust::engine::Game::new();
-    // SAFETY: this serialized fixture owns the published game and inactive audio.
-    unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::engine::Kernel::current().write(|kernel| {
-                uqm_rust::battle::tactrans_native::stop_ditty(kernel);
-            });
-        });
+    {
+        {
+            {
+                uqm_rust::battle::tactrans_native::stop_ditty(&mut game.kernel);
+            };
+        };
     }
 }
 
@@ -21,20 +20,19 @@ fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
 #[serial_test::serial]
 fn battle_song_release_uses_the_already_borrowed_kernel() {
     let mut game = uqm_rust::engine::Game::new();
-    // SAFETY: this serialized fixture owns the published game and inactive audio.
-    unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::engine::Kernel::current().write(|kernel| {
+    {
+        {
+            {
+                let kernel = &mut game.kernel;
                 uqm_rust::battle::battle_native::free_battle_song(kernel);
                 uqm_rust::battle::battle_native::free_battle_song(kernel);
-            });
-        });
+            };
+        };
     }
 }
 
 use std::mem;
 use uqm_rust::{
-    app::bridge,
     engine::{Game, World},
     ships::native::abi::*,
 };
@@ -54,6 +52,7 @@ fn public_campaign_copy_does_not_traverse_live_records() {
     let view = CampaignView::from_world(&world);
     assert_eq!(
         LiveCampaign {
+            boss: Default::default(),
             ui: &Default::default(),
             ending: Default::default(),
             world: &view,
@@ -70,13 +69,17 @@ fn public_campaign_copy_does_not_traverse_live_records() {
 #[serial_test::serial]
 fn empty_npc_phrase_does_not_acquire_an_owner() {
     let mut game = Game::new();
-    // SAFETY: this serialized fixture publishes its game, and phrase zero is a no-op.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            World::current().write(|world| {
-                uqm_rust::comm::ffi::npc_phrase(world, &mut uqm_rust::comm::Comm::new(), 0, None)
-            });
-        });
+    {
+        {
+            {
+                uqm_rust::comm::ffi::npc_phrase(
+                    &mut game.world,
+                    &mut uqm_rust::comm::Comm::new(),
+                    0,
+                    None,
+                )
+            };
+        };
     }
 }
 
@@ -115,12 +118,11 @@ fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
 #[serial_test::serial]
 fn summary_picker_clones_from_the_already_borrowed_race_queue() {
     let mut game = Game::new();
-    // SAFETY: this fixture exclusively owns both initialized queues for the publication.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            World::current().write(|world| {
+    {
+        {
+            {
                 let template = {
-                    let mut races = world.avail_races();
+                    let mut races = game.world.avail_races();
                     let id = races.alloc().unwrap();
                     let template = races.get_mut(id);
                     template.species_id = SPECIES_ID_EARTHLING_ID;
@@ -129,14 +131,14 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
                     races.put(id);
                     *races.get(id)
                 };
-                let mut destination = world.built_ships();
+                let mut destination = game.world.built_ships();
                 let id = destination.clone_fragment(&template, 0, 0, || 5).unwrap();
                 let cloned = destination.get(id);
                 assert_eq!(cloned.crew_level, 12);
                 assert_eq!(cloned.max_crew, 18);
                 assert_eq!(cloned.species_id, SPECIES_ID_EARTHLING_ID);
-            });
-        });
+            };
+        };
     }
 }
 
@@ -158,11 +160,11 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
     catalog[0].star_pt.x = 1752;
     catalog[0].star_pt.y = 1450;
     game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
-    // SAFETY: the serialized fixture owns the catalog and game lifecycle.
-    unsafe {
-        bridge::with_game(&mut game, || {
+    {
+        {
             let point = POINT { x: 1752, y: 1450 };
-            World::current().write(|world| {
+            {
+                let world = &mut game.world;
                 let selected = uqm_rust::planets::starmap::find_star_id(
                     world,
                     world.catalog(),
@@ -182,8 +184,8 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
                 }));
                 assert!(rejected.is_err());
                 assert_eq!(world.star_pointer(), address);
-            });
-        });
+            };
+        };
     }
     assert_eq!(
         game.world.star_pointer(),
@@ -197,10 +199,9 @@ fn space_queries_use_the_world_of_the_entered_context() {
     let mut game = Game::new();
     game.world.set_activity(IN_HYPERSPACE as u16);
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
-    // SAFETY: the serialized fixture suspends publication while Cx is borrowed.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            bridge::enter(|cx| {
+    {
+        {
+            game.with_context(|cx| {
                 assert_ne!(uqm_rust::navigation::globals::in_hqspace(cx.world), 0);
                 assert_ne!(uqm_rust::navigation::globals::in_hyper_space(cx.world), 0);
                 cx.world
@@ -208,7 +209,7 @@ fn space_queries_use_the_world_of_the_entered_context() {
                 assert_ne!(uqm_rust::navigation::globals::in_quasi_space(cx.world), 0);
                 assert_eq!(uqm_rust::navigation::globals::in_hyper_space(cx.world), 0);
             });
-        });
+        };
     }
 }
 
@@ -216,11 +217,10 @@ fn space_queries_use_the_world_of_the_entered_context() {
 #[serial_test::serial]
 fn status_offsets_use_the_already_borrowed_kernel() {
     let mut game = Game::new();
-    // SAFETY: the serialized fixture owns the lifecycle; status initialization only writes offsets.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            uqm_rust::engine::Kernel::current().write(|kernel| init_status_offsets(kernel, 240));
-        });
+    {
+        {
+            init_status_offsets(&mut game.kernel, 240);
+        };
     }
 }
 
@@ -236,7 +236,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &mut crate::engine::battle::Cx<'_>,
+            _: &mut uqm_rust::engine::battle::Cx<'_>,
         ) -> Injected {
             Injected::default()
         }
@@ -259,8 +259,8 @@ fn starbase_releases_world_before_communication_and_cleanup() {
     let _quiet = game.kernel.diagnostics.suppress_interaction();
     // SAFETY: this serialized fixture owns the published lifecycle.
     unsafe {
-        bridge::with_game(&mut game, || {
-            bridge::enter(|cx| {
+        {
+            game.with_context(|cx| {
                 uqm_rust::ui::starbase::run_starbase_visit(
                     cx,
                     &mut Io {
@@ -282,7 +282,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
                     },
                 );
             })
-        });
+        };
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);
     assert_eq!(
@@ -380,10 +380,9 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
         Default::default(),
         game.kernel.configuration.clone(),
     );
-    // SAFETY: this serialized fixture owns empty encounter resources.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            bridge::enter(|cx| {
+    {
+        {
+            game.with_context(|cx| {
                 assert_eq!(
                     uqm_rust::battle::encount_native::uninit_encounter(
                         cx,
@@ -395,7 +394,7 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
                     0
                 );
             });
-        });
+        };
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);
 }
@@ -407,11 +406,11 @@ fn campaign_star_observation_releases_world_between_field_reads() {
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let view = CampaignView::from_world(&game.world);
-    // SAFETY: the serialized fixture owns the lifecycle and has no selected star.
-    unsafe {
-        bridge::with_game(&mut game, || {
+    {
+        {
             assert_eq!(
                 LiveCampaign {
+                    boss: Default::default(),
                     ui: &Default::default(),
                     ending: Default::default(),
                     world: &view,
@@ -420,7 +419,7 @@ fn campaign_star_observation_releases_world_between_field_reads() {
                 .read(StateKey::StarCurrent),
                 None
             );
-        });
+        };
     }
 }
 
@@ -577,15 +576,14 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
 #[serial_test::serial]
 fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
     let mut game = Game::new();
-    // SAFETY: this serialized fixture owns the game and its idle battle state.
-    unsafe {
-        bridge::with_game(&mut game, || {
+    {
+        {
             for step in [false, true] {
-                bridge::enter(|cx| {
+                let zoom = game.with_context(|cx| {
                     uqm_rust::battle::process_native::init_display_list(cx, step);
                     assert!(cx.elements().head().is_none());
+                    (cx.b.zoom_out, cx.b.max_zoom_out)
                 });
-                let zoom = bridge::battle(|battle| (battle.zoom_out, battle.max_zoom_out));
                 let expected = if step {
                     ((MAX_VIS_REDUCTION + 1) as i16, MAX_VIS_REDUCTION as i16)
                 } else {
@@ -596,7 +594,7 @@ fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
                 };
                 assert_eq!(zoom, expected);
             }
-        });
+        };
     }
 }
 

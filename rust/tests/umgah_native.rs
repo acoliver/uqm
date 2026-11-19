@@ -475,7 +475,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
             assert_eq!((*cone).life, 0);
             assert_eq!((*cone).hits, 0);
             assert_eq!(hit.hits, 3);
-            let freed_blast = uqm_rust::app::bridge::enter(|cx| {
+            let freed_blast = crate::battle_context::with(|cx| {
                 cx.alloc_element()
                     .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
             });
@@ -483,7 +483,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
                 !freed_blast.is_null(),
                 "blast element returned to the queue free list"
             );
-            assert!(uqm_rust::app::bridge::enter(|cx| cx
+            assert!(crate::battle_context::with(|cx| cx
                 .alloc_element()
                 .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id)))
             .is_null());

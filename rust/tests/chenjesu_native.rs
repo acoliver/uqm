@@ -14,9 +14,8 @@ use uqm_rust::ships::native::{
 };
 
 unsafe fn crystal(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
-    // SAFETY: the fixture owns the published battle, ship and returned missile.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(ship.id);
             let out = cx.spawn_weapons(ship.ship_id, origin);
             assert_eq!(out.len(), 1);

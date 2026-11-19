@@ -73,16 +73,17 @@ impl Harness {
     fn new() -> Self {
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
-            uqm_rust::engine::World::current().write(rust_init_game_state);
+            crate::battle_context::with(|cx| rust_init_game_state(&mut cx.world));
             ScreenWidth = 320;
         }
-        let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
-        let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
+        let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
+        let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
         // SAFETY: the serialized harness copies the initialized integer-only catalog.
         let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
-        let state = uqm_rust::engine::World::current().write(|world| {
+        let state = crate::battle_context::with(|cx| {
+            let world = &mut cx.world;
             world.set_catalog(std::borrow::Cow::Owned(*star));
             Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
         });
@@ -99,9 +100,9 @@ impl Harness {
         self.state.sys.sun.data_index = size;
         self.star[0].star_type = (color << 5) | 0b101;
         self.star[0].index = self.star_index;
-        uqm_rust::engine::World::current().write(|world| {
-            world.set_catalog(std::borrow::Cow::Owned(*self.star));
-            world.current_star = Some(uqm_rust::engine::StarId(0));
+        crate::battle_context::with(|cx| {
+            cx.world.set_catalog(std::borrow::Cow::Owned(*self.star));
+            cx.world.current_star = Some(uqm_rust::engine::StarId(0));
         });
         let mut next = uqm_rust::engine::world::generation::SolarSys::new(
             &uqm_rust::planets::tables::PLANET_ARRAY,
@@ -265,9 +266,9 @@ fn c_table(system: &str) -> &'static dyn SystemGenerator {
 impl SpecialOps for Harness {
     fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
         if let Some(unleashed) = system.strip_prefix("chmmr") {
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
                 set_game_state(
-                    world,
+                    &mut cx.world,
                     uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
                     unleashed.parse().expect("0 or 1"),
                 )
@@ -288,45 +289,45 @@ impl SpecialOps for Harness {
 
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
         if let Some(taken) = system.strip_prefix("burv") {
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
                 set_game_state(
-                    world,
+                    &mut cx.world,
                     uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
                     taken.parse().expect("0 or 1"),
                 )
             });
         }
         if let Some(taken) = system.strip_prefix("aqua") {
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
                 set_game_state(
-                    world,
+                    &mut cx.world,
                     uqm_rust::engine::StoryKey::AQUA_HELIX,
                     taken.parse().expect("0 or 1"),
                 )
             });
         }
         if let Some(taken) = system.strip_prefix("bomb") {
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
                 set_game_state(
-                    world,
+                    &mut cx.world,
                     uqm_rust::engine::StoryKey::UTWIG_BOMB,
                     taken.parse().expect("0 or 1"),
                 )
             });
         }
         if let Some(taken) = system.strip_prefix("sun") {
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
                 set_game_state(
-                    world,
+                    &mut cx.world,
                     uqm_rust::engine::StoryKey::SUN_DEVICE,
                     taken.parse().expect("0 or 1"),
                 )
             });
         }
         if let Some(taken) = system.strip_prefix("taalo") {
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
                 set_game_state(
-                    world,
+                    &mut cx.world,
                     uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
                     taken.parse().expect("0 or 1"),
                 )
@@ -365,9 +366,10 @@ pub fn sol_matches_the_c_original(table: &[uqm_rust::engine::world::planet::Plan
 
 impl Drop for Harness {
     fn drop(&mut self) {
-        uqm_rust::engine::World::current().write(|world| {
-            world.set_catalog(std::borrow::Cow::Owned(self.previous_catalog));
-            world.current_star = self.previous_star;
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_catalog(std::borrow::Cow::Owned(self.previous_catalog));
+            cx.world.current_star = self.previous_star;
         });
     }
 }

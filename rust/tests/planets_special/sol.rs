@@ -63,14 +63,14 @@ impl Ops for Harness {
 
     fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
         self.set_star(0, 0);
-        uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(
+        crate::battle_context::with(|cx| {
+            (&mut cx.world).set_story_state(
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
                 u32::from(case.pluto),
             )
         });
-        uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(
+        crate::battle_context::with(|cx| {
+            (&mut cx.world).set_story_state(
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
                 u32::from(case.destroyed),
             )
@@ -112,15 +112,15 @@ impl Ops for Harness {
             "scan changed solar system: {case:?}"
         );
         assert_eq!(
-            uqm_rust::engine::World::current().read(|world| get_game_state(
-                world,
+            crate::battle_context::with(|cx| get_game_state(
+                &cx.world,
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
             )),
             u32::from(case.pluto)
         );
         assert_eq!(
-            uqm_rust::engine::World::current().read(|world| get_game_state(
-                world,
+            crate::battle_context::with(|cx| get_game_state(
+                &cx.world,
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
             )),
             u32::from(case.destroyed)

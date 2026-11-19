@@ -295,7 +295,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
             );
             let mut ghosts = Vec::new();
             loop {
-                let handle = uqm_rust::app::bridge::enter(|cx| {
+                let handle = crate::battle_context::with(|cx| {
                     cx.alloc_element()
                         .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
                 });

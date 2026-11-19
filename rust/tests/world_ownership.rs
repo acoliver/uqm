@@ -107,18 +107,16 @@ fn new_campaign_resets_story_without_discarding_owned_state_files() {
         .unwrap()
         .write(b"retained")
         .unwrap();
-    // SAFETY: the local owner is published only for each synchronous entry.
-    unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state)
-        })
+    {
+        {
+            uqm_rust::state::ffi::rust_init_game_state(&mut game.world)
+        }
     };
     game.world.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
-    // SAFETY: no owner borrow survives the synchronous bridge call.
-    unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state)
-        })
+    {
+        {
+            uqm_rust::state::ffi::rust_init_game_state(&mut game.world)
+        }
     };
     assert_eq!(game.world.story_state(StoryKey::SHOFIXTI_RECRUITED), 0);
     assert_eq!(game.world.files.get_file(0).unwrap().length(), 8);

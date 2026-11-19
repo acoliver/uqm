@@ -65,16 +65,12 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         let path = CString::new(fixture.path().to_str().unwrap()).unwrap();
         unsafe {
             log_init(100);
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
-            (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .module_slots = [255; 16];
-            (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .drive_slots = [255; 11];
-            (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .jet_slots = [255; 8];
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
+            crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
+            crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
+            crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
             uio_bridge::uio_init();
             let repository = uio_bridge::uio_openRepository(0);
             let mount = uio_bridge::uio_mountDir(
@@ -126,12 +122,12 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             for (i, key) in keys.iter().enumerate() {
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
-                let first = uqm_rust::engine::World::current()
-                    .write(|world| RaceDesc::load(world, species, false))
-                    .unwrap();
-                let second = uqm_rust::engine::World::current()
-                    .write(|world| RaceDesc::load(world, species, false))
-                    .unwrap();
+                let first =
+                    crate::battle_context::with(|cx| RaceDesc::load(&mut cx.world, species, false))
+                        .unwrap();
+                let second =
+                    crate::battle_context::with(|cx| RaceDesc::load(&mut cx.world, species, false))
+                        .unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
                 let original = first.info().ship_cost;
                 // SAFETY: this fixture exclusively owns the live descriptor; only its scalar cost changes.
@@ -139,34 +135,44 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     .ship_info
                     .ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
-                let loaded = uqm_rust::engine::World::current()
-                    .write(|world| RaceDesc::load(world, species, false))
-                    .unwrap();
+                let loaded =
+                    crate::battle_context::with(|cx| RaceDesc::load(&mut cx.world, species, false))
+                        .unwrap();
                 assert_eq!(loaded.info().ship_cost, original);
                 assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
-                uqm_rust::engine::World::current().write(|world| first.unload(world, false));
-                uqm_rust::engine::World::current().write(|world| second.unload(world, false));
-                uqm_rust::engine::World::current().write(|world| loaded.unload(world, false));
+                crate::battle_context::with(|cx| first.unload(&mut cx.world, false));
+                crate::battle_context::with(|cx| second.unload(&mut cx.world, false));
+                crate::battle_context::with(|cx| loaded.unload(&mut cx.world, false));
             }
-            assert!(uqm_rust::engine::World::current()
-                .write(|world| RaceDesc::load(world, SPECIES_ID_NUM_SPECIES_ID, false))
-                .is_none());
-            assert!(uqm_rust::engine::World::current()
-                .write(|world| RaceDesc::load(world, u32::MAX, false))
-                .is_none());
+            assert!(crate::battle_context::with(|cx| RaceDesc::load(
+                &mut cx.world,
+                SPECIES_ID_NUM_SPECIES_ID,
+                false
+            ))
+            .is_none());
+            assert!(crate::battle_context::with(|cx| RaceDesc::load(
+                &mut cx.world,
+                u32::MAX,
+                false
+            ))
+            .is_none());
             // No graphics are registered in the fixture, so required battle art fails.
-            assert!(uqm_rust::engine::World::current()
-                .write(|world| RaceDesc::load(world, SPECIES_ID_ARILOU_ID, true))
-                .is_none());
-            let mut loaded = uqm_rust::engine::World::current()
-                .write(|world| RaceDesc::load(world, SPECIES_ID_ARILOU_ID, false))
-                .unwrap();
+            assert!(crate::battle_context::with(|cx| RaceDesc::load(
+                &mut cx.world,
+                SPECIES_ID_ARILOU_ID,
+                true
+            ))
+            .is_none());
+            let mut loaded = crate::battle_context::with(|cx| {
+                RaceDesc::load(&mut cx.world, SPECIES_ID_ARILOU_ID, false)
+            })
+            .unwrap();
             assert!(loaded.race().is_some());
             loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            uqm_rust::engine::World::current().write(|world| loaded.unload(world, true));
+            crate::battle_context::with(|cx| loaded.unload(&mut cx.world, true));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()
@@ -174,9 +180,10 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     event,
                     uqm_rust::collections::observation::Event::ResourcesFree { .. }
                 )));
-            let mut probe = uqm_rust::engine::World::current()
-                .write(|world| RaceDesc::load(world, SPECIES_ID_UR_QUAN_PROBE_ID, false))
-                .unwrap();
+            let mut probe = crate::battle_context::with(|cx| {
+                RaceDesc::load(&mut cx.world, SPECIES_ID_UR_QUAN_PROBE_ID, false)
+            })
+            .unwrap();
             probe.set_race(&TEARDOWN_RACE);
             // The shared callback fixture expects this scalar and must run before observation.
             (*(probe.address() as *mut uqm_rust::engine::battle::record::RaceDescriptor))
@@ -184,7 +191,8 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 .ship_cost = 16;
             let descriptor = probe.address();
             uqm_rust::collections::observation::drain();
-            uqm_rust::engine::World::current().write(|world| {
+            crate::battle_context::with(|cx| {
+                let world = &mut cx.world;
                 let assets = probe.into_campaign_probe(world);
                 world.retain_campaign_probe(assets);
                 world.reset_game_data();
@@ -199,15 +207,15 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             let decoy =
                 uqm_rust::graphics::drawable_abi::LoadedDrawable::create(2, 0, 0, 1).unwrap();
             let decoy_frames = decoy.lease();
-            uqm_rust::engine::World::current().write(|world| {
-                let id = world.avail_races().alloc().unwrap();
-                let mut fleets = world.avail_races();
+            crate::battle_context::with(|cx| {
+                let id = cx.world.avail_races().alloc().unwrap();
+                let mut fleets = cx.world.avail_races();
                 fleets.get_mut(id).icons = decoy_frames.frame(0).unwrap();
                 fleets.get_mut(id).melee_icon = decoy_frames.frame(0).unwrap();
                 fleets.put(id);
             });
             uqm_rust::collections::observation::drain();
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 uqm_rust::navigation::globals::uninit_game_structures(cx);
                 assert_eq!(cx.world.avail_races_ref().count(), 0);
                 assert_eq!(cx.world.encounters_ref().count(), 0);

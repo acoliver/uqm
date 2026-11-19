@@ -228,7 +228,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 let enemy = enemy_ship.ptr();
                 (*bubble).target = None;
                 let mut tracked_facing: COUNT = 0;
-                let delta = uqm_rust::app::bridge::enter(|cx| {
+                let delta = crate::battle_context::with(|cx| {
                     let mut subject = cx.weapon_origin(bubbles[0].unwrap());
                     cx.track_subject(&mut subject, &mut tracked_facing)
                 });

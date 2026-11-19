@@ -16,7 +16,7 @@ fn projected_images_record_provenance_without_borrowing_stack_storage() {
             let destination = battle::Object::new(&pool);
             observation::enable();
             observation::drain();
-            let expected = uqm_rust::app::bridge::enter(|cx| {
+            let expected = crate::battle_context::with(|cx| {
                 let visual = cx.element(source.id).current;
                 cx.copy_image_to_current(destination.id, visual.image.clone());
                 cx.copy_visual_to_next(destination.id, visual);

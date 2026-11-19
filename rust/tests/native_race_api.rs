@@ -13,9 +13,8 @@ use uqm_rust::ships::native::abi::*;
 fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
     battle_context::run(|_| {
         let _owner = Battle::new(4);
-        // SAFETY: the serialized fixture publishes the game only for this owner borrow.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 let element = cx.alloc_element().unwrap();
                 cx.put(element);
                 cx.world.set_activity(SUPER_MELEE as u16);
@@ -56,9 +55,8 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
         let retained = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
         let raw = view.raw();
         drop(view);
-        // SAFETY: the fixture owns the published game-thread context for this call.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 assert_eq!(cx.frame_count(retained.view(0)), 1);
             });
         }
@@ -80,9 +78,8 @@ fn callback_modes_control_dispatch_metadata_and_observations() {
     battle_context::run(|_| {
         let owner = Battle::new(8);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
-        // SAFETY: owner keeps the serialized test battle published until all fixtures drop.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 observation::enable();
                 cx.set_preprocess(ship.ship_id, Selection::Disabled);
                 observation::drain();
@@ -115,9 +112,8 @@ fn callback_modes_control_dispatch_metadata_and_observations() {
 fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
     battle_context::run(|_| {
         let _owner = Battle::new(3);
-        // SAFETY: this test owns all element slots and the game-thread context.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 let a = cx.alloc_element().unwrap();
                 let b = cx.alloc_element().unwrap();
                 let c = cx.alloc_element().unwrap();
@@ -155,7 +151,7 @@ fn projected_autoaim_uses_both_positions_without_mutating_live_target() {
         unsafe {
             let ship = Ship::new(&owner, SPECIES_ID_ARILOU_ID, 0);
             let enemy = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 cx.element_mut(enemy.id).current.location = POINT { x: 4000, y: 4300 };
                 cx.element_mut(enemy.id).next.location = POINT { x: 4000, y: 4300 };
                 cx.set_target(ship.id, Some(enemy.id));

@@ -146,8 +146,10 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let flame_frames = FrameSet::with_bounds(16, [0, 0]);
             fleet.descriptor_mut().ship_data.weapon = flame_frames.array();
@@ -192,8 +194,10 @@ fn flame_advances_its_animation_every_next_turn_frames() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let flame_frames = FrameSet::with_bounds(4, [0, 0]);
             fleet.descriptor_mut().ship_data.weapon = flame_frames.array();
@@ -237,8 +241,10 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             spawn_ship(&mut fleet, 400, 500);
             let mut out = [ptr::null_mut()];
@@ -278,8 +284,10 @@ fn special_key_starts_the_cloak_and_spends_energy() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
@@ -305,8 +313,8 @@ fn special_key_starts_the_cloak_and_spends_energy() {
 fn cloak_needs_energy_and_a_ready_counter() {
     battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
-        uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+        crate::battle_context::with(|cx| cx.world.set_activity(0));
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(&mut cx.world));
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship = avenger(&mut fleet);
         paint(ship, gfx_object_STAMP_PRIM, WHITE);
@@ -340,8 +348,10 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
@@ -382,8 +392,10 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
@@ -436,8 +448,10 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship_frames = FrameSet::with_bounds(16, [0, 0]);
             let ship = avenger(&mut fleet);
@@ -469,8 +483,10 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship_frames = FrameSet::with_bounds(16, [0, 0]);
             let ship = avenger(&mut fleet);
@@ -497,8 +513,8 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
 fn firing_while_cloaked_without_a_target_keeps_the_facing() {
     battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
-        uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+        crate::battle_context::with(|cx| cx.world.set_activity(0));
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(&mut cx.world));
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship_frames = FrameSet::with_bounds(16, [0, 0]);
         let ship = avenger(&mut fleet);
@@ -521,8 +537,8 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
 fn firing_needs_energy_to_break_the_cloak() {
     battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
-        uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+        crate::battle_context::with(|cx| cx.world.set_activity(0));
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(&mut cx.world));
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship = avenger(&mut fleet);
         paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
@@ -572,8 +588,10 @@ fn intelligence_pursues_and_ignores_incoming_fire_when_flaming() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
@@ -606,8 +624,10 @@ fn intelligence_fires_flames_in_range_and_unwinds_the_cloak_input() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
@@ -643,8 +663,10 @@ fn intelligence_flame_window_depends_on_enemy_and_incoming_fire_timing() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
@@ -677,8 +699,10 @@ fn intelligence_cloaks_when_idle_and_ready() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
@@ -712,8 +736,10 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
@@ -722,19 +748,20 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
 
             // LOBYTE (CurrentActivity): CHECK_PAUSE sits in the high byte.
             let encounter = (IN_ENCOUNTER | CHECK_PAUSE) as u16;
-            uqm_rust::engine::World::current().write(|world| world.set_activity(encounter));
-            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 1));
+            crate::battle_context::with(|cx| cx.world.set_activity(encounter));
+            crate::battle_context::with(|cx| cx.world.set_story_state(probe, 1));
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), 0);
 
-            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 0));
+            crate::battle_context::with(|cx| cx.world.set_story_state(probe, 0));
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
 
             // Outside an encounter the probe flag is irrelevant.
-            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 1));
-            uqm_rust::engine::World::current()
-                .write(|world| world.set_activity((IN_HYPERSPACE | CHECK_PAUSE) as u16));
+            crate::battle_context::with(|cx| cx.world.set_story_state(probe, 1));
+            crate::battle_context::with(|cx| {
+                cx.world.set_activity((IN_HYPERSPACE | CHECK_PAUSE) as u16)
+            });
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
-            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 0));
+            crate::battle_context::with(|cx| cx.world.set_story_state(probe, 0));
         }
     })
 }
@@ -744,8 +771,10 @@ fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
     battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
+            crate::battle_context::with(|cx| {
+                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
+            });
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);

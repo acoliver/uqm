@@ -134,7 +134,7 @@ impl<'a> Ship<'a> {
     }
 
     unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> COUNT {
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
             for (slot, weapon) in out.iter_mut().zip(&weapons) {
@@ -222,7 +222,9 @@ impl<'a> Ship<'a> {
 }
 
 unsafe fn prim(el: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
-    uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*el).PrimIndex)))
+    // SAFETY: the caller passes a live fixture element.
+    let index = unsafe { (*el).PrimIndex };
+    crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 
 unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
