@@ -521,11 +521,11 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         battle::{Battle, Cx},
         StoryKey,
     };
+    use uqm_rust::navigation::events::{add_event, game_clock_tick};
     use uqm_rust::navigation::{
         events::{dispatch_event, EventServices},
         hyper_units::Geometry,
     };
-    use uqm_rust::time::clock_abi::{add_event, game_clock_tick};
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());

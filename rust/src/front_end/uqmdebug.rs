@@ -101,7 +101,7 @@ pub fn forward_to_next_event(cx: &mut Cx<'_>, skip_hee: bool) {
             let clock = &cx.world.data.game.game_clock;
             (clock.year_index, clock.month_index, clock.day_index) < date
         } {
-            crate::time::clock_abi::advance_days(cx, 1);
+            crate::navigation::events::advance_days(cx, 1);
         }
         if done {
             break;

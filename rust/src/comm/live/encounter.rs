@@ -44,6 +44,6 @@ impl<H> EncounterApi<H> for Host<'_, '_, H> {
         );
     }
     fn advance_ilwrath(&mut self) {
-        crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 12);
+        crate::navigation::events::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 12);
     }
 }

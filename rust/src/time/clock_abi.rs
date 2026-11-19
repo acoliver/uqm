@@ -114,20 +114,9 @@ pub(crate) fn schedule_event(
     None
 }
 
-pub fn add_event(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    kind: u32,
-    month: u16,
-    day: u16,
-    year: u16,
-    selector: u8,
-) -> Option<LinkId<ScheduledEvent>> {
-    let mut random = cx.rng;
-    let mut dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
-    schedule_event(cx.world, &mut dispatch, kind, month, day, year, selector)
-}
-
-fn dispatch_day_events(
+/// Run every event scheduled for `today`, in queue order; each is removed
+/// before its callback so the callback may schedule more for the same day.
+pub(crate) fn dispatch_day_events(
     world: &mut crate::engine::World,
     today: (u16, u16, u16),
     mut dispatch: impl FnMut(&mut crate::engine::World, u8),
@@ -136,35 +125,6 @@ fn dispatch_day_events(
         dispatch(world, selector);
         world.clock.events().free(id);
     }
-}
-
-fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
-    crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
-    let clock = &cx.world.data.game.game_clock;
-    let today = (
-        clock.year_index,
-        u16::from(clock.month_index),
-        u16::from(clock.day_index),
-    );
-    let mut random = cx.rng;
-    let dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
-    dispatch_day_events(cx.world, today, dispatch);
-}
-
-pub fn game_clock_tick(cx: &mut crate::engine::battle::Cx<'_>) {
-    if super::clock_bridge::rust_clock_tick(cx.world) {
-        finish_clock_day(cx);
-    }
-}
-
-pub fn advance_days(cx: &mut crate::engine::battle::Cx<'_>, days: i32) {
-    super::clock_bridge::log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
-    for _ in 0..days {
-        super::clock_bridge::next_clock_day_internal(&mut cx.world.data.game.game_clock);
-        finish_clock_day(cx);
-    }
-    let clock = &mut cx.world.data.game.game_clock;
-    clock.tick_count = clock.day_in_ticks;
 }
 
 #[cfg(test)]
