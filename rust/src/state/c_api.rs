@@ -1,7 +1,6 @@
 //! Remaining state.c entry points. File storage stays in `ffi`'s sole manager.
 
 use super::ffi::*;
-#[cfg(test)]
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::ptr;
 
