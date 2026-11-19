@@ -1,7 +1,5 @@
 //! Display resources for campaign callbacks that also redraw their status label.
-use std::{ffi::CString, ptr};
-use uqm_rust::{
-    engine::Game,
+use crate::{
     graphics::{
         context_abi::{CreateContextAux, DestroyContext, SetContext},
         drawable_abi::LoadedDrawable,
@@ -10,7 +8,13 @@ use uqm_rust::{
         sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
     },
     io::uio_bridge as uio,
+    world::Game,
 };
+use std::{ffi::CString, ptr};
+
+/// Entries in the fixture's game-text table. It must reach past the highest
+/// months and status string ids that campaign callbacks read.
+pub const GAME_TEXT_ENTRIES: usize = 470;
 
 pub struct CampaignDisplay {
     context: CONTEXT,
@@ -44,7 +48,7 @@ impl CampaignDisplay {
         draw: impl FnOnce(&mut Game),
         options: GraphicsOptions,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tmp");
         std::fs::create_dir_all(&root)?;
         let directory = tempfile::tempdir_in(root.canonicalize()?)?;
         std::fs::create_dir(directory.path().join("font"))?;
@@ -103,10 +107,10 @@ impl CampaignDisplay {
             );
             assert!(!mount.is_null());
             let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-            let previous_content = uqm_rust::mainloop::dir_prep::contentDir;
-            uqm_rust::mainloop::dir_prep::contentDir = content.cast();
-            uqm_rust::resource::ffi_bridge::InitResourceSystem();
-            uqm_rust::resource::ffi_bridge::LoadResourceIndex(
+            let previous_content = crate::io::handles::contentDir;
+            crate::io::handles::contentDir = content.cast();
+            crate::resource::ffi_bridge::InitResourceSystem();
+            crate::resource::ffi_bridge::LoadResourceIndex(
                 content.cast(),
                 c"fixture.rmp".as_ptr(),
                 ptr::null(),
@@ -134,16 +138,13 @@ impl CampaignDisplay {
                 .lease()
                 .frame(0)
                 .ok_or("fixture screen has no frame")?;
-            let count = (uqm_rust::starbase::ids::MONTHS_STRING_BASE as usize + 12)
-                .max(uqm_rust::starbase::ids::STATUS_STRING_BASE as usize + 3);
-            game.kernel.install_game_text(
-                uqm_rust::strings::owned_table::LoadedTextTable::fixture(vec![
+            game.kernel
+                .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(vec![
                     b"A\0".to_vec();
-                    count
-                ]),
-            );
+                    GAME_TEXT_ENTRIES
+                ]));
             draw(game);
-            uqm_rust::mainloop::dir_prep::contentDir = previous_content;
+            crate::io::handles::contentDir = previous_content;
             uio::uio_closeDir(content);
             uio::uio_closeRepository(repository);
             uio::uio_unInit();
@@ -156,7 +157,7 @@ impl CampaignDisplay {
     }
     pub fn finish(&self, game: Game) {
         // SAFETY: the fixture retains its queued drawing resources until this flush.
-        unsafe { uqm_rust::graphics::dcqueue_abi::TFB_FlushGraphics() };
+        unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
         drop(game);
     }
 }

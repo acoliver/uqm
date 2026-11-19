@@ -1,16 +1,17 @@
+use super::campaign_display::CampaignDisplay;
 use crate::graphics::{
     context_abi::{CreateContextAux, DestroyContext},
     native_abi::CONTEXT,
 };
-use crate::{campaign_display_test::CampaignDisplay, engine::Game};
+use crate::world::Game;
 
-pub(super) struct ConversationDisplay {
+pub struct ConversationDisplay {
     _display: CampaignDisplay,
     contexts: Vec<CONTEXT>,
 }
 
 impl ConversationDisplay {
-    pub(super) fn install(game: &mut Game) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn install(game: &mut Game) -> Result<Self, Box<dyn std::error::Error>> {
         let display = CampaignDisplay::install(game)?;
         let mut contexts = Vec::new();
         for (name, slot) in [
@@ -44,7 +45,7 @@ impl ConversationDisplay {
         })
     }
 
-    pub(super) fn finish(self, game: Game) {
+    pub fn finish(self, game: Game) {
         self._display.finish(game);
         drop(self);
     }

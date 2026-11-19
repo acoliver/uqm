@@ -35,3 +35,8 @@ pub use world::{Game, StarId, World, WorldData};
 
 pub mod save;
 pub mod species;
+
+// The engine's own unit tests build a Kernel without the font installers
+// these fixtures call.
+#[cfg(all(feature = "test-support", not(test)))]
+pub mod test_support;

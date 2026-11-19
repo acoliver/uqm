@@ -37,12 +37,13 @@ regex = "1" # @plan PLAN-20260314-FILE-IO.P07 @requirement REQ-FIO-DIRLIST-REGEX
 zip = { version = "9", default-features = false, features = ["deflate"] } # UQM packages use stored/deflate entries.
 crc32fast = "1.4" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
 fast_image_resize = { version = "5.0", features = ["only_u8x4"] }
+tempfile = { version = "3", optional = true }
 
 [features]
 default = ["audio_heart"]
 audio_heart = []
 debug-process = []
-test-support = []
+test-support = ["dep:tempfile"]
 bundled-sdl = ["sdl2/bundled", "sdl2/static-link"]
 
 [dev-dependencies]
