@@ -2,6 +2,7 @@
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
 use crate::math::wrap_delta;
+use crate::navigation::globals::in_hqspace;
 use crate::ships::native::abi::*;
 
 mod collision_motion;

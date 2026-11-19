@@ -10,7 +10,8 @@ use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::collections::observation;
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
@@ -551,7 +552,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 (*e).turn = 0;
                 (*e).state_flags &= !(CHANGING as u16);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
-                assert_eq!(frame_index((*e).next.image.frame.raw()), expected);
+                assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), expected);
                 assert_eq!((*e).turn, 5);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_eq!((*e).life, life);
@@ -734,7 +735,10 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
             let input = with_rng(8, 0, || think(&mut ship, &mut c, 0, 1));
             assert_ne!(input & RIGHT as u8, 0);
             assert_eq!(input & (LEFT | SPECIAL) as u8, 0);
-            assert_eq!(frame_index((*ship.ptr()).next.image.frame.raw()), 1);
+            assert_eq!(
+                GetFrameIndex((*ship.ptr()).next.image.frame.raw().cast()),
+                1
+            );
         }
     })
 }

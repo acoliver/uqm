@@ -5,7 +5,8 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, angle_to_facing, frame_index, normalize_facing};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, angle_to_facing, normalize_facing};
 #[test]
 fn descriptor_laser_and_limpet_launch() {
     battle_context::run(|_| {
@@ -56,7 +57,7 @@ fn descriptor_laser_and_limpet_launch() {
             with_rng(11, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(frame_index((*e).next.image.frame.raw()), 1);
+            assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 1);
         }
     })
 }
@@ -157,7 +158,10 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 (5000 - i32::from(raw_y)) as SIZE,
             ))));
             assert_eq!(ship.ship_mut().ship_facing, face);
-            assert_eq!(frame_index((*ship.ptr()).current.image.frame.raw()), face);
+            assert_eq!(
+                GetFrameIndex((*ship.ptr()).current.image.frame.raw().cast()),
+                face
+            );
             assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(

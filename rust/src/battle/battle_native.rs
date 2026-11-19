@@ -119,6 +119,7 @@ fn initialize_battle(
 pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
+    use crate::navigation::globals::{in_hqspace, in_hyper_space};
     use abi::*;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;

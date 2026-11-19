@@ -133,7 +133,7 @@ pub unsafe fn InitContexts(kernel: &mut crate::engine::Kernel) -> u32 {
 unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
     // SAFETY: only resource loaders run during the owner borrow.
     let loaded = {
-        crate::battle::context_access::lifecycle::init_ships(&mut *kernel);
+        kernel.reset_race_capacities(crate::ships::native::abi::MAX_SHIPS_PER_SIDE as usize);
         let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.starcon") else {
             return 0;
         };

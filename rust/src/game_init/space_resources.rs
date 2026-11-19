@@ -28,9 +28,8 @@ use crate::engine::battle::frames::{free_image, load_animation, load_graphic};
 
 pub(crate) mod live {
     use super::*;
-    use crate::ships::native::abi::{
-        in_hqspace, IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID,
-    };
+    use crate::navigation::globals::in_hqspace;
+    use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID};
 
     pub fn init_space(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
         {

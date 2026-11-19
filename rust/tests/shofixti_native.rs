@@ -7,7 +7,8 @@ mod battle_context;
 mod shared;
 
 use std::{ffi::CStr, mem, ptr};
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
@@ -361,7 +362,10 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (10, 1, 1, 1)
             );
             assert_eq!((*dart).playerNr, 1);
-            assert_eq!(frame_index((*dart).current.image.frame.raw()), facing % 16);
+            assert_eq!(
+                GetFrameIndex((*dart).current.image.frame.raw().cast()),
+                facing % 16
+            );
             assert_eq!(
                 (*dart).current.image.frame.raw(),
                 ship.weapon_frames.frame((facing % 16) as usize)
@@ -515,13 +519,14 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             ship.inner.ship_mut().cur_status_flags = current;
             with_rng(11, 0, || ship.inner.postprocess());
             assert_eq!(
-                frame_index(
+                GetFrameIndex(
                     ship.inner
                         .descriptor_mut()
                         .ship_data
                         .captain_control
                         .special
                         .raw()
+                        .cast()
                 ),
                 index
             );
@@ -751,7 +756,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (*explosion).next.image.frame = ship.special_frames.selection(7);
             with_rng(3, 0, || hooks::invoke_element_pointer(animate, explosion));
             assert_eq!(
-                frame_index((*explosion).next.image.frame.raw()),
+                GetFrameIndex((*explosion).next.image.frame.raw().cast()),
                 1,
                 "advance current, not next frame"
             );

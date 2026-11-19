@@ -13,8 +13,9 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use uqm_rust::collections::observation;
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{
-    abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
+    abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
 
 use uqm_rust::strings::string_table::{
@@ -653,7 +654,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
             assert!(out[1].is_null());
             assert!(out[2].is_null());
             assert_eq!(
-                frame_index((*shared::element(out[0])).current.image.frame.raw()),
+                GetFrameIndex((*shared::element(out[0])).current.image.frame.raw().cast()),
                 0,
                 "the first missile is the forward one"
             );
@@ -676,7 +677,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             (*m).state_flags &= !(CHANGING as u16);
             assert_eq!((*m).turn, 0);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(frame_index((*m).next.image.frame.raw()), 3);
+            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 3);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
             assert_eq!((*m).turn, 1);
@@ -686,11 +687,11 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             hooks::invoke_element_pointer(animate, m);
             assert_eq!((*m).turn, 0);
             assert_eq!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!(frame_index((*m).next.image.frame.raw()), 6);
+            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 6);
 
             (*m).current.image.frame = ship.weapon_frames.selection(7);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(frame_index((*m).next.image.frame.raw()), 0);
+            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 0);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!((*m).turn, 1);
             for h in out {
@@ -905,8 +906,8 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 9, 6);
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
-            assert_eq!(frame_index((*el).current.image.frame.raw()), 5);
-            assert_eq!(frame_index((*el).next.image.frame.raw()), 5);
+            assert_eq!(GetFrameIndex((*el).current.image.frame.raw().cast()), 5);
+            assert_eq!(GetFrameIndex((*el).next.image.frame.raw().cast()), 5);
             assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             let control = (*el).IntersectControl;
             assert_eq!(
@@ -918,7 +919,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             );
             assert_eq!((control.EndPoint.x, control.EndPoint.y), (300, 19));
             // next.image.frame was overwritten before InitIntersectFrame runs.
-            assert_eq!(frame_index(control.IntersectStamp.frame), 5);
+            assert_eq!(GetFrameIndex(control.IntersectStamp.frame.cast()), 5);
             assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
             assert_eq!(
                 (*el).state_flags & (NONSOLID | FINITE_LIFE) as u16,
@@ -1292,7 +1293,10 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
-            assert_eq!(frame_index((*el).current.image.frame.raw()), facing);
+            assert_eq!(
+                GetFrameIndex((*el).current.image.frame.raw().cast()),
+                facing
+            );
             assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(

@@ -25,7 +25,7 @@ pub trait AiOps {
         raw: &mut [crate::engine::battle::Concern],
         count: u16,
     );
-    fn selection_delay(&self);
+    fn selection_delay(&mut self);
 }
 
 impl AiOps for Cx<'_> {
@@ -54,10 +54,8 @@ impl AiOps for Cx<'_> {
         raw.copy_from_slice(&concerns.objects[..raw.len()]);
     }
 
-    fn selection_delay(&self) {
-        // SAFETY: the owning game thread performs the existing half-second picker delay.
-        unsafe {
-            crate::ships::native::abi::SleepThread(crate::ships::native::abi::ONE_SECOND >> 1);
-        }
+    fn selection_delay(&mut self) {
+        let runtime = self.kernel.input_runtime();
+        runtime.sleep(self, crate::ships::native::abi::ONE_SECOND >> 1);
     }
 }
