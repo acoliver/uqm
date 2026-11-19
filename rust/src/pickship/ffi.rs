@@ -17,13 +17,13 @@ use super::{
     crew_label, crew_strip, find_escort, highlight, icon_origin, moved, name_strip, slot, Area,
     Cursor, Direction, Escort, Slot, ICON_HEIGHT, ICON_WIDTH, NO_ID,
 };
-use crate::c_bindings::controller_input::{
+use crate::input::frames::{
     KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
 
 use crate::comm::locdata::{CColor, CPoint, CRect};
 
-use crate::mainloop::types::activity_flags::CHECK_ABORT;
+use crate::engine::world::activity::activity_flags::CHECK_ABORT;
 
 use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
 

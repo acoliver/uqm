@@ -46,6 +46,7 @@ const KEY_MENU_SELECT: usize = 9;
 const KEY_MENU_CANCEL: usize = 10;
 const FADE_ALL_TO_COLOR: u32 = 253;
 
+use super::planet_info::{get_planet_info, put_planet_info};
 use crate::engine::time::counter_abi::GetTimeCounter;
 use crate::front_end::gameopt::runtime::game_options;
 use crate::navigation::interplanetary::do_missions;
@@ -53,7 +54,6 @@ use crate::planets::cargo::live::cargo_menu;
 use crate::planets::orbit::live::{free_planet, planet_orbit_menu};
 use crate::planets::pstarmap::star_map;
 use crate::planets::roster::live::roster_menu;
-use crate::state::c_api::planets::{get_planet_info, put_planet_info};
 use crate::ui::settings::stop_music;
 
 #[inline]

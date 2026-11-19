@@ -4,8 +4,8 @@ use super::device_effects::{effect_state, repair_ultron, ULTRON_COMPONENTS};
 use crate::engine::{battle::Cx, observe::Io};
 use crate::engine::{StoryKey, World};
 
+use crate::engine::world::activity::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
 use crate::graphics::context_abi::ContextLease;
-use crate::mainloop::types::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
 
 use crate::comm::locdata::{CColor, CRect};
 use crate::engine::species::ship;

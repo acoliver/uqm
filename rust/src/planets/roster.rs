@@ -111,11 +111,11 @@ fn update_crew(
 
 pub(crate) mod live {
     use super::{navigate, update_crew, SHIP_POS};
-    use crate::c_bindings::controller_input::*;
     use crate::engine::{battle::Cx, observe::Io};
+    use crate::input::frames::*;
     use std::ffi::CString;
 
-    use crate::time::counter_abi::GetTimeCounter;
+    use crate::engine::time::counter_abi::GetTimeCounter;
 
     use crate::ui::sis::capacity::crew_capacity;
 
