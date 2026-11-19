@@ -17,7 +17,6 @@ use super::response::ResponseFunc;
 use super::response_ui::{refresh_responses, select_conversation_summary};
 use super::state::Comm;
 use crate::engine::input::InputSession;
-#[cfg(not(test))]
 use crate::engine::observe::CheckpointView;
 use crate::engine::{battle::Cx, observe::Io, World};
 use std::ffi::c_int;
@@ -57,41 +56,8 @@ mod fresh_press;
 // override behaviour by operating on Comm fields directly.
 // Test-mode c_bridge stub — provides constants and no-op wrappers so ffi.rs
 // tests compile without real C linkage.
-#[cfg(test)]
-#[allow(dead_code)]
 pub(super) mod c_bridge {
     use super::Comm;
-    pub const ONE_SECOND_TICKS: i32 = 840;
-    pub use crate::time::source as clock;
-
-    pub fn play_alien_music(_comm: &mut Comm, _enabled: bool) {}
-    pub fn set_color_map_from_comm_data(_comm: &mut Comm) {}
-    pub fn call_refresh_responses(
-        _comm: &mut Comm,
-        _cx: &mut super::Cx<'_>,
-        _top: u8,
-        _count: u8,
-        _cur: u8,
-    ) {
-    }
-    pub fn call_select_conversation_summary(
-        _comm: &mut Comm,
-        _cx: &mut super::Cx<'_>,
-        _io: &mut super::Io<'_>,
-    ) {
-    }
-    pub fn call_update_comm_graphics(
-        _comm: &mut Comm,
-        _input: &crate::engine::input::InputSession,
-    ) {
-    }
-    pub fn call_feedback_player_phrase(_comm: &mut Comm, _cx: &mut super::Cx<'_>) {}
-}
-
-#[cfg(not(test))]
-pub(super) mod c_bridge {
-    use super::Comm;
-    #[cfg(not(test))]
     pub use crate::sound::heart_ffi::fade_music as FadeMusic;
     pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
     pub use crate::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
@@ -102,8 +68,8 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
     use crate::sound::music::{remember_music, MusicRequest};
-    pub use crate::time::source as clock;
     use std::ffi::c_int;
+    pub use uqm_engine::time::source as clock;
 
     pub use crate::comm::comm_abi::check_subtitles;
 
@@ -120,8 +86,6 @@ pub(super) mod c_bridge {
     pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
 
     pub use crate::comm::commanim_abi::runtime::init_comm_animations;
-
-    pub use crate::mainloop::input_abi::live::UpdateInputState;
 
     pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
         input.pulsed().menu[key_index as usize]
@@ -140,7 +104,6 @@ pub(super) mod c_bridge {
     pub const ONE_SECOND_TICKS: i32 = 840;
 
     // Safe wrappers for use from ffi.rs (outside lock)
-    #[cfg(not(test))]
     pub fn call_refresh_responses(
         comm: &mut Comm,
         cx: &mut super::Cx<'_>,
@@ -153,7 +116,6 @@ pub(super) mod c_bridge {
             super::super::sis_graphics::refresh_responses(comm, activity, top, count, cur)
         });
     }
-    #[cfg(not(test))]
     pub fn call_select_conversation_summary(
         comm: &mut Comm,
         cx: &mut super::Cx<'_>,
@@ -161,11 +123,9 @@ pub(super) mod c_bridge {
     ) {
         super::super::sis_graphics::select_conversation_summary(comm, cx, io);
     }
-    #[cfg(not(test))]
     pub fn call_update_comm_graphics(comm: &mut Comm, input: &crate::engine::input::InputSession) {
         super::do_update_animations(comm, input, false)
     }
-    #[cfg(not(test))]
     pub fn call_feedback_player_phrase(comm: &mut Comm, cx: &mut super::Cx<'_>) {
         let activity = cx.world.activity();
         super::super::sis_graphics::feedback_player_phrase(comm, activity, None);
@@ -185,7 +145,6 @@ pub(super) mod c_bridge {
     }
 }
 
-#[cfg(not(test))]
 pub mod dinput {
     use super::fresh_press::FreshPressLatch;
     use super::Comm;
@@ -198,8 +157,6 @@ pub mod dinput {
     const MENU_SOUND_NONE: u16 = 0;
     const OPT_PC: c_int = 0x02;
     const CHECK_ABORT: u32 = 0x4000;
-
-    use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
     use crate::comm::ffi::rust_update_speech_graphics;
 
@@ -222,25 +179,27 @@ pub mod dinput {
         left: FreshPressLatch,
     }
 
-    // DoInput callback for talk segue (replaces c_DoTalkSegue)
-    unsafe fn do_talk_segue_frame(
+    /// One `DoTalkSegue` frame up to its pacing sleep. `None` ends the loop
+    /// without sleeping; otherwise the caller sleeps until `ts.next_time`
+    /// and continues while the value is non-zero.
+    fn do_talk_segue_frame(
         comm: &mut Comm,
         input: &InputSession,
         ts: &mut TalkingStateDInput,
         activity: u16,
-    ) -> c_int {
+    ) -> Option<c_int> {
         // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
         let activity = u32::from(activity);
         if (activity & CHECK_ABORT) != 0 {
             ts.ended = 1;
-            return 0;
+            return None;
         }
 
         // Cancel: skip to end
         if c_bridge::pulsed_menu_key(input, KEY_MENU_CANCEL) != 0 {
             c_bridge::JumpTrack();
             ts.ended = 1;
-            return 0;
+            return None;
         }
 
         // Seek input
@@ -286,10 +245,7 @@ pub mod dinput {
         let cur_track = c_bridge::PlayingTrack();
         ts.ended = (ts.seeking == 0 && cur_track == 0) as c_int;
 
-        unsafe { SleepThreadUntil(ts.next_time) };
-        ts.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
-
-        (ts.seeking != 0 || (cur_track != 0 && cur_track <= ts.wait_track)) as c_int
+        Some((ts.seeking != 0 || (cur_track != 0 && cur_track <= ts.wait_track)) as c_int)
     }
 
     /// Ported from c_RunTalkSegue — runs the talk segue via DoInput.
@@ -336,9 +292,16 @@ pub mod dinput {
         cx.kernel
             .input_controls()
             .set_menu_sounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
+        let runtime = cx.kernel.input_runtime();
         comm.run_input(cx, io, false, |comm, cx, _| {
             let activity = cx.world.activity();
-            cx.with_legacy(|| unsafe { do_talk_segue_frame(comm, input, &mut ts, activity) != 0 })
+            let Some(more) = cx.with_legacy(|| do_talk_segue_frame(comm, input, &mut ts, activity))
+            else {
+                return false;
+            };
+            runtime.sleep_until(cx, ts.next_time);
+            ts.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+            more != 0
         });
         cx.with_legacy(|| {
             if wait_track == 0 {
@@ -363,7 +326,7 @@ pub mod dinput {
     }
 
     // DoInput callback for last replay (replaces c_DoLastReplay)
-    unsafe fn do_last_replay_frame(
+    fn do_last_replay_frame(
         comm: &mut Comm,
         input: &InputSession,
         lrs: &mut LastReplayStateDInput,
@@ -420,7 +383,7 @@ pub mod dinput {
 
         cx.with_legacy(|| super::do_update_animations(comm, input, false));
 
-        unsafe { cx.with_legacy(|| SleepThreadUntil(lrs.next_time)) };
+        cx.kernel.input_runtime().sleep_until(cx, lrs.next_time);
         lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
 
         1
@@ -436,7 +399,7 @@ pub mod dinput {
             cancel: FreshPressLatch::entering(input, KEY_MENU_CANCEL),
             left: FreshPressLatch::entering(input, KEY_MENU_LEFT),
         };
-        comm.run_input(cx, io, false, |comm, cx, io| unsafe {
+        comm.run_input(cx, io, false, |comm, cx, io| {
             do_last_replay_frame(comm, input, &mut lrs, cx, io) != 0
         });
     }
@@ -544,15 +507,6 @@ pub fn do_talk_segue(
     if check_abort_external(cx.world) {
         ts.ended = true;
         return false;
-    }
-
-    // C parity: DoInput calls UpdateInputState() every frame before the
-    // InputFunc callback. The Rust talk-segue loop does not go through
-    // DoInput, so we must call it ourselves to refresh CurrentInputState
-    // and PulsedInputState from ImmediateInputState.
-    #[cfg(not(test))]
-    unsafe {
-        c_bridge::UpdateInputState(cx, input);
     }
 
     // ---- cancel (skip to end of current phrase) ----------------------------
@@ -1188,7 +1142,6 @@ fn init_speech_graphics(comm: &mut Comm) {
     }
 }
 
-#[cfg(not(test))]
 fn set_slider_image_frame(comm: &mut Comm, index: u16) {
     let frame = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
         comm.presentation.activity_frame,
@@ -1227,7 +1180,6 @@ fn update_animations(_input: &crate::engine::input::InputSession, comm: &mut Com
 /// Ported from c_UpdateAnimations — processes communication animations with
 /// context switching, batched graphics, and subtitle redraw.
 ///
-#[cfg(not(test))]
 fn do_update_animations(
     comm: &mut Comm,
     input: &crate::engine::input::InputSession,
@@ -1250,7 +1202,6 @@ fn do_update_animations(
 
 /// Ported from c_RunCommAnimFrame — one animation frame + sleep.
 ///
-#[cfg(not(test))]
 fn do_run_comm_anim_frame(comm: &mut Comm, input: &crate::engine::input::InputSession) {
     do_update_animations(comm, input, false);
     crate::threading::pacing::GameThreadPacer::new(comm.animation_context()).sleep_for(840 / 40);
