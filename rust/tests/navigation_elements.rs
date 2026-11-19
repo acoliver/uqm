@@ -89,11 +89,10 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
     battle_context::run(|_| {
         let _owner = Battle::new(8);
         let frames = NativeFrames::new(16);
-        // SAFETY: the serialized fixture owns and restores navigation's live projections.
-        unsafe {
+        {
             let mut solar = crate::battle_context::with(|cx| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
-                    &cx.world,
+                    cx.world,
                     uqm_rust::engine::StarId(0),
                 )
             });
@@ -153,7 +152,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
         unsafe {
             let mut solar = crate::battle_context::with(|cx| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
-                    &cx.world,
+                    cx.world,
                     uqm_rust::engine::StarId(0),
                 )
             });

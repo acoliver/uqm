@@ -12,7 +12,7 @@ use uqm_rust::{
     engine::{
         battle::Cx,
         input::{frames::InputState, Frame, InputRuntime, InputSession},
-        observe::{CampaignView, Io, Observer, Unobserved},
+        observe::{Io, Observer, Unobserved},
         Game,
     },
 };

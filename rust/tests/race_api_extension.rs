@@ -39,8 +39,7 @@ fn teardown_receives_final_crew_and_owned_state() {
     };
     battle_context::run(|_| {
         let owner = Battle::new(2);
-        // SAFETY: the serialized fixture owns the enlisted-crew authority and restores it after teardown.
-        unsafe {
+        {
             let saved_crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
             let mut ship = Ship::native(&owner, &RACE, 0);
             crate::battle_context::with(|cx| {
@@ -216,15 +215,12 @@ fn abandonment_pool_exhaustion_keeps_crew_and_rng_unchanged() {
 fn navigation_world_projections_write_the_single_authority() {
     battle_context::run(|_| {
         let _owner = Battle::new(2);
-        // SAFETY: this test serializes and restores every modified world value.
-        unsafe {
+        {
             let activity = crate::battle_context::with(|cx| cx.world.activity());
             let autopilot = crate::battle_context::with(|cx| cx.world.data.game.autopilot);
             let velocity = crate::battle_context::with(|cx| cx.world.data.game.velocity);
             let sis = crate::battle_context::with(|cx| cx.world.data.flagship);
-            crate::battle_context::with(|cx| {
-                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
-            });
+            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             crate::battle_context::with(|cx| {
                 cx.set_activity(42);
                 assert_eq!(cx.world.activity(), 42);
@@ -532,56 +528,51 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
         ..EMPTY_RACE
     };
     battle_context::run(|_| {
-        // SAFETY: the serialized fixture owns and restores the world authorities.
-        unsafe {
-            let activity = crate::battle_context::with(|cx| cx.world.activity());
-            let crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
-            crate::battle_context::with(|cx| {
-                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
-            });
-            crate::battle_context::with(|cx| {
-                cx.world.set_activity(IN_ENCOUNTER as u16);
-                cx.world.set_flagship_crew(17);
-                let keys = [
-                    (StoryKey::SHOFIXTI_RECRUITED, 0),
-                    (StoryKey::PROBE_ILWRATH_ENCOUNTER, 1),
-                    (StoryKey::ARILOU_SPACE_SIDE, 2),
-                    (StoryKey::CHMMR_BOMB_STATE, 3),
-                    (StoryKey::BOMB_CARRIER, 0),
-                ];
-                for &(key, value) in &keys {
-                    cx.world.set_story_state(key, value);
-                    assert_eq!(cx.story_state(key), value);
-                }
-                let d = (RACE.descriptor)(cx.world).into_legacy();
-                assert_eq!(d.ship_info.crew_level, 17);
-                assert_eq!(
-                    d.ship_data.captain_control.captain_rsc,
-                    c"ship.synthetic.oldcaptain".as_ptr()
-                );
-                assert_eq!(cx.world.story_state(StoryKey::BOMB_CARRIER), 1);
-                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
-                assert!((RACE.descriptor)(cx.world)
-                    .into_legacy()
-                    .ship_data
-                    .captain_control
-                    .captain_rsc
-                    .is_null());
-                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
-                cx.set_activity(SUPER_MELEE as u16);
-                assert!((RACE.descriptor)(cx.world)
-                    .into_legacy()
-                    .ship_data
-                    .captain_control
-                    .captain_rsc
-                    .is_null());
-                for &(key, _) in &keys {
-                    cx.world.set_story_state(key, 0);
-                }
-            });
-            crate::battle_context::with(|cx| cx.world.set_activity(activity));
-            crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted = crew);
-        }
+        let activity = crate::battle_context::with(|cx| cx.world.activity());
+        let crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+        crate::battle_context::with(|cx| {
+            cx.world.set_activity(IN_ENCOUNTER as u16);
+            cx.world.set_flagship_crew(17);
+            let keys = [
+                (StoryKey::SHOFIXTI_RECRUITED, 0),
+                (StoryKey::PROBE_ILWRATH_ENCOUNTER, 1),
+                (StoryKey::ARILOU_SPACE_SIDE, 2),
+                (StoryKey::CHMMR_BOMB_STATE, 3),
+                (StoryKey::BOMB_CARRIER, 0),
+            ];
+            for &(key, value) in &keys {
+                cx.world.set_story_state(key, value);
+                assert_eq!(cx.story_state(key), value);
+            }
+            let d = (RACE.descriptor)(cx.world).into_legacy();
+            assert_eq!(d.ship_info.crew_level, 17);
+            assert_eq!(
+                d.ship_data.captain_control.captain_rsc,
+                c"ship.synthetic.oldcaptain".as_ptr()
+            );
+            assert_eq!(cx.world.story_state(StoryKey::BOMB_CARRIER), 1);
+            cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
+            assert!((RACE.descriptor)(cx.world)
+                .into_legacy()
+                .ship_data
+                .captain_control
+                .captain_rsc
+                .is_null());
+            cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
+            cx.set_activity(SUPER_MELEE as u16);
+            assert!((RACE.descriptor)(cx.world)
+                .into_legacy()
+                .ship_data
+                .captain_control
+                .captain_rsc
+                .is_null());
+            for &(key, _) in &keys {
+                cx.world.set_story_state(key, 0);
+            }
+        });
+        crate::battle_context::with(|cx| cx.world.set_activity(activity));
+        crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted = crew);
     });
 }
 

@@ -68,19 +68,8 @@ fn public_campaign_copy_does_not_traverse_live_records() {
 #[test]
 #[serial_test::serial]
 fn empty_npc_phrase_does_not_acquire_an_owner() {
-    let mut game = Game::new();
-    {
-        {
-            {
-                uqm_rust::comm::ffi::npc_phrase(
-                    &mut game.world,
-                    &mut uqm_rust::comm::Comm::new(),
-                    0,
-                    None,
-                )
-            };
-        };
-    }
+    let game = Game::new();
+    uqm_rust::comm::ffi::npc_phrase(&game.world, &mut uqm_rust::comm::Comm::new(), 0, None);
 }
 
 #[test]
@@ -228,9 +217,7 @@ fn status_offsets_use_the_already_borrowed_kernel() {
 #[test]
 #[serial_test::serial]
 fn starbase_releases_world_before_communication_and_cleanup() {
-    use uqm_rust::engine::observe::{
-        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
-    };
+    use uqm_rust::engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
     struct Recording(Vec<String>);
     impl Observer for Recording {
         fn input_admitted(
@@ -257,32 +244,27 @@ fn starbase_releases_world_before_communication_and_cleanup() {
     game.world.set_activity(CHECK_ABORT as u16);
     let mut observer = Recording(Vec::new());
     let _quiet = game.kernel.diagnostics.suppress_interaction();
-    // SAFETY: this serialized fixture owns the published lifecycle.
-    unsafe {
-        {
-            game.with_context(|cx| {
-                uqm_rust::ui::starbase::run_starbase_visit(
-                    cx,
-                    &mut Io {
-                        observer: &mut observer,
+    {
+        game.with_context(|cx| {
+            uqm_rust::ui::starbase::run_starbase_visit(
+                cx,
+                &mut Io {
+                    observer: &mut observer,
+                },
+                &uqm_rust::ui::MenuServices {
+                    communicate: |cx, io, conversation, options| {
+                        uqm_rust::comm::dispatch::init_communication_with_options(
+                            cx,
+                            io,
+                            conversation,
+                            options,
+                        )
                     },
-                    &uqm_rust::ui::MenuServices {
-                        communicate: |cx, io, conversation, options| {
-                            uqm_rust::comm::dispatch::init_communication_with_options(
-                                cx,
-                                io,
-                                conversation,
-                                options,
-                            )
-                        },
-                        game_options: |cx, io| {
-                            uqm_rust::front_end::gameopt::game_options(cx, io, None)
-                        },
-                        ship_spin: uqm_rust::front_end::fmv::do_ship_spin,
-                    },
-                );
-            })
-        };
+                    game_options: |cx, io| uqm_rust::front_end::gameopt::game_options(cx, io, None),
+                    ship_spin: uqm_rust::front_end::fmv::do_ship_spin,
+                },
+            );
+        });
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);
     assert_eq!(

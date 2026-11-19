@@ -9,18 +9,14 @@ use uqm_rust::{
     state::game_state_keys::{get_game_state, set_game_state},
 };
 unsafe fn modules() {
-    crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(&mut cx.world));
+    crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
     crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
     crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
     crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
     crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted = 9);
     crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as u16));
     crate::battle_context::with(|cx| {
-        set_game_state(
-            &mut cx.world,
-            uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
-            0,
-        )
+        set_game_state(cx.world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
     });
 }
 #[test]
@@ -98,20 +94,16 @@ fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
         unsafe {
             modules();
             crate::battle_context::with(|cx| {
-                set_game_state(
-                    &mut cx.world,
-                    uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
-                    3,
-                )
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3)
             });
             crate::battle_context::with(|cx| {
-                set_game_state(&mut cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
             });
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
             assert_eq!(
                 crate::battle_context::with(|cx| get_game_state(
-                    &cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::BOMB_CARRIER
                 )),
                 1
@@ -131,14 +123,10 @@ fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
             );
             ship.uninit();
             crate::battle_context::with(|cx| {
-                set_game_state(&mut cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
             });
             crate::battle_context::with(|cx| {
-                set_game_state(
-                    &mut cx.world,
-                    uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
-                    0,
-                )
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
             });
         }
     })
@@ -160,11 +148,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             ((*ship.ptr()).velocity).set_components(256, 0);
             ship.ship_mut().cur_status_flags = THRUST as u16;
             crate::battle_context::with(|cx| {
-                set_game_state(
-                    &mut cx.world,
-                    uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE,
-                    0,
-                )
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
             });
             ship.preprocess();
             let (velocity_x, velocity_y) = ((*ship.ptr()).velocity).get_current_components();
@@ -173,11 +157,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             assert_eq!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
             assert_eq!(ship.ship_mut().weapon_counter, 1);
             crate::battle_context::with(|cx| {
-                set_game_state(
-                    &mut cx.world,
-                    uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE,
-                    2,
-                )
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2)
             });
             ship.ship_mut().cur_status_flags = THRUST as u16;
             (*ship.ptr()).thrust = 0;
@@ -194,11 +174,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             );
             ship.uninit();
             crate::battle_context::with(|cx| {
-                set_game_state(
-                    &mut cx.world,
-                    uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE,
-                    0,
-                )
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
             });
         }
     })
@@ -217,11 +193,7 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
                 cx.world.data.game.autopilot = POINT { x: 100, y: 9999 }
             });
             crate::battle_context::with(|cx| {
-                set_game_state(
-                    &mut cx.world,
-                    uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE,
-                    0,
-                )
+                set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
             });
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);

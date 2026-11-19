@@ -17,8 +17,7 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
             fleets.put(id);
         }
     }
-    // SAFETY: the serialized fixture owns its published game; queue operations do not enter UI.
-    unsafe {
+    {
         {
             {
                 let fleets = game.world.avail_races_ref();
@@ -54,15 +53,11 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
                 assert!(ships.clone_fragment(&template, 0, 1, &mut name).is_none());
                 assert_eq!(ships.count(), 12);
             };
-            {
-                uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
-                    .unwrap()
-            };
+            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
+                .unwrap();
             let first = game.world.npc_built_ships_ref().head().unwrap();
-            {
-                uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
-                    .unwrap()
-            };
+            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
+                .unwrap();
             {
                 let ships = game.world.npc_built_ships_ref();
                 assert!(!ships.contains(first));

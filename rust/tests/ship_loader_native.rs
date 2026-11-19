@@ -65,9 +65,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         let path = CString::new(fixture.path().to_str().unwrap()).unwrap();
         unsafe {
             log_init(100);
-            crate::battle_context::with(|cx| {
-                uqm_rust::state::ffi::rust_init_game_state(&mut cx.world)
-            });
+            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
             crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
             crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
@@ -123,10 +121,10 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
                 let first =
-                    crate::battle_context::with(|cx| RaceDesc::load(&mut cx.world, species, false))
+                    crate::battle_context::with(|cx| RaceDesc::load(cx.world, species, false))
                         .unwrap();
                 let second =
-                    crate::battle_context::with(|cx| RaceDesc::load(&mut cx.world, species, false))
+                    crate::battle_context::with(|cx| RaceDesc::load(cx.world, species, false))
                         .unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
                 let original = first.info().ship_cost;
@@ -136,43 +134,41 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     .ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
                 let loaded =
-                    crate::battle_context::with(|cx| RaceDesc::load(&mut cx.world, species, false))
+                    crate::battle_context::with(|cx| RaceDesc::load(cx.world, species, false))
                         .unwrap();
                 assert_eq!(loaded.info().ship_cost, original);
                 assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
-                crate::battle_context::with(|cx| first.unload(&mut cx.world, false));
-                crate::battle_context::with(|cx| second.unload(&mut cx.world, false));
-                crate::battle_context::with(|cx| loaded.unload(&mut cx.world, false));
+                crate::battle_context::with(|cx| first.unload(cx.world, false));
+                crate::battle_context::with(|cx| second.unload(cx.world, false));
+                crate::battle_context::with(|cx| loaded.unload(cx.world, false));
             }
             assert!(crate::battle_context::with(|cx| RaceDesc::load(
-                &mut cx.world,
+                cx.world,
                 SPECIES_ID_NUM_SPECIES_ID,
                 false
             ))
             .is_none());
-            assert!(crate::battle_context::with(|cx| RaceDesc::load(
-                &mut cx.world,
-                u32::MAX,
-                false
-            ))
-            .is_none());
+            assert!(
+                crate::battle_context::with(|cx| RaceDesc::load(cx.world, u32::MAX, false))
+                    .is_none()
+            );
             // No graphics are registered in the fixture, so required battle art fails.
             assert!(crate::battle_context::with(|cx| RaceDesc::load(
-                &mut cx.world,
+                cx.world,
                 SPECIES_ID_ARILOU_ID,
                 true
             ))
             .is_none());
             let mut loaded = crate::battle_context::with(|cx| {
-                RaceDesc::load(&mut cx.world, SPECIES_ID_ARILOU_ID, false)
+                RaceDesc::load(cx.world, SPECIES_ID_ARILOU_ID, false)
             })
             .unwrap();
             assert!(loaded.race().is_some());
             loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            crate::battle_context::with(|cx| loaded.unload(&mut cx.world, true));
+            crate::battle_context::with(|cx| loaded.unload(cx.world, true));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()
@@ -181,7 +177,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     uqm_rust::collections::observation::Event::ResourcesFree { .. }
                 )));
             let mut probe = crate::battle_context::with(|cx| {
-                RaceDesc::load(&mut cx.world, SPECIES_ID_UR_QUAN_PROBE_ID, false)
+                RaceDesc::load(cx.world, SPECIES_ID_UR_QUAN_PROBE_ID, false)
             })
             .unwrap();
             probe.set_race(&TEARDOWN_RACE);

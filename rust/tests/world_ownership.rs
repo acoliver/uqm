@@ -107,17 +107,9 @@ fn new_campaign_resets_story_without_discarding_owned_state_files() {
         .unwrap()
         .write(b"retained")
         .unwrap();
-    {
-        {
-            uqm_rust::state::ffi::rust_init_game_state(&mut game.world)
-        }
-    };
+    uqm_rust::state::ffi::rust_init_game_state(&mut game.world);
     game.world.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
-    {
-        {
-            uqm_rust::state::ffi::rust_init_game_state(&mut game.world)
-        }
-    };
+    uqm_rust::state::ffi::rust_init_game_state(&mut game.world);
     assert_eq!(game.world.story_state(StoryKey::SHOFIXTI_RECRUITED), 0);
     assert_eq!(game.world.files.get_file(0).unwrap().length(), 8);
 }

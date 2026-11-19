@@ -140,7 +140,7 @@ fn exercise_live_callers(directory: &Path) {
         .observer()
         .unwrap_or_else(|| panic!("state test application has no observer"))
         .as_ref();
-    crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(&mut cx.world));
+    crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
     observation::record(Event::SpaceActive(true));
     descriptor_fields(observer, directory);
     elements_and_fighters(observer, directory);
@@ -566,8 +566,7 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
 
 fn campaign_fields(observer: &AutomationObserver, directory: &Path) {
     let (before, _) = snapshot(observer, directory);
-    // SAFETY: the game is idle and this is its sole thread.
-    unsafe {
+    {
         crate::battle_context::with(|cx| cx.world.data.game.game_clock.day_index = 7);
         crate::battle_context::with(|cx| cx.world.data.game.game_clock.month_index = 9);
         crate::battle_context::with(|cx| cx.world.data.game.game_clock.year_index = 2161);

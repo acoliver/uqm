@@ -27,13 +27,13 @@ impl Battle {
         let counters = crate::battle_context::with(|cx| cx.b.counters);
         let inner = shared::Battle::new(capacity);
         crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as _));
-        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(&mut cx.world));
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
         set_recruited(true);
         ScreenWidth = 320;
         ScreenHeight = 240;
         _GraphicsStatusFlags &= !4;
         crate::battle_context::with(|cx| cx.b.counters = [10, 10]);
-        crate::battle_context::with(|cx| reset_winner(&mut cx.kernel));
+        crate::battle_context::with(|cx| reset_winner(cx.kernel));
         Self {
             inner,
             globals,
@@ -46,7 +46,7 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            crate::battle_context::with(|cx| reset_winner(&mut cx.kernel));
+            crate::battle_context::with(|cx| reset_winner(cx.kernel));
             crate::battle_context::with(|cx| cx.world.data = self.globals);
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
@@ -58,7 +58,7 @@ impl Drop for Battle {
 unsafe fn set_recruited(value: bool) {
     crate::battle_context::with(|cx| {
         uqm_rust::state::ffi::rust_set_game_state_bits(
-            &mut cx.world,
+            cx.world,
             SHOFIXTI_RECRUITED as i32,
             END_SHOFIXTI_RECRUITED as i32,
             value as BYTE,
@@ -939,7 +939,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     );
                     core(transitions::cleanup_dead_ship, ship.ptr());
                     core(transitions::cleanup_dead_ship, other.ptr());
-                    crate::battle_context::with(|cx| transitions::stop_ditty(&mut cx.kernel));
+                    crate::battle_context::with(|cx| transitions::stop_ditty(cx.kernel));
                     let expected_selection = initial == [2, 2];
                     let mut selected = [false; 2];
                     for side in 0..2 {

@@ -13,9 +13,7 @@ use uqm_rust::{
     engine::{
         battle::{Battle, Cx},
         input::{frames::*, Frame, InputRuntime, InputSession},
-        observe::{
-            CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved,
-        },
+        observe::{CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved},
         Game,
     },
     graphics::{
