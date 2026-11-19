@@ -104,8 +104,6 @@ const REPORT_METRICS: &[&str] = &[
     "planned_engine_core",
     "banned_std",
     "planned.uqm-engine",
-    "planned.uqm-content",
-    "planned.uqm-modes",
     "planned.uqm-platform",
 ];
 

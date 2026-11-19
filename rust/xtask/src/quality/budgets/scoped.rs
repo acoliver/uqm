@@ -66,18 +66,12 @@ fn identity(name: &str, fields: &[&str]) -> bool {
                 && ["raw_records", "raw_pointer_parameters"].contains(&fields[1])
                 && fields[2].contains("::")
         }
-        "u6_04_content_edges" => {
-            super::projection::identity(name, fields[2])
-                && fields[0] == "layers"
-                && ["module_edges", "planned.uqm-content"].contains(&fields[1])
-                && fields[2].ends_with("::@file")
-        }
         name if super::projection::ends(name).is_some() => {
             super::projection::identity(name, fields[2])
                 && ((fields[0] == "ffi" && fields[1] == "owner_projections")
                     || (matches!(name, "u4_04_world_projection" | "u5_01_world_projection")
                         && fields[0] == "layers"
-                        && ["module_edges", "planned.uqm-content"].contains(&fields[1])))
+                        && fields[1] == "module_edges"))
         }
         _ => {
             fields[0] == "unsafe"

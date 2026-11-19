@@ -332,14 +332,12 @@ fn layers_follow_aliases_relative_imports_and_foreign_symbol_names() {
             extern "C" { #[link_name = "CONTENT"] static content: u8; }
             #[cfg(test)] fn excluded() { crate::mainloop::test_only(); }
         }
-        mod comm { struct Mode; mod races { fn run() { let _ = super::Mode; } } }
     "#,
         )],
         None,
         false,
     );
     assert_eq!(measured.report("planned.uqm-engine", None).unwrap(), 3);
-    assert_eq!(measured.report("planned.uqm-content", None).unwrap(), 1);
 }
 
 fn record_transfer_fixture(record: &str) -> Measurement {
@@ -771,7 +769,6 @@ fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges(
     );
     assert_eq!(direct.report("bridge_calls", None).unwrap(), 1);
     assert_eq!(direct.report("module_edges", None).unwrap(), 0);
-    assert_eq!(direct.report("planned.uqm-modes", None).unwrap(), 0);
     let alias = fixture(
         &[(
             "src/lib.rs",
@@ -802,7 +799,6 @@ fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges(
     );
     assert_eq!(address.report("bridge_calls", None).unwrap(), 0);
     assert_eq!(address.report("module_edges", None).unwrap(), 1);
-    assert_eq!(address.report("planned.uqm-modes", None).unwrap(), 1);
     let other = fixture(
         &[(
             "src/lib.rs",
@@ -813,7 +809,6 @@ fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges(
     );
     assert_eq!(other.report("bridge_calls", None).unwrap(), 0);
     assert_eq!(other.report("module_edges", None).unwrap(), 1);
-    assert_eq!(other.report("planned.uqm-modes", None).unwrap(), 1);
 }
 
 #[test]
