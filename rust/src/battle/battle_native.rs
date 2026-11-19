@@ -405,11 +405,9 @@ pub(crate) mod engine {
     ) -> bool {
         let (net, had_net) = initialize_battle(cx);
         let activity = cx.world.activity() as u8;
-        {
-            seed_battle_rng(activity, 4, |domain, fallback| {
-                seed(cx, io, domain, fallback)
-            })
-        };
+        seed_battle_rng(activity, 4, |domain, fallback| {
+            seed(cx, io, domain, fallback)
+        });
         battle_song(cx.kernel, cx.world, false);
         let ships = cx.kernel.ship_lifecycle();
         let mut count = (ships.init)(cx);

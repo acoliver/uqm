@@ -55,12 +55,10 @@ unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout
         && cx.world.activity() & CHECK_ABORT as u16 == 0
     {
         input.update(cx);
-        {
-            if crate::time::source::is_replay() {
-                crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
-            } else {
-                crate::threading::legacy_abi::TaskSwitch();
-            }
+        if crate::time::source::is_replay() {
+            crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
+        } else {
+            crate::threading::legacy_abi::TaskSwitch();
         };
     }
 }

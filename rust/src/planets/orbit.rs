@@ -98,15 +98,13 @@ pub(crate) mod live {
                     },
                     frame: state.next.image.frame.raw() as usize,
                 };
-                {
-                    crate::graphics::menu::stamp(
-                        stamp.frame as _,
-                        crate::graphics::native_abi::POINT {
-                            x: stamp.origin.x,
-                            y: stamp.origin.y,
-                        },
-                    )
-                };
+                crate::graphics::menu::stamp(
+                    stamp.frame as _,
+                    crate::graphics::native_abi::POINT {
+                        x: stamp.origin.x,
+                        y: stamp.origin.y,
+                    },
+                );
             }
         }
     }
@@ -295,10 +293,8 @@ pub(crate) mod live {
         };
         populate(system, presentation.scan().report_context());
         play_planet_music(&game.borrow(), planet_type);
-        {
-            if wait {
-                zoom_in_planet_sphere(&context, &sphere);
-            }
+        if wait {
+            zoom_in_planet_sphere(&context, &sphere);
         };
         draw_display(
             &mut game.borrow_mut(),

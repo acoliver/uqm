@@ -118,11 +118,7 @@ impl ContextOps for Cx<'_> {
     }
 
     fn draw_final_battle_captain(&mut self, ship: ShipId) {
-        let frame = self.take_captain_background(ship);
-        let old = crate::graphics::menu::select(self.kernel.status_context);
-        crate::graphics::menu::stamp(frame, POINT { x: 0, y: 0 });
-        crate::engine::battle::frames::free_frame(frame);
-        crate::graphics::menu::select(old);
+        self.draw_final_captain(ship);
     }
 
     fn start_battle_song_if_ready(&mut self, ship: ShipId) {
