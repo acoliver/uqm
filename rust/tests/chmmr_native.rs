@@ -56,7 +56,7 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
 unsafe fn exhaust() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     loop {
-        let h = uqm_rust::app::bridge::enter(|cx| {
+        let h = crate::battle_context::with(|cx| {
             cx.alloc_element()
                 .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
         });

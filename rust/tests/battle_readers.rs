@@ -29,7 +29,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
             battle::put(junk.ptr().cast());
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().special_counter = 0;
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 uqm_engine::battle::cyborg::tactical(cx, ship.ship_id)
             });
             assert_ne!(ship.ship_mut().ship_input_state & SPECIAL as u8, 0);
@@ -47,7 +47,7 @@ fn typed_ai_uses_the_supplied_subject_projection() {
             let mut target = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 1);
             ship.element_mut().current.location = POINT { x: 1000, y: 1000 };
             target.element_mut().current.location = POINT { x: 3000, y: 1000 };
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let live = cx.weapon_origin(ship.id);
                 let other = cx.weapon_origin(target.id);
                 let mut projected = live.clone();

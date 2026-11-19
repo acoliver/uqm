@@ -14,9 +14,8 @@ fn transition_hook() -> ElementHook {
 }
 
 fn call_transition(id: ElementId) {
-    // SAFETY: the test owns the serialized element pool and retains no record borrow.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             uqm_rust::battle::process_native::invoke_element::invoke_element(
                 cx,
                 transition_hook(),
@@ -92,31 +91,29 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
         let frames = NativeFrames::new(16);
         // SAFETY: the serialized fixture owns and restores navigation's live projections.
         unsafe {
-            let mut solar = uqm_rust::engine::World::current().read(|world| {
+            let mut solar = crate::battle_context::with(|cx| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
-                    world,
+                    &cx.world,
                     uqm_rust::engine::StarId(0),
                 )
             });
             solar.sys.sun.radius = 128 << 6;
-            let old_race = uqm_rust::engine::World::current().read(|w| w.encounter_race);
-            uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
-            let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
-            let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
-            let old_velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .ship_stamp
-                .frame = frames.frame(0);
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .ship_stamp
-                .origin = POINT { x: 80, y: 60 };
-            (**uqm_rust::engine::WorldData::current()).game.ip_location = POINT { x: 100, y: 200 };
+            let old_race = crate::battle_context::with(|cx| cx.world.encounter_race);
+            crate::battle_context::with(|cx| cx.world.encounter_race = -1);
+            let old_stamp = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp);
+            let old_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
+            let old_velocity = crate::battle_context::with(|cx| cx.world.data.game.velocity);
+            crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.frame = frames.frame(0));
+            crate::battle_context::with(|cx| {
+                cx.world.data.game.ship_stamp.origin = POINT { x: 80, y: 60 }
+            });
+            crate::battle_context::with(|cx| {
+                cx.world.data.game.ip_location = POINT { x: 100, y: 200 }
+            });
             let mut velocity = old_velocity;
             velocity.set_components(20, -30);
-            (**uqm_rust::engine::WorldData::current()).game.velocity = velocity;
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| cx.world.data.game.velocity = velocity);
+            crate::battle_context::with(|cx| {
                 solar.refresh_frame(cx);
                 interplanetary::do_missions(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
@@ -135,13 +132,13 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
                 );
                 assert_eq!(cx.element(flagship).thrust, 41);
             });
-            let location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
+            let location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
             assert_eq!(location.x, 120);
             assert_eq!(location.y, 170);
-            (**uqm_rust::engine::WorldData::current()).game.ship_stamp = old_stamp;
-            (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
-            (**uqm_rust::engine::WorldData::current()).game.velocity = old_velocity;
-            uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
+            crate::battle_context::with(|cx| cx.world.data.game.ship_stamp = old_stamp);
+            crate::battle_context::with(|cx| cx.world.data.game.ip_location = old_location);
+            crate::battle_context::with(|cx| cx.world.data.game.velocity = old_velocity);
+            crate::battle_context::with(|cx| cx.world.encounter_race = old_race);
         }
     });
 }
@@ -154,9 +151,9 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
         let frames = NativeFrames::new(16);
         // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.
         unsafe {
-            let mut solar = uqm_rust::engine::World::current().read(|world| {
+            let mut solar = crate::battle_context::with(|cx| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
-                    world,
+                    &cx.world,
                     uqm_rust::engine::StarId(0),
                 )
             });
@@ -169,12 +166,12 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 planet: 0,
                 moon: 0,
             });
-            let old_race = uqm_rust::engine::World::current().read(|w| w.encounter_race);
-            let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
-            let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
-            let old_stars = (**uqm_rust::engine::Kernel::current()).stars_in_space;
-            let (group_id, group) = uqm_rust::engine::World::current().write(|world| {
-                let mut queue = world.ip_groups();
+            let old_race = crate::battle_context::with(|cx| cx.world.encounter_race);
+            let old_stamp = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp);
+            let old_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
+            let old_stars = crate::battle_context::with(|cx| cx.kernel.stars_in_space);
+            let (group_id, group) = crate::battle_context::with(|cx| {
+                let mut queue = cx.world.ip_groups();
                 queue.reinit();
                 let id = queue.alloc().unwrap();
                 let group = queue.get_mut(id);
@@ -188,14 +185,13 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 queue.put(id);
                 (id, queue.raw(id).cast::<IpGroup>())
             });
-            uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
-            (**uqm_rust::engine::Kernel::current()).stars_in_space = frames.frame(0);
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .ship_stamp
-                .frame = frames.frame(0);
-            (**uqm_rust::engine::WorldData::current()).game.ip_location = POINT { x: 100, y: 200 };
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| cx.world.encounter_race = -1);
+            crate::battle_context::with(|cx| cx.kernel.stars_in_space = frames.frame(0));
+            crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.frame = frames.frame(0));
+            crate::battle_context::with(|cx| {
+                cx.world.data.game.ip_location = POINT { x: 100, y: 200 }
+            });
+            crate::battle_context::with(|cx| {
                 solar.refresh_frame(cx);
                 interplanetary::do_missions(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
@@ -220,7 +216,9 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             assert_ne!(((*group).loc.x, (*group).loc.y), (300, 400));
             assert_eq!((*group).sys_loc, 0);
             assert_eq!((*group).group_id, 7);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
+                // Each admitted solar frame supplies its geometry, as the old shared context did.
+                solar.refresh_frame(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
                 let id = cx.elements().succ(flagship).expect("spawned group");
                 let hook = cx.element(id).death.expect("group movement hook");
@@ -232,14 +230,14 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                     "a group returning to the flagship's location must become collidable"
                 );
             });
-            uqm_rust::app::bridge::enter(|cx| interplanetary::notify_others(cx, 0, 2));
+            crate::battle_context::with(|cx| interplanetary::notify_others(cx, 0, 2));
             assert_eq!((*group).dest_loc, 2);
             assert_ne!((*group).task & IpGroup::IGNORE_FLAGSHIP, 0);
-            uqm_rust::engine::World::current().write(|world| world.ip_groups().reinit());
-            (**uqm_rust::engine::WorldData::current()).game.ship_stamp = old_stamp;
-            (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
-            (**uqm_rust::engine::Kernel::current()).stars_in_space = old_stars;
-            uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
+            crate::battle_context::with(|cx| cx.world.ip_groups().reinit());
+            crate::battle_context::with(|cx| cx.world.data.game.ship_stamp = old_stamp);
+            crate::battle_context::with(|cx| cx.world.data.game.ip_location = old_location);
+            crate::battle_context::with(|cx| cx.kernel.stars_in_space = old_stars);
+            crate::battle_context::with(|cx| cx.world.encounter_race = old_race);
         }
     });
 }

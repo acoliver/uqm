@@ -51,12 +51,11 @@ fn check_initialized_identity(h: &mut Harness) {
     h.star_index = SOL_DEFINED;
     h.set_star(0, 0);
     h.star[0].index = uqm_rust::battle::gendef::SHOFIXTI_DEFINED;
-    uqm_rust::engine::World::current()
-        .write(|world| world.set_catalog(std::borrow::Cow::Owned(*h.star)));
+    crate::battle_context::with(|cx| cx.world.set_catalog(std::borrow::Cow::Owned(*h.star)));
     // SAFETY: the serialized harness retains its catalog, RNG and solar records;
     // the callback releases all generated references before returning.
-    let generated = unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    let generated = {
+        crate::battle_context::with(|cx| {
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let mut io = uqm_rust::engine::observe::Io {
                 observer: &mut observer,
@@ -84,40 +83,43 @@ fn check_initialized_identity(h: &mut Harness) {
 
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
-    let old_bomb = uqm_rust::engine::World::current()
-        .read(|world| (world).story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE));
-    let old_probe = uqm_rust::engine::World::current()
-        .read(|world| (world).story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED));
-    uqm_rust::engine::World::current()
-        .write(|world| (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3));
-    uqm_rust::engine::World::current().write(|world| {
-        (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
+    let old_bomb = crate::battle_context::with(|cx| {
+        (&cx.world).story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE)
+    });
+    let old_probe = crate::battle_context::with(|cx| {
+        (&cx.world).story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED)
+    });
+    crate::battle_context::with(|cx| {
+        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3)
+    });
+    crate::battle_context::with(|cx| {
+        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
     unsafe {
-        let saved = uqm_rust::engine::World::current().write(|world| {
+        let saved = crate::battle_context::with(|cx| {
             let saved = (
-                std::mem::take(&mut world.queues),
-                world.data.game.battle_group_ref,
+                std::mem::take(&mut cx.world.queues),
+                cx.world.data.game.battle_group_ref,
             );
-            world.data.game.battle_group_ref = 0x12345678;
+            cx.world.data.game.battle_group_ref = 0x12345678;
             saved
         });
         assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
         }));
-        uqm_rust::engine::World::current().write(|world| {
-            assert_eq!(world.data.game.battle_group_ref, 0);
-            assert!(world.ip_groups_ref().head().is_none());
-            assert!(world.npc_built_ships_ref().head().is_none());
-            world.queues = saved.0;
-            world.data.game.battle_group_ref = saved.1;
+        crate::battle_context::with(|cx| {
+            assert_eq!(cx.world.data.game.battle_group_ref, 0);
+            assert!(cx.world.ip_groups_ref().head().is_none());
+            assert!(cx.world.npc_built_ships_ref().head().is_none());
+            cx.world.queues = saved.0;
+            cx.world.data.game.battle_group_ref = saved.1;
         });
     }
-    uqm_rust::engine::World::current().write(|world| {
-        (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
+    crate::battle_context::with(|cx| {
+        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
     });
-    uqm_rust::engine::World::current().write(|world| {
-        (world).set_story_state(
+    crate::battle_context::with(|cx| {
+        (&mut cx.world).set_story_state(
             uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
             old_probe,
         )
@@ -205,10 +207,9 @@ fn check_drawable_ownership(h: &mut Harness) {
     }
     // DEBUG's early-return LoadPlanet path must release an unconsumed non-null
     // definition as well, rather than proving only a missing-resource branch.
-    let quiet = uqm_rust::engine::Kernel::current()
-        .read(|kernel| kernel.diagnostics.suppress_interaction());
+    let quiet = crate::battle_context::with(|cx| cx.kernel.diagnostics.suppress_interaction());
     unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let game = std::cell::RefCell::new(cx.reborrow());
             let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {

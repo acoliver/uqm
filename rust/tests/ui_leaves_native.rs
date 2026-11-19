@@ -170,7 +170,7 @@ impl Observer for WaitObserver {
     fn input_admitted(
         &mut self,
         view: &InputView,
-        _: &mut crate::engine::battle::Cx<'_>,
+        _: &mut uqm_rust::engine::battle::Cx<'_>,
     ) -> Injected {
         assert_eq!(*view, InputView::Nested);
         self.0 += 1;

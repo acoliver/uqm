@@ -63,7 +63,7 @@ unsafe fn queue() -> Vec<*mut std::ffi::c_void> {
 unsafe fn exhaust_queue() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     loop {
-        let h = uqm_rust::app::bridge::enter(|cx| {
+        let h = crate::battle_context::with(|cx| {
             cx.alloc_element()
                 .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
         });
@@ -728,7 +728,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (0, frames.clone(), FINITE_LIFE | NONSOLID | CHANGING),
                 (0, frames.clone(), FINITE_LIFE | NONSOLID),
             ] {
-                let h = uqm_rust::app::bridge::enter(|cx| {
+                let h = crate::battle_context::with(|cx| {
                     cx.alloc_element()
                         .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
                 });

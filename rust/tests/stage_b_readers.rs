@@ -11,9 +11,8 @@ use uqm_rust::ships::native::abi::*;
 fn laser_construction_preserves_fields_and_pool_exhaustion() {
     battle_context::run(|_| {
         let _owner = Battle::new(1);
-        // SAFETY: the serialized fixture owns the published context and its pool.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 let laser = Laser {
                     origin: POINT { x: 100, y: 200 },
                     end: POINT { x: 300, y: -400 },
@@ -62,9 +61,8 @@ fn gravity_reads_next_positions_and_preserves_queue_order() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
-        // SAFETY: the serialized fixture owns all records for this call.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 let planet = cx.alloc_element().unwrap();
                 cx.element_mut(planet).mass = 200;
                 cx.element_mut(planet).flags = 0;
@@ -94,7 +92,7 @@ fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
         // SAFETY: the fixture owns the published battle and this checked ship.
         unsafe {
             ship.descriptor_mut().ship_info.energy_level = 2;
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 cx.ship_state_mut(ship.ship_id).energy_counter = 9;
                 assert!(!cx.delta_energy(ship.id, -3));
                 assert_ne!(cx.ship_state(ship.ship_id).status & LOW_ON_ENERGY as u16, 0);
@@ -112,7 +110,7 @@ fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
         // SAFETY: the serialized fixture retains the ship, its frames and the published context.
         unsafe {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 assert_eq!(cx.elements().head(), Some(ship.id));
                 cx.spawn_ion_trail(ship.id);
                 let trail = cx.elements().head().unwrap();

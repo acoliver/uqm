@@ -8,9 +8,8 @@ pub enum CollisionCall {
 /// # Safety
 /// The fixture retains the pool element and publishes its battle context.
 pub unsafe fn invoke_element_pointer<E>(hook: ElementHook, element: *mut E) {
-    // SAFETY: fixture storage stays live until native dispatch returns.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             let id = cx
                 .elements()
                 .id(std::ptr::NonNull::new(element.cast()))
@@ -32,7 +31,7 @@ pub unsafe fn invoke_collision_pointer<E, P>(
 ) {
     // SAFETY: the fixture owns the published context, elements and writable points.
     unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             let a = cx
                 .elements()
                 .id(std::ptr::NonNull::new(a.cast()))

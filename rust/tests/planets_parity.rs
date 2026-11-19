@@ -100,12 +100,13 @@ impl SuppliedGenerators {
             // `MAP_WIDTH` derives from the screen width the graphics init sets.
             ScreenWidth = 320;
         }
-        let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
-        let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
+        let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
+        let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
         let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
-        let state = uqm_rust::engine::World::current().write(|world| {
+        let state = crate::battle_context::with(|cx| {
+            let world = &mut cx.world;
             world.set_catalog(std::borrow::Cow::Owned(*star));
             Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
         });
@@ -120,9 +121,9 @@ impl SuppliedGenerators {
     fn set_star(&mut self, size: u8, star_type: u8) {
         self.state.sys.sun.data_index = size;
         self.star[0].star_type = star_type;
-        uqm_rust::engine::World::current().write(|world| {
-            world.set_catalog(std::borrow::Cow::Owned(*self.star));
-            world.current_star = Some(uqm_rust::engine::StarId(0));
+        crate::battle_context::with(|cx| {
+            cx.world.set_catalog(std::borrow::Cow::Owned(*self.star));
+            cx.world.current_star = Some(uqm_rust::engine::StarId(0));
         });
         let mut next = uqm_rust::engine::world::generation::SolarSys::new(
             &uqm_rust::planets::tables::PLANET_ARRAY,
@@ -548,9 +549,10 @@ fn plandata_tables_equal_the_c_originals() {
 
 impl Drop for SuppliedGenerators {
     fn drop(&mut self) {
-        uqm_rust::engine::World::current().write(|world| {
-            world.set_catalog(std::borrow::Cow::Owned(self.previous_catalog));
-            world.current_star = self.previous_star;
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_catalog(std::borrow::Cow::Owned(self.previous_catalog));
+            cx.world.current_star = self.previous_star;
         });
     }
 }
@@ -562,9 +564,8 @@ unsafe fn invoke_generation<R>(
         &mut dyn uqm_rust::planets::generate::SiteHost,
     ) -> R,
 ) -> R {
-    // SAFETY: the serialized fixture owns the published context and initialized record during the callback.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let mut io = uqm_rust::engine::observe::Io {
                 observer: &mut observer,
