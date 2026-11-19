@@ -16,11 +16,15 @@ pub(super) fn hooks() -> Vec<(usize, &'static str)> {
         part12(),
         part13(),
         part14(),
+        part15(),
+        part16(),
+        part17(),
     ]
     .into_iter()
     .flatten()
     .collect()
 }
+
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -55,14 +59,15 @@ fn part0() -> Vec<(usize, &'static str)> {
             crate::ships::races::orz_native::engine::turret_postprocess as *const () as usize,
             "ships::races::orz_native::turret_postprocess",
         ),
+    ]
+}
+
+fn part1() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::human_native::engine::human_intelligence as *const () as usize,
             "ships::races::human_native::human_intelligence",
         ),
-    ]
-}
-fn part1() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::human_native::engine::human_postprocess as *const () as usize,
             "ships::races::human_native::human_postprocess",
@@ -91,6 +96,11 @@ fn part1() -> Vec<(usize, &'static str)> {
             crate::ships::races::spathi_native::engine::spawn_butt_missile as *const () as usize,
             "ships::races::spathi_native::spawn_butt_missile",
         ),
+    ]
+}
+
+fn part2() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::pkunk_native::engine::animate as *const () as usize,
             "ships::races::pkunk_native::animate",
@@ -103,10 +113,6 @@ fn part1() -> Vec<(usize, &'static str)> {
             crate::ships::races::pkunk_native::engine::intercept_pkunk_death as *const () as usize,
             "ships::races::pkunk_native::intercept_pkunk_death",
         ),
-    ]
-}
-fn part2() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::pkunk_native::engine::new_pkunk as *const () as usize,
             "ships::races::pkunk_native::new_pkunk",
@@ -127,6 +133,11 @@ fn part2() -> Vec<(usize, &'static str)> {
             crate::ships::races::pkunk_native::engine::pkunk_preprocess as *const () as usize,
             "ships::races::pkunk_native::pkunk_preprocess",
         ),
+    ]
+}
+
+fn part3() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::pkunk_native::engine::spawn_phoenix_trail as *const () as usize,
             "ships::races::pkunk_native::spawn_phoenix_trail",
@@ -147,10 +158,6 @@ fn part2() -> Vec<(usize, &'static str)> {
             crate::ships::races::urquan_native::engine::initialize_fusion as *const () as usize,
             "ships::races::urquan_native::initialize_fusion",
         ),
-    ]
-}
-fn part3() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::urquan_native::engine::spawn_fighters as *const () as usize,
             "ships::races::urquan_native::spawn_fighters",
@@ -163,6 +170,11 @@ fn part3() -> Vec<(usize, &'static str)> {
             crate::ships::races::urquan_native::engine::urquan_postprocess as *const () as usize,
             "ships::races::urquan_native::urquan_postprocess",
         ),
+    ]
+}
+
+fn part4() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::samatra::engine::comet_collision as *const () as usize,
             "ships::races::samatra::comet_collision",
@@ -191,14 +203,15 @@ fn part3() -> Vec<(usize, &'static str)> {
             crate::ships::races::samatra::engine::generator_preprocess as *const () as usize,
             "ships::races::samatra::generator_preprocess",
         ),
-    ]
-}
-fn part4() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::samatra::engine::samatra_intelligence as *const () as usize,
             "ships::races::samatra::samatra_intelligence",
         ),
+    ]
+}
+
+fn part5() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::samatra::engine::samatra_postprocess as *const () as usize,
             "ships::races::samatra::samatra_postprocess",
@@ -231,14 +244,15 @@ fn part4() -> Vec<(usize, &'static str)> {
             crate::ships::races::yehat_native::engine::yehat_preprocess as *const () as usize,
             "ships::races::yehat_native::yehat_preprocess",
         ),
+    ]
+}
+
+fn part6() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::utwig_native::engine::initialize_lance as *const () as usize,
             "ships::races::utwig_native::initialize_lance",
         ),
-    ]
-}
-fn part5() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::utwig_native::engine::utwig_collision as *const () as usize,
             "ships::races::utwig_native::utwig_collision",
@@ -267,6 +281,11 @@ fn part5() -> Vec<(usize, &'static str)> {
             crate::ships::races::chenjesu_native::engine::crystal_preprocess as *const () as usize,
             "ships::races::chenjesu_native::crystal_preprocess",
         ),
+    ]
+}
+
+fn part7() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::chenjesu_native::engine::doggy_collision as *const () as usize,
             "ships::races::chenjesu_native::doggy_collision",
@@ -275,10 +294,6 @@ fn part5() -> Vec<(usize, &'static str)> {
             crate::ships::races::chenjesu_native::engine::doggy_death as *const () as usize,
             "ships::races::chenjesu_native::doggy_death",
         ),
-    ]
-}
-fn part6() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::chenjesu_native::engine::doggy_preprocess as *const () as usize,
             "ships::races::chenjesu_native::doggy_preprocess",
@@ -303,6 +318,11 @@ fn part6() -> Vec<(usize, &'static str)> {
             crate::ships::races::melnorme_native::engine::confuse_preprocess as *const () as usize,
             "ships::races::melnorme_native::confuse_preprocess",
         ),
+    ]
+}
+
+fn part8() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::melnorme_native::engine::confusion_collision as *const () as usize,
             "ships::races::melnorme_native::confusion_collision",
@@ -315,10 +335,6 @@ fn part6() -> Vec<(usize, &'static str)> {
             crate::ships::races::melnorme_native::engine::pump_up_collision as *const () as usize,
             "ships::races::melnorme_native::pump_up_collision",
         ),
-    ]
-}
-fn part7() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::melnorme_native::engine::pump_up_postprocess as *const () as usize,
             "ships::races::melnorme_native::pump_up_postprocess",
@@ -339,6 +355,11 @@ fn part7() -> Vec<(usize, &'static str)> {
             crate::ships::races::chmmr_native::engine::chmmr_intelligence as *const () as usize,
             "ships::races::chmmr_native::chmmr_intelligence",
         ),
+    ]
+}
+
+fn part9() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::chmmr_native::engine::chmmr_postprocess as *const () as usize,
             "ships::races::chmmr_native::chmmr_postprocess",
@@ -355,10 +376,6 @@ fn part7() -> Vec<(usize, &'static str)> {
             crate::ships::races::chmmr_native::engine::satellite_collision as *const () as usize,
             "ships::races::chmmr_native::satellite_collision",
         ),
-    ]
-}
-fn part8() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::chmmr_native::engine::satellite_death as *const () as usize,
             "ships::races::chmmr_native::satellite_death",
@@ -375,6 +392,11 @@ fn part8() -> Vec<(usize, &'static str)> {
             crate::ships::races::chmmr_native::engine::spawn_point_defense as *const () as usize,
             "ships::races::chmmr_native::spawn_point_defense",
         ),
+    ]
+}
+
+fn part10() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::chmmr_native::engine::spawn_satellites as *const () as usize,
             "ships::races::chmmr_native::spawn_satellites",
@@ -399,10 +421,6 @@ fn part8() -> Vec<(usize, &'static str)> {
             crate::ships::races::ilwrath_native::engine::flame_preprocess as *const () as usize,
             "ships::races::ilwrath_native::flame_preprocess",
         ),
-    ]
-}
-fn part9() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::ilwrath_native::engine::ilwrath_intelligence as *const () as usize,
             "ships::races::ilwrath_native::ilwrath_intelligence",
@@ -411,6 +429,11 @@ fn part9() -> Vec<(usize, &'static str)> {
             crate::ships::races::ilwrath_native::engine::ilwrath_preprocess as *const () as usize,
             "ships::races::ilwrath_native::ilwrath_preprocess",
         ),
+    ]
+}
+
+fn part11() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::ilwrath_native::engine::initialize_flame as *const () as usize,
             "ships::races::ilwrath_native::initialize_flame",
@@ -445,7 +468,8 @@ fn part9() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-fn part10() -> Vec<(usize, &'static str)> {
+
+fn part12() -> Vec<(usize, &'static str)> {
     vec![
         (
             crate::ships::races::druuge_native::engine::cannon_collision as *const () as usize,
@@ -479,6 +503,11 @@ fn part10() -> Vec<(usize, &'static str)> {
             crate::ships::races::mycon_native::engine::mycon_postprocess as *const () as usize,
             "ships::races::mycon_native::mycon_postprocess",
         ),
+    ]
+}
+
+fn part13() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::mycon_native::engine::plasma_collision as *const () as usize,
             "ships::races::mycon_native::plasma_collision",
@@ -487,10 +516,6 @@ fn part10() -> Vec<(usize, &'static str)> {
             crate::ships::races::mycon_native::engine::plasma_preprocess as *const () as usize,
             "ships::races::mycon_native::plasma_preprocess",
         ),
-    ]
-}
-fn part11() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::arilou_native::engine::arilou_intelligence as *const () as usize,
             "ships::races::arilou_native::arilou_intelligence",
@@ -515,6 +540,11 @@ fn part11() -> Vec<(usize, &'static str)> {
             crate::ships::races::vux_native::engine::vux_intelligence as *const () as usize,
             "ships::races::vux_native::vux_intelligence",
         ),
+    ]
+}
+
+fn part14() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::vux_native::engine::vux_postprocess as *const () as usize,
             "ships::races::vux_native::vux_postprocess",
@@ -531,10 +561,6 @@ fn part11() -> Vec<(usize, &'static str)> {
             crate::ships::races::zoqfot_native::engine::spawn_tongue as *const () as usize,
             "ships::races::zoqfot_native::spawn_tongue",
         ),
-    ]
-}
-fn part12() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::zoqfot_native::engine::spit_preprocess as *const () as usize,
             "ships::races::zoqfot_native::spit_preprocess",
@@ -551,6 +577,11 @@ fn part12() -> Vec<(usize, &'static str)> {
             crate::ships::races::zoqfot_native::engine::zoqfotpik_postprocess as *const () as usize,
             "ships::races::zoqfot_native::zoqfotpik_postprocess",
         ),
+    ]
+}
+
+fn part15() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::umgah_native::engine::cone_collision as *const () as usize,
             "ships::races::umgah_native::cone_collision",
@@ -575,10 +606,6 @@ fn part12() -> Vec<(usize, &'static str)> {
             crate::ships::races::umgah_native::engine::umgah_preprocess as *const () as usize,
             "ships::races::umgah_native::umgah_preprocess",
         ),
-    ]
-}
-fn part13() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::thraddash_native::engine::initialize_horn as *const () as usize,
             "ships::races::thraddash_native::initialize_horn",
@@ -587,6 +614,11 @@ fn part13() -> Vec<(usize, &'static str)> {
             crate::ships::races::sis_native::engine::blaster_collision as *const () as usize,
             "ships::races::sis_native::blaster_collision",
         ),
+    ]
+}
+
+fn part16() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::sis_native::engine::blaster_preprocess as *const () as usize,
             "ships::races::sis_native::blaster_preprocess",
@@ -621,7 +653,8 @@ fn part13() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-fn part14() -> Vec<(usize, &'static str)> {
+
+fn part17() -> Vec<(usize, &'static str)> {
     vec![
         (
             crate::ships::races::blackurq_native::engine::buzzsaw_collision as *const () as usize,

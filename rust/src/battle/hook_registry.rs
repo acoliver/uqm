@@ -1,11 +1,10 @@
 //! Stable callback names. Addresses are lookup keys only and never serialized.
 
-mod assigned;
 mod ships;
 pub fn hooks() -> Vec<(usize, &'static str)> {
     ships::hooks()
         .into_iter()
-        .chain(assigned::hooks())
+        .chain(crate::ships::hook_registry::hooks())
         .collect()
 }
 
