@@ -348,7 +348,7 @@ pub fn init_communication_with_options(
             let star = cx
                 .world
                 .selected_star()
-                .expect("an interplanetary encounter has a current star");
+                .unwrap_or_else(|| panic!("an interplanetary encounter has a current star"));
             {
                 let point = CPoint {
                     x: star.star_pt.x,
@@ -369,7 +369,7 @@ pub fn init_communication_with_options(
                 cx.kernel,
                 dimensions.0,
                 std::ffi::CStr::from_bytes_until_nul(&name)
-                    .expect("the planet name is NUL-terminated"),
+                    .unwrap_or_else(|error| panic!("unterminated planet name: {error}")),
             );
         }
     }
