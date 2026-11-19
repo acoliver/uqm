@@ -823,6 +823,20 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
         });
         assert_eq!(group, (77, 77));
 
+        crate::engine::world::fleet::add_escort_ships(
+            cx.world,
+            ORZ_SHIP as u16,
+            12,
+            crate::engine::world::fleet::captain_name,
+        );
+        assert_eq!(
+            host(&mut cx, DialogueKind::Pkunk, |h: &mut Host<'_, '_, _>| h
+                .gift_ships()),
+            0,
+            "a full hangar takes no gift"
+        );
+        cx.world.built_ships().reinit();
+
         let biomass = cx.world.data.flagship.total_bio_mass;
         host(&mut cx, DialogueKind::Umgah, |h: &mut Host<'_, '_, _>| {
             h.add_biomass(5)
@@ -879,4 +893,32 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
         assert_eq!(cx.world.data.flagship.res_units, 1_000_000);
         crate::time::clock_bridge::rust_clock_uninit(cx.world);
     });
+}
+
+/// Zoq and Pik take turns: the speaker of each line is chosen when the
+/// track player reaches that line (its tag callback), not when it is queued.
+#[test]
+fn zoq_and_pik_speaker_switches_when_its_line_starts() {
+    use crate::comm::races::zoqfot::api::Speaker;
+    let mut comm = Comm::new();
+    comm.race_scratch.last_alien = 1;
+    let pik = comm
+        .queue_phrase_callback(Some(super::zoqfot::speaker_callback(Speaker::Pik)))
+        .unwrap_or_else(|| panic!("Pik line has a tag callback"));
+    let zoq = comm
+        .queue_phrase_callback(Some(super::zoqfot::speaker_callback(Speaker::Zoq)))
+        .unwrap_or_else(|| panic!("Zoq line has a tag callback"));
+    comm.apply_phrase_events();
+    assert_eq!(
+        comm.race_scratch.last_alien, 1,
+        "queued lines do not switch yet"
+    );
+    pik(0);
+    comm.apply_phrase_events();
+    assert_eq!(comm.race_scratch.last_alien, 2);
+    assert_eq!(comm.data.definition.alien_text_baseline.x, 181);
+    zoq(0);
+    comm.apply_phrase_events();
+    assert_eq!(comm.race_scratch.last_alien, 0);
+    assert_eq!(comm.data.definition.alien_text_baseline.x, 61);
 }
