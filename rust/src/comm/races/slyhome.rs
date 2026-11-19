@@ -21,7 +21,7 @@ pub(crate) const HOME_TOPICS: [u32; 7] = [
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Exit,
     Home,
     Human,
@@ -31,15 +31,15 @@ pub(crate) enum Handler {
     Bug,
     Fix,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 
 impl<A: SlyhomeApi> Dialogue<'_, A> {
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.api.segue(0);
     }
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => self.exit(r),
             Handler::Home => self.home(r),
@@ -481,7 +481,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
                 GOODBYE_2 as i32
             });
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         if self.api.get(StoryKey::SLYLANDRO_KNOW_BROKEN) != 0
             && self.api.get(StoryKey::RECALL_VISITS) == 0
         {
@@ -552,4 +552,4 @@ mod tests {
     }
 }
 
-pub(crate) mod descriptor;
+pub mod descriptor;

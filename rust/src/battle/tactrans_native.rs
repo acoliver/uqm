@@ -124,7 +124,7 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
     (next, thrust, wait)
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::battle::battle_native::engine::battle_song;
     use crate::battle::battle_native::engine::rgb15;
@@ -201,7 +201,7 @@ pub(crate) mod engine {
         })
     }
 
-    pub(crate) fn preprocess_dead_ship(cx: &mut Cx<'_>, _ship: ElementId) {
+    pub fn preprocess_dead_ship(cx: &mut Cx<'_>, _ship: ElementId) {
         cx.silence_battle_sounds();
     }
 
@@ -357,7 +357,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn explosion_preprocess(cx: &mut Cx<'_>, ship: ElementId) {
+    pub fn explosion_preprocess(cx: &mut Cx<'_>, ship: ElementId) {
         let tick =
             ((NUM_EXPLOSION_FRAMES * 3) as u16).wrapping_sub(cx.element(ship).life_span()) as u8;
         let step = explosion_step(tick);
@@ -465,7 +465,7 @@ pub(crate) mod engine {
         cx.record_ship_death(ship);
     }
 
-    pub(crate) fn cycle_ion_trail(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn cycle_ion_trail(cx: &mut Cx<'_>, e: ElementId) {
         assert_eq!(cx.element(e).flags & PLAYER_SHIP as u16, 0);
         cx.element_mut(e).color_cycle = cx.element(e).color_cycle.wrapping_add(1);
         if cx.element(e).color_cycle as usize != ION_COLORS.len() {

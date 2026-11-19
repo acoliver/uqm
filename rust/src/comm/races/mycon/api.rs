@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait MyconApi: AllianceApi<Handler> {
+pub trait MyconApi: AllianceApi<Handler> {
     fn random(&mut self) -> u32;
 }
 

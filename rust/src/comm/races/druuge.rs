@@ -3,7 +3,7 @@ pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     Buy,
     Trade,
@@ -14,19 +14,19 @@ pub(crate) enum Handler {
     Space,
 }
 #[derive(Default)]
-pub(crate) struct Session {
+pub struct Session {
     slavery_count: u16,
     attempted_salvage: bool,
     last_response: u16,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
-    pub(crate) session: &'a mut Session,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
+    pub session: &'a mut Session,
 }
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::DruugeApi;
 impl<A: DruugeApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::Buy => self.buy(r),
@@ -454,7 +454,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
         self.api.response(BYE, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -645,7 +645,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn post_druuge_enc(&mut self) {
+    pub fn post_druuge_enc(&mut self) {
         if (((self.api.get_segue()) as i32 == 1) && !self.session.attempted_salvage)
             && !(self.api.get(StoryKey::DRUUGE_MANNER) != 0)
             && !(self.api.get(StoryKey::ATTACKED_DRUUGE) != 0)
@@ -654,7 +654,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             self.api.set(StoryKey::DRUUGE_VISITS, 0_u8);
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.session.slavery_count = 0;
         self.session.attempted_salvage = false;
         if ((i32::from(self.api.get(StoryKey::DRUUGE_MANNER)) == 0)
@@ -671,4 +671,4 @@ impl<A: DruugeApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

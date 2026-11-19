@@ -2,7 +2,7 @@ use super::text_layout;
 use crate::comm::races::descriptor::{Color, CommDescriptor};
 use crate::comm::races::script::animation;
 
-pub(crate) fn descriptor(screen_width: i32) -> CommDescriptor {
+pub fn descriptor(screen_width: i32) -> CommDescriptor {
     let (baseline, width) = text_layout(screen_width);
     let mut d = CommDescriptor {
         alien_frame_res: Some(c"comm.yehat.graphics"),

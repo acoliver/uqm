@@ -1,6 +1,6 @@
 //! Live engine callbacks for the Mmrnmhrm, mirroring `mmrnmhrm.c`.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{
         abi::*, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
     };
@@ -107,7 +107,7 @@ pub(crate) mod engine {
         intelligence: Some(mmrnmhrm_intelligence),
         uninit: Some(uninit_mmrnmhrm),
     };
-    pub(crate) fn missile_preprocess(cx: &mut Cx<'_>, element: ElementId) {
+    pub fn missile_preprocess(cx: &mut Cx<'_>, element: ElementId) {
         if cx.element(element).turn > 0 {
             cx.element_mut(element).turn -= 1;
         } else {
@@ -127,7 +127,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn mmrnmhrm_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn mmrnmhrm_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy_eval = ENEMY_SHIP_INDEX as usize;
         let enemy = concerns.objects[enemy_eval].object;
         let can_transform = cx.ship_state(ss).special_counter == 0
@@ -199,7 +199,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn twin_laser_collision(
+    pub fn twin_laser_collision(
         cx: &mut Cx<'_>,
         e0: ElementId,
         p0: &mut POINT,
@@ -213,7 +213,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn initialize_dual_weapons(
+    pub fn initialize_dual_weapons(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -293,7 +293,7 @@ pub(crate) mod engine {
         out
     }
 
-    pub(crate) fn mmrnmhrm_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn mmrnmhrm_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.element(ship).next.image.frames == cx.element(ship).current.image.frames {
             return;
@@ -325,9 +325,9 @@ pub(crate) mod engine {
     }
 
     /// Names the form change in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn mmrnmhrm_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn mmrnmhrm_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.element(ship).flags & APPEARING as u16 == 0
             && cx.ship_state(ss).status & SPECIAL as u16 != 0
@@ -355,7 +355,7 @@ pub(crate) mod engine {
             cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
     }
-    pub(crate) fn uninit_mmrnmhrm(
+    pub fn uninit_mmrnmhrm(
         _world: &mut crate::engine::battle::World,
         stats: &mut crate::engine::battle::views::RaceStats,
     ) {

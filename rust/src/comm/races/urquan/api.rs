@@ -2,7 +2,7 @@ use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 use crate::engine::StoryKey;
 
-pub(crate) trait UrquanApi: EncounterApi<Handler> {
+pub trait UrquanApi: EncounterApi<Handler> {
     fn group_battle(&self, state_key: StoryKey) -> bool;
     fn intro_mode(&mut self, mode: i32, duration: u32);
 }

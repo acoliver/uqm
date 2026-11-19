@@ -6,7 +6,7 @@ use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 
 mod collision_motion;
-pub(crate) mod dispatch;
+pub mod dispatch;
 pub mod invoke_collision;
 pub mod invoke_element;
 mod queue_view;
@@ -207,7 +207,7 @@ mod helpers {
     }
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
     use crate::engine::battle::{Cx, ElementId};
@@ -778,7 +778,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
+    pub fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
         use crate::graphics::context_abi::ContextLease;
         let status = ContextLease::require(cx.kernel.status_context);
         status.select();

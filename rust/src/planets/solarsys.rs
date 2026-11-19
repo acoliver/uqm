@@ -8,7 +8,7 @@ pub(crate) mod drawing;
 #[path = "solarsys/flight.rs"]
 mod flight;
 #[path = "solarsys/lifecycle.rs"]
-pub(crate) mod lifecycle;
+pub mod lifecycle;
 mod planet_info;
 #[path = "solarsys/resources.rs"]
 pub(crate) mod resources;

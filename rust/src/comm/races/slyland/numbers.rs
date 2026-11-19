@@ -48,6 +48,6 @@ const NUMBER_SPEECH: NumberSpeech = NumberSpeech {
     ],
 };
 
-pub(crate) fn descriptor() -> &'static NumberSpeech {
+pub fn descriptor() -> &'static NumberSpeech {
     &NUMBER_SPEECH
 }

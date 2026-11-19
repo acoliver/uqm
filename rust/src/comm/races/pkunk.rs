@@ -3,7 +3,7 @@ pub(crate) use super::script::{StoryKey, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     PkunkAngry,
     DiscussConquer,
@@ -15,13 +15,13 @@ pub(crate) enum Handler {
     PkunkNeutralSpace,
     PkunkMigrate,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::PkunkApi;
 impl<A: PkunkApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::PkunkAngry => self.pkunk_angry(r),
@@ -673,7 +673,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         self.api
             .response(SUIT_YOURSELF, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -943,7 +943,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.pkunk_migrate(0_u16);
         }
     }
-    pub(crate) fn post_pkunk_enc(&mut self) {
+    pub fn post_pkunk_enc(&mut self) {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
@@ -958,7 +958,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         if (i32::from(self.api.get(StoryKey::PKUNK_MANNER)) == 3)
             || (i32::from((self.api.activity()) as u8) == 5)
         {
@@ -972,4 +972,4 @@ impl<A: PkunkApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

@@ -2,7 +2,7 @@
 
 pub(crate) use super::script::DialogueHost;
 
-pub(crate) trait EncounterApi<H>: DialogueHost<H> {
+pub trait EncounterApi<H>: DialogueHost<H> {
     fn segue(&mut self, segue: u32);
     fn get_segue(&self) -> u32;
     fn activity(&self) -> u16;

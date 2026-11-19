@@ -1,6 +1,6 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::race::SaMatraState;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -74,7 +74,7 @@ pub(crate) mod engine {
         edit(&mut state);
         cx.race_stats_mut(ss).state = RaceState::SaMatra(state);
     }
-    pub(crate) fn comet_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn comet_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let index = cx.frame_number(cx.element(e).current.image.frame.view()) + 1;
         if index < 29 {
             if index == 25 {
@@ -100,7 +100,7 @@ pub(crate) mod engine {
         );
         cx.element_mut(e).flags |= CHANGING as u16;
     }
-    pub(crate) fn comet_collision(
+    pub fn comet_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
         p: &mut POINT,
@@ -187,7 +187,7 @@ pub(crate) mod engine {
         }
         h
     }
-    pub(crate) fn turret_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn turret_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
@@ -203,7 +203,7 @@ pub(crate) mod engine {
             cx.element_mut(e).turn = 0;
         }
     }
-    pub(crate) fn gate_collision(
+    pub fn gate_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
         p: &mut POINT,
@@ -240,7 +240,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn gate_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn gate_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if cx.race_stats(ss).characteristics.max_thrust == 0 {
             cx.element_mut(e).mass = SHIP_MASS;
@@ -271,7 +271,7 @@ pub(crate) mod engine {
             cx.element_mut(e).flags |= CHANGING as u16;
         }
     }
-    pub(crate) fn generator_death(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn generator_death(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).flags & FINITE_LIFE as u16 == 0 {
             let ss = cx.owner(e);
             let id = state(cx, ss)
@@ -313,7 +313,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn generator_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn generator_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
@@ -331,7 +331,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn generator_collision(
+    pub fn generator_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
         _p: &mut POINT,
@@ -386,7 +386,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn sentinel_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn sentinel_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         cx.race_stats_mut(ss).characteristics.special_wait = cx
             .race_stats(ss)
@@ -504,7 +504,7 @@ pub(crate) mod engine {
             );
         }
     }
-    pub(crate) fn sentinel_collision(
+    pub fn sentinel_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
         p: &mut POINT,
@@ -577,10 +577,10 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn samatra_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn samatra_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_intelligence(ss, concerns);
     }
-    pub(crate) fn samatra_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn samatra_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
 
         if cx.race_stats(ss).characteristics.max_thrust != 0 {
@@ -653,7 +653,7 @@ pub(crate) mod engine {
             cx.race_stats_mut(ss).characteristics.max_thrust += 1;
         }
     }
-    pub(crate) fn samatra_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn samatra_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
 
         cx.race_stats_mut(ss).characteristics.weapon_wait = 0;

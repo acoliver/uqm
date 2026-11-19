@@ -1,5 +1,5 @@
 //! Live utwig callbacks translated from ships/utwig/utwig.c.
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
     const fn color(r: u8, g: u8, b: u8) -> Color {
         Color {
@@ -104,7 +104,7 @@ pub(crate) mod engine {
         out
     }
 
-    pub(crate) fn utwig_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn utwig_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let weapon = ENEMY_WEAPON_INDEX as usize;
         let mut shield: SIZE = 0;
         if cx.race_stats(ss).ship_info.energy_level != 0 {
@@ -182,7 +182,7 @@ pub(crate) mod engine {
         cx.ship_intelligence(ss, concerns);
     }
 
-    pub(crate) fn utwig_collision(
+    pub fn utwig_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -202,9 +202,9 @@ pub(crate) mod engine {
     }
 
     /// Names the shield in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn utwig_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn utwig_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 != 0 {
             cx.element_mut(e).collide = Some(CollisionHook::Native(utwig_collision));

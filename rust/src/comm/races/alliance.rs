@@ -5,7 +5,7 @@ pub(crate) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
 pub(crate) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;
 pub(crate) const ZOQFOTPIK_SHIP: u16 = ship::ZOQFOTPIK_SHIP as u16;
 
-pub(crate) trait AllianceApi<H>: EncounterApi<H> {
+pub trait AllianceApi<H>: EncounterApi<H> {
     fn set_allied(&mut self, race: u16, allied: bool);
     fn track(&mut self, race: u16);
     fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8);

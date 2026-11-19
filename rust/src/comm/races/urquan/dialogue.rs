@@ -4,12 +4,12 @@ use super::*;
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 
 impl<A: UrquanApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
+    pub fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Combat => self.combat(response),
             Handler::Normal => self.normal(response),
@@ -217,7 +217,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
             .response(BYE_WARS_OVER as u16, Handler::Combat, &[]);
     }
 
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         let activity = self.api.activity() as u8;
         let peaceful = self.api.get(StoryKey::PLAYER_HYPNOTIZED) != 0
             || activity == ActivityKind::WonLastBattle as u8
@@ -226,11 +226,11 @@ impl<A: UrquanApi> Dialogue<'_, A> {
         self.api.segue(if peaceful { 0 } else { 1 });
     }
 
-    pub(crate) fn post(&mut self) {
+    pub fn post(&mut self) {
         self.api.set(StoryKey::PLAYER_HYPNOTIZED, 0);
     }
 
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let activity = self.api.activity() as u8;
         if activity == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES as i32);

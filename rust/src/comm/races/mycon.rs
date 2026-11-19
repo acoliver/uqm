@@ -2,25 +2,25 @@
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::MyconApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     CombatIsInevitable,
     SunDevice,
     TrickMycon,
     NormalMycon,
 }
 #[derive(Default)]
-pub(crate) struct Session {
+pub struct Session {
     made_choice: i32,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
-    pub(crate) session: &'a mut Session,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
+    pub session: &'a mut Session,
 }
 impl<A: MyconApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::CombatIsInevitable => self.combat_is_inevitable(r),
             Handler::SunDevice => self.sun_device(r),
@@ -370,7 +370,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 .response((BYE_HOMEWORLD) as u16, Handler::CombatIsInevitable, &[]);
         }
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut visits: i32;
         if self.api.get(StoryKey::SUN_DEVICE) != 0 {
             visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
@@ -501,8 +501,8 @@ impl<A: MyconApi> Dialogue<'_, A> {
             self.normal_mycon(0_u16 as i32);
         }
     }
-    pub(crate) fn post_mycon_enc(&mut self) {}
-    pub(crate) fn initialize(&mut self) {
+    pub fn post_mycon_enc(&mut self) {}
+    pub fn initialize(&mut self) {
         self.session.made_choice = 0;
         if (i32::from(self.api.activity()) as u8 as i32) != 5 {
             self.api.segue(1);
@@ -515,4 +515,4 @@ impl<A: MyconApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

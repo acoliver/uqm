@@ -4,14 +4,14 @@
 
 pub(crate) use crate::comm::races::descriptor::Point;
 
-pub(crate) mod api;
-pub(crate) mod dialogue;
+pub mod api;
+pub mod dialogue;
 mod phrases;
 
 #[cfg(test)]
 mod parity_tests;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Combat,
     Normal,
     Hypno,
@@ -153,4 +153,4 @@ mod tests {
     }
 }
 
-pub(crate) mod descriptor;
+pub mod descriptor;

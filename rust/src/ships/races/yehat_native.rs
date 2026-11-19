@@ -1,5 +1,5 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
@@ -58,7 +58,7 @@ pub(crate) mod engine {
         intelligence: Some(yehat_intelligence),
         uninit: None,
     };
-    pub(crate) fn initialize_standard_missiles(
+    pub fn initialize_standard_missiles(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -90,7 +90,7 @@ pub(crate) mod engine {
         out.push(cx.missile(&mut block));
         out
     }
-    pub(crate) fn yehat_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn yehat_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let mut shield: SIZE = -1;
         let weapon = &mut concerns.objects[ENEMY_WEAPON_INDEX as usize];
         if let Some(object) = weapon
@@ -158,7 +158,7 @@ pub(crate) mod engine {
         }
         cx.ship_intelligence(ss, concerns);
     }
-    pub(crate) fn yehat_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn yehat_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & NONSOLID as u16 == 0 && cx.ship_state(ss).special_counter > 0 {
             if u32::from(cx.element(e).life) == NORMAL_LIFE {
@@ -171,9 +171,9 @@ pub(crate) mod engine {
     }
 
     /// Names the shield in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn yehat_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn yehat_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 == 0 {
             let expired = if u32::from(cx.element(e).life) > NORMAL_LIFE {

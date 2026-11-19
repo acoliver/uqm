@@ -28,7 +28,7 @@ pub fn get_encounter_star_ship_with_picker(
 }
 
 /// The owner's fragment queue matches battle ship link order in the supplied context.
-pub(crate) fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
+pub fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
     let player = cx.ship_state(owner).player;
     let ships = cx.kernel.ships(player as usize);
     let mut next = ships.head();

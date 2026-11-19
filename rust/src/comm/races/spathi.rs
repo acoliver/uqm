@@ -9,7 +9,7 @@ pub(crate) const SPATHI_SHIP: u16 = 6;
 pub(crate) const GOOD_GUY: u16 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     SpathiOnPluto,
     SpathiMustGrovel,
@@ -20,15 +20,15 @@ pub(crate) enum Handler {
     SpathiNeutral,
 }
 #[derive(Default)]
-pub(crate) struct Session {
+pub struct Session {
     refusals: u8,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
-    pub(crate) session: &'a mut Session,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
+    pub session: &'a mut Session,
 }
 impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
+    pub fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::SpathiOnPluto => self.spathi_on_pluto(r),
@@ -40,7 +40,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             Handler::SpathiNeutral => self.spathi_neutral(r),
         }
     }
-    pub(crate) fn initialize(&mut self, desc: &mut CommDescriptor) {
+    pub fn initialize(&mut self, desc: &mut CommDescriptor) {
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             desc.alien_alt_song_res = Some(c"comm.fwiffo.music");
             desc.alien_song_flags |= 1;
@@ -491,7 +491,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(PART_IN_PEACE, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let manner: u8 = self.api.get(StoryKey::SPATHI_MANNER);
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             self.session.refusals = 0;
@@ -543,7 +543,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.spathi_neutral(0_u16);
         }
     }
-    pub(crate) fn post_spathi_enc(&mut self) {
+    pub fn post_spathi_enc(&mut self) {
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             self.api.set(StoryKey::FOUND_PLUTO_SPATHI, 2);
         } else if self.api.get_segue() == 1 {
@@ -564,4 +564,4 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

@@ -20,7 +20,7 @@ fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
     *dy >>= shift;
 }
 
-pub(crate) mod live {
+pub mod live {
     use super::*;
     use crate::battle::element::{
         APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DISAPPEARING, FINITE_LIFE,
@@ -150,7 +150,7 @@ pub(crate) mod live {
         (task, target)
     }
 
-    pub(crate) fn group_preprocess(
+    pub fn group_preprocess(
         cx: &mut crate::engine::battle::Cx<'_>,
         element: crate::engine::battle::ElementId,
     ) {
@@ -403,7 +403,7 @@ pub(crate) mod live {
             cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         }
     }
-    pub(crate) fn flagship_collision(
+    pub fn flagship_collision(
         cx: &mut crate::engine::battle::Cx<'_>,
         first: crate::engine::battle::ElementId,
         _: &mut POINT,
@@ -414,7 +414,7 @@ pub(crate) mod live {
             collide_flagship(cx, first, second);
         }
     }
-    pub(crate) fn group_collision(
+    pub fn group_collision(
         cx: &mut crate::engine::battle::Cx<'_>,
         first: crate::engine::battle::ElementId,
         _: &mut POINT,
@@ -478,7 +478,7 @@ pub(crate) mod live {
         cx.set_intersect_frame(element, frame);
         cx.put(element);
     }
-    pub(crate) fn flagship_preprocess(
+    pub fn flagship_preprocess(
         cx: &mut crate::engine::battle::Cx<'_>,
         element: crate::engine::battle::ElementId,
     ) {

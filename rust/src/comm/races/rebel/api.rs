@@ -3,7 +3,7 @@ use crate::comm::races::encounter::EncounterApi;
 use crate::engine::StoryKey;
 
 #[derive(Clone, Copy)]
-pub(crate) struct Date {
+pub struct Date {
     pub year: u16,
     pub month: u8,
     pub day: u8,
@@ -20,7 +20,7 @@ impl Default for Date {
     }
 }
 
-pub(crate) trait RebelApi: EncounterApi<Handler> {
+pub trait RebelApi: EncounterApi<Handler> {
     fn date(&self) -> Date;
 
     fn ship_not_ready(&self) -> bool {

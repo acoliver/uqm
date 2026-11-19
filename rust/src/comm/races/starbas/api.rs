@@ -15,14 +15,14 @@ pub(crate) const ZOQFOT_GRPOFFS: [StoryKey; 4] = [
 use super::{EncounterApi, Handler};
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Date {
+pub struct Date {
     pub year: u16,
     pub month: u8,
     pub day: u8,
 }
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct Ship {
+pub struct Ship {
     pub drives: [u8; 11],
     pub jets: [u8; 8],
     pub modules: [u8; 16],
@@ -33,7 +33,7 @@ pub(crate) struct Ship {
     pub mineral_mass: u16,
 }
 
-pub(crate) trait StarbaseApi: EncounterApi<Handler> {
+pub trait StarbaseApi: EncounterApi<Handler> {
     fn date(&self) -> Date;
     fn ship(&self) -> Ship;
     fn escorts_worth(&self) -> u16;

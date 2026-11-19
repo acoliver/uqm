@@ -7,11 +7,11 @@ pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::SpahomeApi;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Exit,
     Password,
     Council,
@@ -23,11 +23,11 @@ pub(crate) enum Handler {
     Allies,
     Info,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: SpahomeApi> Dialogue<'_, A> {
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.api
             .segue(if self.api.get(StoryKey::SPATHI_MANNER) == 3 {
                 0
@@ -35,7 +35,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 1
             });
     }
-    pub(crate) fn post(&mut self) {
+    pub fn post(&mut self) {
         if self.api.get_segue() == 1 {
             let manner = self.api.get(StoryKey::SPATHI_MANNER);
             if manner != 2 {
@@ -50,7 +50,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
     pub(crate) fn offer(&mut self, p: u32, h: Handler) {
         self.api.response(p as u16, h, &[])
     }
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => self.exit(r),
             Handler::Password => self.password(r),
@@ -571,7 +571,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.api.disable(LIKE_SOME_INFO as u16);
         }
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         if self.api.get(StoryKey::SPATHI_MANNER) == 2 {
             self.api.npc(HATE_YOU_FOREVER as i32);
             self.api.segue(1)
@@ -668,4 +668,4 @@ mod tests {
     }
 }
 
-pub(crate) mod descriptor;
+pub mod descriptor;

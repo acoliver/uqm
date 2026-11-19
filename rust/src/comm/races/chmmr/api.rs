@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait ChmmrApi: AllianceApi<Handler> {
+pub trait ChmmrApi: AllianceApi<Handler> {
     fn refit(&mut self);
     fn intro_mode(&mut self, mode: i32, duration: i32);
 }

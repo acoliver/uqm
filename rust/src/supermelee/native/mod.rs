@@ -2,5 +2,5 @@
 pub mod battle_picker;
 pub(crate) mod build_picker;
 pub(crate) mod load_teams;
-pub(crate) mod menu;
+pub mod menu;
 pub(crate) mod protocol;

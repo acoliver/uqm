@@ -1,5 +1,5 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
         wrap_delta,
@@ -94,7 +94,7 @@ pub(crate) mod engine {
         out.push(cx.missile(&mut block));
         out
     }
-    pub(crate) fn fighter_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn fighter_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let face = COUNT::from(cx.element(e).thrust);
         let laser = crate::engine::battle::views::Laser {
@@ -117,7 +117,7 @@ pub(crate) mod engine {
         cx.element_mut(e).post = None;
         cx.element_mut(e).thrust = 8;
     }
-    pub(crate) fn fighter_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn fighter_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         cx.race_stats_mut(ss).characteristics.special_wait = cx
             .race_stats(ss)
@@ -202,7 +202,7 @@ pub(crate) mod engine {
             cx.element_mut(e).velocity.set_vector(8 << ONE_SHIFT, face);
         }
     }
-    pub(crate) fn fighter_collision(
+    pub fn fighter_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -265,7 +265,7 @@ pub(crate) mod engine {
                 .wrapping_sub(1);
         }
     }
-    pub(crate) fn spawn_fighters(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_fighters(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let face =
             (i32::from(cx.ship_state(ss).facing) + angle_to_facing(HALF_CIRCLE as i32)) as COUNT;
@@ -339,7 +339,7 @@ pub(crate) mod engine {
             cx.set_parent(fighter, Some(ss));
         }
     }
-    pub(crate) fn urquan_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn urquan_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
         let weapon = ENEMY_WEAPON_INDEX as usize;
@@ -410,7 +410,7 @@ pub(crate) mod engine {
         }
         cx.race_stats_mut(ss).characteristics.special_wait = 0;
     }
-    pub(crate) fn urquan_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn urquan_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.element(e).hits > 1

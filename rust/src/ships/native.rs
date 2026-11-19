@@ -1,7 +1,7 @@
 //! Live engine ABI for race ports. Unlike `types::RaceDesc`, these records can
 //! be returned directly to the engine's `init_<race>` callers.
 
-pub(crate) fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) {
+pub fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) {
     target.fill(0);
     let length = source
         .iter()

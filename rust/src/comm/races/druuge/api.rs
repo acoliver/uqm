@@ -10,7 +10,7 @@ use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 use crate::engine::world::SisState as CSisState;
 
-pub(crate) trait DruugeApi: EncounterApi<Handler> {
+pub trait DruugeApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
     fn has_escorts(&self) -> bool;
     fn crew_cost(&self) -> u8;

@@ -4,12 +4,12 @@ use super::*;
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 
 impl<A: YehatApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
+    pub fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Exit => self.exit(response),
             Handler::Royalists => self.royalists(response),
@@ -293,7 +293,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.api.npc(phrase as i32);
     }
 
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         let peaceful = self.api.activity() as u8 == ActivityKind::WonLastBattle as u8;
         if !peaceful {
             self.api.segue(1);
@@ -302,7 +302,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         }
     }
 
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         if self.api.activity() as u8 == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);

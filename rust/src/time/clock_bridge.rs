@@ -15,7 +15,7 @@ const CLOCK_BASE_FRAMERATE: usize = 24;
 // Event type constants
 
 // Helper: Log a message to the bridge log (uses central logger)
-pub(crate) fn log_clock_bridge(message: &str) {
+pub fn log_clock_bridge(message: &str) {
     rust_bridge_log_msg(message);
 }
 
@@ -24,7 +24,7 @@ pub(crate) use crate::engine::clock::days_in_month;
 use crate::engine::clock::is_leap_year;
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
-pub(crate) fn next_clock_day_internal(clock: &mut ClockState) {
+pub fn next_clock_day_internal(clock: &mut ClockState) {
     clock.day_index += 1;
 
     if clock.day_index > days_in_month(clock.month_index, clock.year_index) {

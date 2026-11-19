@@ -258,7 +258,7 @@ pub(crate) fn draw_battle_crew_amount(
 }
 
 #[allow(non_snake_case)]
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
 

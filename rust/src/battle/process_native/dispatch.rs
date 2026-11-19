@@ -1,6 +1,6 @@
 //! Observation precedes invocation without retaining a borrow across a game hook.
 
-pub(crate) use crate::engine::battle::access::invoke;
+pub use crate::engine::battle::access::invoke;
 
 pub(crate) fn record_spawn(address: usize, side: i16, species: u32) {
     crate::collections::observation::record(crate::collections::observation::Event::Spawn {

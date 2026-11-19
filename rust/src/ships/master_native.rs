@@ -3,13 +3,13 @@ use crate::engine::battle::kernel::MasterCatalog;
 use crate::ships::DescriptorLoader;
 
 #[derive(Clone, Debug)]
-pub(crate) struct ShipChoice {
+pub struct ShipChoice {
     pub cost: u16,
     pub icon: crate::engine::battle::frames::FrameSelection,
     pub melee_icon: crate::engine::battle::frames::FrameSelection,
 }
 
-pub(crate) fn choices(queue: &MasterCatalog) -> Vec<ShipChoice> {
+pub fn choices(queue: &MasterCatalog) -> Vec<ShipChoice> {
     use crate::engine::battle::frames::FrameSelection;
     let mut result = Vec::with_capacity(queue.count());
     let mut next = queue.head();
@@ -25,11 +25,11 @@ pub(crate) fn choices(queue: &MasterCatalog) -> Vec<ShipChoice> {
     result
 }
 
-pub(crate) fn choice_cost(catalog: &[ShipChoice], index: u16) -> u16 {
+pub fn choice_cost(catalog: &[ShipChoice], index: u16) -> u16 {
     catalog.get(usize::from(index)).map_or(0, |ship| ship.cost)
 }
 
-pub(crate) fn find(queue: &MasterCatalog, species: u32) -> i32 {
+pub fn find(queue: &MasterCatalog, species: u32) -> i32 {
     let mut next = queue.head();
     let mut index = 0;
     while let Some(id) = next {
@@ -42,7 +42,7 @@ pub(crate) fn find(queue: &MasterCatalog, species: u32) -> i32 {
     -1
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::engine::battle::{
         kernel::CatalogEntry,

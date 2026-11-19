@@ -3,11 +3,11 @@
 pub(crate) use crate::comm::races::descriptor::AnimationDescriptor;
 pub(crate) use crate::engine::StoryKey;
 
-pub(crate) const ANIM_DISABLED: u8 = 1 << 7;
+pub const ANIM_DISABLED: u8 = 1 << 7;
 pub(crate) const ONE_SECOND: u16 = 840;
 pub(crate) const FUEL_TANK_SCALE: u32 = 100;
-pub(crate) const GLOBAL_PLAYER_NAME: i32 = -1_000_000;
-pub(crate) const GLOBAL_SHIP_NAME: i32 = -999_999;
+pub const GLOBAL_PLAYER_NAME: i32 = -1_000_000;
+pub const GLOBAL_SHIP_NAME: i32 = -999_999;
 
 #[derive(Clone, Copy, Default)]
 pub struct Supplies {

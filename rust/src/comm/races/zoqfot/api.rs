@@ -1,17 +1,17 @@
 use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Speaker {
+pub enum Speaker {
     Zoq,
     Pik,
 }
-pub(crate) trait ZoqApi: AllianceApi<Handler> {
+pub trait ZoqApi: AllianceApi<Handler> {
     fn speak(&mut self, phrase: u16, speaker: Speaker);
     fn begin_talk(&mut self, track: u16);
     fn date(&self) -> (i16, u8);
 }
 
-pub(crate) fn select_speaker(desc: &mut CommDescriptor, last_alien: &mut u8, speaker: Speaker) {
+pub fn select_speaker(desc: &mut CommDescriptor, last_alien: &mut u8, speaker: Speaker) {
     let (alien, transition, talk, frames, x) = match speaker {
         Speaker::Zoq => (0, 23, 18, 5, 61),
         Speaker::Pik => (2, 26, 29, 2, 181),

@@ -1,5 +1,5 @@
 //! Live zoqfotpik callbacks translated from ships/zoqfot/zoqfot.c.
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
     };
@@ -60,7 +60,7 @@ pub(crate) mod engine {
         intelligence: Some(zoqfotpik_intelligence),
         uninit: None,
     };
-    pub(crate) fn spit_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spit_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
@@ -113,12 +113,12 @@ pub(crate) mod engine {
         out.push(cx.missile(&mut block));
         out
     }
-    pub(crate) fn tongue_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn tongue_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn != 0 {
             spawn_tongue(cx, e);
         }
     }
-    pub(crate) fn tongue_collision(
+    pub fn tongue_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -136,7 +136,7 @@ pub(crate) mod engine {
         cx.element_mut(a).turn = 0;
         cx.element_mut(a).flags |= NONSOLID as u16;
     }
-    pub(crate) fn spawn_tongue(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_tongue(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let mut block = Missile {
             cx: cx.element(e).next.location.x,
@@ -185,7 +185,7 @@ pub(crate) mod engine {
             cx.put(tongue);
         }
     }
-    pub(crate) fn zoqfotpik_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn zoqfotpik_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let mut tongue = false;
         if cx.ship_state(ss).special_counter == 0 {
             cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
@@ -252,7 +252,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn zoqfotpik_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn zoqfotpik_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0

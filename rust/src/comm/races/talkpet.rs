@@ -2,10 +2,10 @@
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::TalkpetApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     MindFuckUrquan,
     MindControl,
@@ -15,11 +15,11 @@ pub(crate) enum Handler {
     KillPet,
     PetDeal,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: TalkpetApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::MindFuckUrquan => self.mind_fuck_urquan(r),
@@ -394,7 +394,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.api.response((MUST_KILL) as u16, Handler::KillPet, &[]);
         }
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut visits: i32;
         if (i32::from(self.api.activity()) as u8 as i32) == 5 {
             self.api.npc(OUT_TAKES);
@@ -509,8 +509,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.pet_deal(0_u16 as i32);
         }
     }
-    pub(crate) fn post_talkpet_enc(&mut self) {}
-    pub(crate) fn initialize(&mut self) {
+    pub fn post_talkpet_enc(&mut self) {}
+    pub fn initialize(&mut self) {
         if (i32::from(self.api.activity()) as u8 as i32) != 1 {
             self.api.segue(0);
         } else {
@@ -522,4 +522,4 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

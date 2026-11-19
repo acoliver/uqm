@@ -2,7 +2,7 @@ use super::{RACE_COLOR_MAP, RACE_CONVERSATION_PHRASES, RACE_FONT, RACE_MUSIC, RA
 use crate::comm::races::descriptor::{Color, CommDescriptor, Point};
 use crate::comm::races::script::animation;
 
-pub(crate) fn descriptor(screen_width: i32) -> CommDescriptor {
+pub fn descriptor(screen_width: i32) -> CommDescriptor {
     let mut d = CommDescriptor {
         alien_frame_res: Some(RACE_PMAP_ANIM),
         alien_font_res: Some(RACE_FONT),

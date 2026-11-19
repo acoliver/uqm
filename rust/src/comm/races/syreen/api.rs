@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait SyreenApi: AllianceApi<Handler> {
+pub trait SyreenApi: AllianceApi<Handler> {
     fn using_speech(&self) -> bool;
 }
 

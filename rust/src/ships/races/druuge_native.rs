@@ -1,6 +1,6 @@
 //! Druuge callbacks registered with the live battle engine.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 14;
@@ -109,7 +109,7 @@ pub(crate) mod engine {
         out
     }
 
-    pub(crate) fn cannon_collision(
+    pub fn cannon_collision(
         cx: &mut Cx<'_>,
         cannon: ElementId,
         point0: &mut POINT,
@@ -146,7 +146,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn druuge_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn druuge_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         let mut old_flags = 0u16;
         let mut enemy_ss = None;
@@ -195,7 +195,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn druuge_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn druuge_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & WEAPON as u16 == 0
             || cx.ship_state(ss).weapon_counter != cx.race_stats(ss).characteristics.weapon_wait
@@ -223,9 +223,9 @@ pub(crate) mod engine {
     }
 
     /// Names the crew burn in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn druuge_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn druuge_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
             return;

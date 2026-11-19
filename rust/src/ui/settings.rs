@@ -65,7 +65,7 @@ pub(crate) fn play_menu_sound(
     }
 }
 
-pub(crate) fn play_loaded_sound(
+pub fn play_loaded_sound(
     world: &crate::engine::World,
     sound: &crate::sound::owned_bank::SoundClip,
     channel: usize,

@@ -1,6 +1,6 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-pub(crate) trait UmgahApi: EncounterApi<Handler> {
+pub trait UmgahApi: EncounterApi<Handler> {
     fn add_biomass(&mut self, amount: u16);
 }
 

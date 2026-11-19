@@ -1,6 +1,6 @@
 //! Umgah callbacks and descriptor translated from `umgah.c`.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
     };
@@ -71,7 +71,7 @@ pub(crate) mod engine {
         };
         d.descriptor(&UMGAH)
     }
-    pub(crate) fn cone_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn cone_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let frame = cx.relative_frame(
             cx.ship_frame(ss, 2),
@@ -81,7 +81,7 @@ pub(crate) mod engine {
         cx.element_mut(e).flags |= APPEARING as u16;
     }
 
-    pub(crate) fn cone_collision(
+    pub fn cone_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -139,9 +139,9 @@ pub(crate) mod engine {
     }
 
     /// Names the jump in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn umgah_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn umgah_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 != 0 {
             cx.race_stats_mut(ss).state = RaceState::Umgah {
@@ -164,7 +164,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn umgah_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn umgah_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).special_counter > 0 {
             cx.ship_state_mut(ss).special_counter = 0;
@@ -172,7 +172,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn uninit_umgah(
+    pub fn uninit_umgah(
         _world: &mut crate::engine::battle::World,
         stats: &mut crate::engine::battle::views::RaceStats,
     ) {
@@ -181,7 +181,7 @@ pub(crate) mod engine {
         };
     }
 
-    pub(crate) fn umgah_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn umgah_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let weapon = ENEMY_WEAPON_INDEX as usize;
         if concerns.objects[weapon].object.is_some()
             && concerns.objects[weapon].movement == MOVEMENT_STATE_ENTICE

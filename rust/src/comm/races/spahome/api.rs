@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait SpahomeApi: AllianceApi<Handler> {
+pub trait SpahomeApi: AllianceApi<Handler> {
     fn have_spathi_escort(&self) -> bool;
 }
 

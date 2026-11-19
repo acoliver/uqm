@@ -7,18 +7,18 @@ mod phrases;
 pub(crate) use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     AlliedHome,
     ExitConversation,
     BeforeKohrAh,
     AfterKohrAh,
     NeutralSupox,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::AlliedHome => self.allied_home(r),
             Handler::ExitConversation => self.exit_conversation(r),
@@ -27,7 +27,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::NeutralSupox => self.neutral_supox(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CommDescriptor) {
+    pub fn initialize(&mut self, _desc: &mut CommDescriptor) {
         self.api.segue(u32::from(
             self.api.get(StoryKey::SUPOX_HOSTILE) != 0 && self.api.activity() as u8 != 5,
         ));
@@ -380,7 +380,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if (self.api.activity() as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -538,4 +538,4 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

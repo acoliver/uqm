@@ -1,5 +1,5 @@
 //! VUX behavior over the battle context's ids and per-ship descriptor.
-pub(crate) mod engine {
+pub mod engine {
     fn build_descriptor(
         _world: &mut crate::engine::battle::World,
     ) -> crate::engine::battle::RaceDesc {
@@ -19,7 +19,7 @@ pub(crate) mod engine {
         uninit: None,
     };
 
-    pub(crate) fn limpet_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn limpet_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let original = normalize_facing(angle_to_facing(i32::from(
             cx.element(e).velocity.travel_angle,
         )));
@@ -34,7 +34,7 @@ pub(crate) mod engine {
         cx.element_mut(e).flags |= CHANGING as u16;
     }
 
-    pub(crate) fn limpet_collision(
+    pub fn limpet_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         _pa: &mut POINT,
@@ -72,7 +72,7 @@ pub(crate) mod engine {
         cx.element_mut(a).flags |= (COLLISION | DISAPPEARING) as u16;
     }
 
-    pub(crate) fn spawn_limpets(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_limpets(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let mut block = crate::engine::battle::views::Missile {
             frames: cx.ship_frame_set(ss, 2),
@@ -98,7 +98,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn initialize_horrific_laser(
+    pub fn initialize_horrific_laser(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -124,7 +124,7 @@ pub(crate) mod engine {
         vec![cx.laser(&mut block)]
     }
 
-    pub(crate) fn vux_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn vux_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         let weapon = ENEMY_WEAPON_INDEX as usize;
         concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
@@ -153,7 +153,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn vux_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn vux_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0
@@ -165,7 +165,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn vux_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn vux_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 != 0 {
             let mut face = cx.ship_state(ss).facing;

@@ -7,7 +7,7 @@ mod phrases;
 use phrases::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     CombatIsInevitable,
     IlwrathGods,
     IlwrathInfo,
@@ -15,11 +15,11 @@ pub(crate) enum Handler {
     GodsOrder,
     GodsSpeak,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
+    pub fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::CombatIsInevitable => self.combat_is_inevitable(r),
             Handler::IlwrathGods => self.ilwrath_gods(r),
@@ -29,7 +29,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             Handler::GodsSpeak => self.gods_speak(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CommDescriptor) {
+    pub fn initialize(&mut self, _desc: &mut CommDescriptor) {
         let peaceful = self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0
             || self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & ((1 << 4) | (1 << 5)) != 0
             || self.api.activity() as u8 == 5;
@@ -408,7 +408,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_SPACE, Handler::CombatIsInevitable, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0 {
             self.api.npc(i32::from(SEND_MESSAGE));
@@ -465,10 +465,10 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn post_ilwrath_enc(&mut self) {}
+    pub fn post_ilwrath_enc(&mut self) {}
 }
 
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

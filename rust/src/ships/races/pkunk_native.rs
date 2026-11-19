@@ -6,7 +6,7 @@
 //! number of evaluations of their arguments, because `TFB_Random` is one of
 //! those arguments.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::{
         Concerns, Cx, ElementId, RaceState, Selection, ShipId, WeaponOrigin, WeaponSpawn,
     };
@@ -188,7 +188,7 @@ pub(crate) mod engine {
         )
     }
 
-    pub(crate) fn animate(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn animate(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
@@ -199,7 +199,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn initialize_bug_missile(
+    pub fn initialize_bug_missile(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -248,7 +248,7 @@ pub(crate) mod engine {
         missiles
     }
 
-    pub(crate) fn pkunk_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn pkunk_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let RaceState::Pkunk {
             phoenix,
             saved_pre,
@@ -280,7 +280,7 @@ pub(crate) mod engine {
         cx.ship_intelligence(ss, concerns);
     }
 
-    pub(crate) fn new_pkunk(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn new_pkunk(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let RaceState::Pkunk {
             saved_pre,
@@ -343,13 +343,13 @@ pub(crate) mod engine {
         cx.set_target(e, Some(cx.ship_element(ss)));
     }
 
-    pub(crate) fn pkunk_reincarnation_death(cx: &mut Cx<'_>, ship: ElementId) {
+    pub fn pkunk_reincarnation_death(cx: &mut Cx<'_>, ship: ElementId) {
         cx.stop_battle_music();
         cx.start_ship_explosion(ship, true);
         cx.element_mut(ship).death = Some(ElementHook::Native(new_pkunk));
     }
 
-    pub(crate) fn intercept_pkunk_death(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn intercept_pkunk_death(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if cx.race_stats(ss).ship_info.crew_level != 0 {
             cx.element_mut(e).flags &= !(DISAPPEARING as ELEMENT_FLAGS);
@@ -373,7 +373,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn spawn_phoenix_trail(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_phoenix_trail(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).color_cycle = cx.element(e).color_cycle.wrapping_add(1);
         let index = usize::from(cx.element(e).color_cycle);
         if index != PHOENIX_TRAIL_COLORS.len() {
@@ -384,7 +384,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn phoenix_transition(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn phoenix_transition(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let ship = cx.ship_element(ss);
         if cx.element(ship).flags & NONSOLID as ELEMENT_FLAGS == 0 {
@@ -435,7 +435,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn pkunk_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn pkunk_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as ELEMENT_FLAGS != 0 {
             let phoenix = if cx.random() & 1 != 0 {
@@ -511,9 +511,9 @@ pub(crate) mod engine {
     }
 
     /// Names the energy burst in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn pkunk_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn pkunk_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.race_stats(ss).characteristics.special_wait != 0 {
             cx.race_stats_mut(ss).characteristics.special_wait -= 1;
@@ -536,7 +536,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn uninit_pkunk(
+    pub fn uninit_pkunk(
         _world: &mut crate::engine::battle::World,
         stats: &mut crate::engine::battle::views::RaceStats,
     ) {

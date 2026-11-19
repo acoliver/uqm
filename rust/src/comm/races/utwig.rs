@@ -7,7 +7,7 @@ mod phrases;
 pub(crate) use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     AlliedHome,
     ExitConversation,
     BeforeKohrAh,
@@ -15,11 +15,11 @@ pub(crate) enum Handler {
     NeutralUtwig,
     BombWorld,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::AlliedHome => self.allied_home(r),
             Handler::ExitConversation => self.exit_conversation(r),
@@ -29,7 +29,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::BombWorld => self.bomb_world(r),
         }
     }
-    pub(crate) fn initialize(&mut self, desc: &mut CommDescriptor) {
+    pub fn initialize(&mut self, desc: &mut CommDescriptor) {
         if self.api.get(StoryKey::UTWIG_HAVE_ULTRON) != 0 {
             desc.alien_alt_song_res = Some(c"comm.utwig.ultron.music");
             desc.alien_song_flags |= 1;
@@ -476,7 +476,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
         }
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if (self.api.activity() as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -704,4 +704,4 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

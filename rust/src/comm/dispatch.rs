@@ -470,7 +470,7 @@ pub fn prepare_automation_sol_probe_encounter(world: &mut World) -> Result<(), &
 
 /// Development-only fleet setup, before the normal final encounter dispatch.
 /// This grants fixture equipment and escorts, so it cannot establish campaign progress.
-pub(crate) fn prepare_samatra_dev_fixture(
+pub fn prepare_samatra_dev_fixture(
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> Result<(), &'static str> {
     cx.world.built_ships().reinit();

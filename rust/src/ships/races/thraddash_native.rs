@@ -1,6 +1,6 @@
 //! Thraddash callbacks and descriptor translated from `thradd.c`.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
@@ -81,7 +81,7 @@ pub(crate) mod engine {
         d.descriptor(&THRADDASH)
     }
 
-    pub(crate) fn flame_napalm_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn flame_napalm_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).velocity = crate::engine::battle::record::VELOCITY_DESC::default();
         if cx.element(e).flags & NONSOLID as u16 != 0 {
             cx.element_mut(e).flags &= !(NONSOLID as u16);
@@ -145,9 +145,9 @@ pub(crate) mod engine {
     }
 
     /// Names the afterburner in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn thraddash_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn thraddash_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
             if cx.ship_state(ss).old_status & SPECIAL as u16 != 0
@@ -230,7 +230,7 @@ pub(crate) mod engine {
                     ) <= (OCTANT as i32 + 2) * 2))
     }
 
-    pub(crate) fn thraddash_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn thraddash_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         if let Some(target) = concerns.objects[enemy].object {
             let opponent = cx.element(target);
