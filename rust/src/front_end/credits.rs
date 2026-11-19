@@ -58,20 +58,17 @@ pub(crate) mod runtime {
             if cx.world.activity() & CHECK_ABORT != 0 {
                 break;
             }
-            // SAFETY: the supplied campaign and input retain the encounter lifecycle; Part 13 retires this boundary.
-            unsafe {
-                crate::comm::dispatch::init_communication_with_options(
-                    cx,
-                    io,
-                    conversation,
-                    CommOptions {
-                        oscilloscope: false,
-                        slider: false,
-                        window: Some(window.clone()),
-                        intro: (1, 0),
-                    },
-                )
-            };
+            crate::comm::dispatch::init_communication_with_options(
+                cx,
+                io,
+                conversation,
+                CommOptions {
+                    oscilloscope: false,
+                    slider: false,
+                    window: Some(window.clone()),
+                    intro: (1, 0),
+                },
+            );
         }
         configuration.update_preferences(|options| options.subtitles = old_subtitles);
     }

@@ -145,8 +145,7 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
 
     fn talk_segue(&mut self, track: u16) {
         let comm = &mut **self.comm.borrow_mut();
-        // SAFETY: both exclusive loans remain live through synchronous speech playback.
-        unsafe { alien_talk_segue(comm, &mut self.cx.borrow_mut(), track) }
+        alien_talk_segue(comm, &mut self.cx.borrow_mut(), track)
     }
 
     fn disable_animation(&mut self, index: usize) {

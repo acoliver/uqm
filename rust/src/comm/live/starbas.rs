@@ -162,16 +162,11 @@ mod api {
         use super::*;
         use crate::comm::host::Host;
 
-        use crate::threading::legacy_abi::TaskSwitch;
-
         use crate::engine::world::fleet::escorts_worth;
 
         use crate::planets::cargo::draw_cargo;
 
         use crate::planets::cargo::show_capacity;
-
-        use crate::threading::pacing::linked::sleep_thread as SleepThread;
-        use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
         impl StarbaseApi for Host<'_, '_, Handler> {
             fn date(&self) -> Date {
@@ -246,22 +241,16 @@ mod api {
                     .with_legacy(|| crate::engine::time::counter_abi::GetTimeCounter())
             }
             fn sleep(&mut self, ticks: u32) {
-                // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    SleepThread(ticks);
-                })
+                let runtime = self.cx.borrow().kernel.input_runtime();
+                runtime.sleep(&mut self.cx.borrow_mut(), ticks);
             }
             fn sleep_until(&mut self, time: u32) {
-                // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    SleepThreadUntil(time);
-                })
+                let runtime = self.cx.borrow().kernel.input_runtime();
+                runtime.sleep_until(&mut self.cx.borrow_mut(), time);
             }
             fn task_switch(&mut self) {
-                // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    TaskSwitch();
-                })
+                let runtime = self.cx.borrow().kernel.input_runtime();
+                runtime.yield_task(&mut self.cx.borrow_mut());
             }
             fn skip_sale(&mut self) -> bool {
                 let runtime = self.cx.borrow().kernel.input_runtime();

@@ -196,10 +196,7 @@ fn in_hq_space(activity: u16) -> bool {
 #[cfg(not(test))]
 /// Port of C `RaceCommunication()`. Determines which alien to talk to,
 /// prepares the npc ship queue, and calls InitCommunication.
-///
-/// # Safety
-/// Calls C FFI functions that access global state.
-pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+pub fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if lobyte(cx.world.activity()) == IN_LAST_BATTLE {
         // Going into talking pet conversation
         cx.world.npc_built_ships().reinit();
@@ -294,17 +291,13 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 #[cfg(not(test))]
 /// Map the conversation to a ship, run the dialogue or attack selection, and
 /// return whether combat was selected before EncounterBattle runs.
-///
-/// # Safety
-/// Called on the game thread with initialized game state and resources.
-pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
+pub fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
     init_communication_with_options(cx, io, which_comm, crate::comm::CommOptions::default())
 }
 
 #[cfg(not(test))]
-/// # Safety
-/// The game-thread context and presentation resources must be initialized.
-pub unsafe fn init_communication_with_options(
+/// `InitCommunication` with presentation options supplied by the caller.
+pub fn init_communication_with_options(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     which_comm: u32,
@@ -352,10 +345,10 @@ pub unsafe fn init_communication_with_options(
                 )
             };
         } else if cx.world.data.game.ip_planet == 0 {
-            let star = &*cx
+            let star = cx
                 .world
-                .star_pointer()
-                .cast::<crate::engine::world::CStarDesc>();
+                .selected_star()
+                .expect("an interplanetary encounter has a current star");
             {
                 let point = CPoint {
                     x: star.star_pt.x,
@@ -375,7 +368,8 @@ pub unsafe fn init_communication_with_options(
             crate::ui::sis::draw_title(
                 cx.kernel,
                 dimensions.0,
-                std::ffi::CStr::from_ptr((name.as_ptr()).cast()),
+                std::ffi::CStr::from_bytes_until_nul(&name)
+                    .expect("the planet name is NUL-terminated"),
             );
         }
     }
@@ -474,13 +468,8 @@ pub(crate) fn production_captain_name() -> u8 {
 ///
 /// The normal game-loop state machine performs the subsequent encounter and
 /// communication dispatch; this helper only constructs the race-23 queue.
-///
-/// # Safety
-/// Game structures and both fleet queues must already be initialized.
 #[cfg_attr(test, allow(dead_code))]
-pub unsafe fn prepare_automation_sol_probe_encounter(
-    world: &mut World,
-) -> Result<(), &'static str> {
+pub fn prepare_automation_sol_probe_encounter(world: &mut World) -> Result<(), &'static str> {
     world.npc_built_ships().reinit();
     if clone_npc_fragment(world, ship::URQUAN_DRONE_SHIP, 0).is_none() {
         return Err("failed to clone the Ur-Quan probe into the NPC queue");
@@ -490,11 +479,8 @@ pub unsafe fn prepare_automation_sol_probe_encounter(
 
 /// Development-only fleet setup, before the normal final encounter dispatch.
 /// This grants fixture equipment and escorts, so it cannot establish campaign progress.
-///
-/// # Safety
-/// Initialized fleets and SIS must be exclusively owned by the game thread.
 #[cfg(not(test))]
-pub(crate) unsafe fn prepare_samatra_dev_fixture(
+pub(crate) fn prepare_samatra_dev_fixture(
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> Result<(), &'static str> {
     cx.world.built_ships().reinit();
