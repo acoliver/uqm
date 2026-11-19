@@ -8,7 +8,7 @@ use crate::comm::Comm;
 use crate::engine::{
     battle::{input::InputContext, Battle, Cx},
     input::{Frame, InputRuntime, InputSession},
-    observe::{CampaignView, InputView, Io, Observer, Unobserved},
+    observe::{InputView, Io, Observer, Unobserved},
     species::ship::YEHAT_REBEL_SHIP,
     world::story::StoryState,
     Game, StoryKey, World,
@@ -22,7 +22,7 @@ impl InputRuntime for Pacing {
     fn input(&self) -> &InputSession {
         &self.0
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {}
