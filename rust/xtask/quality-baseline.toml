@@ -2043,7 +2043,6 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "complexity|cyclomatic|uqm-xtask::abi_check::<Catalog>::const_integer" = 44
 "complexity|cyclomatic|uqm-xtask::abi_check::<Catalog>::normalize" = 48
 "complexity|cyclomatic|uqm-xtask::abi_check::<Collector<'_> as Visit<'ast>>::visit_item_macro" = 26
-"complexity|cyclomatic|uqm-xtask::abi_check::cfg_enabled" = 27
 "complexity|cyclomatic|uqm-xtask::abi_check::run" = 36
 "complexity|cyclomatic|uqm-xtask::native_save::extract_save" = 29
 "complexity|cyclomatic|uqm-xtask::native_suite::<ControllerSupervision>::self_consistent" = 33
@@ -2187,7 +2186,7 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "complexity|loc|uqm-save::decode::read_chunks" = 83
 "complexity|loc|uqm-xtask::abi_check::<Catalog>::normalize" = 165
 "complexity|loc|uqm-xtask::abi_check::<Collector<'_> as Visit<'ast>>::visit_item_macro" = 99
-"complexity|loc|uqm-xtask::abi_check::cfg_enabled" = 101
+"complexity|loc|uqm-xtask::abi_check::cfg_enabled" = 96
 "complexity|loc|uqm-xtask::abi_check::run" = 206
 "complexity|loc|uqm-xtask::execute_native_scenarios" = 88
 "complexity|loc|uqm-xtask::native_cli::report_bundle" = 86
@@ -2365,7 +2364,7 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "loc|loc|uqm-engine::sound::stream::@file" = 1081
 "loc|loc|uqm-engine::sound::trackplayer::@file" = 803
 "loc|loc|uqm-engine::video::ffi::@file" = 933
-"loc|loc|uqm-xtask::abi_check::@file" = 1461
+"loc|loc|uqm-xtask::abi_check::@file" = 1456
 "loc|loc|uqm-xtask::native_suite::@file" = 1504
 "loc|loc|uqm::automation::child_session::@file" = 2538
 "loc|loc|uqm::automation::coordinator::@file" = 2637
@@ -2425,7 +2424,6 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "uqm-engine::observe::@file" = "uqm-engine::observe_port::@file"
 "uqm-engine::observe::Io" = "uqm-engine::observe_port::ObservationIo"
 "uqm::automation::native_isolation" = "uqm-engine::platform::macos::sandbox"
-"uqm::battle::context_access::fixture::<Cx<'_> as FixtureOps>::zoom_sample" = "uqm-engine::battle::access::<Cx<'_>>::zoom_sample"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input_port"
 "uqm::io" = "uqm-engine::io"
@@ -2434,6 +2432,5 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "uqm::network" = "uqm-engine::network"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
-"uqm::supermelee::setup::persistence::builtin_teams" = "uqm::supermelee::setup::builtin::builtin_teams"
 "uqm::threading" = "uqm-engine::threading"
 "uqm::video" = "uqm-engine::video"

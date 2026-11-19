@@ -946,27 +946,23 @@ fn cfg_enabled(meta: &syn::Meta, config: &BuildCfg) -> Result<bool, String> {
                 .get_ident()
                 .map(ToString::to_string)
                 .unwrap_or_default();
-            let expected = match &value.value {
-                syn::Expr::Lit(value) => match &value.lit {
-                    syn::Lit::Str(v) => v.value(),
-                    _ => {
-                        return Err(format!(
-                            "unsupported cfg value `{}`",
-                            meta.to_token_stream()
-                        ));
-                    }
-                },
-                _ => {
-                    return Err(format!(
-                        "unsupported cfg value `{}`",
-                        meta.to_token_stream()
-                    ));
-                }
+            let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(expected),
+                ..
+            }) = &value.value
+            else {
+                return Err(format!(
+                    "unsupported cfg value `{}`",
+                    meta.to_token_stream()
+                ));
             };
+            let expected = expected.value();
             let actual = match key.as_str() {
                 "feature" => match expected.as_str() {
                     "audio_heart" | "native" | "bundled-sdl" => true,
                     "debug-process" => config.debug_process,
+                    // Dev-dependency fixtures; production ABI never includes them.
+                    "test-support" => false,
                     _ => {
                         return Err(format!(
                             "unsupported feature cfg `{expected}` in ABI source"
@@ -1963,6 +1959,13 @@ mod tests {
         assert!(active(&catalog.declarations[0], &mac).unwrap());
         assert!(active(&catalog.definitions[1], &mac).unwrap());
         assert!(cfg_enabled(&syn::parse_quote!(unknown_target_key = "value"), &linux).is_err());
+    }
+
+    #[test]
+    fn test_support_fixtures_are_outside_the_abi_surface() {
+        let linux = BuildCfg::for_test(false, &[("target_os", "linux"), ("target_arch", "x86_64")]);
+        assert!(!cfg_enabled(&syn::parse_quote!(feature = "test-support"), &linux).unwrap());
+        assert!(cfg_enabled(&syn::parse_quote!(not(feature = "test-support")), &linux).unwrap());
     }
 
     #[test]
