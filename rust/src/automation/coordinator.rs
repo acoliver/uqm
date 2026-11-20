@@ -16,7 +16,6 @@
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
 use super::input_ffi::{contact_snapshot, navigation_snapshot};
-use uqm_engine::{battle::Cx, StoryKey};
 mod device;
 mod fixtures;
 mod initialization;
@@ -67,7 +66,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use uqm_engine::graphics::presented_frame::PresentedFrame;
+use uqm_engine::{battle::Cx, graphics::presented_frame::PresentedFrame, StoryKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct PendingPlayerInput {

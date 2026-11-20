@@ -24,6 +24,7 @@ pub mod engine {
     use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
     use uqm_engine::graphics::geometry::Color;
     use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math;
     use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
     use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
@@ -254,7 +255,7 @@ pub mod engine {
                 && cx.ship_state(ss).input & THRUST as u8 == 0
                 && normalize_angle(
                     i32::from(cx.element(ship).velocity.travel_angle)
-                        - i32::from(uqm_engine::math::arctan(
+                        - i32::from(math::arctan(
                             (i32::from(cx.element(target).next.location.x)
                                 - i32::from(cx.element(ship).next.location.x))
                                 as i16,
@@ -451,7 +452,7 @@ pub mod engine {
                 if i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)
                     <= i64::from((GRAVITY_THRESHOLD as i32) << ONE_SHIFT).pow(2)
                 {
-                    pfacing = angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))) as u16;
+                    pfacing = angle_to_facing(i32::from(math::arctan(dx, dy))) as u16;
                     let delta = normalize_facing(
                         i32::from(pfacing)
                             - angle_to_facing(i32::from(cx.element(e).velocity.travel_angle))
@@ -506,7 +507,7 @@ pub mod engine {
                     cx.element_mut(e).flags &= !(IGNORE_SIMILAR as u16);
                     cx.element_mut(e).flags |= CHANGING as u16;
                 }
-                let mut frames = (uqm_engine::math::square_root(
+                let mut frames = (math::square_root(
                     (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32,
                 ) >> 6) as u16;
                 if frames == 0 {
@@ -519,8 +520,7 @@ pub mod engine {
                 dy = (i32::from(cx.element(object).current.location.y) + i32::from(vy as i16)
                     - i32::from(cx.element(e).current.location.y)) as i16;
                 delta = normalize_facing(
-                    angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy)))
-                        - i32::from(facing),
+                    angle_to_facing(i32::from(math::arctan(dx, dy))) - i32::from(facing),
                 ) as i16;
                 if delta > 0 {
                     if i32::from(delta) == angle_to_facing(HALF_CIRCLE as i32) {

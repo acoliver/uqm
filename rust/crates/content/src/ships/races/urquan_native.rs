@@ -17,6 +17,7 @@ pub mod engine {
     use uqm_engine::battle::{CollisionHook, ElementHook};
     use uqm_engine::graphics::geometry::Color;
     use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math;
     use uqm_engine::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
     use uqm_engine::math::velocity::VELOCITY_SHIFT;
     use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
@@ -159,8 +160,7 @@ pub mod engine {
                     destination.y.wrapping_sub(position.y),
                     height << (ONE_SHIFT + 3),
                 );
-                face =
-                    normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))));
+                face = normalize_facing(angle_to_facing(i32::from(math::arctan(dx, dy))));
                 cx.element_mut(e).flags &= !(IGNORE_SIMILAR as u16);
                 enroute = false;
             }
@@ -186,9 +186,8 @@ pub mod engine {
                     && i32::from(dy).abs() < RANGE
                     && i32::from(dx) * i32::from(dx) + i32::from(dy) * i32::from(dy) < RANGE * RANGE
                 {
-                    cx.element_mut(e).thrust = normalize_facing(angle_to_facing(i32::from(
-                        uqm_engine::math::arctan(dx, dy),
-                    ))) as u8;
+                    cx.element_mut(e).thrust =
+                        normalize_facing(angle_to_facing(i32::from(math::arctan(dx, dy)))) as u8;
                     cx.element_mut(e).post = Some(ElementHook::Native(fighter_postprocess));
                 }
                 if enroute {
@@ -200,9 +199,7 @@ pub mod engine {
                     };
                     dx = dx.wrapping_add(cosine(facing_to_angle(offset_face), 30 << ONE_SHIFT));
                     dy = dy.wrapping_add(sine(facing_to_angle(offset_face), 30 << ONE_SHIFT));
-                    face = normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(
-                        dx, dy,
-                    ))));
+                    face = normalize_facing(angle_to_facing(i32::from(math::arctan(dx, dy))));
                 }
             }
             cx.element_mut(e).flags |= CHANGING as u16;
@@ -234,7 +231,7 @@ pub mod engine {
                 cx.copy_visual_to_next(fighter, current);
                 let mut travel = cx.element(fighter).velocity.travel_angle;
                 let delta = normalize_angle(
-                    i32::from(uqm_engine::math::arctan(
+                    i32::from(math::arctan(
                         (pb).x.wrapping_sub((pa).x),
                         (pb).y.wrapping_sub((pa).y),
                     )) - i32::from(travel),
