@@ -220,7 +220,6 @@ mod tests {
         let mut game = Game::new();
         let display = campaign_display::CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("campaign panel fixture failed: {error}"));
-        crate::callback::ffi::Alarm_init();
         game.kernel.screen_context = game.kernel.off_screen_context;
         let context = ContextLease::require(game.kernel.off_screen_context);
         context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
@@ -347,7 +346,7 @@ mod tests {
         ui::sis::set_menu_flash(&game.kernel, (320, 240), false);
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         game.kernel.sis_highlight.context.borrow_mut().take();
-        crate::callback::ffi::Alarm_uninit();
+        uqm_engine::host::dispatch().clear();
         let long_label = std::ffi::CString::new("A".repeat(100))
             .unwrap_or_else(|error| panic!("fixture label: {error}"));
         assert!(!ui::sis::draw_message(

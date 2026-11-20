@@ -44,8 +44,7 @@ pub fn teardown_subsystems() {
         // 5. NETPLAY teardown — Phase 2 scope (skipped)
 
         // 6. Callback / alarm systems
-        c_main_extern::uqm_callback_uninit();
-        c_main_extern::uqm_alarm_uninit();
+        crate::engine::host::dispatch().clear();
 
         // 7. Task system, time system
         c_main_extern::CleanupTaskSystem();

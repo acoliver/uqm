@@ -49,16 +49,13 @@ impl SessionCore {
         }
     }
     pub fn net_input_blocking(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {
-        self.net_input_with(
-            timeout.min(crate::callback::ffi::Async_timeBeforeNextMs()),
-            emit,
-        );
+        self.net_input_with(timeout.min(uqm_engine::host::async_wait_ms()), emit);
     }
     pub fn net_input_with(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {
         let deadline = crate::platform::sys::Deadline::after_millis(timeout);
         let before = self.connection_progress();
         loop {
-            crate::callback::ffi::Async_process();
+            uqm_engine::host::process_async();
             for player in 0..2 {
                 if self
                     .connection(player)
@@ -68,7 +65,7 @@ impl SessionCore {
                 }
             }
             self.flush_packet_queues(emit);
-            crate::callback::ffi::Callback_process();
+            uqm_engine::host::dispatch().process_callbacks();
             if self.connection_progress() != before || deadline.has_passed() {
                 return;
             }

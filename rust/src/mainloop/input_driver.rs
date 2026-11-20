@@ -12,7 +12,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     loop {
         // SAFETY: event dispatch and task switching run on the initialized game thread.
         unsafe {
-            crate::callback::ffi::Async_process();
+            crate::engine::host::process_async();
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
             process_utility_keys(controls);
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
@@ -150,7 +150,7 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
 
     fn yield_poll(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         {
-            crate::callback::ffi::Async_process();
+            crate::engine::host::process_async();
             // SAFETY: the retained runtime and handoff own game-thread event pumping.
             unsafe { crate::threading::legacy_abi::TaskSwitch() };
         };

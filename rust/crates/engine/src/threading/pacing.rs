@@ -188,7 +188,6 @@ impl GameThreadPacer {
 
 pub mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
-    use crate::callback::ffi::{Async_process, Async_timeBeforeNextMs};
     #[cfg(target_os = "macos")]
     use crate::threading::critical_timer::CriticalTimer;
     #[cfg(not(target_os = "macos"))]
@@ -227,7 +226,7 @@ pub mod linked {
 
     impl PacingEnv for GameThread {
         fn process_async(&mut self) {
-            Async_process();
+            crate::host::process_async();
         }
 
         fn pump_and_flush(&mut self) {
@@ -244,7 +243,7 @@ pub mod linked {
         }
 
         fn async_wait_ms(&self) -> u32 {
-            Async_timeBeforeNextMs()
+            crate::host::async_wait_ms()
         }
 
         fn sleep_ms(&mut self, ms: u32) {

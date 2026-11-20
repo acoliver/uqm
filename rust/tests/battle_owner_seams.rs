@@ -57,7 +57,6 @@ fn unthrottled_runtime_processes_callbacks_without_sampling_or_flushing_input() 
         atomic::{AtomicBool, Ordering},
         Arc,
     };
-    use uqm_rust::callback::ffi::{Callback_add, Callback_init, Callback_uninit};
     use uqm_rust::engine::input::{frames::KEY_MENU_SELECT, InputControls, InputRuntime};
     let mut game = Game::new();
     let controls = InputControls::default();
@@ -80,14 +79,12 @@ fn unthrottled_runtime_processes_callbacks_without_sampling_or_flushing_input() 
         uqm_rust::math::random,
     );
     let called = Arc::new(AtomicBool::new(false));
-    Callback_init();
-    Callback_add(
+    uqm_rust::engine::host::dispatch().add_callback(
         |flag: Arc<AtomicBool>| flag.store(true, Ordering::SeqCst),
         called.clone(),
-    )
-    .unwrap();
+    );
     runtime.yield_poll(&mut cx);
-    Callback_uninit();
+    uqm_rust::engine::host::dispatch().clear();
     assert!(called.load(Ordering::SeqCst));
     assert_eq!(controls.current(), current);
     assert_eq!(controls.pulsed(), pulsed);

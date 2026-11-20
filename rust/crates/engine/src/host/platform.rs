@@ -8,6 +8,7 @@ use std::panic::Location;
 use std::sync::{Arc, OnceLock};
 
 use super::clock::{Clock, OsClock, ReplayClock};
+use crate::callback::Dispatch;
 use crate::sound::rodio_audio::{AudioCommand, ReplayAudioPort, RodioAudio, RODIO};
 
 /// A running audio device, or its replay stand-in.
@@ -22,11 +23,24 @@ pub trait AudioPort: Send + Sync {
 pub trait Platform: Send + Sync {
     fn clock(&self) -> &dyn Clock;
     fn audio(&self) -> &dyn AudioPort;
+    /// The game's callback queue and alarms.
+    fn dispatch(&self) -> &Dispatch;
 }
 
 struct OsPlatform {
     clock: OsClock,
     audio: &'static RodioAudio,
+    dispatch: Dispatch,
+}
+
+impl OsPlatform {
+    fn new() -> Self {
+        Self {
+            clock: OsClock::new(),
+            audio: &RODIO,
+            dispatch: Dispatch::new(),
+        }
+    }
 }
 
 impl Platform for OsPlatform {
@@ -36,11 +50,15 @@ impl Platform for OsPlatform {
     fn audio(&self) -> &dyn AudioPort {
         self.audio
     }
+    fn dispatch(&self) -> &Dispatch {
+        &self.dispatch
+    }
 }
 
 struct ReplayPlatform {
     clock: Arc<ReplayClock>,
     audio: ReplayAudioPort,
+    dispatch: Dispatch,
 }
 
 impl Platform for ReplayPlatform {
@@ -49,6 +67,9 @@ impl Platform for ReplayPlatform {
     }
     fn audio(&self) -> &dyn AudioPort {
         &self.audio
+    }
+    fn dispatch(&self) -> &Dispatch {
+        &self.dispatch
     }
 }
 
@@ -62,12 +83,10 @@ pub fn install(replay: bool) {
         Box::new(ReplayPlatform {
             audio: ReplayAudioPort::new(clock.clone()),
             clock,
+            dispatch: Dispatch::new(),
         })
     } else {
-        Box::new(OsPlatform {
-            clock: OsClock::new(),
-            audio: &RODIO,
-        })
+        Box::new(OsPlatform::new())
     };
     assert!(PLATFORM.set(platform).is_ok(), "platform installed twice");
 }
@@ -78,10 +97,7 @@ pub fn platform() -> &'static dyn Platform {
     static UNINSTALLED: OnceLock<OsPlatform> = OnceLock::new();
     match PLATFORM.get() {
         Some(platform) => platform.as_ref(),
-        None => UNINSTALLED.get_or_init(|| OsPlatform {
-            clock: OsClock::new(),
-            audio: &RODIO,
-        }),
+        None => UNINSTALLED.get_or_init(OsPlatform::new),
     }
 }
 
@@ -105,4 +121,21 @@ pub fn advance_to(wake: u32) {
 
 pub fn steps() -> u64 {
     platform().clock().steps()
+}
+
+/// The game's callback queue and alarms.
+pub fn dispatch() -> &'static Dispatch {
+    platform().dispatch()
+}
+
+/// Run the pending callbacks and every due alarm.
+#[track_caller]
+pub fn process_async() {
+    dispatch().process(now_ms);
+}
+
+/// Milliseconds the game thread may wait before callbacks or alarms are due.
+#[track_caller]
+pub fn async_wait_ms() -> u32 {
+    dispatch().time_before_next_ms(now_ms)
 }

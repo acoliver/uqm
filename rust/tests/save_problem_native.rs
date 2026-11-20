@@ -191,9 +191,10 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         )));
         {
             {
-                use uqm_rust::{callback::ffi as alarms, engine::host as source};
+                use uqm_rust::engine::host as source;
+                let process_one = || source::dispatch().process_one_alarm(source::now_ms());
+                let wait = || source::dispatch().time_before_next_alarm_ms(source::now_ms());
                 source::install(true);
-                alarms::Alarm_init();
                 let region = |x| RECT {
                     corner: POINT { x, y: 1 },
                     extent: EXTENT {
@@ -211,12 +212,12 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 let mut manual = configure(10);
                 manual.start();
                 let mut scheduled = configure(1).schedule();
-                assert_eq!(alarms::Alarm_timeBeforeNextMs(), 61);
+                assert_eq!(wait(), 61);
                 source::advance_to(51);
-                assert!(!alarms::Alarm_processOne());
+                assert!(!process_one());
                 source::advance_to(52);
-                assert!(alarms::Alarm_processOne());
-                assert!(!alarms::Alarm_processOne());
+                assert!(process_one());
+                assert!(!process_one());
                 manual.process();
                 TFB_FlushGraphics();
                 let pixel = |x| {
@@ -224,12 +225,12 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     (p.r, p.g, p.b, p.a)
                 };
                 assert_eq!(pixel(2), pixel(11));
-                assert_eq!(alarms::Alarm_timeBeforeNextMs(), 62);
+                assert_eq!(wait(), 62);
                 scheduled.pause();
                 source::advance_to(104);
-                assert!(!alarms::Alarm_processOne());
+                assert!(!process_one());
                 scheduled.resume();
-                assert!(alarms::Alarm_processOne());
+                assert!(process_one());
                 manual.process();
                 TFB_FlushGraphics();
                 assert_eq!(pixel(2), pixel(11));
@@ -245,7 +246,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 drop(scheduled);
                 drop(manual);
                 source::advance_to(1_000);
-                assert!(!alarms::Alarm_processOne());
+                assert!(!process_one());
                 TFB_FlushGraphics();
                 assert_eq!(pixel(2), (9, 17, 25, 255));
                 let clip = RECT {
@@ -274,14 +275,14 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 TFB_FlushGraphics();
                 let translated = GetFramePixel(frame, POINT { x: 22, y: 12 });
                 assert_eq!((translated.r, translated.g, translated.b), (9, 17, 25));
-                assert_eq!(alarms::Alarm_timeBeforeNextMs(), 0);
-                assert!(alarms::Alarm_processOne());
+                assert_eq!(wait(), 0);
+                assert!(process_one());
                 reference.process();
                 flash_kernel.sis_highlight.pause_flash();
                 source::advance_to(1_052);
-                assert!(!alarms::Alarm_processOne());
+                assert!(!process_one());
                 flash_kernel.sis_highlight.continue_flash();
-                assert!(alarms::Alarm_processOne());
+                assert!(process_one());
                 reference.process();
                 TFB_FlushGraphics();
                 let translated = GetFramePixel(frame, POINT { x: 22, y: 12 });
@@ -299,11 +300,11 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 );
                 drop(reference);
                 source::advance_to(2_000);
-                assert!(!alarms::Alarm_processOne());
+                assert!(!process_one());
                 TFB_FlushGraphics();
                 let restored = GetFramePixel(frame, POINT { x: 22, y: 12 });
                 assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
-                alarms::Alarm_uninit();
+                source::dispatch().clear();
             }
             for count in [0, 1, u16::MAX] {
                 for offset in [0, 10] {

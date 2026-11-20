@@ -29,5 +29,6 @@ pub mod clock;
 mod platform;
 pub use clock::Clock;
 pub use platform::{
-    advance_to, install, is_replay, now_ms, now_ticks, platform, steps, AudioPort, Platform,
+    advance_to, async_wait_ms, dispatch, install, is_replay, now_ms, now_ticks, platform,
+    process_async, steps, AudioPort, Platform,
 };

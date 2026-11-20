@@ -72,7 +72,6 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
     let mut game = Game::new();
     let display = CampaignDisplay::install(&mut game)
         .unwrap_or_else(|error| panic!("options display: {error}"));
-    uqm_rust::callback::ffi::Alarm_init();
     let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 1, 1, 100)
         .unwrap_or_else(|| panic!("options frames"));
     game.kernel.play_frame = frames
@@ -150,7 +149,7 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
         game.world.data.flagship.ship_name,
     );
     drop(context);
-    uqm_rust::callback::ffi::Alarm_uninit();
+    uqm_rust::engine::host::dispatch().clear();
     display.finish(game);
     state
 }

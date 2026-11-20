@@ -1742,7 +1742,6 @@ pub const TFB_DRAWCOMMANDTYPE_CALLBACK: _bindgen_ty_28 = 14;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
 pub use crate::graphics::native_abi::tfb_drawcommandqueue;
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
-pub use crate::callback::ffi::Async_process;
 
 #[cfg(test)]
 mod ship_abi_tests {

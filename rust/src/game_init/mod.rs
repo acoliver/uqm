@@ -1,19 +1,5 @@
-// Game Initialization Module
-// Handles initialization of game structures, ships, and contexts
-
-pub mod ffi;
-pub mod init;
-pub mod master;
-pub mod setup;
-
-pub use init::*;
-pub use master::*;
-pub use setup::*;
-
-pub mod macro_abi;
+//! Game kernel startup, teardown and per-encounter ship resources.
 
 pub mod cleanup;
-
-pub mod space_resources;
-
 pub mod kernel_abi;
+pub mod space_resources;

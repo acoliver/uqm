@@ -125,8 +125,6 @@ mod live {
         dir_prep::prepare_shadow_addons(&vfs, &parsed.addons);
         crate::time::counter_abi::InitTimeSystem();
         crate::threading::task_abi::InitTaskSystem();
-        crate::callback::ffi::Alarm_init();
-        crate::callback::ffi::Callback_init();
 
         let (driver, flags) = super::graphics_config(parsed);
         let backend = graphics_options(c_option(&parsed.graphics_backend), observer);

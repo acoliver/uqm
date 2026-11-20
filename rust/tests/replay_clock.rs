@@ -1,15 +1,16 @@
-use uqm_rust::callback::ffi::{
-    Alarm_addAbsoluteMs, Alarm_init, Alarm_processOne, Alarm_uninit, Async_process,
-};
 use uqm_rust::{engine::host as source, time::counter_abi::GetTimeCounter};
+
+/// Run the earliest alarm that is due on the replay clock.
+fn process_one() -> bool {
+    source::dispatch().process_one_alarm(source::now_ms())
+}
 
 #[test]
 fn replay_alarms_follow_game_time_while_host_time_passes() {
     source::install(true);
-    Alarm_init();
     let (tx, rx) = std::sync::mpsc::channel();
     for deadline in [30, 10, 20] {
-        Alarm_addAbsoluteMs(
+        source::dispatch().add_alarm_absolute_ms(
             deadline,
             {
                 let tx = tx.clone();
@@ -20,22 +21,22 @@ fn replay_alarms_follow_game_time_while_host_time_passes() {
     }
     std::thread::sleep(std::time::Duration::from_millis(40));
     assert_eq!(GetTimeCounter(), 0);
-    assert!(!Alarm_processOne());
+    assert!(!process_one());
     source::advance_to(17); // 20 ms, truncated from 840-Hz game ticks.
-    assert!(Alarm_processOne());
+    assert!(process_one());
     assert_eq!(rx.try_recv(), Ok(10));
-    assert!(Alarm_processOne());
+    assert!(process_one());
     assert_eq!(rx.try_recv(), Ok(20));
-    assert!(!Alarm_processOne());
+    assert!(!process_one());
     let before = GetTimeCounter();
-    Async_process();
+    source::process_async();
     assert_eq!(GetTimeCounter(), before);
     std::thread::sleep(std::time::Duration::from_millis(10));
-    assert!(!Alarm_processOne());
+    assert!(!process_one());
     source::advance_to(26);
-    assert!(Alarm_processOne());
+    assert!(process_one());
     assert_eq!(rx.try_recv(), Ok(30));
-    assert!(!Alarm_processOne());
+    assert!(!process_one());
     let before = GetTimeCounter();
     let steps = source::steps();
     // DoInput yields here even when its callback (communication responses)
@@ -46,5 +47,5 @@ fn replay_alarms_follow_game_time_while_host_time_passes() {
     }
     assert_eq!(GetTimeCounter(), before + 10_001);
     assert_eq!(source::steps(), steps + 10_001);
-    Alarm_uninit();
+    source::dispatch().clear();
 }
