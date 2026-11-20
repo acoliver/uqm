@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::{engine::host as source, time::counter_abi::get_time_counter};
 
 /// Run the earliest alarm that is due on the replay clock.

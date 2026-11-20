@@ -1,4 +1,5 @@
 //! All mineral surface frames through the production visual and stamp path.
+#![forbid(unsafe_code)]
 use uqm_rust::engine::test_support::native_probe::{set_color_map, DrawQueue};
 use uqm_rust::graphics::context::{ContextLease, LoadedContext};
 use uqm_rust::graphics::drawable::{ContextFrame, LoadedDrawable};

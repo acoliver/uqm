@@ -1,4 +1,5 @@
 //! Real virtual controls, restart dispatch, input reset and save enumeration.
+#![forbid(unsafe_code)]
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use uqm_rust::input::frames::Target;

@@ -3,6 +3,7 @@
 //! The per-session receipt says the child exited. It does not say whether the
 //! run still owns anything, which is the question that matters before a
 //! supervisor claims a clean teardown.
+#![forbid(unsafe_code)]
 
 use std::process::Command;
 use std::time::Duration;

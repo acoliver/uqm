@@ -1,4 +1,5 @@
 //! Two loaded game processes exchange live input/checksums through LoopbackNet.
+#![forbid(unsafe_code)]
 use std::{
     error::Error,
     fs,

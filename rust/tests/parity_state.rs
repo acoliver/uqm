@@ -1,4 +1,5 @@
 //! Production checkpoint and fighter callers, including cross-process address stability.
+#![forbid(unsafe_code)]
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]

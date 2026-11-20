@@ -1,4 +1,5 @@
 //! Campaign labels borrow unpublished owners and retain their display resources.
+#![forbid(unsafe_code)]
 use std::ffi::CString;
 use uqm_rust::engine::test_support::native_probe::{frame_pixel as GetFramePixel, selected_clip};
 use uqm_rust::engine::Game;

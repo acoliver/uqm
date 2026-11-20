@@ -1,4 +1,5 @@
 //! The typed driver exercises the same nested native input and completion loop.
+#![forbid(unsafe_code)]
 #[path = "support/battle_context.rs"]
 mod battle_context;
 

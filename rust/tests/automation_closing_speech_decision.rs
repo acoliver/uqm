@@ -7,6 +7,7 @@
 //! through the farewell.
 //!
 //! Each test owns an observer with its own script and output directory.
+#![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 

@@ -1,4 +1,5 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
+#![forbid(unsafe_code)]
 
 use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;

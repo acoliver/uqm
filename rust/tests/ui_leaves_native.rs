@@ -1,4 +1,5 @@
 //! Owned modal windows restore their pixels and input policy after cancellation.
+#![forbid(unsafe_code)]
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,

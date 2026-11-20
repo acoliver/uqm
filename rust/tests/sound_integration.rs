@@ -1,6 +1,7 @@
 //! Sound decoder integration tests
 //!
 //! These tests verify the Ogg decoder works with real audio files.
+#![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 

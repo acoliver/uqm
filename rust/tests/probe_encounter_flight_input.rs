@@ -4,6 +4,7 @@
 //! `tap_menu_key` writes `ImmediateInputState.menu[]`, which menus read.
 //! Ship flight reads `key[PlayerControls[0]]`, so a menu-key hold flies
 //! nothing. These tests read the scenario sources themselves.
+#![forbid(unsafe_code)]
 
 use serde_json::Value;
 use std::path::PathBuf;

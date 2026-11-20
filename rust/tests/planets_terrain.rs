@@ -1,4 +1,5 @@
 //! Original compiled C, sealed full-buffer fixtures and the Rust terrain owner.
+#![forbid(unsafe_code)]
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};

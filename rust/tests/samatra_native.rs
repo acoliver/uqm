@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::battle::ContextOps;
 use uqm_rust::engine::battle::flags::APPEARING;
 use uqm_rust::engine::battle::flags::DEFY_PHYSICS;

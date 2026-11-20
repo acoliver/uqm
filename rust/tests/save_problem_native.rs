@@ -1,4 +1,5 @@
 //! The save-error popup restores its pixels and context after an observed wait.
+#![forbid(unsafe_code)]
 use std::{cell::Cell, rc::Rc};
 use uqm_rust::engine::battle::Cx;
 use uqm_rust::engine::input::Frame;

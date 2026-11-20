@@ -1,4 +1,5 @@
 //! Retained contact capabilities mutate the supplied campaign, without a published owner.
+#![forbid(unsafe_code)]
 use std::cell::RefCell;
 use uqm_rust::{
     engine::species::ship,

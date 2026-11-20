@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::engine::world::state_file::FileMode;
 use uqm_rust::engine::{Game, StoryKey};
 

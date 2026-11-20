@@ -1,4 +1,5 @@
 //! Stable values shared by save files, input, rendering, ships and netplay.
+#![forbid(unsafe_code)]
 
 use std::mem::{offset_of, size_of};
 use uqm_rust::engine::input_port::frames as input;

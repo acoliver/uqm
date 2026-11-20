@@ -1,4 +1,5 @@
 //! Full-buffer fixtures from the original TopoScale4x, including its persistent RNG.
+#![forbid(unsafe_code)]
 use sha2::{Digest, Sha256};
 use uqm_rust::planets::render::topo_scale::TopoScaler;
 

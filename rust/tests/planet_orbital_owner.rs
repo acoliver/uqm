@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use std::cell::RefCell;
 use uqm_rust::engine::{
     battle::Battle, battle::Cx, observe::Io, observe::Unobserved, Game, StoryKey,

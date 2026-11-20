@@ -1,4 +1,5 @@
 //! Live Thraddash callbacks, using the engine queue, frames, velocity and RNG.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

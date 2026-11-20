@@ -1,4 +1,5 @@
 //! Exercise the Ilwrath live descriptor and registered callbacks against the linked engine.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

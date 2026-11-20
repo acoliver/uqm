@@ -1,4 +1,5 @@
 //! Read-only full-map oracle for the elevation subset of original plangen.c.
+#![forbid(unsafe_code)]
 
 use sha2::{Digest, Sha256};
 use std::fs::File;

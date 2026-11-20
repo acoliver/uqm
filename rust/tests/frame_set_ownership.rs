@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::engine::battle::frames::{
     FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames,
 };

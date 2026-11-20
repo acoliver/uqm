@@ -1,4 +1,5 @@
 //! Saved-fleet integration tests over a real mounted directory.
+#![forbid(unsafe_code)]
 #[cfg(test)]
 mod tests {
     use std::io;

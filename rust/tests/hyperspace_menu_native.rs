@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use std::{cell::Cell, rc::Rc};
 use uqm_rust::engine::battle::input::InputContext;
 use uqm_rust::engine::battle::Battle;

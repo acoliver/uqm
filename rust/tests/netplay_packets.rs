@@ -1,4 +1,5 @@
 //! Production-linked protocol transitions and transport ownership.
+#![forbid(unsafe_code)]
 use std::{
     cell::RefCell,
     collections::VecDeque,

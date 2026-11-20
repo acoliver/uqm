@@ -1,4 +1,5 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

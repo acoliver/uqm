@@ -1,4 +1,5 @@
 //! The real options/settings/name chain borrows one campaign through nested input loops.
+#![forbid(unsafe_code)]
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 use uqm_engine::test_support::campaign_display;
 use uqm_engine::test_support::native_process as native_test_process;

@@ -1,4 +1,5 @@
 //! Production ship pools clear reused records and retain link order and capacity.
+#![forbid(unsafe_code)]
 use uqm_rust::engine::battle::link_queue::{LinkQueue, RacePool, Starship};
 use uqm_rust::engine::World;
 

@@ -3,6 +3,7 @@
 //! Before inbound signal handling existed, a supervisor that received SIGINT
 //! or SIGTERM died where it stood and left the process it was supervising
 //! running, holding its run lock and leaving its owned-process record stale.
+#![forbid(unsafe_code)]
 
 use std::process::Command;
 use std::time::{Duration, Instant};

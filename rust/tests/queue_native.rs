@@ -1,4 +1,5 @@
 //! Production draw queue ordering, batching and no-swap flush contract.
+#![forbid(unsafe_code)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use uqm_rust::engine::test_support::native_probe::{queue_sizes, rendered_frames, DrawQueue};
 use uqm_rust::graphics::state::{

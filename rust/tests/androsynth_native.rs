@@ -1,4 +1,5 @@
 //! Exercise the Androsynth entry point and registered callbacks against the linked engine.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle_context.rs"]
 mod battle_context;

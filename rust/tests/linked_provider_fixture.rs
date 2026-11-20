@@ -1,4 +1,5 @@
 //! Linked fixtures for debug consumers and game-state initialization.
+#![forbid(unsafe_code)]
 
 #[cfg(feature = "debug-process")]
 use uqm_rust::front_end::uqmdebug::uqm_debug_creature_bio_value;

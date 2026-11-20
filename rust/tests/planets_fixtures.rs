@@ -4,6 +4,7 @@
 //! and `orbits.c` were deleted, so this test needs no C and remains the
 //! parity proof. `planets_parity` also drives the supplied production record
 //! views and native resource boundaries.
+#![forbid(unsafe_code)]
 
 use uqm_rust::engine::world::planet::{
     ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo,

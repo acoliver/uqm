@@ -1,4 +1,5 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

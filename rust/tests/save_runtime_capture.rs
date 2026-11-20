@@ -1,5 +1,6 @@
 //! V3b: capture each save through a fresh release game, never through a codec substitute.
 //! UQM_SAVE_CAPTURE_BIN selects a release executable; UQM_SAVE_CAPTURE_OUT records candidates.
+#![forbid(unsafe_code)]
 
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};

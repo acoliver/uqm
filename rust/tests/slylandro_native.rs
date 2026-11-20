@@ -1,4 +1,5 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

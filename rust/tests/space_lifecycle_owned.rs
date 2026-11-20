@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_engine::test_support::campaign_display;
 
 use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;

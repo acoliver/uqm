@@ -1,4 +1,5 @@
 #![cfg(feature = "debug-process")]
+#![forbid(unsafe_code)]
 
 use std::{borrow::Cow, io};
 use uqm_rust::{

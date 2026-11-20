@@ -1,4 +1,5 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

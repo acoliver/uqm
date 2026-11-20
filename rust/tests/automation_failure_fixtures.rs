@@ -5,6 +5,7 @@
 //! than a non-zero exit, a previous run's process that is still alive when the
 //! next run starts, and the consequence of an acknowledgement that never
 //! reached its sender.
+#![forbid(unsafe_code)]
 
 use std::process::Command;
 use std::time::Duration;

@@ -1,4 +1,5 @@
 //! Resource and movie lifecycle through the engine's normal library build.
+#![forbid(unsafe_code)]
 use uqm_rust::graphics::present::GraphicsOptions;
 use uqm_rust::strings::owned_table::LoadedTextTable;
 use uqm_rust::video::legacy::*;

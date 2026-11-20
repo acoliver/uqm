@@ -1,4 +1,5 @@
 //! Linked callback checks against the Chmmr C rules, without a running renderer.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

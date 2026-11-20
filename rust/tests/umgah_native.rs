@@ -1,4 +1,5 @@
 //! Live Umgah callbacks, private cone state, collision cleanup and AI RNG order.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

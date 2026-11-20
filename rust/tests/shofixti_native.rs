@@ -1,4 +1,5 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
+#![forbid(unsafe_code)]
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
 use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
 use uqm_rust::engine::battle::ai_constants::SPECIAL;

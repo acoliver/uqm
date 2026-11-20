@@ -1,4 +1,5 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
+#![forbid(unsafe_code)]
 use uqm_engine::test_support::campaign_display;
 use uqm_engine::test_support::native_process;
 #[test]

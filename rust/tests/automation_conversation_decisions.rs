@@ -7,6 +7,7 @@
 //! script rather than trusting by inspection.
 //!
 //! This test owns its observer; its binary isolates production UI observations.
+#![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 

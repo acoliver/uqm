@@ -1,4 +1,5 @@
 //! Chenjesu fixtures retain the original integer, order and RNG expectations.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

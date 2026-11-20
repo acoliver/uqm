@@ -1,4 +1,5 @@
 //! Exercise the Melnorme descriptor and callbacks against the linked battle engine.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

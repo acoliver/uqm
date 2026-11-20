@@ -1,4 +1,5 @@
 //! Real UIO -> PNG -> font and animation loading with the remaining engine linked.
+#![forbid(unsafe_code)]
 use std::io::Write;
 use uqm_rust::engine::test_support::native_probe;
 use uqm_rust::graphics::drawable::{FrameKind, LoadedDrawable};

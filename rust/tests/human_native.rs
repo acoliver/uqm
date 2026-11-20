@@ -1,4 +1,5 @@
 //! Exercise the Cruiser descriptor and Native callbacks against the linked engine.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

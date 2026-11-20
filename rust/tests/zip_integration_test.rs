@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 /// Integration test for ZIP archive mounting
 ///
 /// This test verifies that the ZIP reader can:

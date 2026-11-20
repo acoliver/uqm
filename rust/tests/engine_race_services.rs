@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_engine::battle::{Battle, Cx, ElementId, RaceDesc, ShipId};
 use uqm_engine::Game;
 

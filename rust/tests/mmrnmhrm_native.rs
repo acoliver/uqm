@@ -1,4 +1,5 @@
 //! Exercise the Mmrnmhrm callbacks through the linked engine ABI.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;

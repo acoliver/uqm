@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use std::error::Error;
 
 use uqm_rust::savegame::{decode_save, encode_save, runtime::prepare_summary_for_write};

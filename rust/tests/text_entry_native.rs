@@ -1,4 +1,5 @@
 //! Text-entry frames lend their actual context to synchronous callbacks.
+#![forbid(unsafe_code)]
 use uqm_rust::{
     engine::{
         battle::Cx,

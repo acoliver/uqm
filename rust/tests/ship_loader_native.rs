@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::engine::battle::RaceDesc;
 use uqm_rust::engine::species::species_id::SPECIES_ID_ARILOU_ID;
 use uqm_rust::engine::species::species_id::SPECIES_ID_NUM_SPECIES_ID;

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::{engine::Game, navigation::hyper_data};
 
 #[test]

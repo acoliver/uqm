@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #[path = "support/battle_context.rs"]
 mod battle_context;
 

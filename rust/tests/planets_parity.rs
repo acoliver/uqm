@@ -3,6 +3,7 @@
 //! Analysis, scan and layout views must reproduce the full domains and frozen
 //! fixtures captured from the C originals in `tests/fixtures/planets/*`.
 //! Native resource and rendering fixtures share the serialized host below.
+#![forbid(unsafe_code)]
 
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 #[path = "planets_render/oval.rs"]

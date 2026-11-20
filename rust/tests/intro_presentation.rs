@@ -1,4 +1,5 @@
 //! Movie frames must survive the same input, pacing and expose boundaries as slides.
+#![forbid(unsafe_code)]
 use std::{cell::RefCell, path::Path, rc::Rc, time::Duration};
 use uqm_rust::engine::test_support::native_probe::register_rect;
 use uqm_rust::graphics::present::{swap_buffers, PresentObserver, Redraw};
