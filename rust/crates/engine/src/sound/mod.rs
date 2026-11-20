@@ -8,7 +8,6 @@
 //! - `DecoderFormats` specifies the output audio format
 //! - Individual decoder implementations (Ogg, Wav, MOD, etc.)
 //! - `rodio_audio` module provides a simple rodio-based audio system
-//! - `rodio_backend` module provides OpenAL-compatible API using rodio
 
 pub mod aiff;
 pub mod decoder;
@@ -23,7 +22,6 @@ pub mod ogg;
 pub mod replay_audio;
 pub mod resource_types;
 pub mod rodio_audio;
-pub mod rodio_backend;
 mod tracker;
 // @plan PLAN-20260225-AUDIO-HEART.P06
 #[cfg(feature = "audio_heart")]
