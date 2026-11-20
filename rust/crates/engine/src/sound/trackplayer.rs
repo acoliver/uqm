@@ -5,10 +5,9 @@
 //! Track player — manages multi-chunk audio sequences with subtitle
 //! synchronization, seeking, and callback dispatching.
 //!
-//! Builds on the stream engine (`stream.rs`) to play linked-list chains
-//! of `SoundChunk`s, each with its own decoder, subtitle text, and timing.
+//! Builds on the stream engine (`stream.rs`) to play sequences of
+//! `SoundChunk`s, each with its own decoder, subtitle text, and timing.
 
-use std::ptr::{self, NonNull};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -35,7 +34,7 @@ pub const MAX_MULTI_TRACKS: usize = 20;
 // Data Structures (spec §3.2.2)
 // =============================================================================
 
-/// A single chunk in the track player's linked list.
+/// A single chunk in the track player's sequence.
 ///
 /// Each chunk represents one audio segment with optional subtitle text,
 /// timing information, and a decoder.
@@ -62,8 +61,6 @@ pub struct SoundChunk {
     /// Per-chunk callback (first page only).
     /// Must be Fn, not FnOnce — callbacks can fire multiple times on seek.
     pub callback: Option<Box<dyn Fn(i32) + Send>>,
-    /// Linked list — next chunk.
-    pub next: Option<Box<SoundChunk>>,
 }
 
 impl SoundChunk {
@@ -73,16 +70,6 @@ impl SoundChunk {
             if let Some(ref text) = self.text {
                 self.text_cstr = std::ffi::CString::new(text.as_str()).ok();
             }
-        }
-    }
-}
-
-// REQ-TRACK-ASSEMBLE-19: Iterative Drop to prevent stack overflow on long lists
-impl Drop for SoundChunk {
-    fn drop(&mut self) {
-        let mut next = self.next.take();
-        while let Some(mut chunk) = next {
-            next = chunk.next.take();
         }
     }
 }
@@ -101,19 +88,17 @@ pub use subtitles::{subtitle_history, subtitle_snapshot, SubtitleIdentity, Subti
 
 /// Global track player state.
 ///
-/// Protected by `TRACK_STATE` mutex. Contains the linked list of chunks
-/// and all playback state.
+/// Protected by `TRACK_STATE` mutex. Owns the chunk sequence; the cursors
+/// are indices into it.
 pub struct TrackPlayerState {
-    /// Linked list head (owns all chunks).
-    pub chunks_head: Option<Box<SoundChunk>>,
-    /// Raw pointer to tail chunk (borrowed from list).
-    pub chunks_tail: *mut SoundChunk,
-    /// Raw pointer to last subtitle chunk.
-    pub last_sub: *mut SoundChunk,
-    /// Current playback chunk.
-    pub cur_chunk: Option<NonNull<SoundChunk>>,
-    /// Current displayed subtitle chunk.
-    pub cur_sub_chunk: Option<NonNull<SoundChunk>>,
+    /// Chunks in playback order.
+    pub chunks: Vec<SoundChunk>,
+    /// Index of the last chunk that carries subtitle text.
+    pub last_sub: Option<usize>,
+    /// Index of the current playback chunk.
+    pub cur_chunk: Option<usize>,
+    /// Index of the current displayed subtitle chunk.
+    pub cur_sub_chunk: Option<usize>,
     /// Shared sample for streaming.
     pub sound_sample: Option<Arc<Mutex<SoundSample>>>,
     /// Number of tracks.
@@ -128,29 +113,11 @@ pub struct TrackPlayerState {
     pub last_track_name: String,
 }
 
-// SAFETY: TrackPlayerState contains raw pointers (chunks_tail, last_sub)
-// and NonNull pointers (cur_chunk, cur_sub_chunk) that point into the
-// owned linked list (chunks_head).
-//
-// 1. Ownership: chunks_head owns the list. All raw pointers are borrowed
-//    references into this list and are NEVER dereferenced after chunks_head
-//    is set to None.
-// 2. Single-writer: Always accessed under TRACK_STATE parking_lot::Mutex,
-//    ensuring exclusive access. Raw pointers are never shared across threads
-//    without the mutex.
-// 3. Lifetime: cur_chunk and cur_sub_chunk are set to None in stop_track()
-//    before chunks_head is dropped. chunks_tail is set to null_mut() when
-//    the list is emptied.
-// 4. Callbacks: TrackCallbacks are only invoked while the sample is alive
-//    (guaranteed by Arc reference held by stream engine).
-unsafe impl Send for TrackPlayerState {}
-
 impl TrackPlayerState {
     fn new() -> Self {
         TrackPlayerState {
-            chunks_head: None,
-            chunks_tail: ptr::null_mut(),
-            last_sub: ptr::null_mut(),
+            chunks: Vec::new(),
+            last_sub: None,
             cur_chunk: None,
             cur_sub_chunk: None,
             sound_sample: None,
@@ -171,7 +138,7 @@ static TRACK_STATE: std::sync::LazyLock<Mutex<TrackPlayerState>> =
 
 /// Details for a resolved seek target.
 struct SeekTarget {
-    chunk_ptr: Option<NonNull<SoundChunk>>,
+    chunk: Option<usize>,
     clamped_ticks: u32,
     seek_time_ms: u32,
 }
@@ -203,21 +170,20 @@ impl StreamCallbacks for TrackCallbacks {
         if state.sound_sample.is_none() {
             return false;
         }
-        let cur = match state.cur_chunk {
-            Some(c) => c,
-            None => return false,
+        let Some(cur) = state.cur_chunk else {
+            return false;
         };
 
-        let chunk = unsafe { cur.as_ref() };
         // Move decoder from chunk to sample
-        let chunk_mut = unsafe { &mut *(cur.as_ptr()) };
-        if let Some(dec) = chunk_mut.decoder.take() {
+        let chunk = &mut state.chunks[cur];
+        if let Some(dec) = chunk.decoder.take() {
             sample.decoder = Some(dec);
         }
         sample.offset = (chunk.start_time * ONE_SECOND as f64 / 1000.0) as i32;
+        let tag_me = chunk.tag_me;
 
-        if chunk.tag_me {
-            do_track_tag_inner(&mut state, chunk);
+        if tag_me {
+            do_track_tag(&mut state, cur);
         }
         true
     }
@@ -227,37 +193,29 @@ impl StreamCallbacks for TrackCallbacks {
         if state.sound_sample.is_none() {
             return false;
         }
-        let cur = match state.cur_chunk {
-            Some(c) => c,
-            None => return false,
+        let Some(cur) = state.cur_chunk else {
+            return false;
         };
-
-        let cur_ref = unsafe { cur.as_ref() };
-        let next = match cur_ref.next.as_ref() {
-            Some(n) => n,
-            None => return false,
-        };
+        let next = cur + 1;
+        if next >= state.chunks.len() {
+            return false;
+        }
 
         // Return decoder to current chunk, take from next
         if let Some(dec) = sample.decoder.take() {
-            let chunk_mut = unsafe { &mut *(cur.as_ptr()) };
-            chunk_mut.decoder = Some(dec);
+            state.chunks[cur].decoder = Some(dec);
         }
 
-        let next_nn = NonNull::from(next.as_ref());
-        state.cur_chunk = Some(next_nn);
-        let next_mut = unsafe { &mut *(next_nn.as_ptr()) };
-        if let Some(dec) = next_mut.decoder.take() {
+        state.cur_chunk = Some(next);
+        if let Some(mut dec) = state.chunks[next].decoder.take() {
             // C parity: OnChunkEnd rewinds the next decoder before attaching it
             // as the active sample decoder.
-            let mut dec = dec;
             let _ = dec.seek(0);
             sample.decoder = Some(dec);
         }
 
-        if next.tag_me {
-            let chunk_ptr = next.as_ref() as *const SoundChunk as usize;
-            let _ = stream::tag_buffer(sample, buffer, chunk_ptr);
+        if state.chunks[next].tag_me {
+            let _ = stream::tag_buffer(sample, buffer, next);
         }
         true
     }
@@ -278,16 +236,13 @@ impl StreamCallbacks for TrackCallbacks {
             stream::clear_buffer_tag(slot);
         }
 
-        let chunk_ptr = tag.data as *const SoundChunk;
+        // The tag carries the chunk index. Stopping the track clears the
+        // sample's tags under the sample lock this callback holds, so an index
+        // past the end can only come from a tag that names no chunk.
         let mut state = TRACK_STATE.lock();
-        if state.chunks_head.is_none() {
-            return;
+        if tag.data < state.chunks.len() {
+            do_track_tag(&mut state, tag.data);
         }
-        if !chunk_is_in_list(&state.chunks_head, chunk_ptr) {
-            return;
-        }
-        let chunk = unsafe { &*chunk_ptr };
-        do_track_tag_inner(&mut state, chunk);
     }
 
     fn on_queue_buffer(&mut self, _sample: &mut SoundSample, _buffer: usize) {
@@ -322,14 +277,10 @@ pub fn splice_track(
         if state.track_count == 0 {
             return Ok(());
         }
-        if !state.last_sub.is_null() {
-            let last_sub = unsafe { &mut *state.last_sub };
+        if let Some(last_sub) = state.last_sub {
             let pages = split_sub_pages(text);
             if let Some(first_page) = pages.first() {
-                match &mut last_sub.text {
-                    Some(t) => t.push_str(&first_page.text),
-                    None => last_sub.text = Some(first_page.text.clone()),
-                }
+                append_text(&mut state.chunks[last_sub], &first_page.text);
             }
             for page in pages.iter().skip(1) {
                 let chunk = SoundChunk {
@@ -342,10 +293,9 @@ pub fn splice_track(
                     text: Some(page.text.clone()),
                     text_cstr: None,
                     callback: None,
-                    next: None,
                 };
-                append_chunk(&mut state, chunk);
-                state.last_sub = state.chunks_tail;
+                state.chunks.push(chunk);
+                state.last_sub = Some(state.chunks.len() - 1);
             }
         }
         return Ok(());
@@ -366,14 +316,8 @@ pub fn splice_track(
     // C parity: when no_page_break is set, append page 0 text to the previous
     // subtitle first, but still build chunk 0 from decoder/timing data.
     if appending_without_page_break {
-        if let Some(first_page) = pages.first() {
-            if !state.last_sub.is_null() {
-                let last_sub = unsafe { &mut *state.last_sub };
-                match &mut last_sub.text {
-                    Some(t) => t.push_str(&first_page.text),
-                    None => last_sub.text = Some(first_page.text.clone()),
-                }
-            }
+        if let (Some(first_page), Some(last_sub)) = (pages.first(), state.last_sub) {
+            append_text(&mut state.chunks[last_sub], &first_page.text);
         }
     }
 
@@ -428,7 +372,6 @@ pub fn splice_track(
             text,
             text_cstr: None,
             callback: if tag_me { callback.take() } else { None },
-            next: None,
         };
 
         // Advance dec_offset by decoder length (like C does)
@@ -437,9 +380,9 @@ pub fn splice_track(
         }
 
         let has_text = chunk.text.is_some();
-        append_chunk(&mut state, chunk);
+        state.chunks.push(chunk);
         if has_text {
-            state.last_sub = state.chunks_tail;
+            state.last_sub = Some(state.chunks.len() - 1);
         }
     }
 
@@ -487,17 +430,16 @@ pub fn splice_multi_track(decoders: Vec<Box<dyn Decoder>>, text: Option<&str>) -
             text: None,
             text_cstr: None,
             callback: None,
-            next: None,
         };
         added_lengths.push(length);
         state.dec_offset += f64::from(length * 1000.0);
-        append_chunk(&mut state, chunk);
+        state.chunks.push(chunk);
     }
 
-    // SAFETY: `last_sub` points into the chunk list owned by `state`, which stays locked.
-    let Some(last_sub) = (unsafe { state.last_sub.as_mut() }) else {
+    let Some(last_sub) = state.last_sub else {
         return Err(AudioError::InvalidSample);
     };
+    let last_sub = &mut state.chunks[last_sub];
     last_sub.text.get_or_insert_with(String::new).push_str(text);
     // An earlier subtitle lookup may have cached this string already.
     last_sub.text_cstr = None;
@@ -529,15 +471,12 @@ pub fn play_track(scope: bool) -> AudioResult<()> {
         eprintln!(
             "[DBG] play_track: sound_sample present, track_count={}, chunks_head={}",
             state.track_count,
-            state.chunks_head.is_some()
+            !state.chunks.is_empty()
         );
 
         let end_time = tracks_end_time_inner(&state);
         state.tracks_length.store(end_time, Ordering::Release);
-        state.cur_chunk = state
-            .chunks_head
-            .as_ref()
-            .map(|c| NonNull::from(c.as_ref()));
+        state.cur_chunk = (!state.chunks.is_empty()).then_some(0);
         state.cur_sub_chunk = None;
 
         sample_arc
@@ -573,9 +512,8 @@ pub fn stop_track() -> AudioResult<()> {
         let _ = stream::destroy_sound_sample(sample);
     }
 
-    state.chunks_head = None;
-    state.chunks_tail = ptr::null_mut();
-    state.last_sub = ptr::null_mut();
+    state.chunks.clear();
+    state.last_sub = None;
     state.dec_offset = 0.0;
     Ok(())
 }
@@ -625,7 +563,7 @@ pub fn playing_track_num() -> u16 {
     }
     state
         .cur_chunk
-        .map(|c| (unsafe { c.as_ref() }.track_num + 1) as u16)
+        .map(|c| (state.chunks[c].track_num + 1) as u16)
         .unwrap_or(0)
 }
 
@@ -679,13 +617,12 @@ pub fn fast_reverse_page() -> AudioResult<()> {
             return Ok(());
         };
 
-        let prev = find_prev_page_inner(&state.chunks_head, state.cur_sub_chunk);
+        let prev = find_prev_page_inner(&state.chunks, state.cur_sub_chunk);
         let Some(page) = prev else {
             return Ok(());
         };
 
-        let chunk = unsafe { page.as_ref() };
-        let offset_ticks = ms_to_ticks(chunk.start_time as u32) as i32;
+        let offset_ticks = ms_to_ticks(state.chunks[page].start_time as u32) as i32;
 
         state.cur_chunk = Some(page);
         state.cur_sub_chunk = Some(page);
@@ -712,10 +649,9 @@ pub fn fast_forward_page() -> AudioResult<()> {
             return Ok(());
         };
 
-        let next = find_next_page_inner(state.cur_sub_chunk);
+        let next = find_next_page_inner(&state.chunks, state.cur_sub_chunk);
         if let Some(page) = next {
-            let chunk = unsafe { page.as_ref() };
-            let offset_ticks = ms_to_ticks(chunk.start_time as u32) as i32;
+            let offset_ticks = ms_to_ticks(state.chunks[page].start_time as u32) as i32;
             state.cur_chunk = Some(page);
             state.cur_sub_chunk = Some(page);
             Some((sample_arc, offset_ticks))
@@ -858,35 +794,12 @@ fn get_time_stamps(timestamp: &str) -> Vec<f64> {
     result
 }
 
-/// Append a chunk to the tail of the linked list.
-fn append_chunk(state: &mut TrackPlayerState, chunk: SoundChunk) {
-    let boxed = Box::new(chunk);
-    let new_ptr = boxed.as_ref() as *const SoundChunk as *mut SoundChunk;
-
-    if state.chunks_tail.is_null() {
-        state.chunks_head = Some(boxed);
-        state.chunks_tail = state
-            .chunks_head
-            .as_ref()
-            .map(|c| c.as_ref() as *const _ as *mut SoundChunk)
-            .unwrap_or(ptr::null_mut());
-    } else {
-        let tail = unsafe { &mut *state.chunks_tail };
-        tail.next = Some(boxed);
-        state.chunks_tail = new_ptr;
+/// Append page text to a subtitle chunk.
+fn append_text(chunk: &mut SoundChunk, text: &str) {
+    match &mut chunk.text {
+        Some(t) => t.push_str(text),
+        None => chunk.text = Some(text.to_owned()),
     }
-}
-
-/// Check if a chunk pointer is in the active linked list.
-fn chunk_is_in_list(head: &Option<Box<SoundChunk>>, target: *const SoundChunk) -> bool {
-    let mut cur = head.as_deref();
-    while let Some(chunk) = cur {
-        if ptr::eq(chunk, target) {
-            return true;
-        }
-        cur = chunk.next.as_deref();
-    }
-    false
 }
 
 /// Seek to a specific position (in game ticks).
@@ -910,29 +823,28 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
             "[PARITY][SEEK] resolved clamped_ticks={} seek_time_ms={} has_chunk={}",
             target.clamped_ticks,
             target.seek_time_ms,
-            target.chunk_ptr.is_some()
+            target.chunk.is_some()
         );
 
         // Keep stream position/timebase coherent with C get_current_track_pos().
         source.start_time = get_time_counter() as i32 - target.clamped_ticks as i32;
 
-        let Some(chunk_ptr) = target.chunk_ptr else {
+        let Some(index) = target.chunk else {
             // Beyond end of all tracks.
             state.cur_chunk = None;
             state.cur_sub_chunk = None;
             source.stream_should_be_playing = false;
             return false;
         };
-        let chunk = unsafe { chunk_ptr.as_ref() };
         let seek_ms = target.seek_time_ms;
 
         {
             // Return currently attached decoder back to old cur_chunk before switching.
             if let Some(dec) = sample.decoder.take() {
-                if let Some(cur_ptr) = state.cur_chunk {
-                    let cur_mut = unsafe { &mut *cur_ptr.as_ptr() };
-                    if cur_mut.decoder.is_none() {
-                        cur_mut.decoder = Some(dec);
+                if let Some(cur) = state.cur_chunk {
+                    let current = &mut state.chunks[cur];
+                    if current.decoder.is_none() {
+                        current.decoder = Some(dec);
                     }
                 }
             }
@@ -940,8 +852,8 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
             // Attach target chunk decoder and seek within it.
             // C parity: seek target is milliseconds relative to chunk start,
             // but decoder seek API takes PCM sample position.
-            let chunk_mut = unsafe { &mut *chunk_ptr.as_ptr() };
-            if let Some(mut dec) = chunk_mut.decoder.take() {
+            let chunk = &mut state.chunks[index];
+            if let Some(mut dec) = chunk.decoder.take() {
                 let pcm_pos = (seek_ms as u64 * dec.frequency() as u64 / 1000) as u32;
                 let _ = dec.seek(pcm_pos);
                 eprintln!(
@@ -960,7 +872,7 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
             );
         }
 
-        state.cur_chunk = Some(chunk_ptr);
+        state.cur_chunk = Some(index);
         true
     })
     .ok_or(AudioError::InvalidSource(SPEECH_SOURCE))?;
@@ -979,32 +891,21 @@ fn resolve_seek_target(state: &mut TrackPlayerState, pos: u32) -> SeekTarget {
     let len = state.tracks_length.load(Ordering::Acquire);
     let clamped_ticks = pos.min(len + 1);
 
-    let mut last_tagged: Option<NonNull<SoundChunk>> = None;
-    let mut cur = state.chunks_head.as_deref();
-
-    while let Some(chunk) = cur {
-        let chunk_ptr = NonNull::from(chunk);
-        let chunk_tag_me = chunk.tag_me;
+    let mut last_tagged = None;
+    for index in 0..state.chunks.len() {
+        let chunk = &state.chunks[index];
         let chunk_start_ms = chunk.start_time as u32;
-        let chunk_len_ms = chunk.length_ms;
-
-        if chunk_tag_me {
-            last_tagged = Some(chunk_ptr);
+        if chunk.tag_me {
+            last_tagged = Some(index);
         }
 
-        let chunk_end_ticks = ms_to_ticks(chunk_start_ms.saturating_add(chunk_len_ms));
+        let chunk_end_ticks = ms_to_ticks(chunk_start_ms.saturating_add(chunk.length_ms));
 
         if clamped_ticks < chunk_end_ticks {
-            // C seek_track semantics:
-            // - remember last tagged chunk seen while scanning
-            // - include current chunk if it is tagged
-            let tagged_ptr = if chunk_tag_me {
-                Some(chunk_ptr)
-            } else {
-                last_tagged
-            };
-            if let Some(tagged) = tagged_ptr {
-                do_track_tag_ptr_inner(state, tagged);
+            // C seek_track semantics: the last tagged chunk seen while
+            // scanning, which includes this chunk when it is tagged.
+            if let Some(tagged) = last_tagged {
+                do_track_tag(state, tagged);
             }
 
             let chunk_start_ticks = ms_to_ticks(chunk_start_ms);
@@ -1012,90 +913,57 @@ fn resolve_seek_target(state: &mut TrackPlayerState, pos: u32) -> SeekTarget {
             let seek_time_ms = ticks_to_ms(rel_ticks);
 
             return SeekTarget {
-                chunk_ptr: Some(chunk_ptr),
+                chunk: Some(index),
                 clamped_ticks,
                 seek_time_ms,
             };
         }
-
-        cur = chunk.next.as_deref();
     }
 
     state.cur_chunk = None;
     state.cur_sub_chunk = None;
     SeekTarget {
-        chunk_ptr: None,
+        chunk: None,
         clamped_ticks,
         seek_time_ms: 0,
     }
 }
 
 /// Find the next tagged page after the given position.
-fn find_next_page_inner(cur: Option<NonNull<SoundChunk>>) -> Option<NonNull<SoundChunk>> {
+fn find_next_page_inner(chunks: &[SoundChunk], cur: Option<usize>) -> Option<usize> {
     let cur = cur?;
-    let node = unsafe { cur.as_ref() };
-    let mut ptr = node.next.as_deref();
-    while let Some(chunk) = ptr {
-        if chunk.tag_me {
-            return Some(NonNull::from(chunk));
-        }
-        ptr = chunk.next.as_deref();
-    }
-    None
+    (cur + 1..chunks.len()).find(|&index| chunks[index].tag_me)
 }
 
 /// Find the previous tagged page before the given position.
-fn find_prev_page_inner(
-    head: &Option<Box<SoundChunk>>,
-    cur: Option<NonNull<SoundChunk>>,
-) -> Option<NonNull<SoundChunk>> {
-    let head_ref = head.as_deref()?;
-    let cur_ptr = cur.map(|nn| nn.as_ptr());
-
-    // C parity: cur == NULL is treated as end-of-list.
-    // So we still scan from head and return the last tagged page.
-    let mut last_tagged = Some(NonNull::from(head_ref));
-    let mut node = Some(head_ref);
-    while let Some(chunk) = node {
-        if let Some(cptr) = cur_ptr {
-            if ptr::eq(chunk, cptr as *const _) {
-                break;
-            }
-        }
-        if chunk.tag_me {
-            last_tagged = Some(NonNull::from(chunk));
-        }
-        node = chunk.next.as_deref();
+fn find_prev_page_inner(chunks: &[SoundChunk], cur: Option<usize>) -> Option<usize> {
+    if chunks.is_empty() {
+        return None;
     }
-    last_tagged
+    // C parity: cur == NULL is treated as end-of-list, so the scan still
+    // starts at the head and returns the last tagged page.
+    let end = cur.unwrap_or(chunks.len()).min(chunks.len());
+    (0..end).rev().find(|&index| chunks[index].tag_me).or(Some(0))
 }
 
 /// Handle a buffer tag event for subtitle synchronization.
 /// Must be called with TRACK_STATE held. Takes &mut TrackPlayerState to
 /// avoid re-locking (FIX: ISSUE-MISC-03).
-fn do_track_tag_inner(state: &mut TrackPlayerState, chunk: &SoundChunk) {
-    if let Some(ref cb) = chunk.callback {
+fn do_track_tag(state: &mut TrackPlayerState, index: usize) {
+    if let Some(ref cb) = state.chunks[index].callback {
         cb(0);
     }
-    state.cur_sub_chunk = Some(NonNull::from(chunk));
-}
-
-fn do_track_tag_ptr_inner(state: &mut TrackPlayerState, chunk_ptr: NonNull<SoundChunk>) {
-    if let Some(ref cb) = unsafe { chunk_ptr.as_ref() }.callback {
-        cb(0);
-    }
-    state.cur_sub_chunk = Some(chunk_ptr);
+    state.cur_sub_chunk = Some(index);
 }
 
 /// Get the total track end time in game ticks.
 fn tracks_end_time_inner(state: &TrackPlayerState) -> u32 {
-    let mut total_ms: u32 = 0;
-    let mut cur = state.chunks_head.as_deref();
-    while let Some(chunk) = cur {
-        let chunk_end_ms = (chunk.start_time as u32).saturating_add(chunk.length_ms);
-        total_ms = total_ms.max(chunk_end_ms);
-        cur = chunk.next.as_deref();
-    }
+    let total_ms = state
+        .chunks
+        .iter()
+        .map(|chunk| (chunk.start_time as u32).saturating_add(chunk.length_ms))
+        .max()
+        .unwrap_or(0);
     ms_to_ticks(total_ms)
 }
 
@@ -1124,68 +992,16 @@ mod tests {
             text: None,
             text_cstr: None,
             callback: None,
-            next: None,
         };
         assert!(chunk.decoder.is_none());
         assert_eq!(chunk.track_num, 0);
     }
 
     #[test]
-    fn test_sound_chunk_linked_list() {
-        let chunk2 = Box::new(SoundChunk {
-            decoder: None,
-            length_ms: 0,
-            start_time: 1000.0,
-            run_time: 500,
-            tag_me: true,
-            track_num: 1,
-            text: Some("Page 2".into()),
-            text_cstr: None,
-            callback: None,
-            next: None,
-        });
-        let chunk1 = SoundChunk {
-            decoder: None,
-            length_ms: 0,
-            start_time: 0.0,
-            run_time: 1000,
-            tag_me: true,
-            track_num: 0,
-            text: Some("Page 1".into()),
-            text_cstr: None,
-            callback: None,
-            next: Some(chunk2),
-        };
-        assert!(chunk1.next.is_some());
-        assert_eq!(chunk1.next.as_ref().unwrap().track_num, 1);
-    }
-
-    #[test]
-    fn test_sound_chunk_iterative_drop() {
-        // Build a long chain — should not stack overflow
-        let mut head: Option<Box<SoundChunk>> = None;
-        for i in (0..1000).rev() {
-            head = Some(Box::new(SoundChunk {
-                decoder: None,
-                length_ms: 0,
-                start_time: i as f64,
-                run_time: 0,
-                tag_me: false,
-                track_num: 0,
-                text: None,
-                text_cstr: None,
-                callback: None,
-                next: head,
-            }));
-        }
-        drop(head); // should not overflow
-    }
-
-    #[test]
     fn test_track_player_state_new() {
         let state = TrackPlayerState::new();
-        assert!(state.chunks_head.is_none());
-        assert!(state.chunks_tail.is_null());
+        assert!(state.chunks.is_empty());
+        assert!(state.last_sub.is_none());
         assert!(state.cur_chunk.is_none());
         assert_eq!(state.track_count, 0);
         assert_eq!(state.tracks_length.load(Ordering::Relaxed), 0);
@@ -1312,7 +1128,6 @@ mod tests {
             text: Some("Subtitle text".into()),
             text_cstr: None,
             callback: Some(Box::new(|_| {})),
-            next: None,
         };
         assert_eq!(chunk.start_time, 500.0);
         assert_eq!(chunk.run_time, ms_to_ticks(1000) as i32);
@@ -1362,8 +1177,8 @@ mod tests {
         assert!(result.is_ok());
         let state = TRACK_STATE.lock();
         assert_eq!(state.track_count, 0);
-        assert!(state.chunks_head.is_none());
-        assert!(state.chunks_tail.is_null());
+        assert!(state.chunks.is_empty());
+        assert!(state.last_sub.is_none());
     }
 
     #[test]
@@ -1431,24 +1246,16 @@ mod tests {
     // REQ-TRACK-SEEK-11..12: Navigation
     #[test]
     fn test_find_next_page_none() {
-        assert!(find_next_page_inner(None).is_none());
+        assert!(find_next_page_inner(&[], None).is_none());
     }
 
     #[test]
-    fn test_find_prev_page_defaults_to_head() {
-        let head: Option<Box<SoundChunk>> = None;
-        assert!(find_prev_page_inner(&head, None).is_none());
+    fn test_find_prev_page_is_none_without_chunks() {
+        assert!(find_prev_page_inner(&[], None).is_none());
     }
 
     fn chunks_in_track() -> usize {
-        let state = TRACK_STATE.lock();
-        let mut count = 0;
-        let mut cur = state.chunks_head.as_deref();
-        while let Some(chunk) = cur {
-            count += 1;
-            cur = chunk.next.as_deref();
-        }
-        count
+        TRACK_STATE.lock().chunks.len()
     }
 
     /// `splice_multi_track` appends to whatever track list exists, so the two

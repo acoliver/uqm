@@ -129,42 +129,20 @@ fn splice_two_pages(calls: Option<&Calls>) {
     .unwrap();
 }
 
-fn chunk_at(index: usize) -> NonNull<SoundChunk> {
-    let state = TRACK_STATE.lock();
-    let mut chunk = state.chunks_head.as_deref().expect("a chunk list");
-    for _ in 0..index {
-        chunk = chunk.next.as_deref().expect("enough chunks");
-    }
-    NonNull::from(chunk)
-}
-
 fn chunk_count() -> usize {
-    let state = TRACK_STATE.lock();
-    let mut count = 0;
-    let mut cur = state.chunks_head.as_deref();
-    while let Some(chunk) = cur {
-        count += 1;
-        cur = chunk.next.as_deref();
-    }
-    count
+    TRACK_STATE.lock().chunks.len()
 }
 
 fn texts() -> Vec<Option<String>> {
     let state = TRACK_STATE.lock();
-    let mut out = Vec::new();
-    let mut cur = state.chunks_head.as_deref();
-    while let Some(chunk) = cur {
-        out.push(chunk.text.clone());
-        cur = chunk.next.as_deref();
-    }
-    out
+    state.chunks.iter().map(|chunk| chunk.text.clone()).collect()
 }
 
-fn cur_chunk() -> Option<NonNull<SoundChunk>> {
+fn cur_chunk() -> Option<usize> {
     TRACK_STATE.lock().cur_chunk
 }
 
-fn cur_sub_chunk() -> Option<NonNull<SoundChunk>> {
+fn cur_sub_chunk() -> Option<usize> {
     TRACK_STATE.lock().cur_sub_chunk
 }
 
@@ -213,7 +191,7 @@ fn speech_callback_advances_while_the_comm_slider_waits_for_the_source() {
         !callback_was_blocked,
         "comm holds TRACK_STATE waiting for the source; decoder holds the source waiting for TRACK_STATE"
     );
-    assert_eq!(cur_chunk(), Some(chunk_at(1)));
+    assert_eq!(cur_chunk(), Some(1));
 }
 
 #[test]
@@ -281,8 +259,9 @@ fn splicing_a_track_builds_one_tagged_chunk_per_subtitle_page() {
         ]
     );
     let state = TRACK_STATE.lock();
-    let first = state.chunks_head.as_deref().unwrap();
-    let second = first.next.as_deref().unwrap();
+    let [first, second] = &state.chunks[..] else {
+        panic!("two chunks");
+    };
     assert_eq!((first.start_time, second.start_time), (0.0, 1000.0));
     assert!(first.tag_me && second.tag_me);
     assert_eq!((first.track_num, second.track_num), (0, 0));
@@ -293,7 +272,7 @@ fn splicing_a_track_builds_one_tagged_chunk_per_subtitle_page() {
     );
     assert_eq!(state.track_count, 1);
     assert_eq!(state.dec_offset, 2000.0);
-    assert_eq!(state.last_sub, state.chunks_tail);
+    assert_eq!(state.last_sub, Some(1));
     assert_eq!(state.last_track_name, "conversation");
     let sample = state.sound_sample.as_ref().unwrap().lock();
     assert_eq!(sample.length, 2.0);
@@ -314,8 +293,9 @@ fn explicit_timestamps_override_the_reading_time_of_each_page() {
     .unwrap();
 
     let state = TRACK_STATE.lock();
-    let first = state.chunks_head.as_deref().unwrap();
-    let second = first.next.as_deref().unwrap();
+    let [first, second] = &state.chunks[..] else {
+        panic!("two chunks");
+    };
     assert_eq!(first.run_time, ms_to_ticks(1500) as i32);
     assert_eq!(second.run_time, ms_to_ticks(2500) as i32);
 }
@@ -339,9 +319,8 @@ fn only_the_first_page_carries_the_completion_callback() {
     splice_two_pages(Some(&calls));
 
     let state = TRACK_STATE.lock();
-    let first = state.chunks_head.as_deref().unwrap();
-    assert!(first.callback.is_some());
-    assert!(first.next.as_deref().unwrap().callback.is_none());
+    assert!(state.chunks[0].callback.is_some());
+    assert!(state.chunks[1].callback.is_none());
 }
 
 #[test]
@@ -360,16 +339,7 @@ fn a_later_subtitle_joins_the_last_page_and_extra_pages_become_audio_less_chunks
         ]
     );
     let state = TRACK_STATE.lock();
-    let third = state
-        .chunks_head
-        .as_deref()
-        .unwrap()
-        .next
-        .as_deref()
-        .unwrap()
-        .next
-        .as_deref()
-        .unwrap();
+    let third = &state.chunks[2];
     assert!(third.decoder.is_none());
     assert!(third.tag_me);
     assert_eq!(third.start_time, 2000.0, "it starts where the audio ended");
@@ -408,10 +378,7 @@ fn a_second_track_continues_the_numbering_and_the_decoder_offset() {
     .unwrap();
 
     let state = TRACK_STATE.lock();
-    let mut chunk = state.chunks_head.as_deref().unwrap();
-    while let Some(next) = chunk.next.as_deref() {
-        chunk = next;
-    }
+    let chunk = state.chunks.last().unwrap();
     assert_eq!(chunk.track_num, 1);
     assert_eq!(chunk.start_time, 2000.0);
     assert_eq!(state.track_count, 2);
@@ -438,7 +405,7 @@ fn numbered_sale_speech_has_decoders_for_the_number_and_continuation() {
     assert_eq!(chunk_count(), 3);
     for i in 0..3 {
         assert!(
-            unsafe { chunk_at(i).as_ref() }.decoder.is_some(),
+            TRACK_STATE.lock().chunks[i].decoder.is_some(),
             "chunk {i} has no speech decoder"
         );
     }
@@ -497,10 +464,7 @@ fn a_track_spliced_without_a_page_break_extends_the_previous_subtitle() {
     let state = TRACK_STATE.lock();
     assert_eq!(state.track_count, 1, "it is part of the same track");
     assert!(!state.no_page_break, "the flag is consumed");
-    let mut chunk = state.chunks_head.as_deref().unwrap();
-    while let Some(next) = chunk.next.as_deref() {
-        chunk = next;
-    }
+    let chunk = state.chunks.last().unwrap();
     assert!(
         !chunk.tag_me,
         "the continued audio is not a page of its own"
@@ -535,10 +499,10 @@ fn playing_a_track_starts_speech_at_the_first_page_and_reports_the_total_length(
         TRACK_STATE.lock().tracks_length.load(Ordering::Acquire),
         ms_to_ticks(2000)
     );
-    assert_eq!(cur_chunk(), Some(chunk_at(0)));
+    assert_eq!(cur_chunk(), Some(0));
     assert_eq!(
         cur_sub_chunk(),
-        Some(chunk_at(0)),
+        Some(0),
         "the first page is shown at once"
     );
     assert_eq!(calls.lock().as_slice(), [0], "its callback fired once");
@@ -576,8 +540,7 @@ fn stopping_a_track_silences_speech_and_forgets_the_whole_conversation() {
     assert!(!stream::playing_stream(SPEECH_SOURCE));
     let state = TRACK_STATE.lock();
     assert!(state.sound_sample.is_none());
-    assert!(state.chunks_head.is_none());
-    assert!(state.chunks_tail.is_null() && state.last_sub.is_null());
+    assert!(state.chunks.is_empty() && state.last_sub.is_none());
     assert_eq!((state.track_count, state.dec_offset), (0, 0.0));
     assert_eq!(state.tracks_length.load(Ordering::Acquire), 0);
     assert!(state.cur_chunk.is_none() && state.cur_sub_chunk.is_none());
@@ -655,14 +618,14 @@ fn reaching_the_end_of_a_chunk_hands_the_stream_to_the_next_one_and_tags_the_buf
     .unwrap();
     play_track(false).unwrap();
     let sample = playing_sample();
-    let second = chunk_at(1);
+    let second = 1;
     let buffer = 123;
 
     let switched = TrackCallbacks.on_end_chunk(&mut sample.lock(), buffer);
 
     assert!(switched);
     assert_eq!(cur_chunk(), Some(second));
-    let first_has_decoder = unsafe { chunk_at(0).as_ref() }.decoder.is_some();
+    let first_has_decoder = TRACK_STATE.lock().chunks[0].decoder.is_some();
     assert!(
         first_has_decoder,
         "the finished chunk gets its decoder back"
@@ -675,7 +638,7 @@ fn reaching_the_end_of_a_chunk_hands_the_stream_to_the_next_one_and_tags_the_buf
     let sample = sample.lock();
     assert!(sample.decoder.is_some());
     let tag = stream::find_tagged_buffer(&sample, buffer).expect("the buffer is tagged");
-    assert_eq!(tag.data, second.as_ptr() as usize);
+    assert_eq!(tag.data, second);
 }
 
 #[test]
@@ -687,7 +650,7 @@ fn the_last_chunk_has_no_successor() {
     assert!(TrackCallbacks.on_end_chunk(&mut sample.lock(), 1));
 
     assert!(!TrackCallbacks.on_end_chunk(&mut sample.lock(), 2));
-    assert_eq!(cur_chunk(), Some(chunk_at(1)));
+    assert_eq!(cur_chunk(), Some(1));
 }
 
 #[test]
@@ -704,8 +667,7 @@ fn a_played_tagged_buffer_shows_its_page_once_and_releases_the_tag() {
     .unwrap();
     {
         // Give the second page a callback so its display is observable.
-        let second = unsafe { &mut *chunk_at(1).as_ptr() };
-        second.callback = recording_callback(&calls);
+        TRACK_STATE.lock().chunks[1].callback = recording_callback(&calls);
     }
     play_track(false).unwrap();
     let sample = playing_sample();
@@ -721,7 +683,7 @@ fn a_played_tagged_buffer_shows_its_page_once_and_releases_the_tag() {
 
     TrackCallbacks.on_tagged_buffer(&mut sample.lock(), &tag);
 
-    assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
+    assert_eq!(cur_sub_chunk(), Some(1));
     assert_eq!(calls.lock().as_slice(), [0]);
     assert!(stream::find_tagged_buffer(&sample.lock(), 55).is_none());
     assert_eq!(
@@ -731,27 +693,15 @@ fn a_played_tagged_buffer_shows_its_page_once_and_releases_the_tag() {
 }
 
 #[test]
-fn a_tag_that_no_longer_points_into_the_conversation_is_ignored() {
+fn a_tag_that_names_no_chunk_of_the_conversation_is_ignored() {
     let _engine = engine();
     splice_two_pages(None);
     play_track(false).unwrap();
     let sample = playing_sample();
     let before = cur_sub_chunk();
-    let stale_chunk = Box::new(SoundChunk {
-        decoder: None,
-        length_ms: 0,
-        start_time: 0.0,
-        run_time: 0,
-        tag_me: true,
-        track_num: 7,
-        text: Some("gone".into()),
-        text_cstr: None,
-        callback: None,
-        next: None,
-    });
     let tag = SoundTag {
         buf_handle: 9,
-        data: stale_chunk.as_ref() as *const SoundChunk as usize,
+        data: chunk_count(),
     };
 
     TrackCallbacks.on_tagged_buffer(&mut sample.lock(), &tag);
@@ -793,8 +743,8 @@ fn seeking_inside_the_chunk_that_is_playing_stays_in_that_chunk() {
 
     seek_to_position(half_a_second).unwrap();
 
-    assert_eq!(cur_chunk(), Some(chunk_at(0)));
-    assert_eq!(cur_sub_chunk(), Some(chunk_at(0)));
+    assert_eq!(cur_chunk(), Some(0));
+    assert_eq!(cur_sub_chunk(), Some(0));
     assert_eq!(speech_start_time(), -(half_a_second as i32));
     let sample = playing_sample();
     let sample = sample.lock();
@@ -814,8 +764,8 @@ fn seeking_into_a_later_chunk_resolves_the_page_and_the_offset_within_it() {
 
     seek_to_position(target).unwrap();
 
-    assert_eq!(cur_chunk(), Some(chunk_at(1)));
-    assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
+    assert_eq!(cur_chunk(), Some(1));
+    assert_eq!(cur_sub_chunk(), Some(1));
     assert_eq!(playing_sample().lock().offset, ms_to_ticks(1000) as i32);
     assert_eq!(speech_start_time(), -(target as i32));
 }
@@ -876,7 +826,7 @@ fn the_conversation_length_counts_a_chunk_whose_decoder_is_lent_to_the_stream() 
     .unwrap();
     play_track(false).unwrap();
     assert!(
-        unsafe { chunk_at(0).as_ref() }.decoder.is_none(),
+        TRACK_STATE.lock().chunks[0].decoder.is_none(),
         "the only chunk's decoder is now with the stream"
     );
 
@@ -895,8 +845,8 @@ fn paging_forward_restarts_speech_at_the_next_page_and_paging_back_returns() {
     play_track(false).unwrap();
 
     fast_forward_page().unwrap();
-    assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
-    assert_eq!(cur_chunk(), Some(chunk_at(1)));
+    assert_eq!(cur_sub_chunk(), Some(1));
+    assert_eq!(cur_chunk(), Some(1));
     assert_eq!(speech_start_time(), -(ms_to_ticks(1000) as i32));
     assert_eq!(
         subtitle_snapshot().unwrap().text.as_c_str(),
@@ -904,7 +854,7 @@ fn paging_forward_restarts_speech_at_the_next_page_and_paging_back_returns() {
     );
 
     fast_reverse_page().unwrap();
-    assert_eq!(cur_sub_chunk(), Some(chunk_at(0)));
+    assert_eq!(cur_sub_chunk(), Some(0));
     assert_eq!(speech_start_time(), 0);
 }
 
@@ -941,7 +891,7 @@ fn subtitles_can_be_walked_from_the_first_page_to_the_last() {
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].text.as_c_str(), c"First line...");
     assert_eq!(
-        TRACK_STATE.lock().chunks_head.as_ref().unwrap().track_num,
+        TRACK_STATE.lock().chunks[0].track_num,
         0
     );
     assert_eq!(subtitle_snapshot().unwrap(), history[0]);
@@ -986,29 +936,14 @@ fn finding_pages_skips_untagged_audio() {
     splice_track(Some("next"), Some("Third"), None, None, vec![voice(1, 1.0)]).unwrap();
     let state = TRACK_STATE.lock();
 
-    let after_second = find_next_page_inner(Some(chunk_at_locked(&state, 1))).unwrap();
-    assert_eq!(
-        unsafe { after_second.as_ref() }.text.as_deref(),
-        Some("Third")
-    );
-    let before_third = find_prev_page_inner(&state.chunks_head, Some(after_second)).unwrap();
-    assert_eq!(
-        unsafe { before_third.as_ref() }.text.as_deref(),
-        Some("..Second line")
-    );
-    let when_unknown = find_prev_page_inner(&state.chunks_head, None).unwrap();
-    assert_eq!(
-        unsafe { when_unknown.as_ref() }.text.as_deref(),
-        Some("Third")
-    );
-}
+    let text = |index: usize| state.chunks[index].text.as_deref();
 
-fn chunk_at_locked(state: &TrackPlayerState, index: usize) -> NonNull<SoundChunk> {
-    let mut chunk = state.chunks_head.as_deref().unwrap();
-    for _ in 0..index {
-        chunk = chunk.next.as_deref().unwrap();
-    }
-    NonNull::from(chunk)
+    let after_second = find_next_page_inner(&state.chunks, Some(1)).unwrap();
+    assert_eq!(text(after_second), Some("Third"));
+    let before_third = find_prev_page_inner(&state.chunks, Some(after_second)).unwrap();
+    assert_eq!(text(before_third), Some("..Second line"));
+    let when_unknown = find_prev_page_inner(&state.chunks, None).unwrap();
+    assert_eq!(text(when_unknown), Some("Third"));
 }
 
 #[test]
@@ -1023,7 +958,6 @@ fn a_chunk_caches_one_nul_terminated_copy_of_its_text() {
         text: Some("hi".into()),
         text_cstr: None,
         callback: None,
-        next: None,
     };
     chunk.ensure_text_cstr();
     let first = chunk.text_cstr.as_ref().unwrap().as_ptr();

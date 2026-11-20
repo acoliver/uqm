@@ -24,26 +24,19 @@ impl SoundChunk {
 
 /// Copy the current page without lending a pointer beyond the track lock.
 pub fn subtitle_snapshot() -> Option<SubtitleSnapshot> {
-    let state = TRACK_STATE.lock();
+    let mut state = TRACK_STATE.lock();
     let current = state.cur_sub_chunk?;
-    // SAFETY: the current chunk belongs to the list protected by the held track lock.
-    unsafe { &mut *current.as_ptr() }.subtitle_snapshot()
+    state.chunks[current].subtitle_snapshot()
 }
 
 /// Copy history in the native traversal order: the head, then tagged successor pages.
 pub fn subtitle_history() -> Vec<SubtitleSnapshot> {
     let mut state = TRACK_STATE.lock();
-    let mut next = state.chunks_head.as_deref_mut();
-    let mut first = true;
-    let mut history = Vec::new();
-    while let Some(chunk) = next {
-        if first || chunk.tag_me {
-            if let Some(subtitle) = chunk.subtitle_snapshot() {
-                history.push(subtitle);
-            }
-        }
-        first = false;
-        next = chunk.next.as_deref_mut();
-    }
-    history
+    state
+        .chunks
+        .iter_mut()
+        .enumerate()
+        .filter(|(index, chunk)| *index == 0 || chunk.tag_me)
+        .filter_map(|(_, chunk)| chunk.subtitle_snapshot())
+        .collect()
 }
