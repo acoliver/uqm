@@ -1,15 +1,14 @@
 //! Splash, introduction, victory and ship-spin presentations, ported from uqm/fmv.c.
 
 use super::intro::show_presentation;
-use crate::{
-    engine::{battle::Cx, observe::Io, world::activity::activity_flags::CHECK_ABORT},
-    graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable, native_abi::POINT},
-    sound::{
-        music::{self, MusicRequest},
-        resource_types::LoadedMusic,
-    },
-    ui::util::wait_for_any_button,
-};
+use crate::engine::battle::Cx;
+use crate::engine::observe::Io;
+use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+use crate::graphics::{context::ContextLease, drawable::LoadedDrawable, geometry::Point};
+use crate::sound::music;
+use crate::sound::music::MusicRequest;
+use crate::sound::resource_types::LoadedMusic;
+use crate::ui::util::wait_for_any_button;
 use std::ffi::CString;
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
@@ -23,9 +22,9 @@ pub fn do_ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: u16, music: Option<
         .selected_context()
         .unwrap_or_else(|| panic!("ship spin requires the selected game context"));
     let (width, height) = context.screen_dimensions();
-    let screen = crate::graphics::native_abi::RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: crate::graphics::native_abi::EXTENT {
+    let screen = crate::graphics::geometry::Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: crate::graphics::geometry::Extent {
             width: width as i16,
             height: height as i16,
         },
@@ -61,7 +60,7 @@ pub fn splash_screen(cx: &mut Cx<'_>, io: &mut Io<'_>, process: impl FnOnce(&mut
     fade(cx, &context, 252, ONE_SECOND / 120);
     context.select();
     if let Some(title) = LoadedDrawable::load(c"graphics.title") {
-        context.draw_stamp(&title.lease().context_frame(0), POINT { x: 0, y: 0 });
+        context.draw_stamp(&title.lease().context_frame(0), Point { x: 0, y: 0 });
     }
     let timeout = context.fade_screen(253, (ONE_SECOND / 2) as i16);
     process(cx, timeout);

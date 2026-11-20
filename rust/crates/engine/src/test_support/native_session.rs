@@ -4,12 +4,12 @@
 //! after the display resources they back, so the resources drop first.
 
 use crate::{
-    graphics::sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
+    graphics::present::{init_graphics, uninit_graphics, GraphicsOptions},
     input::InputSession,
     input_port::sdl_input,
     io::{install, uninstall, Dir, Placement, Vfs},
 };
-use std::{ffi::CString, path::Path, ptr};
+use std::{ffi::CString, path::Path};
 
 /// A temporary directory of fixture content under the repository's tmp directory.
 pub struct FixtureFiles(tempfile::TempDir);
@@ -59,25 +59,14 @@ impl Graphics {
     pub fn start() -> Self {
         std::env::set_var("SDL_VIDEODRIVER", "dummy");
         std::env::set_var("SDL_AUDIODRIVER", "dummy");
-        // SAFETY: the serialized fixture owns SDL until this guard drops.
-        let status = unsafe {
-            TFB_InitGraphics(
-                1,
-                0,
-                ptr::from_ref(&GraphicsOptions::default()).cast(),
-                320,
-                240,
-            )
-        };
-        assert_eq!(status, 0);
+        init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         Self(())
     }
 }
 
 impl Drop for Graphics {
     fn drop(&mut self) {
-        // SAFETY: every display resource this fixture created has already been released.
-        unsafe { TFB_UninitGraphics() };
+        uninit_graphics();
     }
 }
 
@@ -115,22 +104,13 @@ impl ContentMount {
 
     /// Reset the resource system and load `index` from the content directory.
     pub fn init_resources(&self, index: &str) {
-        // SAFETY: the content directory stays mounted for the guard's life.
-        unsafe { crate::resource::ffi_bridge::InitResourceSystem() };
+        crate::resource::init();
         self.load_index(index);
     }
 
     /// Load `index` from the content directory into the live resource system.
     pub fn load_index(&self, index: &str) {
-        let index = cstring(index, "index name");
-        // SAFETY: the content directory stays mounted for the guard's life.
-        unsafe {
-            crate::resource::ffi_bridge::load_resource_index(
-                &self.content,
-                index.as_ptr(),
-                ptr::null(),
-            );
-        }
+        crate::resource::load_index(&self.content, &cstring(index, "index name"), None);
     }
 }
 
@@ -189,19 +169,13 @@ pub fn text_input(text: &str) {
 
 /// Reload `index` from whatever directory is currently the content directory.
 pub fn reload_content_index(index: &str) {
-    let index = cstring(index, "index name");
     let content = crate::io::content_dir().unwrap_or_else(|| panic!("no content directory"));
-    // SAFETY: the serialized fixture keeps a content mount live while it reloads.
-    unsafe {
-        crate::resource::ffi_bridge::load_resource_index(&content, index.as_ptr(), ptr::null())
-    };
+    crate::resource::load_index(&content, &cstring(index, "index name"), None);
 }
 
 /// Drop one entry from the live resource map.
 pub fn remove_resource(key: &str) {
-    let key = cstring(key, "resource key");
-    // SAFETY: the key is NUL terminated and the resource system is initialized by the fixture.
-    unsafe { crate::resource::ffi_bridge::res_Remove(key.as_ptr()) };
+    crate::resource::remove(key);
 }
 
 fn cstring(text: &str, what: &str) -> CString {

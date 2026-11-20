@@ -1,6 +1,6 @@
 //! Escort highlight phase, retained across separate roster visits.
 
-use crate::graphics::native_abi::Color;
+use crate::graphics::geometry::Color;
 
 pub struct RosterFlash {
     color: Color,

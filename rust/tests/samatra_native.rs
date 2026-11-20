@@ -299,10 +299,8 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use uqm_rust::{
-    graphics::pixmap_abi::GetFrameIndex, ships::native::abi::*,
-    state::game_state_keys::set_game_state,
-};
+use uqm_rust::ships::native::abi::*;
+use uqm_rust::state::game_state_keys::set_game_state;
 
 unsafe fn boss(battle: &Battle) -> Ship<'_> {
     let mut ship = Ship::with_frames(
@@ -375,7 +373,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
                     ship.descriptor_mut().characteristics.max_thrust,
                     7 - i as u16
                 );
-                assert_eq!(GetFrameIndex((*g).current.image.frame.raw().cast()), 9);
+                assert_eq!(((*g).current.image.frame.raw()).index(), 9);
                 hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
                     ship.descriptor_mut().characteristics.max_thrust,
@@ -484,10 +482,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             let comet = battle::element(
                 *queued()
                     .iter()
-                    .find(|h| {
-                        GetFrameIndex((*battle::element(**h)).current.image.frame.raw().cast())
-                            == 24
-                    })
+                    .find(|h| ((*battle::element(**h)).current.image.frame.raw()).index() == 24)
                     .unwrap(),
             );
             (*comet).next = (*comet).current.clone();

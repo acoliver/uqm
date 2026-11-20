@@ -5,7 +5,7 @@ use crate::engine::{
     battle::{hyperspace as resources, Cx},
     StoryKey,
 };
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntryDisplay {
@@ -26,7 +26,7 @@ pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, Ent
         extra: 0,
         ticks: 1,
     };
-    cx.world.data.game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
+    cx.world.data.game.ship_stamp.origin = Point { x: -9999, y: -9999 };
     resources::load(cx.kernel);
     resources::free_hyperspace(cx.kernel);
     if cx.kernel.last_activity & CHECK_LOAD == 0 {

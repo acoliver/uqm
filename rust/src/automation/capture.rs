@@ -33,8 +33,7 @@ pub(crate) fn presentation_evidence(frame: &PresentedFrame) -> PresentationEvide
 
 /// Validated surface metadata for capture.
 ///
-/// All fields are derived from ABI-authoritative SDL accessors, not the
-/// hand-written partial `SDL_Surface` format pointer.
+/// All fields come from the presented canvas's own size and pixel format.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P07
 /// @requirement REQ-SHOT-002

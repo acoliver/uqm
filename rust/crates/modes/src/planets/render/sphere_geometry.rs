@@ -4,8 +4,7 @@
 //! independently of ScreenWidth and output/window scaling. No scaled sphere
 //! array is needed. Each routine preserves the C-inactive fields.
 
-use crate::graphics::cmap::Color;
-use crate::graphics::drawable::Point;
+use crate::graphics::{geometry::Color, geometry::Point};
 
 pub const RADIUS: i32 = 37;
 pub const DIAMETER: usize = (RADIUS * 2 + 1) as usize;
@@ -256,7 +255,7 @@ mod tests {
 
     #[test]
     fn channels_use_rgb_selection_wrap_saturation_and_invalid_zero() {
-        let colors = [Color::with_alpha(255, 3, 4, 0); 4];
+        let colors = [Color::rgba(255, 3, 4, 0); 4];
         assert_eq!(get_color_channel(colors[0], -1), 0);
         assert_eq!(get_color_channel(colors[0], 2), 4);
         assert_eq!(get_avg_channel(colors, [u32::MAX; 4], 0), 255);

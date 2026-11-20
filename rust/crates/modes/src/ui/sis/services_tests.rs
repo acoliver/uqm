@@ -1,10 +1,10 @@
+use crate::graphics::{
+    geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
+};
 const GAMESTR_COUNT: usize = 579;
 use super::*;
 use crate::engine::Game;
-use crate::graphics::{
-    context_abi::{ContextFrame, LoadedContext},
-    drawable_abi::LoadedDrawable,
-};
+use crate::graphics::{context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable};
 use uqm_engine::test_support::campaign_display::CampaignDisplay;
 use uqm_engine::test_support::conversation_display;
 
@@ -17,14 +17,14 @@ fn gradient(game: &mut Game) -> LoadedDrawable {
     let first = drawable.lease().frame(0).unwrap();
     let owner = LoadedContext::create(c"equipment gradient fixture");
     let context = owner.lease();
-    let first = ContextFrame::retain(std::ptr::NonNull::new(first));
+    let first = ContextFrame::retain(first);
     for index in 0..6 {
         context.set_frame(first.indexed_frame(index));
         context.fill_rectangle(
             rgb15(31, 31, 31),
-            RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: 1,
                     height: 1,
                 },
@@ -41,11 +41,11 @@ fn check_equipment(game: &Game, context: &ContextLease, screen: &ContextFrame) {
     let point = font
         .measure(
             c"A",
-            POINT {
+            Point {
                 x: 40,
                 y: 227 - 3 * font.leading(),
             },
-            TEXT_ALIGN_ALIGN_RIGHT,
+            TextAlign::Right,
             u16::MAX,
         )
         .rect
@@ -81,15 +81,15 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
         ));
     let effect = gradient(&mut game);
     let context = ContextLease::require(game.kernel.status_context);
-    let screen = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+    let screen = ContextFrame::retain(game.kernel.screen);
     context.set_frame(screen.clone());
     context.clear_clip();
     repair_sis_border(&game.kernel, (320, 240));
     context.flush();
     for (point, color) in [
-        (POINT { x: 6, y: 9 }, rgb15(16, 16, 16)),
-        (POINT { x: 249, y: 9 }, rgb15(8, 8, 8)),
-        (POINT { x: 6, y: 237 }, rgb15(8, 8, 8)),
+        (Point { x: 6, y: 9 }, rgb15(16, 16, 16)),
+        (Point { x: 249, y: 9 }, rgb15(8, 8, 8)),
+        (Point { x: 6, y: 237 }, rgb15(8, 8, 8)),
     ] {
         assert_eq!(rgba(screen.pixel(point)), rgba(color));
     }
@@ -103,11 +103,11 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
     };
     context.flush();
     assert_eq!(
-        rgba(screen.pixel(POINT { x: 258, y: 193 })),
+        rgba(screen.pixel(Point { x: 258, y: 193 })),
         rgba(rgb15(15, 15, 15))
     );
     assert_eq!(
-        rgba(screen.pixel(POINT { x: 270, y: 196 })),
+        rgba(screen.pixel(Point { x: 270, y: 196 })),
         rgba(rgb15(10, 10, 31))
     );
     let foreground = rgb15(2, 3, 4);
@@ -115,7 +115,7 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
     clear_sis_rect(&game.kernel, &mut game.world, (320, 240), 4);
     context.flush();
     assert_eq!(
-        rgba(screen.pixel(POINT { x: 270, y: 196 })),
+        rgba(screen.pixel(Point { x: 270, y: 196 })),
         rgba(rgb15(0, 0, 21))
     );
     assert_eq!(rgba(context.foreground()), rgba(foreground));
@@ -124,9 +124,9 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
         campaign_date(&game.kernel, 1, 9, 2155),
         c"A 09\xc2\xb72155".to_owned()
     );
-    let rect = RECT {
-        corner: POINT { x: 10, y: 10 },
-        extent: EXTENT {
+    let rect = Rect {
+        corner: Point { x: 10, y: 10 },
+        extent: Extent {
             width: 5,
             height: 5,
         },
@@ -187,7 +187,7 @@ fn conversation_headers_use_the_campaign_display_resources() {
     game.world.story = Some(crate::state::game_state::StoryState::new());
     game.world.data.flagship.planet_name[..2].copy_from_slice(b"A\0");
     let effect = gradient(&mut game);
-    let screen = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+    let screen = ContextFrame::retain(game.kernel.screen);
     for raw in [
         game.kernel.status_context,
         game.kernel.screen_context,
@@ -212,16 +212,16 @@ fn conversation_headers_use_the_campaign_display_resources() {
             .unwrap()
             .measure(
                 c"A",
-                POINT {
+                Point {
                     x: SIS_TITLE_WIDTH >> 1,
                     y: SIS_TITLE_HEIGHT - 2,
                 },
-                TEXT_ALIGN_ALIGN_CENTER,
+                TextAlign::Center,
                 u16::MAX,
             )
             .rect
             .corner;
-        let title_point = POINT {
+        let title_point = Point {
             x: (i32::from(SIS_ORG_X) + 320 - 78 - i32::from(SIS_TITLE_BOX_WIDTH) + 1) as i16
                 + glyph.x,
             y: SIS_ORG_Y - SIS_TITLE_HEIGHT + glyph.y,
@@ -229,7 +229,7 @@ fn conversation_headers_use_the_campaign_display_resources() {
         assert_eq!(rgba(screen.pixel(title_point)), rgba(rgb15(27, 0, 27)));
 
         assert_eq!(
-            rgba(screen.pixel(POINT { x: 6, y: 9 })),
+            rgba(screen.pixel(Point { x: 6, y: 9 })),
             rgba(rgb15(16, 16, 16))
         );
         let space = ContextLease::require(game.kernel.space_context);

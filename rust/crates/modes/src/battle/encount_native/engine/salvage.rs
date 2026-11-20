@@ -1,32 +1,28 @@
 //! Retained salvage panel resources and the ordered post-battle reward display.
 use super::*;
 use crate::engine::{battle::Cx, observe::Io};
-use crate::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
+};
 
 fn draw_salvage_line(
     kernel: &crate::engine::Kernel,
     string: &std::ffi::CStr,
-    baseline: POINT,
+    baseline: Point,
     style: SalvageText,
 ) {
-    let context = crate::graphics::context_abi::ContextLease::retain(
-        std::ptr::NonNull::new(kernel.space_context)
+    let context = crate::graphics::context::ContextLease::retain(
+        kernel
+            .space_context
             .unwrap_or_else(|| panic!("salvage requires a space context")),
     );
     let (font, align, color) = match style {
-        SalvageText::Caption => (
-            kernel.tiny_font_lease(),
-            TEXT_ALIGN_ALIGN_CENTER,
-            rgb15(8, 8, 8),
-        ),
-        SalvageText::Amount => (
-            kernel.micro_font_lease(),
-            TEXT_ALIGN_ALIGN_RIGHT,
-            rgb15(0, 0, 24),
-        ),
+        SalvageText::Caption => (kernel.tiny_font_lease(), TextAlign::Center, rgb15(8, 8, 8)),
+        SalvageText::Amount => (kernel.micro_font_lease(), TextAlign::Right, rgb15(0, 0, 24)),
         SalvageText::Total => (
             kernel.micro_font_lease(),
-            TEXT_ALIGN_ALIGN_CENTER,
+            TextAlign::Center,
             rgb15(0, 0, 24),
         ),
     };
@@ -34,8 +30,8 @@ fn draw_salvage_line(
     context.draw_text(&font, string, baseline, align, color);
 }
 
-fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &RECT) {
-    let baseline = POINT {
+fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &Rect) {
+    let baseline = Point {
         x: rect.corner.x.wrapping_add(100),
         y: rect.corner.y.wrapping_add(68),
     };
@@ -46,7 +42,7 @@ fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], r
     draw_salvage_line(
         kernel,
         kernel.game_text((ENCOUNTER_STRING_BASE + 3) as usize),
-        POINT {
+        Point {
             y: baseline.y.wrapping_add(6),
             ..baseline
         },
@@ -60,30 +56,31 @@ fn draw_fade_text(
     str1: &std::ffi::CStr,
     str2: &std::ffi::CStr,
     fade_in: BOOLEAN,
-    rect: &RECT,
+    rect: &Rect,
 ) {
-    let context = crate::graphics::context_abi::ContextLease::retain(
-        std::ptr::NonNull::new(cx.kernel.space_context)
+    let context = crate::graphics::context::ContextLease::retain(
+        cx.kernel
+            .space_context
             .unwrap_or_else(|| panic!("salvage requires a space context")),
     );
     let font = cx
         .kernel
         .micro_font_lease()
         .unwrap_or_else(|| panic!("salvage requires the micro font"));
-    let baseline = POINT {
+    let baseline = Point {
         x: rect.corner.x.wrapping_add(100),
         y: rect.corner.y.wrapping_add(45),
     };
     let render = |color| {
-        context.draw_text(&font, str1, baseline, TEXT_ALIGN_ALIGN_CENTER, color);
+        context.draw_text(&font, str1, baseline, TextAlign::Center, color);
         context.draw_text(
             &font,
             str2,
-            POINT {
+            Point {
                 y: baseline.y.wrapping_add(11),
                 ..baseline
             },
-            TEXT_ALIGN_ALIGN_CENTER,
+            TextAlign::Center,
             color,
         );
     };
@@ -122,9 +119,9 @@ fn draw_fade_text(
 
 pub(super) struct Salvage {
     context: ContextLease,
-    rect: RECT,
-    salvage_rect: RECT,
-    stamp_origin: POINT,
+    rect: Rect,
+    salvage_rect: Rect,
+    stamp_origin: Point,
     stamp_frame: ContextFrame,
     str1: std::ffi::CString,
     str2: std::ffi::CString,
@@ -135,9 +132,9 @@ pub(super) struct Salvage {
 }
 impl Salvage {
     pub(super) fn new(kernel: &crate::engine::Kernel, victory: i16) -> Self {
-        let rect = RECT {
-            corner: POINT { x: 0, y: 0 },
-            extent: EXTENT {
+        let rect = Rect {
+            corner: Point { x: 0, y: 0 },
+            extent: Extent {
                 width: 0,
                 height: 0,
             },
@@ -146,8 +143,8 @@ impl Salvage {
             context: ContextLease::require(kernel.space_context),
             rect,
             salvage_rect: rect,
-            stamp_origin: POINT { x: 0, y: 0 },
-            stamp_frame: ContextFrame::retain(None),
+            stamp_origin: Point { x: 0, y: 0 },
+            stamp_frame: ContextFrame::default(),
             str1: std::ffi::CString::default(),
             str2: std::ffi::CString::default(),
             buf: [0; 80],
@@ -177,7 +174,7 @@ impl Salvage {
             DSME_NONE as u16,
         );
         display::draw_title(cx);
-        crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
+        crate::graphics::context::ContextLease::require(cx.kernel.space_context).select();
         if self.victory != 0 {
             let mut panel = crate::comm::locdata::CRect {
                 corner: crate::comm::locdata::CPoint { x: 0, y: 0 },
@@ -185,12 +182,12 @@ impl Salvage {
                 height: 0,
             };
             draw_armada(cx.kernel, cx.world, 1, &mut panel);
-            self.salvage_rect = RECT {
-                corner: POINT {
+            self.salvage_rect = Rect {
+                corner: Point {
                     x: panel.corner.x,
                     y: panel.corner.y,
                 },
-                extent: EXTENT {
+                extent: Extent {
                     width: panel.width,
                     height: panel.height,
                 },
@@ -209,9 +206,7 @@ impl Salvage {
         self.stamp_origin.x = self.salvage_rect.corner.x.wrapping_add(32);
         self.stamp_origin.y = self.salvage_rect.corner.y.wrapping_add(56);
         let resources = cx.world.fleet_resources(frag.species_id);
-        self.stamp_frame = crate::graphics::context_abi::ContextFrame::retain(
-            std::ptr::NonNull::new(resources.icon().raw()),
-        );
+        self.stamp_frame = crate::graphics::drawable::ContextFrame::retain(resources.icon().raw());
         self.context
             .draw_stamp(&self.stamp_frame.next_frame(), self.stamp_origin);
         let (name, _) = resources.label(0);
@@ -244,7 +239,7 @@ impl Salvage {
         draw_salvage_line(
             cx.kernel,
             &amount,
-            POINT {
+            Point {
                 x: (self.rect.corner.x as i32 + self.rect.extent.width as i32 - 1) as i16,
                 y: self.rect.corner.y.wrapping_add(14),
             },
@@ -313,7 +308,7 @@ impl Salvage {
                     draw_salvage_line(
                         cx.kernel,
                         &total,
-                        POINT {
+                        Point {
                             x: (self.rect.corner.x as i32 + (self.rect.extent.width as i32 >> 1))
                                 as i16,
                             y: self.rect.corner.y.wrapping_add(14),
@@ -396,9 +391,8 @@ mod tests {
     #[serial_test::serial]
     fn owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order() {
         if !uqm_engine::test_support::native_process::own_graphics_process("battle::encount_native::engine::salvage::tests::owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order") { return; }
-        use crate::{
-            graphics::drawable_abi::LoadedDrawable, strings::owned_table::LoadedTextTable,
-        };
+        use crate::graphics::drawable::LoadedDrawable;
+        use crate::strings::owned_table::LoadedTextTable;
         use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
@@ -504,8 +498,8 @@ mod tests {
         salvage.context.flush();
         drop(salvage);
         game.world.clear_fleet_resources();
-        game.kernel.flag_stat_frame = std::ptr::null_mut();
-        game.kernel.font_grad_frame = std::ptr::null_mut();
+        game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
         drop(frames);
         display.finish(game);
     }

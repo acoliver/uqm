@@ -37,7 +37,7 @@ fn game() -> crate::engine::Game {
     game.world.story = Some(crate::engine::world::story::StoryState::new());
     let mut catalog = crate::planets::tables::STARMAP_ARRAY;
     catalog[0] = CStarDesc {
-        star_pt: crate::graphics::native_abi::POINT { x: 1000, y: 2000 },
+        star_pt: crate::graphics::geometry::Point { x: 1000, y: 2000 },
         star_type: 0,
         index: 0,
         prefix: 0,

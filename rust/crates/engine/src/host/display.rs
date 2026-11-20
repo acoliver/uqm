@@ -1,76 +1,60 @@
-//! The game thread's window system and draw queue as safe calls.
+//! The display port: compose and show one frame of the screen canvases.
 //!
-//! The graphics entry points these forward to are `unsafe` only because they
-//! must run on the game thread, which owns SDL and the draw queue. Every
-//! caller of this module is on that thread, so the preconditions hold for all
-//! of them; the graphics owner replaces each body when its entry point becomes
-//! safe.
-
-use crate::graphics::cmap_abi::UninitColorMaps;
-use crate::graphics::dcqueue_abi::{
-    TFB_FlushGraphics, TFB_FlushGraphicsEx, TFB_PurgeDanglingGraphics,
-};
-use crate::graphics::sdl::lifecycle_abi::{
-    GraphicsOptions, TFB_InitGraphics, TFB_ProcessEvents, TFB_SwapBuffers, TFB_UninitGraphics,
+//! A display belongs to the game thread that draws (an SDL window cannot
+//! move between threads), so it is separate from the process-wide platform
+//! services.
+use crate::graphics::{
+    canvas::Canvas, geometry::Rect, presentation_diagnostics::PresentationSample,
+    presented_frame::PresentedFrame,
 };
 
-/// Dispatch the window system's pending events to the game.
-pub fn process_events() {
-    // SAFETY: game thread only, with input initialized.
-    unsafe { TFB_ProcessEvents() };
+/// One layer of a presented frame, drawn in order.
+pub enum Layer<'a> {
+    /// A screen canvas at `alpha`, whole or clipped to `rect`.
+    Screen {
+        screen: i32,
+        canvas: &'a Canvas,
+        alpha: u8,
+        rect: Option<Rect>,
+    },
+    /// A fade colour over the whole frame.
+    Color { rgba: [u8; 4] },
 }
 
-/// Run every committed draw command and present the frame if it changed.
-pub fn flush_draws() {
-    // SAFETY: game thread only; it consumes the draw queue.
-    unsafe { TFB_FlushGraphics() };
+/// A frame to show: the swap state it was composed from and its layers.
+pub struct PresentFrame<'a> {
+    pub force_redraw: i32,
+    pub transition: i32,
+    pub fade: i32,
+    pub layers: Vec<Layer<'a>>,
 }
 
-/// Run every committed draw command without presenting a frame.
-///
-/// Queued commands hold pointers into the resources they draw with; owners
-/// call this before freeing such a resource.
-pub fn drain_committed_draws() {
-    // SAFETY: game thread only; it consumes the draw queue.
-    unsafe { TFB_FlushGraphicsEx(1) };
-}
+/// The display a game frame is presented on.
+pub trait Display {
+    /// Compose and show `frame`. Before showing it, `capture` receives the
+    /// presentation count and the samples since the last present; when it
+    /// returns a capture generation, the composed pixels are read back and
+    /// returned with that generation.
+    fn present(
+        &mut self,
+        frame: &PresentFrame<'_>,
+        capture: &mut dyn FnMut(u64, &[PresentationSample]) -> Option<u64>,
+    ) -> Option<PresentedFrame>;
 
-/// Run every committed draw command, then publish exactly one frame.
-///
-/// `flush_draws` alone does not swap when the queue is already empty.
-pub fn present_committed_draws() {
-    drain_committed_draws();
-    // SAFETY: game thread only, with graphics initialized.
-    unsafe { TFB_SwapBuffers(0) };
-}
+    /// Record a diagnostic sample for the next present (window and display
+    /// events, reconfiguration).
+    fn record(&mut self, sample: PresentationSample);
 
-/// Bring graphics up; `false` when the backend could not start.
-pub fn init_graphics(
-    driver: i32,
-    flags: i32,
-    options: &GraphicsOptions,
-    width: i32,
-    height: i32,
-) -> bool {
-    // SAFETY: called once on the game thread; `options` is live for the call.
-    unsafe {
-        TFB_InitGraphics(
-            driver,
-            flags,
-            std::ptr::from_ref(options).cast(),
-            width,
-            height,
-        ) == 0
-    }
-}
+    /// Show one decoded movie frame scaled to fit the window, outside the
+    /// screen canvases (the 3DO movies at full window resolution). Pixels
+    /// are RGBA words with red in the low byte.
+    fn present_video(&mut self, pixels: &[u32], width: u32, height: u32) -> Result<(), String>;
 
-/// Shut graphics down in the order the subsystems depend on each other.
-pub fn uninit_graphics() {
-    // SAFETY: game thread only, after every graphics producer has stopped and
-    // no queued command retains a colour map.
-    unsafe {
-        TFB_PurgeDanglingGraphics();
-        UninitColorMaps();
-        TFB_UninitGraphics();
-    }
+    /// The window's SDL id and client bounds `(x, y, width, height)` for
+    /// native-window proof; `show` raises the window first.
+    #[cfg(feature = "debug-process")]
+    fn native_window(&mut self, show: bool) -> (u32, (i32, i32, u32, u32));
+
+    /// Apply a new video mode (fullscreen flag and window size).
+    fn reconfigure(&mut self, flags: i32, width: i32, height: i32) -> Result<(), String>;
 }

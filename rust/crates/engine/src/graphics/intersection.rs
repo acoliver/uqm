@@ -1,40 +1,55 @@
-//! Fixed-point collision walker from intersec.c (84632e007).
+//! Fixed-point collision walker, ported from intersec.c (GPL-2.0-or-later).
+use super::drawable::FrameId;
+use super::geometry::{Extent, HotSpot, Point, Rect};
+use super::image::ImageId;
+use super::state;
 
-use super::*;
+/// A stamp: a frame at an origin (C: `STAMP`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Stamp {
+    pub origin: Point,
+    pub frame: FrameId,
+}
+
+/// A moving stamp's sweep for collision tests (C: `INTERSECT_CONTROL`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(non_snake_case)]
+pub struct IntersectControl {
+    pub last_time_val: u16,
+    pub EndPoint: Point,
+    pub IntersectStamp: Stamp,
+}
+
+/// What the sweep reads of a stamp's frame.
+#[derive(Clone, Copy, Debug)]
+struct Shape {
+    hot_spot: HotSpot,
+    bounds: Extent,
+    image: Option<ImageId>,
+}
 
 const TIME_SHIFT: u32 = 8;
 const TIME_SCALE: i16 = 1 << TIME_SHIFT;
 const MAX_TIME_VALUE: u16 = TIME_SCALE as u16 + 1;
 
-type ImageIntersect<'a> = dyn FnMut(
-        *mut crate::graphics::native_abi::tfb_image,
-        Point,
-        *mut crate::graphics::native_abi::tfb_image,
-        Point,
-        &Rect,
-    ) -> bool
-    + 'a;
+type ImageIntersect<'a> =
+    dyn FnMut(Option<ImageId>, Point, Option<ImageId>, Point, &Rect) -> bool + 'a;
 
 // SIZE and COUNT in the C algorithm are signed/unsigned 16-bit. Wrapping
 // operations preserve assignment narrowing, including the fast-forward COUNT.
-unsafe fn frame_intersect(
-    control0: &mut IntersectControl,
-    r0: &mut Rect,
-    control1: &mut IntersectControl,
-    r1: &mut Rect,
-    mut t0: u16,
-    t1: u16,
+fn frame_intersect(
+    (control0, frame0, r0): (&mut IntersectControl, &Shape, &mut Rect),
+    (control1, frame1, r1): (&mut IntersectControl, &Shape, &mut Rect),
+    (mut t0, t1): (u16, u16),
     images_intersect: &mut ImageIntersect<'_>,
 ) -> u16 {
-    let frame0 = &*control0.IntersectStamp.frame;
-    let frame1 = &*control1.IntersectStamp.frame;
     let mut box0 = Rect {
         corner: r0.corner,
-        extent: frame0.Bounds,
+        extent: frame0.bounds,
     };
     let mut box1 = Rect {
         corner: r1.corner,
-        extent: frame1.Bounds,
+        extent: frame1.bounds,
     };
 
     let mut dx_0 = r0.extent.width;
@@ -180,7 +195,7 @@ unsafe fn frame_intersect(
 
         if check_first || check0 || check1 {
             let mut overlap = Rect::default();
-            if BoxIntersect(&mut box0, &mut box1, &mut overlap) != 0
+            if super::bbox::box_intersect(box0, box1, &mut overlap) != 0
                 && images_intersect(
                     frame0.image,
                     box0.corner,
@@ -210,18 +225,53 @@ unsafe fn frame_intersect(
     0
 }
 
-pub(super) unsafe fn drawables_intersect(
-    control0: *mut IntersectControl,
-    control1: *mut IntersectControl,
+/// C: `DrawablesIntersect`: the first tick (1-based) within `max_time` at
+/// which the two sweeping stamps' pixels overlap, or zero; on a hit both
+/// end points move to the last positions before it.
+pub fn drawables_intersect(
+    control0: &mut IntersectControl,
+    control1: &mut IntersectControl,
+    max_time: u16,
+) -> u16 {
+    state::with(|g| {
+        let shape = |frame: FrameId| {
+            (!frame.is_null()).then(|| {
+                let frame = g.frame(frame);
+                Shape {
+                    hot_spot: frame.hot_spot,
+                    bounds: frame.bounds,
+                    image: frame.image,
+                }
+            })
+        };
+        let shapes = (
+            shape(control0.IntersectStamp.frame),
+            shape(control1.IntersectStamp.frame),
+        );
+        let active = g.context_active();
+        sweep(
+            control0,
+            control1,
+            shapes,
+            max_time,
+            active,
+            &mut |a, ao, b, bo, area| {
+                let image = |id: Option<ImageId>| {
+                    id.unwrap_or_else(|| panic!("collision frame without an image"))
+                };
+                super::image::intersect(&g.images, image(a), ao, image(b), bo, *area)
+            },
+        )
+    })
+}
+
+fn sweep(
+    control0: &mut IntersectControl,
+    control1: &mut IntersectControl,
+    shapes: (Option<Shape>, Option<Shape>),
     mut max_time: u16,
     context_active: bool,
-    mut images_intersect: impl FnMut(
-        *mut crate::graphics::native_abi::tfb_image,
-        Point,
-        *mut crate::graphics::native_abi::tfb_image,
-        Point,
-        &Rect,
-    ) -> bool,
+    images_intersect: &mut ImageIntersect<'_>,
 ) -> u16 {
     if !context_active || max_time == 0 {
         return 0;
@@ -230,8 +280,6 @@ pub(super) unsafe fn drawables_intersect(
         max_time = MAX_TIME_VALUE;
     }
 
-    let control0 = &mut *control0;
-    let control1 = &mut *control1;
     control0.last_time_val = 0;
     control1.last_time_val = 0;
     let mut r0 = Rect {
@@ -247,30 +295,28 @@ pub(super) unsafe fn drawables_intersect(
     r1.extent.width = control1.EndPoint.x.wrapping_sub(r1.corner.x);
     r1.extent.height = control1.EndPoint.y.wrapping_sub(r1.corner.y);
 
-    let frame0 = control0.IntersectStamp.frame;
-    if frame0.is_null() {
+    let Some(frame0) = shapes.0 else {
         return 0;
-    }
-    r0.corner.x = r0.corner.x.wrapping_sub((*frame0).HotSpot.x);
-    r0.corner.y = r0.corner.y.wrapping_sub((*frame0).HotSpot.y);
-    let frame1 = control1.IntersectStamp.frame;
-    if frame1.is_null() {
+    };
+    r0.corner.x = r0.corner.x.wrapping_sub(frame0.hot_spot.x);
+    r0.corner.y = r0.corner.y.wrapping_sub(frame0.hot_spot.y);
+    let Some(frame1) = shapes.1 else {
         return 0;
-    }
-    r1.corner.x = r1.corner.x.wrapping_sub((*frame1).HotSpot.x);
-    r1.corner.y = r1.corner.y.wrapping_sub((*frame1).HotSpot.y);
+    };
+    r1.corner.x = r1.corner.x.wrapping_sub(frame1.hot_spot.x);
+    r1.corner.y = r1.corner.y.wrapping_sub(frame1.hot_spot.y);
 
     let mut dy = r1.corner.y.wrapping_sub(r0.corner.y);
-    let mut time_y_0 = dy.wrapping_sub((*frame0).Bounds.height).wrapping_add(1);
-    let mut time_y_1 = dy.wrapping_add((*frame1).Bounds.height).wrapping_sub(1);
+    let mut time_y_0 = dy.wrapping_sub(frame0.bounds.height).wrapping_add(1);
+    let mut time_y_1 = dy.wrapping_add(frame1.bounds.height).wrapping_sub(1);
     dy = r0.extent.height.wrapping_sub(r1.extent.height);
     if (time_y_0 <= 0 && time_y_1 >= 0)
         || (time_y_0 > 0 && dy >= time_y_0)
         || (time_y_1 < 0 && dy <= time_y_1)
     {
         let mut dx = r1.corner.x.wrapping_sub(r0.corner.x);
-        let mut time_x_0 = dx.wrapping_sub((*frame0).Bounds.width).wrapping_add(1);
-        let mut time_x_1 = dx.wrapping_add((*frame1).Bounds.width).wrapping_sub(1);
+        let mut time_x_0 = dx.wrapping_sub(frame0.bounds.width).wrapping_add(1);
+        let mut time_x_1 = dx.wrapping_add(frame1.bounds.width).wrapping_sub(1);
         dx = r0.extent.width.wrapping_sub(r1.extent.width);
         if (time_x_0 <= 0 && time_x_1 >= 0)
             || (time_x_0 > 0 && dx >= time_x_0)
@@ -356,27 +402,58 @@ pub(super) unsafe fn drawables_intersect(
 
             if time_y_0 <= time_y_1 {
                 let intersect_time = frame_intersect(
-                    control0,
-                    &mut r0,
-                    control1,
-                    &mut r1,
-                    time_y_0 as u16,
-                    time_y_1 as u16,
-                    &mut images_intersect,
+                    (control0, &frame0, &mut r0),
+                    (control1, &frame1, &mut r1),
+                    (time_y_0 as u16, time_y_1 as u16),
+                    images_intersect,
                 );
                 if intersect_time != 0 {
-                    let frame0 = &*control0.IntersectStamp.frame;
-                    control0.EndPoint.x = r0.corner.x.wrapping_add(frame0.HotSpot.x);
-                    control0.EndPoint.y = r0.corner.y.wrapping_add(frame0.HotSpot.y);
-                    let frame1 = &*control1.IntersectStamp.frame;
-                    control1.EndPoint.x = r1.corner.x.wrapping_add(frame1.HotSpot.x);
-                    control1.EndPoint.y = r1.corner.y.wrapping_add(frame1.HotSpot.y);
+                    control0.EndPoint.x = r0.corner.x.wrapping_add(frame0.hot_spot.x);
+                    control0.EndPoint.y = r0.corner.y.wrapping_add(frame0.hot_spot.y);
+                    control1.EndPoint.x = r1.corner.x.wrapping_add(frame1.hot_spot.x);
+                    control1.EndPoint.y = r1.corner.y.wrapping_add(frame1.hot_spot.y);
                     return intersect_time;
                 }
             }
         }
     }
     0
+}
+
+/// A collision sweep holding its frame while the sweep updates its end
+/// point.
+pub struct FrameIntersection {
+    control: IntersectControl,
+    frame: super::drawable::ContextFrame,
+}
+
+impl FrameIntersection {
+    pub fn new(frame: super::drawable::ContextFrame, origin: Point) -> Self {
+        Self {
+            control: IntersectControl {
+                last_time_val: 0,
+                EndPoint: origin,
+                IntersectStamp: Stamp {
+                    origin,
+                    frame: frame.frame(),
+                },
+            },
+            frame,
+        }
+    }
+
+    pub fn set_frame(&mut self, frame: super::drawable::ContextFrame, origin: Point) {
+        self.control.IntersectStamp = Stamp {
+            origin,
+            frame: frame.frame(),
+        };
+        self.control.EndPoint = origin;
+        self.frame = frame;
+    }
+
+    pub fn intersect(&mut self, other: &mut Self, max_time: u16) -> u16 {
+        drawables_intersect(&mut self.control, &mut other.control, max_time)
+    }
 }
 
 #[cfg(test)]
@@ -387,36 +464,65 @@ mod tests {
         Point { x, y }
     }
 
-    fn frame(width: i16, height: i16) -> FrameDesc {
-        FrameDesc {
-            Type: 0,
-            Index: 0,
-            HotSpot: point(0, 0),
-            Bounds: Extent { width, height },
-            image: std::ptr::dangling_mut(),
-            parent: std::ptr::null_mut(),
+    fn frame(width: i16, height: i16) -> Shape {
+        Shape {
+            hot_spot: point(0, 0),
+            bounds: Extent { width, height },
+            image: None,
         }
     }
 
-    fn control(frame: &mut FrameDesc, origin: Point, end_point: Point) -> IntersectControl {
-        IntersectControl {
-            last_time_val: 99,
-            EndPoint: end_point,
-            IntersectStamp: Stamp { origin, frame },
+    struct Probe<'a> {
+        control: IntersectControl,
+        shape: Option<&'a Shape>,
+    }
+
+    impl std::ops::Deref for Probe<'_> {
+        type Target = IntersectControl;
+        fn deref(&self) -> &IntersectControl {
+            &self.control
         }
     }
 
-    unsafe fn intersect(a: &mut IntersectControl, b: &mut IntersectControl, max: u16) -> u16 {
-        drawables_intersect(a, b, max, true, |_, _, _, _, _| true)
+    impl std::ops::DerefMut for Probe<'_> {
+        fn deref_mut(&mut self) -> &mut IntersectControl {
+            &mut self.control
+        }
+    }
+
+    fn control(shape: &Shape, origin: Point, end_point: Point) -> Probe<'_> {
+        Probe {
+            control: IntersectControl {
+                last_time_val: 99,
+                EndPoint: end_point,
+                IntersectStamp: Stamp {
+                    origin,
+                    frame: FrameId::NULL,
+                },
+            },
+            shape: Some(shape),
+        }
+    }
+
+    fn intersect(a: &mut Probe<'_>, b: &mut Probe<'_>, max: u16) -> u16 {
+        let shapes = (a.shape.copied(), b.shape.copied());
+        sweep(
+            &mut a.control,
+            &mut b.control,
+            shapes,
+            max,
+            true,
+            &mut |_, _, _, _, _| true,
+        )
     }
 
     #[test]
     fn stationary_overlap_returns_one_and_preserves_zero_last_time() {
-        let mut fa = frame(2, 2);
-        let mut fb = frame(2, 2);
-        let mut a = control(&mut fa, point(0, 0), point(0, 0));
-        let mut b = control(&mut fb, point(1, 1), point(1, 1));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 1);
+        let fa = frame(2, 2);
+        let fb = frame(2, 2);
+        let mut a = control(&fa, point(0, 0), point(0, 0));
+        let mut b = control(&fb, point(1, 1), point(1, 1));
+        assert_eq!(intersect(&mut a, &mut b, 257), 1);
         assert_eq!((a.last_time_val, b.last_time_val), (0, 0));
         assert_eq!((a.EndPoint, b.EndPoint), (point(0, 0), point(1, 1)));
     }
@@ -424,22 +530,22 @@ mod tests {
     #[test]
     fn moving_point_returns_collision_tick_but_previous_noncolliding_endpoint() {
         // cycle=4: pixel steps occur at 65,129,193,257. Search begins at 64.
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(0, 0), point(4, 0));
-        let mut b = control(&mut fb, point(2, 0), point(2, 0));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 129);
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(0, 0), point(4, 0));
+        let mut b = control(&fb, point(2, 0), point(2, 0));
+        assert_eq!(intersect(&mut a, &mut b, 257), 129);
         assert_eq!((a.last_time_val, b.last_time_val), (65, 64));
         assert_eq!((a.EndPoint, b.EndPoint), (point(1, 0), point(2, 0)));
     }
 
     #[test]
     fn reverse_motion_has_the_same_time_and_previous_endpoint() {
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(4, 0), point(0, 0));
-        let mut b = control(&mut fb, point(2, 0), point(2, 0));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 129);
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(4, 0), point(0, 0));
+        let mut b = control(&fb, point(2, 0), point(2, 0));
+        assert_eq!(intersect(&mut a, &mut b, 257), 129);
         assert_eq!((a.last_time_val, b.last_time_val), (65, 64));
         assert_eq!(a.EndPoint, point(3, 0));
     }
@@ -447,11 +553,11 @@ mod tests {
     #[test]
     fn simultaneous_steps_are_tested_together_after_fast_forward() {
         // Relative cycle=8 sets t0=96. Each walker starts at its first pixel.
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(0, 0), point(4, 0));
-        let mut b = control(&mut fb, point(4, 0), point(0, 0));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 129);
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(0, 0), point(4, 0));
+        let mut b = control(&fb, point(4, 0), point(0, 0));
+        assert_eq!(intersect(&mut a, &mut b, 257), 129);
         assert_eq!((a.last_time_val, b.last_time_val), (96, 96));
         assert_eq!((a.EndPoint, b.EndPoint), (point(1, 0), point(3, 0)));
     }
@@ -460,25 +566,25 @@ mod tests {
     fn bresenham_minor_axis_does_not_use_linear_sampling() {
         // cycle=5, errors=(5,5): (1,0) at 53, (2,0) at 104, (3,1) at 155.
         // Linear sampling invents (2,1) at 129, but the C walker never visits it.
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(0, 0), point(5, 2));
-        let mut b = control(&mut fb, point(2, 1), point(2, 1));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 0);
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(0, 0), point(5, 2));
+        let mut b = control(&fb, point(2, 1), point(2, 1));
+        assert_eq!(intersect(&mut a, &mut b, 257), 0);
         assert_eq!((a.last_time_val, b.last_time_val), (104, 51));
         assert_eq!((a.EndPoint, b.EndPoint), (point(5, 2), point(2, 1)));
     }
 
     #[test]
     fn touching_box_edges_are_not_overlapping_pixels() {
-        let mut fa = frame(2, 2);
-        let mut fb = frame(2, 2);
-        let mut a = control(&mut fa, point(0, 0), point(0, 0));
-        let mut b = control(&mut fb, point(2, 0), point(2, 0));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 0);
+        let fa = frame(2, 2);
+        let fb = frame(2, 2);
+        let mut a = control(&fa, point(0, 0), point(0, 0));
+        let mut b = control(&fb, point(2, 0), point(2, 0));
+        assert_eq!(intersect(&mut a, &mut b, 257), 0);
         a.EndPoint = point(2, 0);
         // First one-pixel move is at 129; the boxes now share a column.
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 129);
+        assert_eq!(intersect(&mut a, &mut b, 257), 129);
         assert_eq!((a.last_time_val, b.last_time_val), (0, 0));
         assert_eq!(a.EndPoint, point(0, 0));
     }
@@ -486,11 +592,11 @@ mod tests {
     #[test]
     fn time_limit_is_inclusive_and_clamped_to_257() {
         for (max, expected) in [(128, 0), (129, 129), (257, 129), (u16::MAX, 129)] {
-            let mut fa = frame(1, 1);
-            let mut fb = frame(1, 1);
-            let mut a = control(&mut fa, point(0, 0), point(4, 0));
-            let mut b = control(&mut fb, point(2, 0), point(2, 0));
-            assert_eq!(unsafe { intersect(&mut a, &mut b, max) }, expected);
+            let fa = frame(1, 1);
+            let fb = frame(1, 1);
+            let mut a = control(&fa, point(0, 0), point(4, 0));
+            let mut b = control(&fb, point(2, 0), point(2, 0));
+            assert_eq!(intersect(&mut a, &mut b, max), expected);
         }
     }
 
@@ -498,11 +604,11 @@ mod tests {
     fn fast_forward_keeps_error_remainders() {
         // t0=192: start=8*191=1528, five steps plus time_error=248.
         // The next pixels are x=6 at 193 and x=7 at 225.
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(0, 0), point(8, 0));
-        let mut b = control(&mut fb, point(7, 0), point(7, 0));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 225);
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(0, 0), point(8, 0));
+        let mut b = control(&fb, point(7, 0), point(7, 0));
+        assert_eq!(intersect(&mut a, &mut b, 257), 225);
         assert_eq!((a.last_time_val, b.last_time_val), (193, 192));
         assert_eq!(a.EndPoint, point(6, 0));
     }
@@ -510,27 +616,27 @@ mod tests {
     #[test]
     fn inactive_context_and_zero_limit_do_not_touch_controls() {
         for (active, max) in [(false, 257), (true, 0)] {
+            let shape = Some(frame(1, 1));
             assert_eq!(
-                unsafe {
-                    drawables_intersect(
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                        max,
-                        active,
-                        |_, _, _, _, _| panic!("early exit must not test pixels"),
-                    )
-                },
+                sweep(
+                    &mut IntersectControl::default(),
+                    &mut IntersectControl::default(),
+                    (shape, shape),
+                    max,
+                    active,
+                    &mut |_, _, _, _, _| panic!("early exit must not test pixels"),
+                ),
                 0
             );
         }
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(0, 0), point(4, 0));
-        let mut b = control(&mut fb, point(2, 0), point(2, 0));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 0) }, 0);
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(0, 0), point(4, 0));
+        let mut b = control(&fb, point(2, 0), point(2, 0));
+        assert_eq!(intersect(&mut a, &mut b, 0), 0);
         assert_eq!((a.last_time_val, b.last_time_val), (99, 99));
-        a.IntersectStamp.frame = std::ptr::null_mut();
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 0);
+        a.shape = None;
+        assert_eq!(intersect(&mut a, &mut b, 257), 0);
         assert_eq!((a.last_time_val, b.last_time_val), (0, 0));
     }
     #[test]
@@ -538,11 +644,11 @@ mod tests {
         // (dx,dy)=(4,2): (1,0) at 65, then (2,1) at 129.
         let mut fa = frame(1, 1);
         let mut fb = frame(1, 1);
-        fa.HotSpot = point(2, 3);
-        fb.HotSpot = point(2, 3);
-        let mut a = control(&mut fa, point(10, 20), point(14, 22));
-        let mut b = control(&mut fb, point(12, 21), point(12, 21));
-        assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 129);
+        fa.hot_spot = point(2, 3);
+        fb.hot_spot = point(2, 3);
+        let mut a = control(&fa, point(10, 20), point(14, 22));
+        let mut b = control(&fb, point(12, 21), point(12, 21));
+        assert_eq!(intersect(&mut a, &mut b, 257), 129);
         assert_eq!((a.last_time_val, b.last_time_val), (65, 64));
         assert_eq!((a.EndPoint, b.EndPoint), (point(11, 20), point(12, 21)));
     }
@@ -550,11 +656,11 @@ mod tests {
     #[test]
     fn vertical_motion_in_both_directions_uses_the_same_ticks() {
         for (start, end, previous) in [(0, 4, 1), (4, 0, 3)] {
-            let mut fa = frame(1, 1);
-            let mut fb = frame(1, 1);
-            let mut a = control(&mut fa, point(0, start), point(0, end));
-            let mut b = control(&mut fb, point(0, 2), point(0, 2));
-            assert_eq!(unsafe { intersect(&mut a, &mut b, 257) }, 129);
+            let fa = frame(1, 1);
+            let fb = frame(1, 1);
+            let mut a = control(&fa, point(0, start), point(0, end));
+            let mut b = control(&fb, point(0, 2), point(0, 2));
+            assert_eq!(intersect(&mut a, &mut b, 257), 129);
             assert_eq!((a.last_time_val, b.last_time_val), (65, 64));
             assert_eq!(a.EndPoint, point(0, previous));
         }
@@ -562,18 +668,23 @@ mod tests {
 
     #[test]
     fn same_velocity_checks_only_the_initial_pixels() {
-        let mut fa = frame(2, 2);
-        let mut fb = frame(2, 2);
-        let mut a = control(&mut fa, point(0, 0), point(4, 2));
-        let mut b = control(&mut fb, point(1, 1), point(5, 3));
+        let fa = frame(2, 2);
+        let fb = frame(2, 2);
+        let mut a = control(&fa, point(0, 0), point(4, 2));
+        let mut b = control(&fb, point(1, 1), point(5, 3));
         let mut checks = 0;
         assert_eq!(
-            unsafe {
-                drawables_intersect(&mut a, &mut b, 257, true, |_, _, _, _, _| {
+            sweep(
+                &mut a.control,
+                &mut b.control,
+                (Some(fa), Some(fb)),
+                257,
+                true,
+                &mut |_, _, _, _, _| {
                     checks += 1;
                     false
-                })
-            },
+                }
+            ),
             0
         );
         assert_eq!(checks, 1);
@@ -584,16 +695,19 @@ mod tests {
     #[test]
     fn bounding_rejection_does_not_call_pixel_intersection() {
         for target in [point(8, 0), point(0, 8)] {
-            let mut fa = frame(1, 1);
-            let mut fb = frame(1, 1);
-            let mut a = control(&mut fa, point(0, 0), point(-4, -4));
-            let mut b = control(&mut fb, target, target);
+            let fa = frame(1, 1);
+            let fb = frame(1, 1);
+            let mut a = control(&fa, point(0, 0), point(-4, -4));
+            let mut b = control(&fb, target, target);
             assert_eq!(
-                unsafe {
-                    drawables_intersect(&mut a, &mut b, 257, true, |_, _, _, _, _| {
-                        panic!("disjoint swept boxes")
-                    })
-                },
+                sweep(
+                    &mut a.control,
+                    &mut b.control,
+                    (Some(fa), Some(fb)),
+                    257,
+                    true,
+                    &mut |_, _, _, _, _| panic!("disjoint swept boxes")
+                ),
                 0
             );
             assert_eq!((a.last_time_val, b.last_time_val), (0, 0));
@@ -604,10 +718,10 @@ mod tests {
     fn frame_fast_forward_narrows_count_and_advances_only_once_per_tick() {
         // COUNT(512*255)=65024, then >>8 is 254. At 257 the walker
         // advances to 255, not 510 or 512, despite cycle exceeding 256.
-        let mut fa = frame(1, 1);
-        let mut fb = frame(1, 1);
-        let mut a = control(&mut fa, point(0, 0), point(512, 0));
-        let mut b = control(&mut fb, point(255, 0), point(255, 0));
+        let fa = frame(1, 1);
+        let fb = frame(1, 1);
+        let mut a = control(&fa, point(0, 0), point(512, 0));
+        let mut b = control(&fb, point(255, 0), point(255, 0));
         let mut r0 = Rect {
             corner: point(0, 0),
             extent: Extent {
@@ -620,17 +734,12 @@ mod tests {
             extent: Extent::default(),
         };
         assert_eq!(
-            unsafe {
-                frame_intersect(
-                    &mut a,
-                    &mut r0,
-                    &mut b,
-                    &mut r1,
-                    256,
-                    256,
-                    &mut |_, _, _, _, _| true,
-                )
-            },
+            frame_intersect(
+                (&mut a.control, &fa, &mut r0),
+                (&mut b.control, &fb, &mut r1),
+                (256, 256),
+                &mut |_, _, _, _, _| true,
+            ),
             257
         );
         assert_eq!(r0.corner, point(254, 0));

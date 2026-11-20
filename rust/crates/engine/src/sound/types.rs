@@ -136,21 +136,16 @@ pub const BUFFER_SIZE: usize = 16384;
 
 #[cfg(not(test))]
 use crate::time::counter_abi::GetTimeCounter;
-#[cfg(not(test))]
-extern "C" {
-    static mut QuitPosted: i32;
-}
-
 /// Current game time in 840 units per second.
 #[cfg(not(test))]
 pub fn get_time_counter() -> u32 {
     GetTimeCounter()
 }
 
-/// Safe wrapper around the C `QuitPosted` global flag.
+/// Whether the window asked to quit (C: `QuitPosted`).
 #[cfg(not(test))]
 pub fn quit_posted() -> bool {
-    unsafe { QuitPosted != 0 }
+    crate::graphics::state::quit_posted()
 }
 
 /// Test stub for `GetTimeCounter()` — returns 0.

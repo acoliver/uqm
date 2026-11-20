@@ -10,7 +10,6 @@ mod special_hooks;
 
 use std::{ffi::CStr, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
@@ -113,7 +112,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 c"ship.umgah.meleeicons"
             );
             assert!(
-                d.ship_info.race_strings.is_null()
+                d.ship_info.race_strings.is_none()
                     && d.ship_info.icons.is_null()
                     && d.ship_info.melee_icon.is_null()
             );
@@ -178,7 +177,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 CStr::from_ptr(d.ship_data.ship_sounds_rsc),
                 c"ship.umgah.sounds"
             );
-            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
                     d.cyborg_control.ManeuverabilityIndex,
@@ -213,15 +212,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 battle::element(h),
             );
             assert_eq!(
-                GetFrameIndex(
-                    first
-                        .descriptor_mut()
-                        .ship_data
-                        .special
-                        .view(0)
-                        .raw()
-                        .cast()
-                ),
+                (first.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 21
             );
             first.descriptor_mut().ship_info.energy_level = 1;
@@ -236,15 +227,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert_eq!(second.descriptor_mut().ship_info.energy_level, 30);
             assert_eq!(second.descriptor_mut().characteristics.special_wait, 2);
             assert_eq!(
-                GetFrameIndex(
-                    second
-                        .descriptor_mut()
-                        .ship_data
-                        .special
-                        .view(0)
-                        .raw()
-                        .cast()
-                ),
+                (second.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 0
             );
             second.ship_mut().ship_facing = 9;
@@ -252,15 +235,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert_ne!(previous_facing(&mut first), previous_facing(&mut second));
             assert_eq!(previous_facing(&mut first), data);
             assert_eq!(
-                GetFrameIndex(
-                    first
-                        .descriptor_mut()
-                        .ship_data
-                        .special
-                        .view(0)
-                        .raw()
-                        .cast()
-                ),
+                (first.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 21
             );
             first.uninit();
@@ -271,15 +246,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 battle::element(other),
             );
             assert_eq!(
-                GetFrameIndex(
-                    second
-                        .descriptor_mut()
-                        .ship_data
-                        .special
-                        .view(0)
-                        .raw()
-                        .cast()
-                ),
+                (second.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 25
             );
             battle_context::dispose(h);
@@ -363,16 +330,13 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                 let data = previous_facing(&mut ship);
                 assert!(data.is_some());
                 assert_eq!(data, Some(5));
-                assert_eq!(
-                    GetFrameIndex((*cone).current.image.frame.raw().cast()),
-                    index
-                );
+                assert_eq!(((*cone).current.image.frame.raw()).index(), index);
                 let old_frame = (*cone).next.image.frame.raw();
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*cone).preprocess_func.unwrap(), cone)
                 });
                 assert_eq!(
-                    GetFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw().cast()),
+                    (ship.descriptor_mut().ship_data.special.view(0).raw()).index(),
                     (index + 16) % 48
                 );
                 assert_eq!((*cone).next.image.frame.raw(), old_frame);
@@ -387,7 +351,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     "holding facing keeps the saved facing"
                 );
                 assert_eq!(
-                    GetFrameIndex((*battle::element(next)).current.image.frame.raw().cast()),
+                    ((*battle::element(next)).current.image.frame.raw()).index(),
                     (index + 16) % 48
                 );
                 battle_context::dispose(next);
@@ -396,10 +360,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             ship.ship_mut().ship_facing = 9;
             let h = fire(&mut ship);
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
-            assert_eq!(
-                GetFrameIndex((*battle::element(h)).current.image.frame.raw().cast()),
-                9
-            );
+            assert_eq!(((*battle::element(h)).current.image.frame.raw()).index(), 9);
             assert_eq!(
                 (*battle::element(h)).IntersectControl.IntersectStamp.frame,
                 ship.raw_frame(2, 9)
@@ -454,7 +415,7 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
             assert!(!previous_facing(&mut ship).is_none());
             assert_eq!(previous_facing(&mut ship).unwrap(), 15);
             assert_eq!(
-                GetFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw().cast()),
+                (ship.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 15
             );
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 30);
@@ -462,7 +423,7 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
             assert!(fire(&mut ship).is_null());
             assert_eq!(previous_facing(&mut ship).unwrap(), 4);
             assert_eq!(
-                GetFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw().cast()),
+                (ship.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 4
             );
             assert_eq!(queued(), vec![ship.handle]);

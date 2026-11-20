@@ -30,7 +30,7 @@ pub struct ElementObservation {
     pub parent: usize,
     pub target: usize,
     pub primitive: u16,
-    pub intersect: INTERSECT_CONTROL,
+    pub intersect: crate::graphics::intersection::IntersectControl,
 }
 impl std::ops::Deref for ElementObservation {
     type Target = ElementState;
@@ -90,8 +90,8 @@ pub fn ship_record(
 
 pub struct ShipResourceObservation<'a> {
     pub descriptor: Option<DescriptorRecordObservation<'a>>,
-    pub icons: Option<&'a crate::graphics::native_abi::frame_desc>,
-    pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
+    pub icons: crate::graphics::drawable::FrameId,
+    pub strings: Option<crate::strings::owned_table::EntryRef>,
 }
 pub struct DescriptorRecordObservation<'a> {
     pub address: usize,
@@ -114,7 +114,9 @@ pub fn ship_resources(
     let icons = s
         .picker_resources
         .as_ref()
-        .map_or(std::ptr::null_mut(), |resources| resources.icon().raw());
+        .map_or(crate::graphics::drawable::FrameId::NULL, |resources| {
+            resources.icon().raw()
+        });
     ShipResourceObservation {
         descriptor: s
             .descriptor
@@ -130,14 +132,12 @@ pub fn ship_resources(
                 code_loaded: d.race.is_some(),
                 state: &d.race_state,
             }),
-        // SAFETY: the icon array belongs to the entry's retained picker resources,
-        // which cannot be released while the pool is borrowed.
-        icons: unsafe { icons.as_ref() },
+        icons,
         strings: s
             .picker_resources
             .as_ref()
             .and_then(|resources| resources.strings.as_ref())
-            .map(crate::strings::owned_table::TextEntry::record),
+            .map(crate::strings::owned_table::TextEntry::entry_ref),
     }
 }
 
@@ -155,8 +155,9 @@ mod owner_tests {
         record.ship_facing = 9;
         record.crew_level = 42;
         let mut descriptor = crate::battle::record::RaceDescriptor::EMPTY;
-        descriptor.ship_info.icons = std::ptr::without_provenance_mut(0x1234);
-        descriptor.ship_info.race_strings = std::ptr::without_provenance_mut(0x5678);
+        descriptor.ship_info.icons = crate::graphics::drawable::FrameId::from_bits(0x1234 << 16);
+        descriptor.ship_info.race_strings =
+            Some(crate::strings::owned_table::EntryRef::new(0x5678, 0));
         record.descriptor = Some(Box::new(descriptor));
         ships.put(link);
         let observed = super::ship_record(&game.kernel.races[0], link, &game.kernel.elements);

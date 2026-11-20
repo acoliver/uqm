@@ -104,8 +104,8 @@ impl<'a> Ship<'a> {
 }
 
 pub(super) struct ShipResources<'a> {
-    icons: Frame<'a>,
-    strings: StringEntry<'a>,
+    icons: Frame,
+    strings: StringEntry,
     race: Option<Race<'a>>,
 }
 impl ShipResources<'_> {
@@ -278,7 +278,7 @@ mod tests {
         let assets =
             unsafe { assets::Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
         let resources = ShipResources {
-            icons: Frame(None),
+            icons: Frame(crate::graphics::drawable::FrameId::NULL),
             strings: StringEntry(None),
             race: Some(Race {
                 species: SPECIES_ID_EARTHLING_ID,

@@ -32,15 +32,13 @@ pub(crate) mod live {
     use super::navigate;
     use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        drawable_abi::{DrawableLease, LoadedDrawable},
-        native_abi as render,
+        context::ContextLease, drawable::ContextFrame, drawable::DrawableLease,
+        drawable::LoadedDrawable,
     };
     use crate::ships::master_native::ShipChoice;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
     use crate::supermelee::session::MeleeSession;
-    use std::ptr::NonNull;
 
     pub(crate) struct BuildPicker {
         drawable: LoadedDrawable,
@@ -70,21 +68,21 @@ pub(crate) mod live {
             draw: bool,
         ) {
             let rect = frame.frame_rect(0);
-            let origin = render::POINT {
+            let origin = crate::graphics::geometry::Point {
                 x: rect.corner.x + 20 + (ship % 5) as i16 * 18,
                 y: rect.corner.y + 5 + (ship / 5) as i16 * 18,
             };
             let ship = catalog
                 .get(ship as usize)
                 .unwrap_or_else(|| panic!("popup ship {ship}"));
-            let icon = ContextFrame::retain(NonNull::new(ship.icon.raw().cast()));
+            let icon = ContextFrame::retain(ship.icon.raw());
             if draw {
                 context.draw_stamp(&icon, origin);
             } else {
                 context.draw_filled_stamp_preserving_color(
                     &icon,
                     origin,
-                    render::Color {
+                    crate::graphics::geometry::Color {
                         r: 0,
                         g: 0,
                         b: 0,
@@ -106,8 +104,9 @@ pub(crate) mod live {
                 rect.extent.width,
                 rect.extent.height,
             );
-            frame.replace_hotspot(render::POINT { x, y });
-            self.screen.draw_stamp(&frame, render::POINT { x: 0, y: 0 });
+            frame.replace_hotspot(crate::graphics::geometry::Point { x, y });
+            self.screen
+                .draw_stamp(&frame, crate::graphics::geometry::Point { x: 0, y: 0 });
         }
     }
 
@@ -123,8 +122,8 @@ pub(crate) mod live {
         let frame = drawable.lease();
         context.draw_batch(|| {
             context.set_frame(frame.context_frame(0));
-            source.replace_hotspot(render::POINT { x: 0, y: 0 });
-            context.draw_stamp(&source, render::POINT { x: 0, y: 0 });
+            source.replace_hotspot(crate::graphics::geometry::Point { x: 0, y: 0 });
+            context.draw_stamp(&source, crate::graphics::geometry::Point { x: 0, y: 0 });
             for ship in 0..25 {
                 BuildPicker::draw_icon_in(&context, &frame, catalog, ship, true);
             }

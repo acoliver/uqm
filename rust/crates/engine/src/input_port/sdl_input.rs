@@ -17,9 +17,6 @@ use super::gesture::Gesture;
 use super::keynames::{key_name, sdl2_keys};
 use super::templates::bounded_template_name;
 use crate::io::Dir;
-use crate::resource::ffi_bridge::{
-    res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove,
-};
 
 const ALTERNATES: usize = 2;
 const MENU_NAMES: &[&str] = &[
@@ -164,15 +161,8 @@ fn flight_key(template: usize, name: &str, alternate: usize) -> CString {
 
 /// The gesture text of a resource string, if the resource exists.
 fn resource_gesture(key: &CStr) -> Option<Option<Gesture>> {
-    // SAFETY: `key` is a terminated string and a present string resource has a
-    // terminated, live value that is copied before the next resource change.
-    unsafe {
-        if res_IsString(key.as_ptr()) == 0 {
-            return None;
-        }
-        let spec = CStr::from_ptr(res_GetString(key.as_ptr()));
-        Some(Gesture::parse(&spec.to_string_lossy()))
-    }
+    let spec = crate::resource::string(key.to_str().ok()?)?;
+    Some(Gesture::parse(&spec))
 }
 
 impl DriverState {
@@ -237,14 +227,12 @@ impl DriverState {
 
 /// The value of a string resource, empty when it is absent.
 fn resource_gesture_name(key: &CStr) -> CString {
-    // SAFETY: as in `resource_gesture`.
-    unsafe {
-        if res_IsString(key.as_ptr()) != 0 {
-            CStr::from_ptr(res_GetString(key.as_ptr())).to_owned()
-        } else {
-            CString::default()
-        }
-    }
+    key.to_str()
+        .ok()
+        .and_then(crate::resource::string)
+        .map_or_else(CString::default, |name| {
+            CString::new(name).unwrap_or_else(|_| panic!("resource string contains NUL"))
+        })
 }
 
 /// Why the input driver could not start.
@@ -278,8 +266,7 @@ fn install_controls(controls: &InputControls) {
     load_index(config.as_ref(), c"override.cfg", c"menu.");
     state.register_menu_controls(controls);
     load_index(config.as_ref(), c"flight.cfg", c"keys.");
-    // SAFETY: the key is a terminated string.
-    if unsafe { res_HasKey(c"keys.1.name".as_ptr()) } == 0 {
+    if !crate::resource::has_key("keys.1.name") {
         load_index(content.as_ref(), c"uqm.key", c"keys.");
     }
     state.register_flight_controls(controls);
@@ -325,7 +312,7 @@ fn init_joysticks() -> Result<(), InputInitError> {
 /// Load a resource index from `dir`; an absent directory loads nothing.
 fn load_index(dir: Option<&Dir>, file: &CStr, prefix: &CStr) {
     if let Some(dir) = dir {
-        crate::io::load_resource_index(dir, file, Some(prefix));
+        crate::resource::load_index(dir, file, Some(prefix));
     }
 }
 
@@ -341,9 +328,7 @@ pub fn uninit_input() {
 /// resources loaded next provide them.
 pub fn forget_template_names() {
     for template in 1..=TEMPLATES {
-        let key = resource_key(format!("config.keys.{template}.name"));
-        // SAFETY: the resource key is a terminated string, live for the call.
-        unsafe { res_Remove(key.as_ptr()) };
+        crate::resource::remove(&format!("config.keys.{template}.name"));
     }
 }
 
@@ -556,9 +541,9 @@ pub fn remove_input_state(template: i32, control: i32, alternate: i32) {
         controls.vcontrol(|vc| vc.unbind(gesture, flight_target(template, control)));
     }
     state.configured[index] = None;
-    let key = flight_key(template, FLIGHT_NAMES[control], alternate);
-    // SAFETY: the resource key is a terminated string, live for the call.
-    unsafe { res_Remove(key.as_ptr()) };
+    crate::resource::remove(
+        &flight_key(template, FLIGHT_NAMES[control], alternate).to_string_lossy(),
+    );
 }
 
 /// Wait for the player to make a gesture and bind it to a flight control
@@ -583,9 +568,7 @@ pub fn rebind_input_state(template: i32, control: i32, alternate: i32, mut poll:
     controls.vcontrol(|vc| vc.bind(gesture, flight_target(template, control)));
     INPUT.lock().configured[index] = Some(gesture);
     let key = flight_key(template, FLIGHT_NAMES[control], alternate);
-    let value = resource_key(gesture.to_string());
-    // SAFETY: both strings are terminated and live for the call.
-    unsafe { res_PutString(key.as_ptr(), value.as_ptr()) };
+    crate::resource::settings::Settings.put_string(&key.to_string_lossy(), &gesture.to_string());
 }
 
 #[cfg(test)]

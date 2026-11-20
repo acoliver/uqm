@@ -1,6 +1,8 @@
 use super::*;
 use crate::engine::Game;
-use crate::graphics::context_abi::ContextFrame;
+use crate::graphics::{
+    drawable::ContextFrame, geometry::Color, geometry::Point, geometry::TextAlign,
+};
 use uqm_engine::test_support::campaign_display::CampaignDisplay;
 
 #[test]
@@ -19,15 +21,10 @@ fn pilot_uses_the_retained_panel_and_preserves_phase_across_reset() {
     game.world.data.game.autopilot.y = 0;
     game.world.data.flagship.fuel_on_board = 100;
     let context = ContextLease::require(game.kernel.off_screen_context);
-    let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+    let frame = ContextFrame::retain(game.kernel.screen);
     let font = game.kernel.tiny_font_lease().unwrap();
-    let measurement = font.measure(
-        c"A",
-        POINT { x: 85, y: 6 },
-        TEXT_ALIGN_ALIGN_CENTER,
-        u16::MAX,
-    );
-    let point = POINT {
+    let measurement = font.measure(c"A", Point { x: 85, y: 6 }, TextAlign::Center, u16::MAX);
+    let point = Point {
         x: 8 + measurement.rect.corner.x,
         y: 2 + measurement.rect.corner.y,
     };

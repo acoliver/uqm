@@ -77,14 +77,15 @@ fn update_crew(
     world: &mut crate::engine::World,
     point: (i16, i16),
     delta: i16,
-) -> Option<(Option<crate::graphics::context_abi::ContextFrame>, String)> {
+) -> Option<(Option<crate::graphics::drawable::ContextFrame>, String)> {
     let index = SHIP_POS.iter().position(|candidate| *candidate == point)?;
     let id = world.built_ships_ref().at(index)?;
     let record = world.built_ships_ref();
     let ship = record.get(id);
     let frame = if delta == 0 {
-        std::ptr::NonNull::new(ship.icons)
-            .map(|frame| crate::graphics::context_abi::ContextFrame::retain(Some(frame)))
+        ship.icons
+            .non_null()
+            .map(crate::graphics::drawable::ContextFrame::retain)
     } else {
         None
     };
@@ -111,20 +112,18 @@ fn update_crew(
 
 pub(crate) mod live {
     use super::{navigate, update_crew, SHIP_POS};
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::engine::{battle::Cx, observe::Io};
     use crate::input::frames::*;
-    use std::ffi::CString;
-
-    use crate::engine::time::counter_abi::GetTimeCounter;
-
     use crate::ui::sis::capacity::crew_capacity;
+    use std::ffi::CString;
 
     struct Menu {
         selected: usize,
         positions: Vec<(i16, i16)>,
         point: (i16, i16),
-        frame: Option<crate::graphics::context_abi::ContextFrame>,
-        context: crate::graphics::context_abi::ContextLease,
+        frame: Option<crate::graphics::drawable::ContextFrame>,
+        context: crate::graphics::context::ContextLease,
         modifying: bool,
     }
 
@@ -132,7 +131,7 @@ pub(crate) mod live {
         let Some(frame) = &menu.frame else {
             return;
         };
-        let origin = crate::graphics::native_abi::POINT {
+        let origin = crate::graphics::geometry::Point {
             x: menu.point.0,
             y: menu.point.1,
         };
@@ -145,7 +144,7 @@ pub(crate) mod live {
     }
 
     fn flash_crew(kernel: &crate::engine::Kernel) {
-        crate::graphics::context_abi::ContextLease::require(kernel.status_context).select();
+        crate::graphics::context::ContextLease::require(kernel.status_context).select();
         crate::ui::sis::highlight_rect(kernel, crate::ui::sis::status_message_rect());
     }
 
@@ -266,9 +265,7 @@ pub(crate) mod live {
                 positions,
                 point: (0, 0),
                 frame: None,
-                context: crate::graphics::context_abi::ContextLease::require(
-                    cx.kernel.status_context,
-                ),
+                context: crate::graphics::context::ContextLease::require(cx.kernel.status_context),
                 modifying: false,
             };
             menu.context.select();

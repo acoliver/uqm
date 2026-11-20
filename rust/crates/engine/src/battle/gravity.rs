@@ -2,8 +2,7 @@
 
 use super::flags::{DISAPPEARING, NONSOLID, PLAYER_SHIP, PRE_PROCESS};
 use crate::battle::{Cx, ElementId};
-
-use crate::graphics::native_abi::INTERSECT_CONTROL;
+use crate::graphics::intersection::IntersectControl;
 
 fn gravity_mass(mass: u8) -> bool {
     mass > 100
@@ -53,16 +52,16 @@ pub fn control(
     cx: &Cx<'_>,
     id: ElementId,
     frame: crate::battle::views::FrameSelection,
-) -> INTERSECT_CONTROL {
+) -> IntersectControl {
     let current = cx.element(id).current;
-    let origin = crate::graphics::native_abi::POINT {
+    let origin = crate::graphics::geometry::Point {
         x: current.location.x >> 2,
         y: current.location.y >> 2,
     };
-    INTERSECT_CONTROL {
+    IntersectControl {
         last_time_val: 0,
         EndPoint: origin,
-        IntersectStamp: crate::graphics::native_abi::STAMP {
+        IntersectStamp: crate::graphics::intersection::Stamp {
             origin,
             frame: frame.raw(),
         },

@@ -1,7 +1,7 @@
 //! Record operations used by race hooks, independent of mode publication.
 use super::race_services::StarContact;
 use super::{Concerns, Cx, ElementId, ShipId, StoryKey};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 impl Cx<'_> {
     pub fn set_flagship_crew(&mut self, crew: u16) {
@@ -69,7 +69,7 @@ impl Cx<'_> {
         self.world.data.game.velocity = velocity;
     }
 
-    pub fn set_autopilot(&mut self, point: POINT) {
+    pub fn set_autopilot(&mut self, point: Point) {
         // SAFETY: this context owns the navigation autopilot authority.
         self.world.data.game.autopilot = point;
     }
@@ -84,7 +84,7 @@ impl Cx<'_> {
         self.world.story_state(StoryKey::PORTAL_COUNTER) as u8
     }
 
-    pub fn autopilot(&self) -> crate::graphics::native_abi::POINT {
+    pub fn autopilot(&self) -> crate::graphics::geometry::Point {
         // SAFETY: this is a value projection of the game-thread-owned world.
         self.world.data.game.autopilot
     }

@@ -26,14 +26,27 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
     }
 }
 
-pub use crate::engine::host::display::drain_committed_draws;
+/// Execute every committed draw command without presenting a frame.
+///
+/// Queued draw commands hold the resources they draw with; owners call this
+/// before freeing such a resource.
+pub fn drain_committed_draws() {
+    crate::graphics::state::flush_ex(true);
+}
+
+/// Drain every committed draw command, then publish exactly one frame; a
+/// flush alone does not swap when batching already emptied the queue.
+fn present_committed_draws() {
+    drain_committed_draws();
+    crate::graphics::present::swap_buffers(crate::graphics::present::Redraw::No);
+}
 
 /// Present drawing committed before a synchronous `DoInput` loop begins.
 ///
 /// Nested menus often draw their initial state immediately before calling
 /// `DoInput`; the outer callback cannot return while that nested loop runs.
 pub fn rust_begin_input_loop() {
-    crate::engine::host::display::present_committed_draws();
+    present_committed_draws();
 }
 
 /// Complete the typed input callback and notify its supplied observer.
@@ -48,7 +61,7 @@ pub fn rust_complete_input_frame(
     let result = complete_input_frame(|| keep_running != 0);
 
     if result.present {
-        crate::engine::host::display::present_committed_draws();
+        present_committed_draws();
     }
 
     io.observer.simulation(cx, "input-loop");

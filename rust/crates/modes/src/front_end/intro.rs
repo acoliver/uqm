@@ -10,22 +10,20 @@ mod render;
 mod render_tests;
 pub(super) mod text;
 
-use crate::{
-    engine::{
-        battle::Cx,
-        input::InputSession,
-        observe::{CheckpointView, Io},
-        world::activity::activity_flags::CHECK_ABORT,
-    },
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        drawable_abi::LoadedDrawable,
-        native_abi::{Color, EXTENT, POINT, RECT},
-    },
-    sound::{music, resource_types::LoadedMusic},
-    strings::owned_table::LoadedTextTable,
-    video::legacy::{LoadedVideo, VideoPlayback},
+use crate::engine::battle::Cx;
+use crate::engine::input::InputSession;
+use crate::engine::observe::CheckpointView;
+use crate::engine::observe::Io;
+use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
+    geometry::Rect,
 };
+use crate::sound::music;
+use crate::sound::resource_types::LoadedMusic;
+use crate::strings::owned_table::LoadedTextTable;
+use crate::video::legacy::LoadedVideo;
+use crate::video::legacy::VideoPlayback;
 use args::rgb as parse_rgb;
 use records::PresentationState;
 use std::ffi::{CStr, CString};
@@ -106,8 +104,8 @@ fn presentation_frame(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut Presentation
 
 struct DisplayRestore {
     context: ContextLease,
-    font: Option<crate::graphics::native_font::FontLease>,
-    clip: RECT,
+    font: Option<crate::graphics::font::FontLease>,
+    clip: Rect,
 }
 impl Drop for DisplayRestore {
     fn drop(&mut self) {

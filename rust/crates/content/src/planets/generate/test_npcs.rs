@@ -120,7 +120,7 @@ impl<S: Story, H: sam::GuardSite> sam::GuardSite for (&mut S, &mut H) {
     fn init_ip_groups(&mut self, reference: u32) {
         self.1.init_ip_groups(reference)
     }
-    fn planet_outer_location(&self, planet: u16) -> crate::graphics::native_abi::POINT {
+    fn planet_outer_location(&self, planet: u16) -> crate::graphics::geometry::Point {
         self.1.planet_outer_location(planet)
     }
     fn for_each_ip_group(
@@ -129,10 +129,10 @@ impl<S: Story, H: sam::GuardSite> sam::GuardSite for (&mut S, &mut H) {
     ) {
         self.1.for_each_ip_group(visit)
     }
-    fn ip_location(&self) -> crate::graphics::native_abi::POINT {
+    fn ip_location(&self) -> crate::graphics::geometry::Point {
         self.1.ip_location()
     }
-    fn set_and_transform_ip_location(&mut self, location: crate::graphics::native_abi::POINT) {
+    fn set_and_transform_ip_location(&mut self, location: crate::graphics::geometry::Point) {
         self.1.set_and_transform_ip_location(location)
     }
 }

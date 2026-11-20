@@ -47,7 +47,6 @@ pub(crate) fn synced_node_position(
 
 mod production {
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
-
     use super::{initialize_element, Frame};
     use crate::engine::battle::Cx;
 
@@ -122,7 +121,7 @@ mod production {
                     super::synced_node_position(state.life, state.flags, &positions)
                 {
                     cx.element_mut(element).current.location =
-                        crate::graphics::native_abi::POINT { x, y };
+                        crate::graphics::geometry::Point { x, y };
                 }
             }
         }
@@ -214,8 +213,8 @@ fn initialize_element(
     };
     cx.set_primitive_stamp(
         element,
-        crate::graphics::native_abi::STAMP {
-            origin: crate::graphics::native_abi::POINT { x: 0, y: 0 },
+        crate::graphics::intersection::Stamp {
+            origin: crate::graphics::geometry::Point { x: 0, y: 0 },
             frame: frame.raw(),
         },
     );
@@ -248,7 +247,7 @@ mod retrieval_tests {
     #[serial_test::serial]
     fn scan_frame_indices_wrap_and_retain_the_drawable_after_release() {
         use crate::engine::battle::views::FrameSelection;
-        let drawable = crate::graphics::drawable_abi::LoadedDrawable::create(0, 0, 0, 4)
+        let drawable = crate::graphics::drawable::LoadedDrawable::create(0, 0, 0, 4)
             .unwrap_or_else(|| panic!("scan fixture drawable"));
         let lease = drawable.lease();
         let source = FrameSelection::retain(lease.frame(2).unwrap());
@@ -273,7 +272,7 @@ mod retrieval_tests {
     #[test]
     #[serial_test::serial]
     fn real_scan_initializer_preserves_every_node_kind_and_retained_frame() {
-        use crate::graphics::drawable_abi::LoadedDrawable;
+        use crate::graphics::drawable::LoadedDrawable;
         use crate::planet_side::{
             creatures::CreatureKind,
             generation::{GeneratedNode, GeneratedNodeKind},

@@ -26,8 +26,10 @@ pub mod live {
         APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DISAPPEARING, FINITE_LIFE,
         IGNORE_VELOCITY, NONSOLID, NORMAL_LIFE,
     };
+    use crate::engine::battle::EMPTY_PRIMITIVE;
+    use crate::engine::battle::STAMP_PRIMITIVE;
     use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::graphics::{native_abi::POINT, EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::graphics::geometry::Point;
     use crate::engine::math::battle_types::{FACING_SHIFT, HALF_CIRCLE};
     use crate::engine::save::START_ENCOUNTER;
     use crate::engine::species::ship::URQUAN_DRONE_SHIP;
@@ -53,16 +55,16 @@ pub mod live {
     fn flagship_location(cx: &crate::engine::battle::Cx<'_>) -> u8 {
         cx.flagship_location()
     }
-    fn world(cx: &crate::engine::battle::Cx<'_>, point: POINT) -> POINT {
+    fn world(cx: &crate::engine::battle::Cx<'_>, point: Point) -> Point {
         let (screen_width, screen_height) = cx.screen_dimensions();
         let width = (screen_width - 64) << 5;
         let height = screen_height << 5;
-        POINT {
+        Point {
             x: (((point.x as i32) << 2) + (width >> 1) - (width >> 4)) as i16,
             y: (((point.y as i32) << 2) + (height >> 1) - (height >> 4)) as i16,
         }
     }
-    fn display(cx: &crate::engine::battle::Cx<'_>, point: POINT, radius: i16) -> POINT {
+    fn display(cx: &crate::engine::battle::Cx<'_>, point: Point, radius: i16) -> Point {
         SolarCoordinates::new(cx.screen_dimensions()).to_display(point, radius)
     }
     pub fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
@@ -177,7 +179,7 @@ pub mod live {
         task &= !IP_GROUP::IGNORE_FLAGSHIP;
         if task <= IP_GROUP::ON_STATION {
             if task == IP_GROUP::FLEE {
-                destination = POINT {
+                destination = Point {
                     x: cx.ip_group_mut(element).loc.x.wrapping_mul(2),
                     y: cx.ip_group_mut(element).loc.y.wrapping_mul(2),
                 };
@@ -191,7 +193,7 @@ pub mod live {
                     destination = cx.navigation().game.ip_location;
                 } else {
                     let (distance, origin) = if task != IP_GROUP::ON_STATION {
-                        (ORBIT_RADIUS as i32, POINT { x: 0, y: 0 })
+                        (ORBIT_RADIUS as i32, Point { x: 0, y: 0 })
                     } else {
                         (
                             STATION_RADIUS as i32,
@@ -199,7 +201,7 @@ pub mod live {
                         )
                     };
                     let mut angle = (cx.ip_group_mut(element).orbit_pos as u16 + 1) << 2;
-                    destination = POINT {
+                    destination = Point {
                         x: origin.x.wrapping_add(cosine(i32::from(angle), distance)),
                         y: origin.y.wrapping_add(sine(i32::from(angle), distance)),
                     };
@@ -208,7 +210,7 @@ pub mod live {
                     {
                         cx.ip_group_mut(element).orbit_pos = (((angle + 2) >> 2) & 15) as u8;
                         angle += 4;
-                        destination = POINT {
+                        destination = Point {
                             x: origin.x.wrapping_add(cosine(i32::from(angle), distance)),
                             y: origin.y.wrapping_add(sine(i32::from(angle), distance)),
                         };
@@ -237,7 +239,7 @@ pub mod live {
                 if task == IP_GROUP::ON_STATION {
                     target = 0;
                 }
-                destination = POINT {
+                destination = Point {
                     x: cx.ip_group_mut(element).loc.x.wrapping_mul(2),
                     y: cx.ip_group_mut(element).loc.y.wrapping_mul(2),
                 };
@@ -323,7 +325,7 @@ pub mod live {
                     }
                     let width = cx.screen_dimensions().0 - 64 - 14;
                     let height = cx.screen_dimensions().1 - 13;
-                    let entry = POINT {
+                    let entry = Point {
                         x: ((width >> 1) - cosine(i32::from(angle), width * 9 / 16) as i32) as i16,
                         y: ((height >> 1) - sine(i32::from(angle), height * 9 / 16) as i32) as i16,
                     };
@@ -406,9 +408,9 @@ pub mod live {
     pub fn flagship_collision(
         cx: &mut crate::engine::battle::Cx<'_>,
         first: crate::engine::battle::ElementId,
-        _: &mut POINT,
+        _: &mut Point,
         second: crate::engine::battle::ElementId,
-        _: &mut POINT,
+        _: &mut Point,
     ) {
         if cx.world.activity() & START_ENCOUNTER == 0 {
             collide_flagship(cx, first, second);
@@ -417,9 +419,9 @@ pub mod live {
     pub fn group_collision(
         cx: &mut crate::engine::battle::Cx<'_>,
         first: crate::engine::battle::ElementId,
-        _: &mut POINT,
+        _: &mut Point,
         second: crate::engine::battle::ElementId,
-        _: &mut POINT,
+        _: &mut Point,
     ) {
         if cx.world.activity() & START_ENCOUNTER != 0 {
             return;
@@ -582,7 +584,7 @@ pub mod live {
             task: u8,
         ) -> ((u8, u8), u8, bool, IP_GROUP) {
             let mut game = Game::new();
-            game.world.data.game.ip_location = POINT { x: 0, y: 0 };
+            game.world.data.game.ip_location = Point { x: 0, y: 0 };
             let id = {
                 let mut groups = game.world.ip_groups();
                 let id = groups.alloc().unwrap();
@@ -650,7 +652,7 @@ pub mod live {
                 |g| {
                     g.dest_loc = 6;
                     g.orbit_pos = 2;
-                    g.loc = POINT { x: 10, y: 10 };
+                    g.loc = Point { x: 10, y: 10 };
                 },
                 9,
                 0,
@@ -667,7 +669,7 @@ pub mod live {
             let (result, thrust, _, record) = pursue(
                 |g| {
                     g.dest_loc = 6;
-                    g.loc = POINT { x: 1300, y: 0 };
+                    g.loc = Point { x: 1300, y: 0 };
                 },
                 9,
                 0,
@@ -690,7 +692,7 @@ pub mod live {
                     |g| {
                         g.dest_loc = 6;
                         g.race_id = race;
-                        g.loc = POINT { x, y: 0 };
+                        g.loc = Point { x, y: 0 };
                     },
                     9,
                     1,

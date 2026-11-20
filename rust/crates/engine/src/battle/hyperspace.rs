@@ -1,60 +1,43 @@
 //! Hyperspace resource operations over the retained kernel.
 
-use crate::{graphics::context_abi::ContextLease, Kernel};
-use std::ptr::NonNull;
+use crate::{graphics::context::ContextLease, Kernel};
+
+fn context(context: Option<crate::graphics::context::ContextId>, name: &str) -> ContextLease {
+    ContextLease::retain(
+        context.unwrap_or_else(|| panic!("hyperspace {name} context is not initialized")),
+    )
+}
 
 pub fn radar_context(kernel: &Kernel) -> ContextLease {
-    ContextLease::retain(
-        NonNull::new(kernel.radar_context)
-            .unwrap_or_else(|| panic!("hyperspace radar context is not initialized")),
-    )
+    context(kernel.radar_context, "radar")
 }
 
 pub fn space_context(kernel: &Kernel) -> ContextLease {
-    ContextLease::retain(
-        NonNull::new(kernel.space_context)
-            .unwrap_or_else(|| panic!("hyperspace space context is not initialized")),
-    )
+    context(kernel.space_context, "space")
 }
 
 pub fn status_context(kernel: &Kernel) -> ContextLease {
-    ContextLease::retain(
-        NonNull::new(kernel.status_context)
-            .unwrap_or_else(|| panic!("hyperspace status context is not initialized")),
-    )
+    context(kernel.status_context, "status")
 }
 
 pub fn load(kernel: &mut Kernel) {
-    // SAFETY: the kernel exclusively owns every resource slot used by the loader.
-    unsafe { load_owned(kernel) }
-}
-
-unsafe fn load_owned(kernel: &mut Kernel) {
-    use crate::graphics::{
-        palette_cycle::PaletteCycle, pixmap_abi::CaptureDrawable, resgfx::LoadGraphicInstance,
-    };
+    use crate::battle::frames::load_graphic;
+    use crate::graphics::palette_cycle::PaletteCycle;
     if kernel.hyperstars[0].is_null() {
-        kernel.hyperstars[0] =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.ambient".as_ptr()).cast());
-        kernel.hyperstars[1] =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.hyperstars".as_ptr()).cast());
+        kernel.hyperstars[0] = load_graphic(c"graphics.ambient");
+        kernel.hyperstars[1] = load_graphic(c"graphics.hyperstars");
         kernel.cmaps[0] = PaletteCycle::load(c"colortable.hyperspace");
-        kernel.hyperstars[2] =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.quasispace".as_ptr()).cast());
+        kernel.hyperstars[2] = load_graphic(c"graphics.quasispace");
         kernel.cmaps[1] = PaletteCycle::load(c"colortable.quasispace");
     }
 }
 
+/// Release the hyperspace frames and palettes after their last user.
 pub fn free_hyper_data(kernel: &mut Kernel) {
-    // SAFETY: the exclusive kernel releases its resources after their last hyperspace user.
-    unsafe { free_owned(kernel) }
-}
-
-unsafe fn free_owned(kernel: &mut Kernel) {
-    use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
     for frame in &mut kernel.hyperstars {
-        DestroyDrawable(ReleaseDrawable(*frame));
-        *frame = std::ptr::null_mut();
+        drop(crate::graphics::drawable::LoadedDrawable::from_frame(
+            std::mem::take(frame),
+        ));
     }
     for map in &mut kernel.cmaps {
         *map = None;

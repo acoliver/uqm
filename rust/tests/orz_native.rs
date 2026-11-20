@@ -9,7 +9,6 @@ mod battle;
 use battle::{Battle, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::engine::battle::{CollisionFn, ElementFn};
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
@@ -201,7 +200,7 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
                 CStr::from_ptr(d.ship_info.melee_icon_rsc),
                 c"ship.orz.meleeicons"
             );
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
             assert_eq!(d.fleet.strength, 60);
@@ -465,7 +464,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
                     (*turret).current.image.frame.raw()
                 );
                 assert_eq!(
-                    GetFrameIndex((*turret).current.image.frame.raw().cast()),
+                    ((*turret).current.image.frame.raw()).index(),
                     normalize_facing(15 + i32::from(expected_offset))
                 );
                 assert_eq!(

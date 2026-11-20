@@ -1,8 +1,8 @@
 use uqm_engine::battle::{Battle, Cx, ElementId, RaceDesc, ShipId};
-use uqm_engine::graphics::native_abi::POINT;
+use uqm_engine::graphics::geometry::Point;
 use uqm_engine::Game;
 
-fn owner(cx: &mut Cx<'_>, side: usize, position: POINT) -> (ShipId, ElementId) {
+fn owner(cx: &mut Cx<'_>, side: usize, position: Point) -> (ShipId, ElementId) {
     let ship = {
         let mut ships = cx.kernel.ships(side);
         let link = ships
@@ -48,8 +48,8 @@ fn interception_uses_the_supplied_projection_without_moving_live_records() {
     with_context(
         || panic!("interception must not draw RNG"),
         |cx| {
-            let (_, source) = owner(cx, 0, POINT { x: 1000, y: 1000 });
-            let (_, target) = owner(cx, 1, POINT { x: 3000, y: 1000 });
+            let (_, source) = owner(cx, 0, Point { x: 1000, y: 1000 });
+            let (_, target) = owner(cx, 1, Point { x: 3000, y: 1000 });
             let live = cx.weapon_origin(source);
             let other = cx.weapon_origin(target);
             let mut projected = live.clone();
@@ -68,9 +68,9 @@ fn homing_keeps_first_equal_distance_target_without_drawing_rng() {
     with_context(
         || panic!("aligned homing must not draw RNG"),
         |cx| {
-            let (_, tracker) = owner(cx, 0, POINT { x: 1000, y: 1000 });
-            let (_, first) = owner(cx, 1, POINT { x: 1100, y: 1000 });
-            let (_, second) = owner(cx, 1, POINT { x: 1000, y: 1100 });
+            let (_, tracker) = owner(cx, 0, Point { x: 1000, y: 1000 });
+            let (_, first) = owner(cx, 1, Point { x: 1100, y: 1000 });
+            let (_, second) = owner(cx, 1, Point { x: 1000, y: 1100 });
             let mut facing = 4;
             assert_eq!(cx.track_ship(tracker, &mut facing), 0);
             assert_eq!(cx.target(tracker), Some(first));
@@ -86,9 +86,9 @@ fn opposite_heading_homing_retains_explicit_target() {
     with_context(
         || 1,
         |cx| {
-            let (_, tracker) = owner(cx, 0, POINT { x: 1000, y: 1000 });
-            let (_, target) = owner(cx, 1, POINT { x: 1100, y: 1000 });
-            let (_, closer) = owner(cx, 1, POINT { x: 1001, y: 1000 });
+            let (_, tracker) = owner(cx, 0, Point { x: 1000, y: 1000 });
+            let (_, target) = owner(cx, 1, Point { x: 1100, y: 1000 });
+            let (_, closer) = owner(cx, 1, Point { x: 1001, y: 1000 });
             cx.set_target(tracker, Some(target));
             let mut facing = 12;
             assert_eq!(cx.track_ship(tracker, &mut facing), 8);
@@ -105,15 +105,15 @@ fn gravity_uses_next_positions_and_preserves_order_for_unpublished_owners() {
     with_context(
         || panic!("gravity must not draw RNG"),
         |cx| {
-            let (_, ship) = owner(cx, 0, POINT { x: 2000, y: 2000 });
+            let (_, ship) = owner(cx, 0, Point { x: 2000, y: 2000 });
             let planet = cx
                 .alloc_element()
                 .unwrap_or_else(|| panic!("fixture allocation must succeed"));
             cx.element_mut(planet).mass = 200;
-            cx.element_mut(planet).current.location = POINT { x: 4000, y: 4000 };
-            cx.element_mut(planet).next.location = POINT { x: 400, y: 400 };
+            cx.element_mut(planet).current.location = Point { x: 4000, y: 4000 };
+            cx.element_mut(planet).next.location = Point { x: 400, y: 400 };
             cx.put(planet);
-            cx.element_mut(ship).next.location = POINT { x: 400, y: 400 };
+            cx.element_mut(ship).next.location = Point { x: 400, y: 400 };
             let head = cx.elements().head();
             assert!(!uqm_engine::battle::gravity::calculate_gravity(
                 cx,
@@ -191,7 +191,7 @@ fn record_dispatch_observes_before_call_and_reloads_callback_selection() {
     with_context(
         || panic!("dispatch does not draw RNG"),
         |cx| {
-            let (ship, _) = owner(cx, 0, POINT { x: 10, y: 20 });
+            let (ship, _) = owner(cx, 0, Point { x: 10, y: 20 });
             attach_race(cx, ship);
             observation::drain();
             assert!(!cx.invoke_ship_process(ship, true));
@@ -229,7 +229,7 @@ fn weapon_dispatch_keeps_failed_slots_and_supplied_origin_without_linking() {
     with_context(
         || panic!("dispatch does not draw RNG"),
         |cx| {
-            let (ship, source) = owner(cx, 0, POINT { x: 10, y: 20 });
+            let (ship, source) = owner(cx, 0, Point { x: 10, y: 20 });
             attach_race(cx, ship);
             let mut origin = cx.weapon_origin(source);
             origin.current.location.x = 123;
@@ -263,13 +263,13 @@ fn empty_neighbors_and_cloak_projections_use_owned_records() {
     with_context(
         || panic!("record queries do not draw RNG"),
         |cx| {
-            let (_, id) = owner(cx, 0, POINT { x: 10, y: 20 });
+            let (_, id) = owner(cx, 0, Point { x: 10, y: 20 });
             assert!(!cx.gravity(id));
             assert!(!cx.matter_conflict(id));
             assert!(!cx.object_cloaked(id));
             assert!(!cx.subject_cloaked(&cx.weapon_origin(id)));
             cx.primitive_style_mut(id).kind = 2;
-            cx.primitive_style_mut(id).color = uqm_engine::graphics::native_abi::Color {
+            cx.primitive_style_mut(id).color = uqm_engine::graphics::geometry::Color {
                 r: 0,
                 g: 0,
                 b: 0,
@@ -280,7 +280,7 @@ fn empty_neighbors_and_cloak_projections_use_owned_records() {
             cx.primitive_style_mut(id).color.a = 254;
             assert!(!cx.object_cloaked(id));
             assert!(!cx.subject_cloaked(&cx.weapon_origin(id)));
-            cx.primitive_style_mut(id).kind = uqm_engine::graphics::native_abi::EMPTY_PRIMITIVE;
+            cx.primitive_style_mut(id).kind = 7;
             assert!(cx.object_cloaked(id));
             assert!(cx.subject_cloaked(&cx.weapon_origin(id)));
         },
@@ -294,7 +294,7 @@ fn dispatch_rejects_an_uninstalled_race() {
     with_context(
         || panic!("dispatch does not draw RNG"),
         |cx| {
-            let (ship, _) = owner(cx, 0, POINT { x: 10, y: 20 });
+            let (ship, _) = owner(cx, 0, Point { x: 10, y: 20 });
             cx.invoke_ship_process(ship, false);
         },
     );
@@ -306,7 +306,7 @@ fn primitive_effects_require_explicit_installation_on_the_supplied_owner() {
     with_context(
         || panic!("status must not draw RNG"),
         |cx| {
-            let (ship, _) = owner(cx, 0, POINT { x: 0, y: 0 });
+            let (ship, _) = owner(cx, 0, Point { x: 0, y: 0 });
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 cx.draw_statistics(ship, -1, 0);
             }));
@@ -332,7 +332,7 @@ fn installed_primitives_run_real_crew_and_energy_updates_without_publication() {
         || panic!("status must not draw RNG"),
         |cx| {
             uqm_rust::battle::services::install(cx.kernel);
-            let (ship, element) = owner(cx, 0, POINT { x: 0, y: 0 });
+            let (ship, element) = owner(cx, 0, Point { x: 0, y: 0 });
             cx.element_mut(element).hits = 10;
             cx.race_stats_mut(ship).ship_info.max_energy = 20;
             cx.race_stats_mut(ship).ship_info.energy_level = 12;
@@ -393,13 +393,13 @@ fn projectile_records_preserve_geometry_widths_callbacks_and_exhaustion() {
         || panic!("projectile allocation must not draw RNG"),
         |cx| {
             let mut laser = Laser {
-                origin: POINT { x: 100, y: 200 },
-                end: POINT { x: 32, y: -16 },
+                origin: Point { x: 100, y: 200 },
+                end: Point { x: 32, y: -16 },
                 flags: 256,
                 sender: 1,
                 pixoffs: 3,
                 face: 4,
-                color: uqm_engine::graphics::native_abi::Color {
+                color: uqm_engine::graphics::geometry::Color {
                     r: 1,
                     g: 2,
                     b: 3,

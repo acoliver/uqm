@@ -1,30 +1,25 @@
 //! Campaign title drawing over retained display resources.
 use super::{rgb15, SIS_ORG_X, SIS_ORG_Y, SIS_TITLE_BOX_WIDTH, SIS_TITLE_HEIGHT, SIS_TITLE_WIDTH};
-use crate::{
-    engine::Kernel,
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::{EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
-    },
+use crate::engine::Kernel;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
 };
-use std::{
-    ffi::{CStr, CString},
-    ptr::NonNull,
-};
+use std::ffi::{CStr, CString};
 
 pub fn draw_title(kernel: &Kernel, screen_width: i32, text: &CStr) {
     let context = ContextLease::require(kernel.off_screen_context);
-    let screen = ContextFrame::retain(NonNull::new(kernel.screen));
+    let screen = ContextFrame::retain(kernel.screen);
     let font = kernel
         .tiny_font_lease()
         .unwrap_or_else(|| panic!("SIS title requires its tiny font"));
-    let clip = RECT {
-        corner: POINT {
+    let clip = Rect {
+        corner: Point {
             x: (i32::from(SIS_ORG_X) + screen_width - 78 - i32::from(SIS_TITLE_BOX_WIDTH) + 1)
                 as i16,
             y: SIS_ORG_Y - SIS_TITLE_HEIGHT,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: SIS_TITLE_WIDTH,
             height: SIS_TITLE_HEIGHT - 1,
         },
@@ -39,11 +34,11 @@ pub fn draw_title(kernel: &Kernel, screen_width: i32, text: &CStr) {
             context.draw_text(
                 &font,
                 text,
-                POINT {
+                Point {
                     x: SIS_TITLE_WIDTH >> 1,
                     y: SIS_TITLE_HEIGHT - 2,
                 },
-                TEXT_ALIGN_ALIGN_CENTER,
+                TextAlign::Center,
                 rgb15(27, 0, 27),
             );
         });
@@ -51,11 +46,11 @@ pub fn draw_title(kernel: &Kernel, screen_width: i32, text: &CStr) {
     });
 }
 
-pub fn draw_hyper_coords(kernel: &Kernel, screen_width: i32, point: POINT) {
+pub fn draw_hyper_coords(kernel: &Kernel, screen_width: i32, point: Point) {
     draw_title(kernel, screen_width, &hyper_coord_text(point));
 }
 
-pub(super) fn hyper_coord_text(point: POINT) -> CString {
+pub(super) fn hyper_coord_text(point: Point) -> CString {
     CString::new(format!(
         "{:03}.{} : {:03}.{}",
         (i32::from(point.x) / 10) as u32,

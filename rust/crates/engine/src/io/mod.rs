@@ -35,19 +35,6 @@ pub fn installed() -> Option<Vfs> {
     INSTALLED.lock().clone()
 }
 
-/// Load the resource index `file` from `dir`, keying its entries under
-/// `prefix` when one is given.
-pub fn load_resource_index(dir: &Dir, file: &std::ffi::CStr, prefix: Option<&std::ffi::CStr>) {
-    // SAFETY: `file` is a terminated string and `prefix` is terminated or null.
-    unsafe {
-        crate::resource::ffi_bridge::load_resource_index(
-            dir,
-            file.as_ptr(),
-            prefix.map_or(std::ptr::null(), std::ffi::CStr::as_ptr),
-        )
-    };
-}
-
 pub fn content_dir() -> Option<Dir> {
     installed()?.content_dir()
 }

@@ -1,7 +1,7 @@
 //! Hangar positions and cursor traversal for the shipped PC layout.
 #![allow(non_snake_case)]
 
-use crate::graphics::native_abi::{BYTE, EXTENT, POINT, RECT};
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 
 // Mirrors the shipped C build, which does not define USE_3DO_HANGAR.
 pub(crate) const USE_3DO_HANGAR: bool = false;
@@ -17,22 +17,22 @@ pub(crate) const HANGAR_ROWS: u8 = 12 / HANGAR_SHIPS_ROW;
 pub(crate) const SHIP_WIN_WIDTH: i16 = 34;
 pub(crate) const SHIP_WIN_HEIGHT: i16 = SHIP_WIN_WIDTH + 6;
 
-pub(crate) const fn DMS_GetEscortShipRect(slot: BYTE) -> RECT {
+pub(crate) const fn DMS_GetEscortShipRect(slot: u8) -> Rect {
     let row = slot / HANGAR_SHIPS_ROW;
     let col = slot % HANGAR_SHIPS_ROW;
-    RECT {
-        corner: POINT {
+    Rect {
+        corner: Point {
             x: HANGAR_X_COORDS[col as usize],
             y: HANGAR_Y + HANGAR_DY * row as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: SHIP_WIN_WIDTH,
             height: SHIP_WIN_HEIGHT,
         },
     }
 }
 
-pub(crate) const fn DMS_MoveCursor(state: BYTE, dx: i8, dy: i8) -> BYTE {
+pub(crate) const fn DMS_MoveCursor(state: u8, dx: i8, dy: i8) -> u8 {
     let mut row = (state & 0x0f) / HANGAR_SHIPS_ROW;
     let mut col = (state & 0x0f) % HANGAR_SHIPS_ROW;
     let mut flagship = state >> 4 != 0;
@@ -40,15 +40,14 @@ pub(crate) const fn DMS_MoveCursor(state: BYTE, dx: i8, dy: i8) -> BYTE {
         if flagship {
             row = HANGAR_ROWS;
         }
-        row = ((row as i32 + (HANGAR_ROWS + 1) as i32 + dy as i32) % (HANGAR_ROWS + 1) as i32)
-            as BYTE;
+        row =
+            ((row as i32 + (HANGAR_ROWS + 1) as i32 + dy as i32) % (HANGAR_ROWS + 1) as i32) as u8;
         flagship = row == HANGAR_ROWS;
         if flagship {
             row = 0;
         }
     } else if dx != 0 && !flagship {
-        col =
-            ((col as i32 + HANGAR_SHIPS_ROW as i32 + dx as i32) % HANGAR_SHIPS_ROW as i32) as BYTE;
+        col = ((col as i32 + HANGAR_SHIPS_ROW as i32 + dx as i32) % HANGAR_SHIPS_ROW as i32) as u8;
     }
     (row * HANGAR_SHIPS_ROW + col) | if flagship { 0xf0 } else { 0 }
 }

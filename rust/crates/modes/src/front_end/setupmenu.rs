@@ -71,7 +71,7 @@ impl SetupSession {
         );
         let mut counts =
             std::array::from_fn(|index| resources.strings.choices[index].options.len());
-        counts[0] = if uqm_engine::graphics::sdl::platform_abi::TFB_SupportsHardwareScaling() != 0 {
+        counts[0] = if uqm_engine::graphics::present::supports_hardware_scaling() {
             6
         } else {
             2
@@ -140,7 +140,7 @@ impl SetupSession {
             Action::GammaStep(direction) => {
                 self.gamma
                     .step(&mut self.menu.sliders[3], direction, |gamma| {
-                        uqm_engine::graphics::sdl::platform_abi::TFB_SetGamma(gamma)
+                        uqm_engine::graphics::present::set_gamma(gamma)
                     })
             }
             Action::EditText => self.edit(cx, io),
@@ -208,7 +208,7 @@ impl SetupSession {
         }
         let gamma = self.gamma.slider_to_gamma(options.gamma);
         if input.preferences().gamma != 1.0 || gamma != 1.0 {
-            if uqm_engine::graphics::sdl::platform_abi::TFB_SetGamma(gamma) {
+            if uqm_engine::graphics::present::set_gamma(gamma) {
                 log::info!("Gamma correction set to {gamma:.4}.");
             } else {
                 log::warn!("Unable to set gamma correction.");

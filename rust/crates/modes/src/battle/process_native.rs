@@ -779,7 +779,7 @@ pub mod engine {
     }
 
     pub fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
-        use crate::graphics::context_abi::ContextLease;
+        use crate::graphics::context::ContextLease;
         let status = ContextLease::require(cx.kernel.status_context);
         status.select();
         let scale = cx.kernel.configuration.preferences().melee_scale;

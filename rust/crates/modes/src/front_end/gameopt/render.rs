@@ -2,12 +2,8 @@
 use super::{layout::BLACK_COLOR, picker::PickerState, preview};
 use crate::engine::{save::summary_record::SummaryDesc, Kernel, World};
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_abi::{
-        Color, EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER, TEXT_ALIGN_ALIGN_LEFT,
-        TEXT_ALIGN_ALIGN_RIGHT,
-    },
-    native_font::FontLease,
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 use crate::starbase::ids::{
     NAVIGATION_STRING_BASE, PLANET_NUMBER_BASE, SAFE_X, SAFE_Y, SAVEGAME_STRING_BASE, SIS_ORG_X,
@@ -34,14 +30,14 @@ impl PickerDisplay {
     pub fn new(kernel: &Kernel) -> Self {
         Self {
             context: ContextLease::require(kernel.space_context),
-            summary_frame: ContextFrame::retain(std::ptr::NonNull::new(kernel.play_frame))
-                .wrapped_frame(39),
-            misc: ContextFrame::retain(std::ptr::NonNull::new(kernel.misc_data_frame)),
+            summary_frame: ContextFrame::retain(kernel.play_frame).wrapped_frame(39),
+            misc: ContextFrame::retain(kernel.misc_data_frame),
             tiny: kernel
                 .tiny_font_lease()
                 .unwrap_or_else(|| panic!("picker tiny font absent")),
             star: FontLease::retain(
-                std::ptr::NonNull::new(kernel.star_con_font)
+                kernel
+                    .star_con_font
                     .unwrap_or_else(|| panic!("picker star font absent")),
             ),
         }
@@ -53,7 +49,7 @@ impl PickerDisplay {
             &self
                 .summary_frame
                 .wrapped_frame(count.wrapping_sub(if saving { 3 } else { 2 })),
-            POINT {
+            Point {
                 x: SUMMARY_X_OFFS + 1,
                 y: 0,
             },
@@ -73,7 +69,7 @@ impl PickerDisplay {
                 &self
                     .summary_frame
                     .wrapped_frame(self.summary_frame.frame_count().wrapping_sub(1)),
-                POINT { x: 0, y: 0 },
+                Point { x: 0, y: 0 },
             );
             self.summary(
                 kernel,
@@ -101,11 +97,11 @@ impl PickerDisplay {
         self.context.select();
         self.context.with_batch(|| {
             self.context.set_font(&self.star);
-            let mut origin = POINT {
+            let mut origin = Point {
                 x: 7 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS + 3,
                 y: 17,
             };
-            let mut baseline = POINT {
+            let mut baseline = Point {
                 x: 33 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS + 3,
                 y: 20,
             };
@@ -124,12 +120,12 @@ impl PickerDisplay {
                     &self.star,
                     &text(sis.element_amounts[i].to_string(), 39),
                     baseline,
-                    TEXT_ALIGN_ALIGN_RIGHT,
+                    TextAlign::Right,
                     color,
                 );
                 baseline.y += 12;
             }
-            origin = POINT {
+            origin = Point {
                 x: 24 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS,
                 y: 68,
             };
@@ -138,11 +134,11 @@ impl PickerDisplay {
             self.context.draw_text(
                 &self.star,
                 &text(sis.total_bio_mass.to_string(), 39),
-                POINT {
+                Point {
                     x: 50 + SUMMARY_X_OFFS,
                     y: 71,
                 },
-                TEXT_ALIGN_ALIGN_RIGHT,
+                TextAlign::Right,
                 COLORS[8],
             );
         });
@@ -162,14 +158,14 @@ impl PickerDisplay {
                     &self
                         .summary_frame
                         .wrapped_frame(self.summary_frame.frame_count().wrapping_sub(4)),
-                    POINT { x: 0, y: 0 },
+                    Point { x: 0, y: 0 },
                 );
                 return;
             }
             let status = ContextLease::require(kernel.status_context);
             status.with_selected(|| {
-                let rect = RECT {
-                    corner: POINT {
+                let rect = Rect {
+                    corner: Point {
                         x: (i32::from(SIS_ORG_X)
                             + ((sis_width(dimensions) - STATUS_WIDTH) >> 1)
                             + i32::from(SAFE_X)
@@ -177,7 +173,7 @@ impl PickerDisplay {
                             + i32::from(SUMMARY_X_OFFS)) as i16,
                         y: SIS_ORG_Y as i16,
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: STATUS_WIDTH as i16,
                         height: (dimensions.1 - i32::from(SAFE_Y) * 2) as i16,
                     },
@@ -209,14 +205,14 @@ impl PickerDisplay {
         if summary.flags & 128 != 0 {
             self.context.draw_stamp(
                 &self.summary_frame,
-                POINT {
+                Point {
                     x: SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS + 6,
                     y: 0,
                 },
             );
             self.context.draw_stamp(
                 &self.summary_frame.next_frame(),
-                POINT {
+                Point {
                     x: SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS,
                     y: 0,
                 },
@@ -225,8 +221,8 @@ impl PickerDisplay {
             self.cargo(&summary.sis);
             let radar = ContextLease::require(kernel.radar_context);
             radar.with_selected(|| {
-                let rect = RECT {
-                    corner: POINT {
+                let rect = Rect {
+                    corner: Point {
                         x: SIS_ORG_X + 10 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS,
                         y: SIS_ORG_Y as i16 + 84,
                     },
@@ -238,8 +234,8 @@ impl PickerDisplay {
             self.context.draw_text(
                 &self.star,
                 &text(summary.sis.res_units.to_string(), 255),
-                POINT { x, y: 102 },
-                TEXT_ALIGN_ALIGN_CENTER,
+                Point { x, y: 102 },
+                TextAlign::Center,
                 rgb15(16, 0, 16),
             );
         }
@@ -249,8 +245,8 @@ impl PickerDisplay {
                 (u32::from(summary.mcredit_lo) | u32::from(summary.mcredit_hi) << 8).to_string(),
                 255,
             ),
-            POINT { x, y: 126 },
-            TEXT_ALIGN_ALIGN_CENTER,
+            Point { x, y: 126 },
+            TextAlign::Center,
             rgb15(16, 0, 16),
         );
         let (location, title) = location_labels(kernel, world, dimensions, summary);
@@ -258,18 +254,18 @@ impl PickerDisplay {
         self.context.draw_text(
             &self.tiny,
             &location,
-            POINT { x: 6, y: 145 },
-            TEXT_ALIGN_ALIGN_LEFT,
+            Point { x: 6, y: 145 },
+            TextAlign::Left,
             rgb15(27, 0, 27),
         );
         self.context.draw_text(
             &self.tiny,
             &title,
-            POINT {
+            Point {
                 x: (sis_width(dimensions) - 57 - 4 + (55 >> 1)) as i16,
                 y: 145,
             },
-            TEXT_ALIGN_ALIGN_CENTER,
+            TextAlign::Center,
             rgb15(27, 0, 27),
         );
     }
@@ -283,7 +279,7 @@ impl PickerDisplay {
                         &self
                             .misc
                             .wrapped_frame(77 + u16::from(summary.device_list[index])),
-                        POINT {
+                        Point {
                             x: 140 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS + j as i16 * 18,
                             y: 13 + i as i16 * 18,
                         },
@@ -299,9 +295,9 @@ impl PickerDisplay {
             self.context.set_font(&self.tiny);
             self.context.fill_rectangle(
                 BLACK_COLOR,
-                RECT {
-                    corner: POINT { x: 1, y: 160 },
-                    extent: EXTENT {
+                Rect {
+                    corner: Point { x: 1, y: 160 },
+                    extent: Extent {
                         width: 240,
                         height: 65,
                     },
@@ -316,12 +312,12 @@ impl PickerDisplay {
                 } else {
                     rgb15(0, 0, 20)
                 };
-                let rect = RECT {
-                    corner: POINT {
+                let rect = Rect {
+                    corner: Point {
                         x: 8,
                         y: (160 + (current - first) * 13) as i16,
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: if MAX_SAVED_GAMES > 99 { 20 } else { 15 },
                         height: 11,
                     },
@@ -330,19 +326,19 @@ impl PickerDisplay {
                 self.context.draw_text(
                     &self.tiny,
                     &text(format!("{current:02}"), 255),
-                    POINT {
+                    Point {
                         x: rect.corner.x + 3,
                         y: rect.corner.y + 8,
                     },
-                    TEXT_ALIGN_ALIGN_LEFT,
+                    TextAlign::Left,
                     color,
                 );
-                let rect = RECT {
-                    corner: POINT {
+                let rect = Rect {
+                    corner: Point {
                         x: 30 + SAFE_X,
                         ..rect.corner
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: 204 - SAFE_X,
                         ..rect.extent
                     },
@@ -352,11 +348,11 @@ impl PickerDisplay {
                 self.context.draw_text(
                     &self.tiny,
                     &label,
-                    POINT {
+                    Point {
                         x: rect.corner.x + 3,
                         y: rect.corner.y + 8,
                     },
-                    TEXT_ALIGN_ALIGN_LEFT,
+                    TextAlign::Left,
                     color,
                 );
             }
@@ -376,7 +372,7 @@ fn location_labels(
 ) -> (CString, CString) {
     let x_factor = (((dimensions.0 - STATUS_WIDTH - i32::from(SAFE_X) * 2) << 5) >> 4) * 195;
     let y_factor = (((dimensions.1 - i32::from(SAFE_Y) * 2) << 5) >> 4) * 25;
-    let mut point = POINT {
+    let mut point = Point {
         x: (summary
             .sis
             .log_x

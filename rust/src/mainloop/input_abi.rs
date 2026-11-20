@@ -24,7 +24,7 @@ pub(crate) mod live {
     }
 
     pub fn UpdateInputState(cx: &mut Cx<'_>, input: &InputSession) {
-        if !crate::graphics::sdl::lifecycle_abi::game_active() {
+        if !crate::graphics::state::game_active() {
             crate::ui::util::sleep_game(cx);
         }
         if input.paused() {

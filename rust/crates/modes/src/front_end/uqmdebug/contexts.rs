@@ -1,9 +1,8 @@
 //! Retained graphics-context inspection with supplied input and diagnostic output.
 use super::*;
 use crate::graphics::{
-    context_abi::{ContextFrame, LoadedContext},
-    drawable_abi::LoadedDrawable,
-    native_abi::{POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
+    context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
 };
 use crate::input::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
 use std::io::{self, Write};
@@ -15,7 +14,7 @@ struct ScreenRestore {
 }
 impl Drop for ScreenRestore {
     fn drop(&mut self) {
-        self.context.draw_stamp(&self.frame, POINT { x: 0, y: 0 });
+        self.context.draw_stamp(&self.frame, Point { x: 0, y: 0 });
     }
 }
 
@@ -26,7 +25,7 @@ pub fn debug_contexts(cx: &mut Cx<'_>, io: &mut Io<'_>, out: &mut impl Write) ->
     let screen = ContextLease::require(cx.kernel.screen_context);
     screen.with_selected(|| {
         let contexts = screen.diagnostic_contexts();
-        let target = ContextFrame::retain(std::ptr::NonNull::new(cx.kernel.screen));
+        let target = ContextFrame::retain(cx.kernel.screen);
         let visible = contexts
             .iter()
             .filter(|context| context.with_selected(|| context.target().same_frame(&target)))
@@ -37,9 +36,9 @@ pub fn debug_contexts(cx: &mut Cx<'_>, io: &mut Io<'_>, out: &mut impl Write) ->
         let dimensions = screen.screen_dimensions();
         let saved = LoadedDrawable::capture(
             &screen,
-            Some(RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: crate::graphics::native_abi::EXTENT {
+            Some(Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: crate::graphics::geometry::Extent {
                     width: dimensions.0 as i16,
                     height: dimensions.1 as i16,
                 },
@@ -71,7 +70,7 @@ pub fn debug_contexts(cx: &mut Cx<'_>, io: &mut Io<'_>, out: &mut impl Write) ->
             context: screen.clone(),
             frame: saved_frame,
         };
-        screen.draw_stamp(&clone.lease().context_frame(0), POINT { x: 0, y: 0 });
+        screen.draw_stamp(&clone.lease().context_frame(0), Point { x: 0, y: 0 });
         let runtime = cx.kernel.input_runtime();
         context.select();
         runtime.run(cx, io, true, &mut |cx: &mut Cx<'_>, _: &mut Io<'_>| {
@@ -94,22 +93,22 @@ pub fn debug_contexts(cx: &mut Cx<'_>, io: &mut Io<'_>, out: &mut impl Write) ->
 fn draw_context(
     context: &ContextLease,
     source: &ContextLease,
-    font: &crate::graphics::native_font::FontLease,
+    font: &crate::graphics::font::FontLease,
     hue: f64,
 ) {
     let rectangle = colors::hsva_to_rgba(hue, 1.0, 0.5, 100);
     let line = colors::hsva_to_rgba(hue, 1.0, 1.0, 90);
     let rect = source.with_selected(|| source.clip_rect());
     let p1 = rect.corner;
-    let p2 = POINT {
+    let p2 = Point {
         x: (i32::from(p1.x) + i32::from(rect.extent.width) - 1) as i16,
         y: p1.y,
     };
-    let p3 = POINT {
+    let p3 = Point {
         x: p1.x,
         y: (i32::from(p1.y) + i32::from(rect.extent.height) - 1) as i16,
     };
-    let p4 = POINT { x: p2.x, y: p3.y };
+    let p4 = Point { x: p2.x, y: p3.y };
     context.with_text_state(|| {
         context.fill_rectangle(rectangle, rect);
         for (first, second) in [(p1, p2), (p2, p4), (p1, p3), (p3, p4), (p1, p4), (p2, p3)] {
@@ -119,11 +118,11 @@ fn draw_context(
         context.draw_text_alpha(
             font,
             &name,
-            POINT {
+            Point {
                 x: ((i32::from(p1.x) + i32::from(p2.x) + 1) / 2) as i16,
                 y: (i32::from(p1.y) + 8) as i16,
             },
-            TEXT_ALIGN_ALIGN_CENTER,
+            TextAlign::Center,
             line,
         );
     });

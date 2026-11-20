@@ -1,14 +1,12 @@
-use super::palette::*;
-use crate::engine::input::frames::*;
-use crate::engine::Kernel;
-use crate::graphics::native_abi::*;
-use uqm_engine::time::counter_abi::ONE_SECOND;
-
 use super::menu_state::{
     alternate, end_state, PM_CHANGE_CAPTAIN, PM_CHANGE_SHIP, PM_CREW, PM_CYBORG_OFF,
     PM_CYBORG_SUPER, PM_EXIT_SETTINGS, PM_FUEL, PM_MUSIC_OFF, PM_MUSIC_ON, PM_SOUND_OFF,
     PM_SOUND_ON, PM_STARMAP,
 };
+use super::palette::*;
+use crate::engine::input::frames::*;
+use crate::engine::Kernel;
+use uqm_engine::time::counter_abi::ONE_SECOND;
 const OPT_PC: i32 = 2;
 
 mod render;
@@ -23,8 +21,8 @@ pub(crate) fn choose_menu_state(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &crate::engine::input::InputSession,
     state: &mut u8,
-    base_state: BYTE,
-) -> BOOLEAN {
+    base_state: u8,
+) -> u32 {
     use super::menu_state::{navigate, MenuKeys};
     let pulsed = input.pulsed();
     let keys = MenuKeys {

@@ -2,15 +2,12 @@
 
 pub mod live {
     use crate::comm::locdata::{CPoint, CRect};
-    use crate::graphics::context_abi::{ContextFrame, LoadedContext};
-    use crate::graphics::drawable::Point;
-    use crate::graphics::native_abi as c;
+    use crate::graphics::{context::LoadedContext, drawable::ContextFrame, geometry::Point};
     use crate::planets::render::{
         c_api::render_native_topography, topo_gen, topo_scale::TopoScaler,
     };
-    use crate::planets::sphere::shield_level;
-
     use crate::planets::sphere::live::init_sphere_rotation;
+    use crate::planets::sphere::shield_level;
     use crate::planets::sphere::SphereState;
 
     fn init_orbit(state: &mut SphereState, width: usize, shielded: bool) {
@@ -18,9 +15,7 @@ pub mod live {
         state.allocate_pixels(width, shielded);
     }
 
-    fn create_shield(
-        state: &mut SphereState,
-    ) -> crate::engine::graphics::drawable_abi::LoadedDrawable {
+    fn create_shield(state: &mut SphereState) -> crate::engine::graphics::drawable::LoadedDrawable {
         let image = crate::planets::sphere::images::image(2 | 8, 89, 89, 1);
         let target = image.lease().context_frame(0);
         let pixels = &mut state.scratch;
@@ -28,7 +23,7 @@ pub mod live {
             for x in -44_i32..=44 {
                 let rad2 = x * x + y * y;
                 let pixel = &mut pixels[((y + 44) * 89 + x + 44) as usize];
-                *pixel = c::Color {
+                *pixel = crate::graphics::geometry::Color {
                     r: 0,
                     g: 0,
                     b: 0,
@@ -43,7 +38,7 @@ pub mod live {
                 } else {
                     (220 - (165.0 * (radius - 37.0) / 7.0) as i32, 255)
                 };
-                *pixel = c::Color {
+                *pixel = crate::graphics::geometry::Color {
                     r: red.max(0) as u8,
                     g: 0,
                     b: 0,
@@ -52,7 +47,7 @@ pub mod live {
             }
         }
         target.write_colors(pixels, 89, 89);
-        target.replace_hotspot(c::POINT { x: 45, y: 45 });
+        target.replace_hotspot(crate::graphics::geometry::Point { x: 45, y: 45 });
         image
     }
 
@@ -79,7 +74,7 @@ pub mod live {
         }
         throb.write_colors(&state.scratch, width, height);
         let rect = shield.rect();
-        throb.replace_hotspot(c::POINT {
+        throb.replace_hotspot(crate::graphics::geometry::Point {
             x: -rect.corner.x,
             y: -rect.corner.y,
         });
@@ -93,7 +88,7 @@ pub mod live {
     ) {
         state.render_pixels(offset, throb);
         target.write_colors(&state.scratch, 75, 75);
-        target.replace_hotspot(c::POINT { x: 38, y: 38 });
+        target.replace_hotspot(crate::graphics::geometry::Point { x: 38, y: 38 });
     }
 
     fn load_surface_palette(
@@ -114,7 +109,7 @@ pub mod live {
 
     fn load_definition(
         state: &mut SphereState,
-        definition: crate::engine::graphics::drawable_abi::LoadedDrawable,
+        definition: crate::engine::graphics::drawable::LoadedDrawable,
         width: usize,
     ) {
         let frame = definition.lease().context_frame(0);
@@ -220,7 +215,7 @@ pub mod live {
         animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
         pulsing_shield: bool,
         source: SurfaceInputs<'_>,
-        definition: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
+        definition: Option<crate::engine::graphics::drawable::LoadedDrawable>,
     ) {
         let SurfaceInputs {
             rng,
@@ -306,19 +301,19 @@ pub mod live {
         });
     }
 
-    fn overlay_shield(context: &crate::graphics::context_abi::ContextLease, state: &SphereState) {
+    fn overlay_shield(context: &crate::graphics::context::ContextLease, state: &SphereState) {
         let old = context.target();
         context.set_frame(state.topography().context_frame(0));
         context.clear_clip();
         let rect = context.clip_rect();
         context.with_draw_mode(
-            c::DrawMode {
+            crate::graphics::geometry::DrawMode {
                 kind: 1,
                 factor: 255,
             },
             || {
                 context.fill_rectangle(
-                    c::Color {
+                    crate::graphics::geometry::Color {
                         r: 255,
                         g: 0,
                         b: 0,

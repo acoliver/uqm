@@ -1,12 +1,9 @@
 //! Movie frames must survive the same input, pacing and expose boundaries as slides.
 use std::{ffi::CString, path::Path, ptr, time::Duration};
-use uqm_rust::graphics::{
-    cmap_abi::FadeScreen,
-    dcqueue_abi::TFB_FlushGraphics,
-    geometry_ffi::TFB_BBox_RegisterRect,
-    native_abi::{EXTENT, POINT, RECT},
-    sdl::lifecycle_abi::{TFB_InitGraphics, TFB_SwapBuffers, TFB_UninitGraphics},
-};
+use uqm_rust::engine::test_support::native_probe::register_rect;
+use uqm_rust::graphics::present::{swap_buffers, Redraw};
+use uqm_rust::graphics::state::{draw_on_screen, fade_screen};
+use uqm_rust::graphics::{dcq::Screen, geometry::Extent, geometry::Point, geometry::Rect};
 use uqm_rust::mainloop::input_frame::rust_complete_input_frame;
 use uqm_rust::video::{
     decoder::DukVideoDecoder,
@@ -55,23 +52,19 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
 
     // This process owns its SDL instance; no native window or user config is used.
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
-    let options = uqm_rust::graphics::sdl::lifecycle_abi::GraphicsOptions::default();
+    let options = uqm_rust::graphics::present::GraphicsOptions::default();
     unsafe {
-        assert_eq!(
-            TFB_InitGraphics(0, 0, ptr::from_ref(&options).cast(), 320, 240),
-            0
-        );
-        FadeScreen(253, 0);
-        let screen = uqm_rust::graphics::ffi::rust_gfx_get_screen_surface(0);
-        assert_eq!(sdl2_sys::SDL_FillRect(screen.cast(), ptr::null(), 0), 0);
-        let bounds = RECT {
-            corner: POINT { x: 0, y: 0 },
-            extent: EXTENT {
+        uqm_rust::graphics::present::init_graphics(0, 0, options, 320, 240);
+        fade_screen(253, 0);
+        draw_on_screen(Screen::Main, |canvas| canvas.words_mut().fill(0));
+        let bounds = Rect {
+            corner: Point { x: 0, y: 0 },
+            extent: Extent {
                 width: 320,
                 height: 240,
             },
         };
-        TFB_BBox_RegisterRect(&bounds);
+        register_rect(bounds);
 
         let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
         let descriptor = ClipSource {
@@ -102,38 +95,38 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
                 uqm_rust::engine::Game::new()
                     .with_context(|cx| rust_complete_input_frame(cx, 1, &mut io));
                 assert!(readback() == movie, "input boundary erased the movie");
-                TFB_FlushGraphics();
+                uqm_rust::graphics::state::flush();
                 assert!(readback() == movie, "pacing flush erased the movie");
-                TFB_SwapBuffers(2);
+                swap_buffers(Redraw::Expose);
                 assert!(readback() == movie, "expose erased the movie");
             }
             // Advance to the next scheduled movie frame, not a redraw of the current one.
             std::thread::sleep(Duration::from_secs_f64(1.0 / f64::from(DUCK_FPS)));
         }
         let movie = readback();
-        FadeScreen(252, 0);
-        TFB_SwapBuffers(1);
+        fade_screen(252, 0);
+        swap_buffers(Redraw::Fading);
         assert!(readback()
             .as_chunks::<4>()
             .0
             .iter()
             .all(|p| p[..3] == [0, 0, 0]));
-        FadeScreen(253, 0);
-        TFB_SwapBuffers(1);
+        fade_screen(253, 0);
+        swap_buffers(Redraw::Fading);
         assert!(
             readback() == movie,
             "fade restores the retained movie frame"
         );
 
         tfb_stop_video(&mut clip);
-        assert_eq!(sdl2_sys::SDL_FillRect(screen.cast(), ptr::null(), 0), 0);
-        TFB_SwapBuffers(1);
+        draw_on_screen(Screen::Main, |canvas| canvas.words_mut().fill(0));
+        swap_buffers(Redraw::Fading);
         assert!(readback()
             .as_chunks::<4>()
             .0
             .iter()
             .all(|p| p[..3] == [0, 0, 0]));
         drop(mount);
-        TFB_UninitGraphics();
+        uqm_rust::graphics::present::uninit_graphics();
     }
 }

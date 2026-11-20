@@ -5,9 +5,8 @@
 //! forms and truncated sequences yield `0` after resynchronising on the next
 //! non-continuation byte.
 
-use std::ffi::{c_char, c_int};
-
 use crate::log_abi::{log_message, LOG_WARNING};
+use std::ffi::{c_char, c_int};
 
 pub type UniChar = u32;
 
@@ -61,6 +60,52 @@ unsafe fn bad_sequence(p: &mut *const u8) -> UniChar {
     log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
     resync(p);
     0
+}
+
+/// Decode one character from `cursor` and advance past it, as
+/// `get_char_from_string` does on a NUL-terminated string; the end of the
+/// slice reads as NUL. Bad encodings yield `0` after resynchronising.
+pub fn next_char(cursor: &mut &[u8]) -> UniChar {
+    fn byte(cursor: &[u8]) -> u8 {
+        cursor.first().copied().unwrap_or(0)
+    }
+    fn advance(cursor: &mut &[u8]) {
+        *cursor = cursor.get(1..).unwrap_or(&[]);
+    }
+    fn bad(cursor: &mut &[u8]) -> UniChar {
+        log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
+        while byte(cursor) & 0xc0 == 0x80 {
+            advance(cursor);
+        }
+        0
+    }
+    let lead = byte(cursor);
+    if lead < 0x80 {
+        advance(cursor);
+        return UniChar::from(lead);
+    }
+    let (continuations, lead_bits, min) = if (lead & 0xe0) == 0xc0 {
+        (1, lead & 0x1f, 0x80)
+    } else if (lead & 0xf0) == 0xe0 {
+        (2, lead & 0x0f, 0x800)
+    } else if (lead & 0xf8) == 0xf0 {
+        (3, lead & 0x07, 0x10000)
+    } else {
+        return bad(cursor);
+    };
+    let mut result = UniChar::from(lead_bits);
+    advance(cursor);
+    for _ in 0..continuations {
+        if byte(cursor) & 0xc0 != 0x80 {
+            return bad(cursor);
+        }
+        result = (result << 6) | UniChar::from(byte(cursor) & 0x3f);
+        advance(cursor);
+    }
+    if result < min {
+        return bad(cursor);
+    }
+    result
 }
 
 /// Like [`get_char_from_string`] but never reads at or past `end`; on any

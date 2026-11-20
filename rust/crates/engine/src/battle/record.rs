@@ -1,30 +1,25 @@
 //! Shared battle record layouts during the storage transition.
-use crate::graphics::native_abi::{
-    BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
-    UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
-};
+use crate::graphics::{drawable::FrameId, geometry::Point, intersection::IntersectControl};
 pub use crate::math::velocity::VelocityDesc as VELOCITY_DESC;
+use crate::resource::ResourceKey;
+use crate::strings::owned_table::EntryRef;
 #[cfg(test)]
 use crate::World as WorldOwner;
-use std::os::raw::c_uint as SPECIES_ID;
-
-pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
-
 pub use abi::{
     captain_stuff, state, state__bindgen_ty_1, tfb_soundsample, ElementRecord, ShipRecord,
     TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, EVALUATE_DESC, FLEET_STUFF,
-    INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, PRIM_DESC, SHIP_INFO, STATE,
+    INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, SHIP_INFO, STATE,
 };
+use std::os::raw::c_uint as SPECIES_ID;
 
 #[allow(non_camel_case_types, non_snake_case)]
 mod abi {
     use super::*;
-    pub use crate::graphics::native_abi::PRIM_DESC;
 
     #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct state {
-        pub location: POINT,
+        pub location: Point,
         pub image: state__bindgen_ty_1,
     }
     #[repr(C)]
@@ -41,17 +36,17 @@ mod abi {
         pub postprocess_func: Option<crate::battle::hooks::ElementHook>,
         pub collision_func: Option<crate::battle::CollisionHook>,
         pub death_func: Option<crate::battle::ElementHook>,
-        pub playerNr: SIZE,
-        pub state_flags: ELEMENT_FLAGS,
-        pub life: COUNT,
-        pub hits: COUNT,
-        pub mass: BYTE,
-        pub turn: BYTE,
-        pub thrust: BYTE,
-        pub colorCycleIndex: BYTE,
+        pub playerNr: i16,
+        pub state_flags: u16,
+        pub life: u16,
+        pub hits: u16,
+        pub mass: u8,
+        pub turn: u8,
+        pub thrust: u8,
+        pub colorCycleIndex: u8,
         pub velocity: VELOCITY_DESC,
-        pub IntersectControl: INTERSECT_CONTROL,
-        pub PrimIndex: COUNT,
+        pub IntersectControl: IntersectControl,
+        pub PrimIndex: u16,
         pub current: STATE,
         pub next: STATE,
         pub parent: crate::battle::Parent,
@@ -63,24 +58,24 @@ mod abi {
     #[derive(Debug, Default)]
     pub struct ShipRecord {
         pub SpeciesID: SPECIES_ID,
-        pub captains_name_index: BYTE,
+        pub captains_name_index: u8,
         pub descriptor: Option<Box<RaceDescriptor>>,
-        pub crew_level: COUNT,
-        pub max_crew: COUNT,
-        pub ship_cost: BYTE,
-        pub index: COUNT,
+        pub crew_level: u16,
+        pub max_crew: u16,
+        pub ship_cost: u8,
+        pub index: u16,
         pub(in crate::battle) picker_resources:
             Option<crate::battle::link_queue::ShipPickerResources>,
-        pub weapon_counter: BYTE,
-        pub special_counter: BYTE,
-        pub energy_counter: BYTE,
-        pub ship_input_state: BYTE,
-        pub cur_status_flags: STATUS_FLAGS,
-        pub old_status_flags: STATUS_FLAGS,
+        pub weapon_counter: u8,
+        pub special_counter: u8,
+        pub energy_counter: u8,
+        pub ship_input_state: u8,
+        pub cur_status_flags: u16,
+        pub old_status_flags: u16,
         pub hShip: Option<crate::battle::ElementId>,
-        pub ship_facing: COUNT,
-        pub playerNr: SIZE,
-        pub control: BYTE,
+        pub ship_facing: u16,
+        pub playerNr: i16,
+        pub control: u8,
     }
 
     impl ShipRecord {
@@ -102,11 +97,11 @@ mod abi {
     #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct captain_stuff {
-        pub captain_rsc: RESOURCE,
-        pub background: FRAME,
-        pub turn: FRAME,
-        pub thrust: FRAME,
-        pub weapon: FRAME,
+        pub captain_rsc: ResourceKey,
+        pub background: FrameId,
+        pub turn: FrameId,
+        pub thrust: FrameId,
+        pub weapon: FrameId,
         pub special: crate::battle::frames::FrameSelection,
     }
 
@@ -118,72 +113,72 @@ mod abi {
     #[derive(Debug, Copy, Clone)]
     pub struct EVALUATE_DESC {
         pub ObjectPtr: *mut ElementRecord,
-        pub facing: COUNT,
-        pub which_turn: COUNT,
+        pub facing: u16,
+        pub which_turn: u16,
         pub MoveState: MOVEMENT_STATE,
     }
 
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct INTEL_STUFF {
-        pub ManeuverabilityIndex: COUNT,
-        pub WeaponRange: COUNT,
+        pub ManeuverabilityIndex: u16,
+        pub WeaponRange: u16,
     }
 
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct CHARACTERISTIC_STUFF {
-        pub max_thrust: COUNT,
-        pub thrust_increment: COUNT,
-        pub energy_regeneration: BYTE,
-        pub weapon_energy_cost: BYTE,
-        pub special_energy_cost: BYTE,
-        pub energy_wait: BYTE,
-        pub turn_wait: BYTE,
-        pub thrust_wait: BYTE,
-        pub weapon_wait: BYTE,
-        pub special_wait: BYTE,
-        pub ship_mass: BYTE,
+        pub max_thrust: u16,
+        pub thrust_increment: u16,
+        pub energy_regeneration: u8,
+        pub weapon_energy_cost: u8,
+        pub special_energy_cost: u8,
+        pub energy_wait: u8,
+        pub turn_wait: u8,
+        pub thrust_wait: u8,
+        pub weapon_wait: u8,
+        pub special_wait: u8,
+        pub ship_mass: u8,
     }
 
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct SHIP_INFO {
-        pub ship_flags: UWORD,
-        pub ship_cost: BYTE,
-        pub crew_level: COUNT,
-        pub max_crew: COUNT,
-        pub energy_level: BYTE,
-        pub max_energy: BYTE,
-        pub race_strings_rsc: RESOURCE,
-        pub icons_rsc: RESOURCE,
-        pub melee_icon_rsc: RESOURCE,
-        pub race_strings: STRING,
-        pub icons: FRAME,
-        pub melee_icon: FRAME,
+        pub ship_flags: u16,
+        pub ship_cost: u8,
+        pub crew_level: u16,
+        pub max_crew: u16,
+        pub energy_level: u8,
+        pub max_energy: u8,
+        pub race_strings_rsc: ResourceKey,
+        pub icons_rsc: ResourceKey,
+        pub melee_icon_rsc: ResourceKey,
+        pub race_strings: Option<EntryRef>,
+        pub icons: FrameId,
+        pub melee_icon: FrameId,
     }
 
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct FLEET_STUFF {
-        pub strength: COUNT,
-        pub known_loc: POINT,
+        pub strength: u16,
+        pub known_loc: Point,
     }
 
     #[repr(C)]
     #[derive(Debug)]
     pub struct DATA_STUFF {
-        pub ship_rsc: [RESOURCE; 3usize],
-        pub weapon_rsc: [RESOURCE; 3usize],
-        pub special_rsc: [RESOURCE; 3usize],
+        pub ship_rsc: [ResourceKey; 3usize],
+        pub weapon_rsc: [ResourceKey; 3usize],
+        pub special_rsc: [ResourceKey; 3usize],
         pub captain_control: CAPTAIN_STUFF,
-        pub victory_ditty_rsc: RESOURCE,
-        pub ship_sounds_rsc: RESOURCE,
+        pub victory_ditty_rsc: ResourceKey,
+        pub ship_sounds_rsc: ResourceKey,
         pub ship: crate::battle::frames::FrameArray,
         pub weapon: crate::battle::frames::FrameArray,
         pub special: crate::battle::frames::FrameArray,
         pub victory_ditty: MUSIC_REF,
-        pub ship_sounds: SOUND,
+        pub ship_sounds: Option<EntryRef>,
     }
 
     pub const MAX_DISPLAY_PRIMS: u32 = 330;
@@ -192,7 +187,7 @@ mod abi {
 impl Default for ElementRecord {
     fn default() -> Self {
         let visual = STATE {
-            location: POINT { x: 0, y: 0 },
+            location: Point { x: 0, y: 0 },
             image: state__bindgen_ty_1 {
                 frame: FrameSelection::ABSENT,
                 frames: crate::battle::frames::Frames::ABSENT,
@@ -212,12 +207,12 @@ impl Default for ElementRecord {
             thrust: 0,
             colorCycleIndex: 0,
             velocity: VELOCITY_DESC::new(),
-            IntersectControl: INTERSECT_CONTROL {
-                IntersectStamp: crate::graphics::native_abi::STAMP {
-                    origin: POINT { x: 0, y: 0 },
-                    frame: ptr::null_mut(),
+            IntersectControl: IntersectControl {
+                IntersectStamp: crate::graphics::intersection::Stamp {
+                    origin: Point { x: 0, y: 0 },
+                    frame: FrameId::NULL,
                 },
-                EndPoint: POINT { x: 0, y: 0 },
+                EndPoint: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
             PrimIndex: 0,
@@ -552,12 +547,12 @@ impl ElementState {
             thrust: self.thrust,
             colorCycleIndex: self.color_cycle,
             velocity: self.velocity,
-            IntersectControl: INTERSECT_CONTROL {
-                IntersectStamp: crate::graphics::native_abi::STAMP {
-                    origin: POINT { x: 0, y: 0 },
-                    frame: ptr::null_mut(),
+            IntersectControl: IntersectControl {
+                IntersectStamp: crate::graphics::intersection::Stamp {
+                    origin: Point { x: 0, y: 0 },
+                    frame: FrameId::NULL,
                 },
-                EndPoint: POINT { x: 0, y: 0 },
+                EndPoint: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
             PrimIndex: 0,
@@ -670,8 +665,8 @@ mod projection_tests {
         raw.set_mass_points(5);
         raw.set_turn_wait(12);
         raw.set_thrust_wait(13);
-        raw.current.location = POINT { x: 11, y: 12 };
-        raw.next.location = POINT { x: 21, y: 22 };
+        raw.current.location = Point { x: 11, y: 12 };
+        raw.next.location = Point { x: 21, y: 22 };
         raw.IntersectControl.last_time_val = 31;
         let mut subject = Subject::decode(&raw);
         assert_eq!(subject.life_span(), 21);
@@ -835,7 +830,6 @@ mod kernel_tests {
         assert_eq!(fresh.space_origin.y, 0);
         assert_eq!(fresh.status_offsets, [0; 2]);
         assert!(fresh.player_input.iter().all(Option::is_none));
-        assert!(fresh.menu_sounds.is_null());
         assert!(fresh.game_sounds.is_none());
         assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);
@@ -882,7 +876,7 @@ impl Kernel {
     pub fn shared_frame_source(
         &self,
         role: super::views::SharedFrames,
-    ) -> &[crate::graphics::native_abi::FRAME; 3] {
+    ) -> &[crate::graphics::drawable::FrameId; 3] {
         match role {
             super::views::SharedFrames::Asteroid => &self.asteroid,
             super::views::SharedFrames::Explosion => &self.explosion,

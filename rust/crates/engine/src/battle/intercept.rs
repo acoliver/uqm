@@ -2,7 +2,6 @@
 
 use super::flags::*;
 use super::{Cx, Subject};
-use crate::graphics::native_abi::COUNT;
 use crate::math::battle_types::ONE_SHIFT;
 use crate::math::velocity::VELOCITY_SHIFT;
 
@@ -134,9 +133,9 @@ pub fn plot_intercept(
     cx: &mut Cx<'_>,
     a: &Subject,
     b: &Subject,
-    mut turns: COUNT,
-    margin: COUNT,
-) -> COUNT {
+    mut turns: u16,
+    margin: u16,
+) -> u16 {
     if (a.flags | b.flags) & FINITE_LIFE as u16 != 0 {
         if a.flags & FINITE_LIFE as u16 == 0 {
             turns = turns.min(b.life);

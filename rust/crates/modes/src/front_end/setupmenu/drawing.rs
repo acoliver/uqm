@@ -5,10 +5,8 @@ use super::{
     NameEntry,
 };
 use crate::graphics::{
-    context_abi::ContextLease,
-    drawable_abi::LoadedDrawable,
-    native_abi::{Color, EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER, TEXT_ALIGN_ALIGN_LEFT},
-    native_font::FontLease,
+    context::ContextLease, drawable::LoadedDrawable, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 use std::ffi::{CStr, CString};
 
@@ -66,7 +64,7 @@ impl SetupResources {
                         .background
                         .lease()
                         .context_frame([0, 1, 1, 2, 3, 1, 2, 1][view.menu.current]);
-                    self.context.draw_stamp(&frame, POINT { x: 0, y: 0 });
+                    self.context.draw_stamp(&frame, Point { x: 0, y: 0 });
                     self.text(&self.strings.title, screen.width / 2, 10, SELECTED, true);
                     self.text(
                         &self.strings.subtitles[view.menu.current],
@@ -109,24 +107,24 @@ impl SetupResources {
         self.context.draw_text(
             &self.font,
             text,
-            POINT { x, y },
+            Point { x, y },
             if centered {
-                TEXT_ALIGN_ALIGN_CENTER
+                TextAlign::Center
             } else {
-                TEXT_ALIGN_ALIGN_LEFT
+                TextAlign::Left
             },
             color,
         );
     }
 
-    fn tips(&self, tips: &[CString; 3], screen: EXTENT) {
+    fn tips(&self, tips: &[CString; 3], screen: Extent) {
         let y = screen.height - 34;
         for (index, tip) in tips.iter().enumerate() {
             self.text(tip, screen.width / 2, y + 8 * index as i16, SELECTED, true);
         }
     }
 
-    fn draw_widget(&self, widget: Widget, y: i16, focused: bool, view: &View<'_>, screen: EXTENT) {
+    fn draw_widget(&self, widget: Widget, y: i16, focused: bool, view: &View<'_>, screen: Extent) {
         match widget {
             Widget::Choice(choice) => self.draw_choice(choice, y, focused, view, screen),
             Widget::Slider(slider) => self.draw_slider(slider, y, focused, view, screen),
@@ -174,7 +172,7 @@ impl SetupResources {
         }
     }
 
-    fn draw_choice(&self, choice: usize, y: i16, focused: bool, view: &View<'_>, screen: EXTENT) {
+    fn draw_choice(&self, choice: usize, y: i16, focused: bool, view: &View<'_>, screen: Extent) {
         let text = &self.strings.choices[choice];
         self.text(
             &text.category,
@@ -209,7 +207,7 @@ impl SetupResources {
         }
     }
 
-    fn draw_slider(&self, slider: usize, y: i16, focused: bool, view: &View<'_>, screen: EXTENT) {
+    fn draw_slider(&self, slider: usize, y: i16, focused: bool, view: &View<'_>, screen: Extent) {
         let text = &self.strings.sliders[slider];
         let color = if focused {
             self.tips(&text.tips, screen);
@@ -221,12 +219,12 @@ impl SetupResources {
         let tick = screen.width / 8;
         self.context.fill_rectangle(
             color,
-            RECT {
-                corner: POINT {
+            Rect {
+                corner: Point {
                     x: 3 * tick,
                     y: y - 4,
                 },
-                extent: EXTENT {
+                extent: Extent {
                     width: 3 * tick,
                     height: 2,
                 },
@@ -234,13 +232,13 @@ impl SetupResources {
         );
         self.context.fill_rectangle(
             color,
-            RECT {
-                corner: POINT {
+            Rect {
+                corner: Point {
                     x: 3 * tick + (3 * i32::from(tick) * view.menu.sliders[slider] / 100) as i16
                         - 1,
                     y: y - 7,
                 },
-                extent: EXTENT {
+                extent: Extent {
                     width: 3,
                     height: 8,
                 },
@@ -255,7 +253,7 @@ impl SetupResources {
         self.text(&value, 7 * tick, y, color, true);
     }
 
-    fn draw_entry(&self, entry: &NameEntry, y: i16, focused: bool, screen: EXTENT) {
+    fn draw_entry(&self, entry: &NameEntry, y: i16, focused: bool, screen: Extent) {
         self.text(
             &self.strings.text_category,
             0,
@@ -275,16 +273,16 @@ impl SetupResources {
         }
         let measured = self.font.measure_bounded::<50>(
             &entry.text,
-            POINT { x: 90, y },
-            TEXT_ALIGN_ALIGN_LEFT,
+            Point { x: 90, y },
+            TextAlign::Left,
             u16::MAX,
         );
-        let mut rect = RECT {
-            corner: POINT {
+        let mut rect = Rect {
+            corner: Point {
                 x: 89,
                 y: y - measured.leading + 2,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: screen.width - 99,
                 height: measured.leading + 2,
             },
@@ -324,12 +322,12 @@ impl SetupResources {
             + 16;
         let height = lines.len() as i16 * 8 + 16;
         let screen = self.context.target().rect().extent;
-        let rect = RECT {
-            corner: POINT {
+        let rect = Rect {
+            corner: Point {
                 x: (screen.width - width) / 2,
                 y: (screen.height - height) / 2,
             },
-            extent: EXTENT { width, height },
+            extent: Extent { width, height },
         };
         self.context.draw_batch(|| {
             self.context.with_text_state(|| {

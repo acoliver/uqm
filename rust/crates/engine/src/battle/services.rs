@@ -1,16 +1,16 @@
 //! Explicit presentation services for engine-owned battle primitives.
 use super::views::FrameSelection;
 use super::{Cx, ElementId, ShipId};
-use crate::graphics::native_abi::{POINT, RECT};
+use crate::graphics::geometry::{Point, Rect};
 
 pub trait PrimitiveServices {
     fn draw_statistics(&self, cx: &mut Cx<'_>, ship: ShipId, crew: i16, energy: i16);
-    fn init_ship_status(&self, cx: &mut Cx<'_>, ship: ShipId, clip: Option<RECT>);
+    fn init_ship_status(&self, cx: &mut Cx<'_>, ship: ShipId, clip: Option<Rect>);
     fn silhouette_at(
         &self,
         cx: &mut Cx<'_>,
         source: ElementId,
-        origin: POINT,
+        origin: Point,
         frame: FrameSelection,
         flags: u8,
     );
@@ -64,7 +64,7 @@ impl Cx<'_> {
             .primitive_services()
             .draw_statistics(self, ship, crew, energy);
     }
-    pub fn init_ship_status(&mut self, ship: ShipId, clip: Option<RECT>) {
+    pub fn init_ship_status(&mut self, ship: ShipId, clip: Option<Rect>) {
         self.kernel
             .primitive_services()
             .init_ship_status(self, ship, clip);
@@ -72,7 +72,7 @@ impl Cx<'_> {
     pub fn silhouette_at(
         &mut self,
         source: ElementId,
-        origin: POINT,
+        origin: Point,
         frame: FrameSelection,
         flags: u8,
     ) {
@@ -86,7 +86,7 @@ impl Cx<'_> {
         frame: crate::battle::views::FrameSelection,
         flags: u8,
     ) {
-        self.silhouette_at(source, POINT { x: 0, y: 0 }, frame, flags);
+        self.silhouette_at(source, Point { x: 0, y: 0 }, frame, flags);
     }
     pub fn silhouette_frame(&mut self, id: ElementId, frame: FrameSelection, flags: u8) {
         self.silhouette(id, frame, flags);
@@ -136,9 +136,9 @@ impl Cx<'_> {
     pub fn weapon_collision(
         &mut self,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) -> Option<ElementId> {
         super::weapon::weapon_collision(self, a, pa, b, pb)
     }

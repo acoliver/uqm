@@ -2,7 +2,7 @@
 
 pub static LAST_PKUNK_SOUND: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 use super::ElementId;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 pub struct SoundQueue {
     pub count: usize,
@@ -89,16 +89,16 @@ impl Default for Channels {
 
 pub struct StarPlane {
     pub min_star_index: u16,
-    pub points: Vec<POINT>,
-    pub displayed: Vec<POINT>,
+    pub points: Vec<Point>,
+    pub displayed: Vec<Point>,
     pub frames: Vec<super::frames::FrameSelection>,
 }
 impl StarPlane {
     pub fn new(count: usize) -> Self {
         Self {
             min_star_index: 0,
-            points: vec![POINT { x: 0, y: 0 }; count],
-            displayed: vec![POINT { x: 0, y: 0 }; count],
+            points: vec![Point { x: 0, y: 0 }; count],
+            displayed: vec![Point { x: 0, y: 0 }; count],
             frames: vec![super::frames::FrameSelection::ABSENT; count],
         }
     }

@@ -1,14 +1,12 @@
 //! Resource admission, encounter execution and ordered teardown.
 
-use super::{
-    assets::Assets,
-    sis_graphics::{ConversationDisplay, ConversationResources},
-    Comm,
-};
+use super::assets::Assets;
+use super::sis_graphics::ConversationDisplay;
+use super::sis_graphics::ConversationResources;
+use super::Comm;
 use crate::engine::{battle::Cx, observe::Io, StoryKey};
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_abi::{EXTENT, RECT},
+    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Rect,
 };
 
 pub(super) fn load_conversation_text(comm: &mut Comm) {
@@ -52,9 +50,7 @@ pub fn prepare(
         .unwrap_or_else(|| panic!("animation context not loaded"))
         .lease();
     animation.select();
-    animation.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        comm.presentation.screen,
-    )));
+    animation.set_frame(ContextFrame::retain(comm.presentation.screen));
     comm.display.window.width = (dimensions.0 - 78) as i16;
     comm.display.window.height = assets.frame.lease().context_frame(0).rect().extent.height;
     if let Some(window) = &comm.options.window {
@@ -65,9 +61,9 @@ pub fn prepare(
     if world.activity() & 0xff != 5 && comm.options.window.is_none() {
         comm.display.window.corner = super::locdata::CPoint { x: 7, y: 10 };
     }
-    animation.set_clip(RECT {
+    animation.set_clip(Rect {
         corner: comm.display.window.corner,
-        extent: EXTENT {
+        extent: Extent {
             width: comm.display.window.width,
             height: comm.display.window.height,
         },

@@ -73,12 +73,10 @@ fn supplied_day_passage_and_tick_dispatch_with_real_status_drawing() {
         assert_eq!(cx.world.data.game.game_clock.tick_count, 2);
         assert_eq!(cx.world.clock.events_ref().count(), 0);
     }
-    let context = crate::graphics::context_abi::ContextLease::require(game.kernel.status_context);
+    let context = crate::graphics::context::ContextLease::require(game.kernel.status_context);
     context.flush();
-    let frame = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    ));
-    let pixel = frame.pixel(crate::graphics::native_abi::POINT { x: 2, y: 130 });
+    let frame = crate::graphics::drawable::ContextFrame::retain(game.kernel.screen);
+    let pixel = frame.pixel(crate::graphics::geometry::Point { x: 2, y: 130 });
     assert_eq!((pixel.r, pixel.g, pixel.b), (0, 66, 0));
     display.finish(game);
 }

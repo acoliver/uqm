@@ -2,7 +2,7 @@ use super::*;
 use std::borrow::Cow;
 
 const STAR: CStarDesc = CStarDesc {
-    star_pt: crate::graphics::native_abi::POINT { x: 100, y: 200 },
+    star_pt: crate::graphics::geometry::Point { x: 100, y: 200 },
     star_type: 0,
     index: 0,
     prefix: 0,

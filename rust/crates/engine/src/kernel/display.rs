@@ -1,48 +1,36 @@
 //! The kernel's display resources: the screen, the drawing contexts and the
 //! frames the status display draws from.
-//!
-//! Each call creates or releases resources through the graphics layer's
-//! pointer API, which is `unsafe` because it requires the game thread. The
-//! kernel is only ever driven from that thread, so these methods are safe to
-//! call and the graphics owner turns their bodies safe when its API is.
 
 use std::ffi::CStr;
 
-use crate::graphics::gfx_common_abi::{ScreenHeight, ScreenWidth};
-use crate::graphics::native_abi::{self as gfx, CONTEXT};
-use crate::graphics::{cmap_abi, context_abi, drawable_abi, pixmap_abi};
+use crate::graphics::context::{ContextId, LoadedContext};
+use crate::graphics::drawable::{FrameId, LoadedDrawable};
+use crate::graphics::geometry::{Extent, Point, Rect};
+use crate::graphics::state::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::graphics::{menu, palette_cycle::PaletteCycle};
 use crate::kernel::Kernel;
 use crate::math::battle_types::STATUS_WIDTH;
-use crate::strings::sresins::LoadStringTableInstance;
-use crate::strings::string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable};
 
 /// The status display's distance from the screen edge.
 const SAFE_X: i32 = 0;
 const SAFE_Y: i32 = 0;
 
-fn create_context(name: &CStr) -> CONTEXT {
-    // SAFETY: game thread; the name is a terminated string.
-    unsafe {
-        #[cfg(feature = "debug-process")]
-        {
-            context_abi::CreateContextAux(name.as_ptr()).cast()
-        }
-        #[cfg(not(feature = "debug-process"))]
-        {
-            let _ = name;
-            context_abi::CreateContextAux().cast()
-        }
-    }
+fn create_context(name: &'static CStr) -> Option<ContextId> {
+    Some(LoadedContext::create(name).into_id())
 }
 
-fn load_frame(resource: &CStr) -> gfx::FRAME {
-    // SAFETY: game thread; the resource system is initialized and the key is terminated.
-    unsafe {
-        pixmap_abi::CaptureDrawable(
-            crate::graphics::resgfx::LoadGraphicInstance(resource.as_ptr()).cast(),
-        )
-        .cast()
-    }
+/// Release a context the kernel owns by id.
+fn destroy_context(context: &mut Option<ContextId>) {
+    drop(context.take().map(LoadedContext::from_id));
+}
+
+/// Release a drawable the kernel owns by its first frame.
+fn destroy_frame(frame: &mut FrameId) {
+    drop(LoadedDrawable::from_frame(std::mem::take(frame)));
+}
+
+fn load_frame(resource: &CStr) -> FrameId {
+    LoadedDrawable::load(resource).map_or(FrameId::NULL, LoadedDrawable::into_frame)
 }
 
 impl Kernel {
@@ -51,63 +39,38 @@ impl Kernel {
         // SAFETY: game thread; graphics and the resource system are initialized.
         unsafe { crate::video::control::InitVideoPlayer(1) };
         self.screen_context = create_context(c"ScreenContext");
-        if self.screen_context.is_null() {
-            return false;
-        }
-        // SAFETY: game thread; the dimensions are fields of this kernel and the
-        // display keeps writing them only while this kernel is live.
-        unsafe {
-            self.screen = pixmap_abi::CaptureDrawable(drawable_abi::CreateDisplay(
-                3,
-                std::ptr::addr_of_mut!(self.screen_width),
-                std::ptr::addr_of_mut!(self.screen_height),
-            ))
-            .cast();
-            if self.screen.is_null() {
-                return false;
-            }
-            context_abi::SetContext(self.screen_context.cast());
-            drawable_abi::SetContextFGFrame(self.screen.cast());
-            context_abi::SetContextOrigin(gfx::POINT { x: 0, y: 0 });
-        }
+        let (width, height) = crate::graphics::state::screen_dimensions();
+        (self.screen_width, self.screen_height) = (width as i16, height as i16);
+        self.screen = LoadedDrawable::display(3).into_frame();
+        menu::select(self.screen_context);
+        menu::set_frame(self.screen);
+        menu::set_origin(Point { x: 0, y: 0 });
         true
     }
 
     /// Release the screen display and context and stop the video player.
     pub fn close_screen(&mut self) {
+        destroy_frame(&mut self.screen);
+        destroy_context(&mut self.screen_context);
         // SAFETY: game thread, after the game loop has stopped using the screen.
-        unsafe {
-            drawable_abi::DestroyDrawable(pixmap_abi::ReleaseDrawable(self.screen));
-            self.screen = std::ptr::null_mut();
-            context_abi::DestroyContext(self.screen_context.cast());
-            self.screen_context = std::ptr::null_mut();
-            crate::video::control::UninitVideoPlayer();
-        }
+        unsafe { crate::video::control::UninitVideoPlayer() };
     }
 
     pub fn init_resources(&mut self) -> bool {
-        // SAFETY: game thread, once, before any resource is loaded.
-        self.h_res_index = unsafe { crate::resource::ffi_bridge::InitResourceSystem() };
-        !self.h_res_index.is_null()
+        crate::resource::init();
+        true
     }
 
     pub fn uninit_resources(&mut self) {
-        // SAFETY: game thread, after every resource owner has released its resources.
-        unsafe { crate::resource::ffi_bridge::UninitResourceSystem() };
+        crate::resource::uninit();
     }
 
     /// Make `colortable.main` the active colour map.
     pub fn load_main_colormap(&mut self) -> bool {
-        // SAFETY: game thread; the resource system is initialized, the key is
-        // terminated, and the table is released after the map is installed.
-        unsafe {
-            let map = CaptureStringTable(LoadStringTableInstance(c"colortable.main".as_ptr()));
-            if map.is_null() {
-                return false;
-            }
-            cmap_abi::SetColorMap(cmap_abi::GetColorMapAddress(map.cast()));
-            DestroyStringTable(ReleaseStringTable(map));
-        }
+        let Some(map) = PaletteCycle::load(c"colortable.main") else {
+            return false;
+        };
+        map.apply();
         true
     }
 
@@ -115,40 +78,27 @@ impl Kernel {
     /// clipped to the status display.
     pub fn create_contexts(&mut self) -> bool {
         self.status_context = create_context(c"StatusContext");
-        if self.status_context.is_null() {
-            return false;
-        }
-        // SAFETY: game thread; the contexts and the screen were created by this kernel.
-        unsafe {
-            context_abi::SetContext(self.status_context.cast());
-            drawable_abi::SetContextFGFrame(self.screen.cast());
-            let mut rect = gfx::RECT {
-                corner: gfx::POINT {
-                    x: (ScreenWidth - STATUS_WIDTH - SAFE_X) as i16,
-                    y: SAFE_Y as i16,
-                },
-                extent: gfx::EXTENT {
-                    width: STATUS_WIDTH as i16,
-                    height: (ScreenHeight - 2 * SAFE_Y) as i16,
-                },
-            };
-            context_abi::SetContextClipRect(&mut rect);
-        }
+        menu::select(self.status_context);
+        menu::set_frame(self.screen);
+        menu::set_clip(Rect {
+            corner: Point {
+                x: (SCREEN_WIDTH - STATUS_WIDTH - SAFE_X) as i16,
+                y: SAFE_Y as i16,
+            },
+            extent: Extent {
+                width: STATUS_WIDTH as i16,
+                height: (SCREEN_HEIGHT - 2 * SAFE_Y) as i16,
+            },
+        });
         self.space_context = create_context(c"SpaceContext");
-        if self.space_context.is_null() {
-            return false;
-        }
         self.off_screen_context = create_context(c"OffScreenContext");
-        !self.off_screen_context.is_null()
+        true
     }
 
     pub fn destroy_contexts(&mut self) {
-        // SAFETY: game thread, after every element and mode has stopped drawing.
-        unsafe {
-            context_abi::DestroyContext(self.off_screen_context.cast());
-            context_abi::DestroyContext(self.space_context.cast());
-            context_abi::DestroyContext(self.status_context.cast());
-        }
+        destroy_context(&mut self.off_screen_context);
+        destroy_context(&mut self.space_context);
+        destroy_context(&mut self.status_context);
     }
 
     /// Load the activity and status frames.
@@ -162,12 +112,7 @@ impl Kernel {
     }
 
     pub fn release_status_frames(&mut self) {
-        // SAFETY: game thread, after the status display has stopped drawing.
-        unsafe {
-            drawable_abi::DestroyDrawable(pixmap_abi::ReleaseDrawable(self.status_frame));
-            drawable_abi::DestroyDrawable(pixmap_abi::ReleaseDrawable(self.activity_frame));
-        }
-        self.status_frame = std::ptr::null_mut();
-        self.activity_frame = std::ptr::null_mut();
+        destroy_frame(&mut self.status_frame);
+        destroy_frame(&mut self.activity_frame);
     }
 }

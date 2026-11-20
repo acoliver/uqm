@@ -1,5 +1,6 @@
 //! Encounter fleet construction, decision screen, combat entry, and salvage.
 
+use crate::graphics::{geometry::Point, geometry::TextAlign};
 pub const ENCOUNTER_DISPLAY_POINTS: [(i16, i16); 10] = [
     (10, 51),
     (-10, 51),
@@ -334,26 +335,21 @@ pub(crate) mod engine {
         cx: &mut crate::engine::battle::Cx<'_>,
         cluster: Option<&std::ffi::CStr>,
     ) {
-        let context = crate::graphics::context_abi::ContextLease::retain(
-            std::ptr::NonNull::new(cx.kernel.space_context)
+        let context = crate::graphics::context::ContextLease::retain(
+            cx.kernel
+                .space_context
                 .unwrap_or_else(|| panic!("encounter requires a space context")),
         );
         let font = cx
             .kernel
             .micro_font_lease()
             .unwrap_or_else(|| panic!("encounter requires the micro font"));
-        let mut baseline = POINT {
+        let mut baseline = Point {
             x: (((cx.screen_dimensions().0 - 78) >> 1) + 1) as i16,
             y: 10,
         };
         let mut line = |text: &std::ffi::CStr| {
-            context.draw_text(
-                &font,
-                text,
-                baseline,
-                TEXT_ALIGN_ALIGN_CENTER,
-                rgb15(0, 0, 20),
-            );
+            context.draw_text(&font, text, baseline, TextAlign::Center, rgb15(0, 0, 20));
             baseline.y += 12;
         };
         if let Some(cluster) = cluster {
@@ -371,7 +367,7 @@ pub(crate) mod engine {
 
     fn draw_encounter_fleet(
         world: &crate::engine::World,
-        context: &crate::graphics::context_abi::ContextLease,
+        context: &crate::graphics::context::ContextLease,
         dimensions: (i32, i32),
     ) {
         if world.activity() as u8 == IN_LAST_BATTLE as u8 {
@@ -397,7 +393,7 @@ pub(crate) mod engine {
     }
 
     fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
-        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+        let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
         let font = cx
             .kernel
             .tiny_font_lease()
@@ -406,7 +402,7 @@ pub(crate) mod engine {
         context.set_font(&font);
         let music = crate::sound::resource_types::LoadedMusic::load(c"music.redalert");
         crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
-        let segue = crate::graphics::drawable_abi::LoadedDrawable::load(c"graphics.segue")
+        let segue = crate::graphics::drawable::LoadedDrawable::load(c"graphics.segue")
             .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
         crate::sound::heart_ffi::wait_for_sound_end(COUNT::MAX);
         crate::ui::settings::stop_loaded_music(music.as_ref());
@@ -417,7 +413,7 @@ pub(crate) mod engine {
         context.with_batch(|| {
             context.set_background(rgb15(0, 0, 0));
             context.clear();
-            context.draw_stamp(&segue.lease().context_frame(0), POINT { x: 0, y: 0 });
+            context.draw_stamp(&segue.lease().context_frame(0), Point { x: 0, y: 0 });
             let cluster = if !cx.world.in_hqspace() {
                 let star = cx
                     .world
@@ -434,12 +430,10 @@ pub(crate) mod engine {
             draw_encounter_location(cx, cluster.as_deref());
             let message = crate::ui::sis::default_message_text(cx.kernel, cx.world);
             crate::ui::sis::draw_message(cx.kernel, width, &message, -1, -1, DSME_NONE as u16);
-            let planet = crate::graphics::context_abi::ContextFrame::retain(
-                std::ptr::NonNull::new(cx.kernel.planet[0]),
-            );
+            let planet = crate::graphics::drawable::ContextFrame::retain(cx.kernel.planet[0]);
             context.draw_stamp(
                 &planet,
-                POINT {
+                Point {
                     x: (dimensions.0 >> 1) as i16,
                     y: (dimensions.1 >> 1) as i16,
                 },

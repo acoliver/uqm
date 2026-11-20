@@ -1,15 +1,14 @@
 use uqm_engine::test_support::campaign_display as campaign_display_test;
 use uqm_engine::test_support::native_process;
-
-use uqm_rust::{
-    comm::{dispatch::race_descriptor, locdata::SessionData, Comm},
-    engine::{
-        self,
-        battle::{Battle, Cx},
-        Game, StoryKey,
-    },
-    graphics,
-};
+use uqm_rust::comm::dispatch::race_descriptor;
+use uqm_rust::comm::locdata::SessionData;
+use uqm_rust::comm::Comm;
+use uqm_rust::engine;
+use uqm_rust::engine::battle::Battle;
+use uqm_rust::engine::battle::Cx;
+use uqm_rust::engine::Game;
+use uqm_rust::engine::StoryKey;
+use uqm_rust::graphics;
 
 #[test]
 #[serial_test::serial]
@@ -20,16 +19,16 @@ fn missing_player_font_aborts_resource_admission() -> Result<(), Box<dyn std::er
     let mut game = Game::new();
     let display = campaign_display_test::CampaignDisplay::install(&mut game)?;
     game.kernel.space_context = game.kernel.status_context;
-    let space = graphics::context_abi::ContextLease::require(game.kernel.space_context);
+    let space = graphics::context::ContextLease::require(game.kernel.space_context);
     space.select();
-    let before = space.selected_context().unwrap().as_raw();
+    let before = space.selected_context().unwrap().context();
     let mut comm = Comm::new();
     assert_eq!(
         uqm_rust::comm::hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)),
         Err("font.player failed to load".into())
     );
     assert!(comm.comm_data().is_none());
-    assert_eq!(space.selected_context().unwrap().as_raw(), before);
+    assert_eq!(space.selected_context().unwrap().context(), before);
     drop(comm);
     drop(space);
     display.finish(game);
@@ -163,7 +162,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                 game.kernel.install_input_runtime(std::rc::Rc::new(runtime));
                 game.kernel.activity_frame = game.kernel.screen;
                 game.kernel.star_con_font = game.kernel.tiny_font;
-                let frames = graphics::drawable_abi::LoadedDrawable::create(8, 1, 1, 100)
+                let frames = graphics::drawable::LoadedDrawable::create(8, 1, 1, 100)
                     .ok_or("missing panel frames")?;
                 game.kernel.flag_stat_frame =
                     frames.lease().frame(0).ok_or("missing panel frame")?;

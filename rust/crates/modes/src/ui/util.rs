@@ -5,21 +5,20 @@ use crate::engine::{
     observe::Io,
 };
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    drawable_abi::LoadedDrawable,
-    native_abi::{Color, POINT, RECT},
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
+    geometry::Point, geometry::Rect,
 };
 use crate::sound::heart_ffi::{pause_track, playing_track, resume_track};
-use uqm_engine::graphics::sdl::lifecycle_abi::{game_active, quit_posted};
+use uqm_engine::graphics::{state::game_active, state::quit_posted};
 use uqm_engine::time::counter_abi::{GetTimeCounter, ONE_SECOND};
 
 pub(crate) fn box_rectangles(
-    rect: RECT,
+    rect: Rect,
     mut border: i16,
     top: Color,
     bottom: Color,
     interior: Option<Color>,
-    mut draw: impl FnMut(Color, RECT),
+    mut draw: impl FnMut(Color, Rect),
 ) {
     let mut r = rect;
     if border == 0 {
@@ -76,16 +75,16 @@ pub(crate) fn box_rectangles(
 pub struct SavedContext {
     context: ContextLease,
     drawable: LoadedDrawable,
-    origin: POINT,
+    origin: Point,
 }
 
 impl SavedContext {
-    pub fn capture(context: &ContextLease, area: Option<RECT>) -> Self {
+    pub fn capture(context: &ContextLease, area: Option<Rect>) -> Self {
         Self {
             context: context.clone(),
             drawable: LoadedDrawable::capture(context, area)
                 .unwrap_or_else(|| panic!("UI background capture failed")),
-            origin: area.map_or(POINT { x: 0, y: 0 }, |area| area.corner),
+            origin: area.map_or(Point { x: 0, y: 0 }, |area| area.corner),
         }
     }
 
@@ -97,7 +96,7 @@ impl SavedContext {
 
 pub fn draw_starcon_box(
     context: &ContextLease,
-    rect: RECT,
+    rect: Rect,
     border: i16,
     top: Color,
     bottom: Color,
@@ -132,10 +131,10 @@ pub fn pause_game(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
         pause_track();
     }
     let context = ContextLease::require(cx.kernel.screen_context);
-    let activity = ContextFrame::retain(std::ptr::NonNull::new(cx.kernel.activity_frame));
+    let activity = ContextFrame::retain(cx.kernel.activity_frame);
     let runtime = cx.kernel.input_runtime();
     context.with_selected(|| {
-        context.with_origin(POINT { x: 0, y: 0 }, || {
+        context.with_origin(Point { x: 0, y: 0 }, || {
             context.with_unclipped(|| {
                 let bounds = context.clip_rect();
                 let mut rect = activity.rect();
@@ -267,7 +266,7 @@ pub fn sleep_game(cx: &mut Cx<'_>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::native_abi::{EXTENT, POINT};
+    use crate::graphics::{geometry::Extent, geometry::Point};
 
     fn rectangles(border: i16, fill: bool) -> Vec<(u8, i16, i16, i16, i16)> {
         let mut draws = Vec::new();
@@ -278,9 +277,9 @@ mod tests {
             a: 255,
         };
         box_rectangles(
-            RECT {
-                corner: POINT { x: 10, y: 20 },
-                extent: EXTENT {
+            Rect {
+                corner: Point { x: 10, y: 20 },
+                extent: Extent {
                     width: 30,
                     height: 40,
                 },

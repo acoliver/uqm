@@ -18,22 +18,18 @@ use crate::engine::{
     Kernel, StoryKey, World,
 };
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_abi::{Color, EXTENT, POINT, RECT},
-    native_font::FontLease,
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect,
 };
 use screen::{enlarge, repair_rectangle, Display};
 use state::MapState;
-use std::{
-    ffi::{c_long, CStr, CString},
-    ptr::NonNull,
-};
+use std::ffi::{c_long, CStr, CString};
 
 const ONE_SECOND: u32 = 840;
 const MAX_ZOOM_SHIFT: i32 = 4;
-const ARILOU_SPACE: POINT = POINT { x: 438, y: 6372 };
-const QUASI_SPACE: POINT = POINT { x: 5000, y: 5000 };
-const ARILOU_HOME: POINT = POINT { x: 6134, y: 5900 };
+const ARILOU_SPACE: Point = Point { x: 438, y: 6372 };
+const QUASI_SPACE: Point = Point { x: 5000, y: 5000 };
+const ARILOU_HOME: Point = Point { x: 6134, y: 5900 };
 
 fn which_space(world: &World) -> u8 {
     world.story_state(StoryKey::ARILOU_SPACE_SIDE) as u8
@@ -41,7 +37,7 @@ fn which_space(world: &World) -> u8 {
 fn portal_open(world: &World) -> bool {
     world.story_state(StoryKey::ARILOU_SPACE) != 0
 }
-fn current_location(world: &World, dimensions: (i32, i32)) -> POINT {
+fn current_location(world: &World, dimensions: (i32, i32)) -> Point {
     if !world.in_hqspace() {
         world
             .selected_star()
@@ -49,7 +45,7 @@ fn current_location(world: &World, dimensions: (i32, i32)) -> POINT {
             .star_pt
     } else {
         let geometry = crate::navigation::hyper_units::Geometry::new(dimensions);
-        POINT {
+        Point {
             x: geometry.universe_x(world.data.flagship.log_x),
             y: geometry.universe_y(world.data.flagship.log_y),
         }
@@ -59,7 +55,7 @@ fn current_location(world: &World, dimensions: (i32, i32)) -> POINT {
 struct StarMap {
     state: MapState,
     display: Display,
-    universe: POINT,
+    universe: Point,
     initialized: bool,
     last_label: CString,
     transition: bool,
@@ -72,7 +68,7 @@ impl StarMap {
         Self {
             state: MapState::new(
                 dimensions,
-                if destination == (POINT { x: -1, y: -1 }) {
+                if destination == (Point { x: -1, y: -1 }) {
                     universe
                 } else {
                     destination
@@ -112,10 +108,10 @@ impl StarMap {
             });
         }
     }
-    fn draw_cursor(&self, point: POINT) {
+    fn draw_cursor(&self, point: Point) {
         self.display.context.draw_stamp(&self.display.frame, point);
     }
-    fn erase_cursor(&self, point: POINT) {
+    fn erase_cursor(&self, point: Point) {
         let mut rect = self.display.frame.rect();
         rect.corner.x = rect.corner.x.wrapping_add(point.x);
         if rect.corner.x < 0 {
@@ -142,7 +138,7 @@ impl StarMap {
         rect.corner.y &= !1;
         self.display.context.restore_screen_region(rect);
     }
-    fn move_cursor(&mut self, world: &World, sx: i32, sy: i32, absolute: Option<POINT>) {
+    fn move_cursor(&mut self, world: &World, sx: i32, sy: i32, absolute: Option<Point>) {
         let movement = self.state.move_cursor(sx, sy, absolute);
         if movement.recentered {
             self.draw_map(world, 0, None, true);
@@ -239,7 +235,7 @@ pub fn star_map(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u32 {
         previous.select();
     }
     if cx.world.data.game.autopilot == map.universe {
-        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
+        cx.world.data.game.autopilot = Point { x: -1, y: -1 };
     }
     u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
 }
@@ -285,10 +281,10 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
     }
 }
 
-fn zero_rect() -> RECT {
-    RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+fn zero_rect() -> Rect {
+    Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 0,
             height: 0,
         },
@@ -334,7 +330,7 @@ impl LineWalk {
             delta: cycle >> 1,
         }
     }
-    fn step(&mut self, p: &mut POINT) {
+    fn step(&mut self, p: &mut Point) {
         self.xe = self.xe.wrapping_sub(self.dx);
         if self.xe <= 0 {
             p.x = p.x.wrapping_add(self.xi);
@@ -348,15 +344,15 @@ impl LineWalk {
     }
 }
 
-fn box_union(a: RECT, b: RECT) -> RECT {
+fn box_union(a: Rect, b: Rect) -> Rect {
     let x = i32::from(a.corner.x).min(i32::from(b.corner.x));
     let y = i32::from(a.corner.y).min(i32::from(b.corner.y));
-    RECT {
-        corner: POINT {
+    Rect {
+        corner: Point {
             x: x as i16,
             y: y as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: ((i32::from(a.corner.x) + i32::from(a.extent.width))
                 .max(i32::from(b.corner.x) + i32::from(b.extent.width))
                 - x) as i16,
@@ -367,14 +363,14 @@ fn box_union(a: RECT, b: RECT) -> RECT {
     }
 }
 
-fn intersects(a: RECT, b: RECT) -> bool {
+fn intersects(a: Rect, b: Rect) -> bool {
     i32::from(a.corner.x) < i32::from(b.corner.x) + i32::from(b.extent.width)
         && i32::from(a.corner.y) < i32::from(b.corner.y) + i32::from(b.extent.height)
         && i32::from(a.corner.x) + i32::from(a.extent.width) > i32::from(b.corner.x)
         && i32::from(a.corner.y) + i32::from(a.extent.height) > i32::from(b.corner.y)
 }
 
-fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) -> u16) -> u16 {
+fn fuel_requirement(from: Point, to: Point, space: u8, sqrt: impl FnOnce(u32) -> u16) -> u16 {
     let x = from.x.wrapping_sub(to.x);
     let y = from.y.wrapping_sub(to.y);
     let f = (c_long::from(x) * c_long::from(x) + c_long::from(y) * c_long::from(y)) as u32;

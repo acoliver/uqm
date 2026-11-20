@@ -1,34 +1,33 @@
 //! Outfit installation, fuel transactions and menu callbacks, ported from outfit.c.
-use crate::engine::world::activity::activity_flags;
-use crate::starbase::ids;
-use crate::starbase::module_guard;
-use crate::starbase::sis_modules as equipment;
-use crate::starbase::sis_modules::ModuleType;
-use crate::ui::sis;
-use uqm_engine::time::counter_abi::ONE_SECOND;
-
 use super::menu_state::PM_FUEL;
 use super::session::{draw_piece, MenuAssets};
 use crate::engine::input::frames::*;
 use crate::engine::observe::Io;
+use crate::engine::world::activity::activity_flags;
 use crate::engine::World;
 use crate::engine::{battle::Cx, input::InputSession, StoryKey};
-use crate::graphics::native_abi::*;
-use crate::graphics::{drawable_abi::LoadedDrawable, menu as draw};
+use crate::graphics::{
+    drawable::FrameId, drawable::LoadedDrawable, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect, geometry::TextAlign, intersection::Stamp, menu as draw,
+};
+use crate::starbase::ids;
+use crate::starbase::module_guard;
+use crate::starbase::sis_modules as equipment;
+use crate::starbase::sis_modules::ModuleType;
+use crate::state::game_state_keys::get_game_state;
 use crate::ui::menu::draw_campaign_menu;
+use crate::ui::sis;
 use sis::{
     clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_flagship_name,
     draw_flagship_stats, draw_title, highlight_rect, set_menu_flash,
 };
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
-use crate::state::game_state_keys::get_game_state;
-use std::ptr;
-
-const OUTFIT_FUEL: BYTE = 0;
-const OUTFIT_MODULES: BYTE = 1;
-const OUTFIT_SAVELOAD: BYTE = 2;
-const OUTFIT_EXIT: BYTE = 3;
-const OUTFIT_DOFUEL: BYTE = 4;
+const OUTFIT_FUEL: u8 = 0;
+const OUTFIT_MODULES: u8 = 1;
+const OUTFIT_SAVELOAD: u8 = 2;
+const OUTFIT_EXIT: u8 = 3;
+const OUTFIT_DOFUEL: u8 = 4;
 use super::outfit_state::{apply_piece, can_install, EMPTY_SLOT};
 const LANDER_X: i16 = 24;
 const LANDER_Y: i16 = 67;
@@ -54,11 +53,11 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 }
 const BLACK: Color = rgb15(0, 0, 0);
 
-fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) {
+fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: u8) {
     let old = draw::select(cx.kernel.status_context);
     let mut r = draw::clip();
-    let mut s = STAMP {
-        origin: POINT {
+    let mut s = Stamp {
+        origin: Point {
             x: (4 + cx.screen_dimensions().0 - ids::STATUS_WIDTH - ids::SAFE_X as i32) as i16
                 - r.corner.x,
             y: (ids::SIS_ORG_Y + cx.screen_dimensions().1
@@ -67,7 +66,7 @@ fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) 
                 - ids::RADAR_HEIGHT) as i16
                 - r.corner.y,
         },
-        frame: ptr::null_mut(),
+        frame: crate::graphics::drawable::FrameId::NULL,
     };
     r.corner.x = s.origin.x - 1;
     r.corner.y = s.origin.y - 11;
@@ -83,7 +82,7 @@ fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) 
         draw::foreground(BLACK);
         draw::fill(r);
     } else if !menu.assets.art().is_null() {
-        s.frame = draw::frame(menu.assets.art(), module as COUNT);
+        s.frame = draw::frame(menu.assets.art(), module as u16);
         draw::stamp(s.frame, s.origin);
         let buffer = format!(
             "{}\0",
@@ -94,11 +93,11 @@ fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) 
         draw::foreground(rgb15(0, 0x1f, 0));
         super::session::text(
             &buffer,
-            POINT {
+            Point {
                 x: s.origin.x + ids::RADAR_WIDTH as i16 - 2,
                 y: s.origin.y + ids::RADAR_HEIGHT as i16 - 2,
             },
-            TEXT_ALIGN_ALIGN_RIGHT,
+            TextAlign::Right,
         );
     }
     draw::unbatch();
@@ -106,26 +105,26 @@ fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) 
 }
 
 fn display_landers(cx: &mut Cx<'_>, menu: &mut OutfitSession) {
-    let mut s = STAMP {
-        origin: POINT { x: 0, y: 0 },
+    let mut s = Stamp {
+        origin: Point { x: 0, y: 0 },
         frame: menu.assets.modules(),
     };
     if get_game_state(cx.world, StoryKey::CHMMR_BOMB_STATE) == 3 {
         s.frame = draw::relative_frame(s.frame, -1);
         draw::stamp(s.frame, s.origin);
     } else {
-        s.origin = POINT {
+        s.origin = Point {
             x: LANDER_X,
             y: LANDER_Y,
         };
         let mut i = 0;
-        while i < cx.world.data.flagship.num_landers as COUNT {
+        while i < cx.world.data.flagship.num_landers as u16 {
             draw::stamp(s.frame, s.origin);
             s.origin.x += LANDER_WIDTH;
             i += 1;
         }
         draw::foreground(BLACK);
-        while i < ids::MAX_LANDERS as COUNT {
+        while i < ids::MAX_LANDERS as u16 {
             draw::filled_stamp(s.frame, s.origin);
             s.origin.x += LANDER_WIDTH;
             i += 1;
@@ -133,16 +132,16 @@ fn display_landers(cx: &mut Cx<'_>, menu: &mut OutfitSession) {
     }
 }
 
-fn slot_piece(world: &World, state: BYTE, item: SIZE) -> BYTE {
-    if state == ModuleType::PlanetLander as BYTE || state == EMPTY_SLOT + 3 {
-        if item < world.data.flagship.num_landers as SIZE {
-            ModuleType::PlanetLander as BYTE
+fn slot_piece(world: &World, state: u8, item: i16) -> u8 {
+    if state == ModuleType::PlanetLander as u8 || state == EMPTY_SLOT + 3 {
+        if item < world.data.flagship.num_landers as i16 {
+            ModuleType::PlanetLander as u8
         } else {
             EMPTY_SLOT + 3
         }
-    } else if state == ModuleType::FusionThruster as BYTE || state == EMPTY_SLOT {
+    } else if state == ModuleType::FusionThruster as u8 || state == EMPTY_SLOT {
         world.data.flagship.drive_slots[item as usize]
-    } else if state == ModuleType::TurningJets as BYTE || state == EMPTY_SLOT + 1 {
+    } else if state == ModuleType::TurningJets as u8 || state == EMPTY_SLOT + 1 {
         world.data.flagship.jet_slots[item as usize]
     } else {
         world.data.flagship.module_slots[item as usize]
@@ -150,52 +149,52 @@ fn slot_piece(world: &World, state: BYTE, item: SIZE) -> BYTE {
 }
 
 // The C InitFlash label is entered both after a transaction and after moving
-// between slot classes. Horizontal movement instead offsets the existing rect.
-fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: BYTE) {
+// between slot classes. Horizontal movement instead offsets the existing Rect.
+fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: u8) {
     let state = menu.state;
-    let mut width = ids::SHIP_PIECE_OFFSET as SIZE;
+    let mut width = ids::SHIP_PIECE_OFFSET;
     let rect = &mut menu.flash_rect;
-    if state == ModuleType::PlanetLander as BYTE || state == EMPTY_SLOT + 3 {
-        *rect = RECT {
-            corner: POINT {
+    if state == ModuleType::PlanetLander as u8 || state == EMPTY_SLOT + 3 {
+        *rect = Rect {
+            corner: Point {
                 x: LANDER_X - 1,
                 y: LANDER_Y - 1,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: 13,
                 height: 15,
             },
         };
         width = LANDER_WIDTH;
-    } else if state == ModuleType::FusionThruster as BYTE || state == EMPTY_SLOT {
-        *rect = RECT {
-            corner: POINT {
+    } else if state == ModuleType::FusionThruster as u8 || state == EMPTY_SLOT {
+        *rect = Rect {
+            corner: Point {
                 x: ids::DRIVE_TOP.x - 1,
                 y: ids::DRIVE_TOP.y - 1,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: 8,
                 height: 6,
             },
         };
-    } else if state == ModuleType::TurningJets as BYTE || state == EMPTY_SLOT + 1 {
-        *rect = RECT {
-            corner: POINT {
+    } else if state == ModuleType::TurningJets as u8 || state == EMPTY_SLOT + 1 {
+        *rect = Rect {
+            corner: Point {
                 x: ids::JET_TOP.x - 1,
                 y: ids::JET_TOP.y - 1,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: 9,
                 height: 10,
             },
         };
     } else {
-        *rect = RECT {
-            corner: POINT {
+        *rect = Rect {
+            corner: Point {
                 x: ids::MODULE_TOP.x - 1,
                 y: ids::MODULE_TOP.y - 1,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: ids::SHIP_PIECE_OFFSET + 2,
                 height: 34,
             },
@@ -210,26 +209,26 @@ fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: BYTE) {
     }
 }
 
-fn module_selection_range(world: &World, state: BYTE) -> (SIZE, SIZE) {
-    let mut first: SIZE = 0;
-    let mut last = if state == ModuleType::PlanetLander as BYTE || state == EMPTY_SLOT + 3 {
-        ids::MAX_LANDERS as SIZE - 1
-    } else if state == ModuleType::FusionThruster as BYTE || state == EMPTY_SLOT {
-        ids::NUM_DRIVE_SLOTS as SIZE - 1
-    } else if state == ModuleType::TurningJets as BYTE || state == EMPTY_SLOT + 1 {
-        ids::NUM_JET_SLOTS as SIZE - 1
+fn module_selection_range(world: &World, state: u8) -> (i16, i16) {
+    let mut first: i16 = 0;
+    let mut last = if state == ModuleType::PlanetLander as u8 || state == EMPTY_SLOT + 3 {
+        ids::MAX_LANDERS as i16 - 1
+    } else if state == ModuleType::FusionThruster as u8 || state == EMPTY_SLOT {
+        ids::NUM_DRIVE_SLOTS as i16 - 1
+    } else if state == ModuleType::TurningJets as u8 || state == EMPTY_SLOT + 1 {
+        ids::NUM_JET_SLOTS as i16 - 1
     } else {
         if world.story_state(StoryKey::CHMMR_BOMB_STATE) == 3 {
-            first = ids::NUM_BOMB_MODULES as SIZE;
+            first = ids::NUM_BOMB_MODULES as i16;
         }
-        equipment::NUM_MODULE_SLOTS as SIZE - 1
+        equipment::NUM_MODULE_SLOTS as i16 - 1
     };
-    if state < ModuleType::CrewPod as BYTE {
-        first = state as SIZE;
-        last = state as SIZE;
+    if state < ModuleType::CrewPod as u8 {
+        first = state as i16;
+        last = state as i16;
     } else if state < EMPTY_SLOT {
-        first = ModuleType::CrewPod as SIZE;
-        last = crate::starbase::module_chooser::LAST_PURCHASE_MODULE as SIZE;
+        first = ModuleType::CrewPod as i16;
+        last = crate::starbase::module_chooser::LAST_PURCHASE_MODULE as i16;
     }
     (first, last)
 }
@@ -238,18 +237,18 @@ fn finish_module_transaction(
     cx: &mut Cx<'_>,
     menu: &mut OutfitSession,
     input: &InputSession,
-    new_piece: BYTE,
-    old_piece: BYTE,
+    new_piece: u8,
+    old_piece: u8,
     cost: i32,
 ) {
     delta_sis_gauges(
         cx.kernel,
         cx.world,
-        sis::UNDEFINED_DELTA as SIZE,
-        sis::UNDEFINED_DELTA as SIZE,
+        sis::UNDEFINED_DELTA,
+        sis::UNDEFINED_DELTA,
         cost,
     );
-    if menu.state == ModuleType::PlanetLander as BYTE || menu.state == EMPTY_SLOT + 3 {
+    if menu.state == ModuleType::PlanetLander as u8 || menu.state == EMPTY_SLOT + 3 {
         display_landers(cx, menu);
     } else {
         draw_piece(
@@ -257,15 +256,13 @@ fn finish_module_transaction(
             &cx.world.data.flagship,
             cx.screen_dimensions(),
             menu.assets.modules(),
-            new_piece as COUNT,
-            menu.delta_item as COUNT,
+            new_piece as u16,
+            menu.delta_item as u16,
             false,
         );
-        if new_piece > ModuleType::TurningJets as BYTE
-            && old_piece > ModuleType::TurningJets as BYTE
-        {
+        if new_piece > ModuleType::TurningJets as u8 && old_piece > ModuleType::TurningJets as u8 {
             sis::capacity::draw_fuel_bars(
-                &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
+                &crate::graphics::context::ContextLease::require(cx.kernel.space_context),
                 &cx.world.data.flagship,
             );
         }
@@ -295,7 +292,7 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
         menu.initialized = true;
         menu.page = OutfitPage::Install;
         draw::select(cx.kernel.space_context);
-        clear_sis_rect(cx.kernel, cx.world, size, sis::CLEAR_RADAR as BYTE);
+        clear_sis_rect(cx.kernel, cx.world, size, sis::CLEAR_RADAR);
         clear_flash(cx.kernel);
         init_flash(cx, menu, old_piece);
     } else if select || cancel {
@@ -309,8 +306,8 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
         if select {
             if new_piece >= EMPTY_SLOT && old_piece >= EMPTY_SLOT {
                 new_piece -= EMPTY_SLOT - 1;
-                if new_piece > ModuleType::CrewPod as BYTE {
-                    new_piece = ModuleType::PlanetLander as BYTE;
+                if new_piece > ModuleType::CrewPod as u8 {
+                    new_piece = ModuleType::PlanetLander as u8;
                 }
             } else {
                 let slot = menu.delta_item;
@@ -336,14 +333,14 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
         } else {
             draw::select(cx.kernel.status_context);
             menu.state = OUTFIT_MODULES;
-            draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
+            draw_campaign_menu(cx, PM_FUEL, menu.state as i16);
             set_menu_flash(cx.kernel, size, false);
             menu.page = OutfitPage::Main;
-            clear_sis_rect(cx.kernel, cx.world, size, sis::DRAW_DISPLAY as BYTE);
+            clear_sis_rect(cx.kernel, cx.world, size, sis::DRAW_DISPLAY);
         }
     } else if left || right || up || down {
         let mut item = if state < EMPTY_SLOT {
-            menu.state as SIZE
+            menu.state as i16
         } else {
             menu.delta_item
         };
@@ -368,7 +365,7 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
                         state = if up { EMPTY_SLOT + 2 } else { EMPTY_SLOT };
                     }
                     if state == EMPTY_SLOT + 2 {
-                        item = ids::NUM_BOMB_MODULES as SIZE;
+                        item = ids::NUM_BOMB_MODULES as i16;
                     }
                 }
                 menu.delta_item = item;
@@ -387,8 +384,8 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
             }
             if !(state < EMPTY_SLOT
                 && (cx.world.data.game.module_cost[item as usize] == 0
-                    || (item >= ModuleType::GunWeapon as SIZE
-                        && item <= ModuleType::CannonWeapon as SIZE
+                    || (item >= ModuleType::GunWeapon as i16
+                        && item <= ModuleType::CannonWeapon as i16
                         && menu.delta_item > 0
                         && menu.delta_item < 13)))
             {
@@ -396,21 +393,20 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
             }
         }
         if state < EMPTY_SLOT {
-            if item != menu.state as SIZE {
-                menu.state = item as BYTE;
+            if item != menu.state as i16 {
+                menu.state = item as u8;
                 cx.kernel.sis_highlight.pre_update_flash_rect();
-                draw_module_strings(cx, menu, item as BYTE);
+                draw_module_strings(cx, menu, item as u8);
                 cx.kernel.sis_highlight.post_update_flash_rect();
             }
         } else if item != menu.delta_item || state != menu.state {
             let piece = slot_piece(cx.world, state, item);
             draw::select(cx.kernel.space_context);
             if state == menu.state {
-                let width = if state == ModuleType::PlanetLander as BYTE || state == EMPTY_SLOT + 3
-                {
+                let width = if state == ModuleType::PlanetLander as u8 || state == EMPTY_SLOT + 3 {
                     LANDER_WIDTH
                 } else {
-                    ids::SHIP_PIECE_OFFSET as SIZE
+                    ids::SHIP_PIECE_OFFSET
                 };
                 menu.flash_rect.corner.x += width * (item - menu.delta_item);
                 menu.delta_item = item;
@@ -440,7 +436,7 @@ fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
     let max_fit = sis::capacity::fuel_capacity(&cx.world.data.flagship)
         .wrapping_sub(cx.world.data.flagship.fuel_on_board) as i32;
     let max_afford =
-        (cx.world.data.flagship.res_units / cx.world.data.game.fuel_cost as DWORD) as i32;
+        (cx.world.data.flagship.res_units / cx.world.data.game.fuel_cost as u32) as i32;
     let min_fit = -(cx.world.data.flagship.fuel_on_board as i32);
     if incr > max_fit {
         incr = max_fit;
@@ -457,11 +453,11 @@ fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
         let cost = incr / equipment::FUEL_TANK_SCALE as i32 * cx.world.data.game.fuel_cost as i32;
         {
             highlight.pre_update_flash_rect();
-            delta_sis_gauges(cx.kernel, cx.world, 0, incr as SIZE, -cost);
+            delta_sis_gauges(cx.kernel, cx.world, 0, incr as i16, -cost);
             highlight.post_update_flash_rect();
         };
         sis::capacity::draw_fuel_bars(
-            &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
+            &crate::graphics::context::ContextLease::require(cx.kernel.space_context),
             &cx.world.data.flagship,
         );
     }
@@ -478,7 +474,7 @@ fn on_naming_done(kernel: &crate::engine::Kernel, world: &crate::engine::World, 
     sis::gauges::draw_flagship_name(kernel, world, width, false);
 }
 
-fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut OutfitSession) -> BOOLEAN {
+fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut OutfitSession) -> u32 {
     menu.assets.art = None;
     menu.assets.modules = None;
     kernel.naming_callback = None;
@@ -498,8 +494,8 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
     menu.assets.modules = LoadedDrawable::load(c"graphics.outfitmodules");
     let background = LoadedDrawable::load(c"graphics.outfit")
         .unwrap_or_else(|| panic!("outfit background missing"));
-    let mut s = STAMP {
-        origin: POINT { x: 0, y: 0 },
+    let mut s = Stamp {
+        origin: Point { x: 0, y: 0 },
         frame: background
             .lease()
             .frame(0)
@@ -520,7 +516,7 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
     drop(background);
     draw_installed_modules(cx, menu.assets.modules());
     sis::capacity::draw_fuel_bars(
-        &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
+        &crate::graphics::context::ContextLease::require(cx.kernel.space_context),
         &cx.world.data.flagship,
     );
     display_landers(cx, menu);
@@ -540,14 +536,14 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
         }
     }
     {
-        draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
+        draw_campaign_menu(cx, PM_FUEL, menu.state as i16);
         draw_flagship_name(cx.kernel, cx.world, size.0, false);
     };
     if input.preferences().fonts == crate::ui::settings::OPT_PC {
         draw_flagship_stats(cx.kernel, cx.world, size);
     }
     {
-        draw::transition(3);
+        draw::transition();
         crate::ui::settings::play_loaded_music(cx.world, menu.assets.music.as_ref(), 1, 1);
         draw::unbatch();
         set_menu_flash(cx.kernel, size, false);
@@ -569,7 +565,7 @@ fn do_outfit(
     input: &InputSession,
     io: &mut Io<'_>,
     services: &super::MenuServices,
-) -> BOOLEAN {
+) -> u32 {
     let size = cx.screen_dimensions();
     if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
         return exit_outfit(cx.kernel, menu);
@@ -606,7 +602,7 @@ fn do_outfit(
                 menu.delta_item = if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) != 3 {
                     0
                 } else {
-                    ids::NUM_BOMB_MODULES as SIZE
+                    ids::NUM_BOMB_MODULES as i16
                 };
                 menu.initialized = false;
                 do_install_module(cx, menu, input);
@@ -616,7 +612,7 @@ fn do_outfit(
                     return exit_outfit(cx.kernel, menu);
                 }
                 {
-                    draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
+                    draw_campaign_menu(cx, PM_FUEL, menu.state as i16);
                     set_menu_flash(cx.kernel, size, false);
                 };
             }
@@ -632,7 +628,7 @@ fn do_outfit(
             change_fuel_quantity(cx, input);
             cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
         } else {
-            crate::ui::menu::choose_menu_state(cx, input, &mut menu.state, PM_FUEL as BYTE);
+            crate::ui::menu::choose_menu_state(cx, input, &mut menu.state, PM_FUEL);
         }
     }
     1
@@ -648,7 +644,7 @@ struct OutfitSession {
     initialized: bool,
     state: u8,
     delta_item: i16,
-    flash_rect: RECT,
+    flash_rect: Rect,
     assets: MenuAssets,
     page: OutfitPage,
 }
@@ -658,9 +654,9 @@ impl Default for OutfitSession {
             initialized: false,
             state: 0,
             delta_item: 0,
-            flash_rect: RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            flash_rect: Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: 0,
                     height: 0,
                 },
@@ -686,7 +682,7 @@ pub fn run(
     menu.assets.music.take()
 }
 
-fn draw_installed_modules(cx: &Cx<'_>, module_frame: FRAME) {
+fn draw_installed_modules(cx: &Cx<'_>, module_frame: FrameId) {
     let slots = cx.world.data.flagship;
     for pieces in [
         slots.drive_slots.as_slice(),
@@ -700,8 +696,8 @@ fn draw_installed_modules(cx: &Cx<'_>, module_frame: FRAME) {
                     &cx.world.data.flagship,
                     cx.screen_dimensions(),
                     module_frame,
-                    piece as COUNT,
-                    slot as COUNT,
+                    piece as u16,
+                    slot as u16,
                     false,
                 );
             }

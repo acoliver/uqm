@@ -7,14 +7,14 @@ use crate::engine::{
     observe::{CheckpointView, Io},
     StoryKey, World,
 };
-use crate::graphics::{drawable_abi::LoadedDrawable, menu as draw, native_abi::*};
+use crate::graphics::{drawable::LoadedDrawable, geometry::Color, menu as draw};
 use crate::sound::resource_types::LoadedMusic;
+use crate::starbase::draw::draw_base_state_strings;
+use crate::starbase::draw::rotate_starbase;
+use crate::starbase::draw::StarbaseAnimation;
+use crate::starbase::graphics::Graphics;
 use crate::starbase::platform::StatusMessageMode;
-use crate::starbase::{
-    draw::{draw_base_state_strings, rotate_starbase, StarbaseAnimation},
-    graphics::Graphics,
-    starbase_menu::StarbaseState,
-};
+use crate::starbase::starbase_menu::StarbaseState;
 use crate::ui::settings::stop_music;
 use crate::ui::sis;
 use uqm_engine::time::counter_abi::ONE_SECOND;
@@ -116,11 +116,11 @@ fn update_starbase_screen(
         rotate_starbase(
             &graphics,
             &mut menu.animation,
-            Some(frame as usize),
+            Some(frame.bits()),
             uqm_engine::host::now_ticks(),
         );
         draw_base_state_strings(&graphics, None, menu.state);
-        draw::transition(3);
+        draw::transition();
         crate::ui::settings::play_loaded_music(cx.world, menu.music.as_ref(), 1, 1);
         draw::unbatch();
     } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
@@ -156,7 +156,7 @@ fn update_starbase_screen(
 }
 
 fn do_time_passage(cx: &mut Cx<'_>) {
-    let interval = (ONE_SECOND * 2) as SIZE;
+    let interval = (ONE_SECOND * 2) as i16;
     let deadline = draw::fade_screen(draw::ScreenFade::Black, interval);
     cx.kernel.input_runtime().sleep_until(cx, deadline);
     crate::navigation::events::advance_days(cx, 14);
@@ -196,7 +196,7 @@ fn prepare_starbase_visit(
     if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2 {
         cx.world.select_star(None);
         cx.world
-            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, u8::MAX as u32);
     }
     if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
@@ -215,14 +215,14 @@ fn prepare_starbase_visit(
             7,
         )
         .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
-        cx.world.npc_built_ships().get_mut(ship).race_id = BYTE::MAX;
+        cx.world.npc_built_ships().get_mut(ship).race_id = u8::MAX;
         (services.communicate)(
             cx,
             io,
             crate::engine::species::conv::ILWRATH,
             Default::default(),
         );
-        if cx.world.data.flagship.crew_enlisted == COUNT::MAX
+        if cx.world.data.flagship.crew_enlisted == u16::MAX
             || cx.world.activity() & activity_flags::CHECK_ABORT != 0
         {
             return None;
@@ -232,7 +232,7 @@ fn prepare_starbase_visit(
             return None;
         }
         cx.world
-            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, u8::MAX as u32);
     }
     let previous = cx
         .kernel
@@ -241,7 +241,7 @@ fn prepare_starbase_visit(
         || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
         do_time_passage(cx);
-        if cx.world.data.flagship.crew_enlisted == COUNT::MAX {
+        if cx.world.data.flagship.crew_enlisted == u16::MAX {
             return None;
         }
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
@@ -252,7 +252,7 @@ fn prepare_starbase_visit(
             return None;
         }
         cx.world
-            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, u8::MAX as u32);
     }
     Some(previous)
 }

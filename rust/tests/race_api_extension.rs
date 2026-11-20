@@ -118,12 +118,10 @@ fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
         let owner = Battle::new(4);
         let mut a = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         let mut b = Ship::bare(&owner, SPECIES_ID_VUX_ID, 1);
-        // SAFETY: sound tables and serialized fixtures stay live until the bank pointers are cleared.
+        // SAFETY: the serialized fixtures own their descriptors for the whole check.
         unsafe {
-            use uqm_rust::strings::string_table::*;
-            let table = AllocStringTable(5, 0);
-            a.descriptor_mut().ship_data.ship_sounds = CaptureStringTable(table).cast();
-            b.descriptor_mut().ship_data.ship_sounds = CaptureStringTable(table).cast();
+            a.descriptor_mut().install_sound_fixture(5);
+            b.descriptor_mut().install_sound_fixture(5);
             crate::battle_context::with(|cx| {
                 assert_eq!(cx.ship_sound_count(a.ship_id), 5);
                 cx.set_ship_sound_bank(a.ship_id, 2);
@@ -133,17 +131,14 @@ fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
                 assert_eq!(cx.last_pkunk_sound(), 4);
                 cx.set_last_pkunk_sound(saved);
             });
-            assert_eq!(
-                GetStringTableIndex(a.descriptor_mut().ship_data.ship_sounds.cast()),
-                2
-            );
-            assert_eq!(
-                GetStringTableIndex(b.descriptor_mut().ship_data.ship_sounds.cast()),
-                0
-            );
-            a.descriptor_mut().ship_data.ship_sounds = std::ptr::null_mut();
-            b.descriptor_mut().ship_data.ship_sounds = std::ptr::null_mut();
-            FreeStringTable(table);
+            let index = |ship: &mut Ship| {
+                ship.descriptor_mut()
+                    .ship_data
+                    .ship_sounds
+                    .map(|s| s.index())
+            };
+            assert_eq!(index(&mut a), Some(2));
+            assert_eq!(index(&mut b), Some(0));
         }
     });
 }

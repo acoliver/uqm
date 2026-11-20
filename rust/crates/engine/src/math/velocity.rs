@@ -27,7 +27,7 @@ pub struct VelocityDesc {
 
 /// Extent type for VelocityDesc fields
 /// Matches C's EXTENT (width, height as i16)
-pub use crate::graphics::native_abi::extent as Extent;
+pub use crate::graphics::geometry::Extent;
 
 // ---------------------------------------------------------------------------
 // VelocityDesc Implementation

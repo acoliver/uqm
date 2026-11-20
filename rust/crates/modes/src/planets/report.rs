@@ -45,9 +45,8 @@ pub(crate) mod live {
     use super::{character_delay, needs_page_marker, take_character, word_character_count};
     use crate::engine::{battle::Cx, observe::Io, strings::owned_table::TextEntry};
     use crate::graphics::{
-        context_abi::{BatchGuard, ContextFrame, ContextLease},
-        native_abi::{Color, POINT},
-        native_font::FontLease,
+        context::BatchGuard, context::ContextLease, drawable::ContextFrame, font::FontLease,
+        geometry::Color, geometry::Point,
     };
     use crate::planets::scan::state::create_context;
     use crate::ui::util::{
@@ -92,11 +91,11 @@ pub(crate) mod live {
                 let mut x = r.extent.width >> 1;
                 for _ in 0..(printer.width - 78) / 6 {
                     if input.preferences().fonts == 2 {
-                        printer.context.draw_stamp(&frame, POINT { x, y });
+                        printer.context.draw_stamp(&frame, Point { x, y });
                     } else {
                         printer
                             .context
-                            .draw_filled_stamp(&frame, POINT { x, y }, DARK_GREEN);
+                            .draw_filled_stamp(&frame, Point { x, y }, DARK_GREEN);
                     }
                     x += r.extent.width + 1;
                 }
@@ -139,11 +138,11 @@ pub(crate) mod live {
                 self.context.draw_text_bounded(
                     &self.font,
                     t.string,
-                    crate::graphics::native_abi::POINT {
+                    crate::graphics::geometry::Point {
                         x: t.baseline.x,
                         y: t.baseline.y,
                     },
-                    crate::graphics::native_abi::TEXT_ALIGN_ALIGN_LEFT,
+                    crate::graphics::geometry::TextAlign::Left,
                     GREEN,
                     1,
                 );
@@ -307,22 +306,22 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn retained_report_batch_releases_on_return_and_panic() {
-        use crate::graphics::{batch_depth::depth, context_abi::LoadedContext};
+        use crate::graphics::context::LoadedContext;
         let _queue = uqm_engine::test_support::native_probe::DrawQueue::init();
         let owner = LoadedContext::create(c"report-batch-test");
         let context = owner.lease();
         {
             let _batch = context.batch();
-            assert_eq!(depth(&context), 1);
+            assert_eq!(context.batch_depth(), 1);
         }
-        assert_eq!(depth(&context), 0);
+        assert_eq!(context.batch_depth(), 0);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _batch = context.batch();
-            assert_eq!(depth(&context), 1);
+            assert_eq!(context.batch_depth(), 1);
             panic!("interrupted report");
         }));
         assert!(result.is_err());
-        assert_eq!(depth(&context), 0);
+        assert_eq!(context.batch_depth(), 0);
     }
 
     #[test]

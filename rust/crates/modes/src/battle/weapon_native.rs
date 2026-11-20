@@ -14,7 +14,7 @@ pub(crate) mod engine {
         frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
-        let mut object = INTERSECT_CONTROL {
+        let mut object = crate::graphics::intersection::IntersectControl {
             IntersectStamp: STAMP {
                 origin,
                 frame: frame.raw(),
@@ -30,10 +30,10 @@ pub(crate) mod engine {
                     .view(),
                 1,
             );
-            let mut ship_intersect = INTERSECT_CONTROL {
+            let mut ship_intersect = crate::graphics::intersection::IntersectControl {
                 IntersectStamp: STAMP {
                     origin: POINT { x: 0, y: 0 },
-                    frame: std::ptr::null_mut(),
+                    frame: crate::graphics::drawable::FrameId::NULL,
                 },
                 EndPoint: POINT { x: 0, y: 0 },
                 last_time_val: 0,

@@ -1,104 +1,140 @@
-//! Serialized drawing operations for menus with registered context and frame owners.
+//! Drawing through the selected context, for menus written in the C style
+//! of "select a context, then draw".
+use super::context::{self, ContextId, ContextLease};
+use super::drawable::{ContextFrame, FrameId};
+use super::font::{FontId, FontLease};
+use super::geometry::{Color, Point, Rect, TextAlign};
+use super::state;
+use std::ffi::CStr;
 
-use super::{
-    context_abi, context_abi::ContextFrame, context_abi::ContextLease, native_abi::*,
-    native_font::FontLease,
-};
-use std::{ffi::CStr, ptr::NonNull};
-
+/// The selected context; panics when none is selected.
 fn current() -> ContextLease {
-    super::ffi::native_allocations().assert_thread();
-    // SAFETY: allocation admission enforces the serialized graphics thread.
-    let context = unsafe { context_abi::_pCurContext };
-    ContextLease::require(context)
+    ContextLease::retain(context::selected().unwrap_or_else(|| panic!("no context selected")))
 }
 
-pub fn select(context: CONTEXT) -> CONTEXT {
-    super::ffi::native_allocations().assert_thread();
-    // SAFETY: allocation admission enforces serialized context selection.
-    let previous = unsafe { context_abi::_pCurContext };
-    let _previous = NonNull::new(previous).map(ContextLease::retain);
-    let next = NonNull::new(context).map(ContextLease::retain);
-    // SAFETY: both optional contexts are registered and retained for the selection.
-    unsafe { context_abi::SetContext(next.as_ref().map_or(std::ptr::null_mut(), |_| context)) };
+/// C: `SetContext`: select `context`, returning the previous selection.
+pub fn select(context: Option<ContextId>) -> Option<ContextId> {
+    context::select(context)
+}
+
+/// The selected context, if any.
+pub fn selected() -> Option<ContextId> {
+    context::selected()
+}
+
+pub fn clip() -> Rect {
+    current().clip_rect()
+}
+
+/// C: `SetContextClipRect`, where `None` clears the clip.
+pub fn set_clip_or_clear(rect: Option<Rect>) {
+    state::with(|g| g.set_clip(rect));
+}
+
+/// C: `SetContextDrawMode`: returns the previous mode.
+pub fn draw_mode(mode: super::geometry::DrawMode) -> super::geometry::DrawMode {
+    state::with(|g| g.set_draw_mode(mode))
+}
+
+/// C: `SetContextFGFrame` returning the previous frame.
+pub fn set_frame_returning(frame: FrameId) -> FrameId {
+    let previous = current().target().frame();
+    set_frame(frame);
     previous
 }
 
-pub fn clip() -> RECT {
-    current().clip_rect()
-}
-pub fn set_clip(rect: RECT) {
+pub fn set_clip(rect: Rect) {
     current().set_clip(rect);
 }
+
+/// C: `SetContextFGFrame` on the selected context.
+pub fn set_frame(frame: FrameId) {
+    current().set_frame(ContextFrame::retain(frame));
+}
+
+/// C: `SetContextOrigin` on the selected context; returns the previous one.
+pub fn set_origin(origin: Point) -> Point {
+    current().target().replace_hotspot(origin)
+}
+
+/// C: `SetContextForeGroundColor`; returns the previous colour.
 pub fn foreground(color: Color) -> Color {
     let context = current();
     let previous = context.foreground();
     context.set_foreground(color);
     previous
 }
+
+/// C: `SetContextBackGroundColor`; returns the previous colour.
 pub fn background(color: Color) -> Color {
-    let context = current();
-    // SAFETY: the registered context remains selected on its owner thread.
-    let previous = unsafe { context_abi::SetContextBackGroundColor(color) };
-    drop(context);
-    previous
+    current().background(color)
 }
+
 pub fn selected_font() -> Option<FontLease> {
     current().font_lease()
 }
-pub fn select_font(font: Option<FontLease>) -> FONT {
+
+/// C: `SetContextFont`; returns the previous font.
+pub fn select_font(font: Option<FontLease>) -> Option<FontId> {
     let context = current();
-    let previous = context.font_lease();
-    let previous_raw = previous
-        .as_ref()
-        .map_or(std::ptr::null_mut(), FontLease::as_raw);
+    let previous = context.font_lease().map(|font| font.font());
     context.replace_font(font);
-    previous_raw
+    previous
 }
-pub fn font(font: FONT) -> FONT {
-    select_font(NonNull::new(font).map(FontLease::retain))
+
+pub fn font(font: Option<FontId>) -> Option<FontId> {
+    select_font(font.map(FontLease::retain))
 }
+
 pub fn selected_effect() -> ContextFrame {
     current().font_effect()
 }
-pub fn select_effect(effect: ContextFrame) -> FRAME {
+
+/// C: `SetContextFontEffect`; returns the previous effect frame.
+pub fn select_effect(effect: ContextFrame) -> FrameId {
     let context = current();
     let previous = context.font_effect();
     context.set_font_effect(effect);
-    previous.as_raw()
+    previous.frame()
 }
-pub fn font_effect(frame: FRAME) -> FRAME {
-    select_effect(ContextFrame::retain(NonNull::new(frame)))
+
+pub fn font_effect(frame: FrameId) -> FrameId {
+    select_effect(ContextFrame::retain(frame))
 }
+
 pub fn font_leading() -> i16 {
     selected_font()
         .unwrap_or_else(|| panic!("selected menu context has no font"))
         .leading()
 }
-pub fn fill(rect: RECT) {
+
+pub fn fill(rect: Rect) {
     let context = current();
     context.fill_rectangle(context.foreground(), rect);
 }
-pub fn outline(rect: RECT) {
+
+pub fn outline(rect: Rect) {
     let context = current();
     context.draw_rectangle(context.foreground(), rect);
 }
-pub fn point(point: POINT) {
+
+pub fn point(point: Point) {
     let context = current();
     context.draw_point(context.foreground(), point);
 }
-pub fn stamp(frame: FRAME, origin: POINT) {
-    current().draw_stamp(&ContextFrame::retain(NonNull::new(frame)), origin);
+
+/// C: `DrawStamp` through the selected context; nothing is drawn when no
+/// context or frame is selected.
+pub fn stamp(frame: FrameId, origin: Point) {
+    state::with(|g| g.draw_stamp(frame, origin));
 }
-pub fn filled_stamp(frame: FRAME, origin: POINT) {
+
+pub fn filled_stamp(frame: FrameId, origin: Point) {
     let context = current();
-    context.draw_filled_stamp(
-        &ContextFrame::retain(NonNull::new(frame)),
-        origin,
-        context.foreground(),
-    );
+    context.draw_filled_stamp(&ContextFrame::retain(frame), origin, context.foreground());
 }
-pub fn text(text: &CStr, baseline: POINT, align: TEXT_ALIGN, count: u16) {
+
+pub fn text(text: &CStr, baseline: Point, align: TextAlign, count: u16) {
     let context = current();
     context.draw_text_bounded(
         &selected_font().unwrap_or_else(|| panic!("selected menu context has no font")),
@@ -109,53 +145,48 @@ pub fn text(text: &CStr, baseline: POINT, align: TEXT_ALIGN, count: u16) {
         count,
     );
 }
-pub fn frame(frame: FRAME, index: u16) -> FRAME {
-    if frame.is_null() {
-        return frame;
-    }
-    ContextFrame::retain(NonNull::new(frame))
-        .wrapped_frame(index)
-        .as_raw()
+
+/// C: `SetAbsFrameIndex`.
+pub fn frame(frame: FrameId, index: u16) -> FrameId {
+    frame.at(index)
 }
-pub fn relative_frame(frame: FRAME, offset: i16) -> FRAME {
-    let lease = ContextFrame::retain(NonNull::new(frame));
-    // SAFETY: the optional frame and its complete drawable are retained during indexing.
-    unsafe { super::pixmap_abi::SetRelFrameIndex(lease.as_raw(), offset) }
+
+/// C: `SetRelFrameIndex`.
+pub fn relative_frame(frame: FrameId, offset: i16) -> FrameId {
+    frame.relative(offset)
 }
-pub fn frame_count(frame: FRAME) -> u16 {
-    if frame.is_null() {
-        return 0;
-    }
-    ContextFrame::retain(NonNull::new(frame)).frame_count()
+
+/// C: `GetFrameCount`.
+pub fn frame_count(frame: FrameId) -> u16 {
+    frame.count()
 }
-pub fn frame_index(frame: FRAME) -> u16 {
-    let lease = ContextFrame::retain(NonNull::new(frame));
-    // SAFETY: the optional frame belongs to its retained drawable allocation.
-    unsafe { super::pixmap_abi::GetFrameIndex(lease.as_raw().cast()) }
+
+/// C: `GetFrameIndex`.
+pub fn frame_index(frame: FrameId) -> u16 {
+    frame.index()
 }
+
 pub fn batch() {
-    let context = current();
-    // SAFETY: the selected context admits this graphics-thread batch operation.
-    unsafe { super::gfx_common_abi::batch_graphics() };
-    drop(context);
+    current();
+    state::batch();
 }
+
 pub fn unbatch() {
-    let context = current();
-    // SAFETY: menu callers balance batch operations on this graphics thread.
-    unsafe { super::gfx_common_abi::unbatch_graphics() };
-    drop(context);
+    current();
+    state::unbatch();
 }
+
 pub fn clear() {
     current().clear();
 }
+
 pub fn transition_source() {
     current().transition_source(None);
 }
-pub fn transition(kind: i32) {
-    let context = current();
-    // SAFETY: the live selected context admits a whole-screen transition.
-    unsafe { super::gfx_common_abi::ScreenTransition(kind, std::ptr::null_mut()) };
-    drop(context);
+
+pub fn transition() {
+    current();
+    super::screen::screen_transition(None);
 }
 
 #[repr(u32)]
@@ -171,36 +202,22 @@ pub fn fade_screen(kind: ScreenFade, interval: i16) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::rc::Rc;
+    use crate::graphics::context::LoadedContext;
+    use crate::graphics::font::{Font, LoadedFont};
 
     #[test]
-    #[serial_test::serial]
     fn selected_font_survives_owner_release_and_null_selection_releases_its_lease() {
-        let owner = super::super::context_abi::LoadedContext::create(c"menu-font-retention");
+        let owner = LoadedContext::create(c"menu-font-retention");
         let context = owner.lease();
-        // SAFETY: this serial fixture registers one newly allocated empty font.
-        let raw = unsafe {
-            let raw = NonNull::new(
-                crate::memory::rust_hcalloc(std::mem::size_of::<font_desc>()).cast::<font_desc>(),
-            )
-            .unwrap();
-            (*raw.as_ptr()).Leading = 17;
-            super::super::native_font::register(raw);
-            raw
-        };
-        let allocation = Rc::downgrade(
-            super::super::ffi::native_allocations()
-                .fonts
-                .get(&(raw.as_ptr() as usize))
-                .unwrap(),
-        );
-        let lease = FontLease::retain(raw);
-        context.set_font(&lease);
+        let mut font = Font::default();
+        font.leading = 17;
+        let loaded = LoadedFont::adopt(font);
+        let raw = loaded.font();
+        context.set_font(&loaded.lease());
         context.select();
-        drop(lease);
-        super::super::native_font::release(raw);
+        drop(loaded);
         assert_eq!(font_leading(), 17);
-        assert_eq!(font(std::ptr::null_mut()), raw.as_ptr());
-        assert!(allocation.upgrade().is_none());
+        assert_eq!(super::font(None), Some(raw));
+        assert!(std::panic::catch_unwind(|| FontLease::retain(raw)).is_err());
     }
 }

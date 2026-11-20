@@ -1,6 +1,7 @@
 use super::*;
 use crate::engine::save::summary_record::SummaryDesc;
 use crate::front_end::gameopt::{picker::PickerState, render::PickerDisplay};
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use crate::sound::heart_ffi::{fade_music, stop_sound};
 use crate::ui::settings::{pause_music, resume_music};
 use uqm_engine::time::counter_abi::GetTimeCounter;
@@ -103,9 +104,9 @@ pub(super) fn pick_game(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     solar: Option<SolarSnapshot>,
-    saving: BOOLEAN,
-    from_main_menu: BOOLEAN,
-) -> BOOLEAN {
+    saving: u32,
+    from_main_menu: u32,
+) -> u32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     log::info!(
@@ -214,12 +215,12 @@ fn name_save_game(
     draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_EDIT, game_index);
     let context = ContextLease::require(cx.kernel.space_context);
     let screen = ContextLease::require(cx.kernel.screen_context);
-    let rect = RECT {
-        corner: POINT {
+    let rect = Rect {
+        corner: Point {
             x: 30 + SAFE_X,
             y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 204 - SAFE_X,
             height: 11,
         },

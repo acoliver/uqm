@@ -1,5 +1,5 @@
 //! Typed resource settings and persistence through a retained directory.
-use super::ffi_bridge::{serialize_index, with_dispatch};
+use super::index;
 use crate::io::Dir;
 use std::{
     ffi::CStr,
@@ -10,58 +10,39 @@ use std::{
 pub struct Settings;
 impl Settings {
     pub fn kind(&self, key: &CStr) -> Option<String> {
-        let key = key.to_str().ok()?;
-        with_dispatch(|dispatch| dispatch.get_resource_type(key).map(str::to_owned))
+        index::kind(key.to_str().ok()?)
     }
 
     pub(crate) fn descriptor(&self, key: &CStr, expected: &str) -> Option<String> {
-        let key = key.to_str().ok()?;
-        with_dispatch(|dispatch| {
-            let kind = dispatch.get_resource_type(key)?;
-            assert_eq!(kind, expected, "unexpected resource type for {key}");
-            dispatch.get_string_resource(key).map(str::to_owned)
-        })
+        index::descriptor(key, expected)
     }
 
+    pub fn has_key(&self, key: &str) -> bool {
+        index::has_key(key)
+    }
     pub fn boolean(&self, key: &str) -> Option<bool> {
-        with_dispatch(|dispatch| {
-            (dispatch.get_resource_type(key) == Some("BOOLEAN"))
-                .then(|| dispatch.get_boolean_resource(key))
-                .flatten()
-        })
+        index::value(key, "BOOLEAN").map(|value| value != 0)
     }
     pub fn integer(&self, key: &str) -> Option<i32> {
-        with_dispatch(|dispatch| {
-            (dispatch.get_resource_type(key) == Some("INT32"))
-                .then(|| dispatch.get_int_resource(key).map(|value| value as i32))
-                .flatten()
-        })
+        index::value(key, "INT32").map(|value| value as i32)
     }
     pub fn string(&self, key: &str) -> Option<String> {
-        with_dispatch(|dispatch| {
-            (dispatch.get_resource_type(key) == Some("STRING"))
-                .then(|| dispatch.get_string_resource(key).map(str::to_owned))
-                .flatten()
-        })
+        index::string(key)
     }
     pub fn put_boolean(&self, key: &str, value: bool) {
-        self.put(key, "BOOLEAN", if value { "true" } else { "false" });
+        index::put(key, "BOOLEAN", if value { "true" } else { "false" });
     }
     pub fn put_integer(&self, key: &str, value: i32) {
-        self.put(key, "INT32", &value.to_string());
+        index::put(key, "INT32", &value.to_string());
     }
     pub fn put_string(&self, key: &str, value: &str) {
-        self.put(key, "STRING", value);
+        index::put(key, "STRING", value);
     }
-    fn put(&self, key: &str, kind: &str, value: &str) {
-        assert!(
-            !key.contains('\0') && !value.contains('\0'),
-            "setting contains NUL"
-        );
-        with_dispatch(|dispatch| dispatch.process_resource_desc(key, &format!("{kind}:{value}")));
+    pub fn remove(&self, key: &str) -> bool {
+        index::remove(key)
     }
     pub fn save(&self, directory: &Dir, file: &CStr, prefix: &str) -> io::Result<()> {
-        let lines = serialize_index(Some(prefix), true);
+        let lines = index::serialize(prefix, true);
         let mut stream = directory.create(file)?;
         for line in lines {
             stream.write_all(line.as_bytes())?;

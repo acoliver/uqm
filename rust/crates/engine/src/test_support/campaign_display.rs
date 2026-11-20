@@ -1,23 +1,21 @@
 //! Display resources for campaign callbacks that also redraw their status label.
 use crate::{
     graphics::{
-        context_abi::{CreateContextAux, DestroyContext, SetContext},
-        drawable_abi::LoadedDrawable,
-        native_abi::CONTEXT,
-        native_font::LoadedFont,
-        sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
+        context::{self, ContextId, LoadedContext},
+        drawable::LoadedDrawable,
+        font::LoadedFont,
+        present::{init_graphics, uninit_graphics, GraphicsOptions},
     },
     world::Game,
 };
-use std::ptr;
 
 /// Entries in the fixture's game-text table. It must reach past the highest
 /// months and status string ids that campaign callbacks read.
 pub const GAME_TEXT_ENTRIES: usize = 470;
 
 pub struct CampaignDisplay {
-    context: CONTEXT,
-    previous: CONTEXT,
+    context: Option<LoadedContext>,
+    previous: Option<ContextId>,
     _screen: Option<LoadedDrawable>,
 }
 
@@ -79,12 +77,8 @@ impl CampaignDisplay {
         )?;
         std::env::set_var("SDL_VIDEODRIVER", "dummy");
         std::env::set_var("SDL_AUDIODRIVER", "dummy");
-        // SAFETY: the serialized fixture owns SDL and the temporary resource mount.
-        unsafe {
-            assert_eq!(
-                TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
-                0
-            );
+        init_graphics(1, 0, options, 320, 240);
+        {
             let content = crate::test_support::native_session::ContentMount::new(directory.path());
             content.init_resources("fixture.rmp");
             game.kernel.install_tiny_font(
@@ -97,19 +91,14 @@ impl CampaignDisplay {
                 LoadedFont::load(c"fixture.tiny").ok_or("battle-font fixture did not load")?,
             );
             load();
-            #[cfg(feature = "debug-process")]
-            let context = CreateContextAux(c"campaign callback fixture".as_ptr());
-            #[cfg(not(feature = "debug-process"))]
-            let context = CreateContextAux();
-            let previous = SetContext(context);
+            let owner = LoadedContext::create(c"campaign callback fixture");
+            let context = owner.context();
+            let previous = context::select(Some(context));
             let screen =
                 LoadedDrawable::create(8, 320, 240, 1).ok_or("screen fixture allocation failed")?;
-            game.kernel.status_context = context;
-            game.kernel.off_screen_context = context;
-            game.kernel.screen = screen
-                .lease()
-                .frame(0)
-                .ok_or("fixture screen has no frame")?;
+            game.kernel.status_context = Some(context);
+            game.kernel.off_screen_context = Some(context);
+            game.kernel.screen = screen.first_frame();
             game.kernel
                 .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(vec![
                     b"A\0".to_vec();
@@ -118,27 +107,23 @@ impl CampaignDisplay {
             draw(game);
             drop(content);
             Ok(Self {
-                context,
+                context: Some(owner),
                 previous,
                 _screen: Some(screen),
             })
         }
     }
     pub fn finish(&self, game: Game) {
-        // SAFETY: the fixture retains its queued drawing resources until this flush.
-        unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
+        crate::graphics::state::flush();
         drop(game);
     }
 }
 
 impl Drop for CampaignDisplay {
     fn drop(&mut self) {
-        // SAFETY: the serialized fixture restores selection before releasing its context.
-        unsafe {
-            SetContext(self.previous);
-            DestroyContext(self.context);
-            drop(self._screen.take());
-            TFB_UninitGraphics();
-        }
+        context::select(self.previous);
+        drop(self.context.take());
+        drop(self._screen.take());
+        uninit_graphics();
     }
 }

@@ -5,7 +5,6 @@
 use std::{ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
 use uqm_rust::battle::AiOps;
-
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
     ships::native::abi::*,
@@ -130,16 +129,13 @@ pub unsafe fn pred<T>(pointer: *mut T) -> *mut std::ffi::c_void {
 }
 
 pub struct Battle {
-    dimensions: (i32, i32),
     graphics: u8,
 }
 impl Battle {
     pub fn new(capacity: COUNT) -> Self {
-        // SAFETY: battle_context serializes this binary's game authorities.
-        unsafe {
-            let dimensions = (ScreenWidth, ScreenHeight);
-            let graphics = uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-            uqm_rust::graphics::context_abi::_GraphicsStatusFlags &= !4;
+        {
+            let graphics = uqm_rust::engine::test_support::native_probe::graphics_status();
+            uqm_rust::engine::test_support::native_probe::set_graphics_status(graphics & !4);
             crate::battle_context::with(|cx| {
                 cx.kernel_mut()
                     .reset_element_capacity(usize::from(capacity));
@@ -153,27 +149,20 @@ impl Battle {
                 let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
                 init_display_list(cx, scaled);
             });
-            ScreenWidth = 320;
-            ScreenHeight = 240;
-            Self {
-                dimensions,
-                graphics,
-            }
+            Self { graphics }
         }
     }
 }
 impl Drop for Battle {
     fn drop(&mut self) {
-        // SAFETY: ships and elements created after this owner have already dropped.
-        unsafe {
+        {
             crate::battle_context::with(|cx| cx.kernel_mut().reset_element_capacity(0));
             crate::battle_context::with(|cx| {
                 for side in 0..2 {
                     cx.kernel_mut().reset_ship_capacity(side, 0);
                 }
             });
-            (ScreenWidth, ScreenHeight) = self.dimensions;
-            uqm_rust::graphics::context_abi::_GraphicsStatusFlags = self.graphics;
+            uqm_rust::engine::test_support::native_probe::set_graphics_status(self.graphics);
         }
     }
 }
@@ -311,16 +300,10 @@ impl<'a> Ship<'a> {
             .make_opaque();
     }
     pub fn set_frame_bounds(&mut self, role: usize, index: usize, bounds: [i16; 2]) {
-        // SAFETY: this fixture retains the registered frame throughout its bounds update.
-        unsafe {
-            (*self
-                .raw_frame(role, index)
-                .cast::<uqm_rust::graphics::native_abi::frame_desc>())
-            .Bounds = uqm_rust::graphics::native_abi::EXTENT {
-                width: bounds[0],
-                height: bounds[1],
-            };
-        }
+        self.raw_frame(role, index)
+            .set_bounds(uqm_rust::graphics::geometry::Extent::new(
+                bounds[0], bounds[1],
+            ));
     }
     pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<*mut std::ffi::c_void> {
         {
@@ -355,16 +338,11 @@ impl<'a> Ship<'a> {
         }
     }
     pub fn set_hot_spot(&mut self, role: usize, index: usize, hot_spot: [i16; 2]) {
-        // SAFETY: this fixture retains the registered frame throughout its hotspot update.
-        unsafe {
-            (*self
-                .raw_frame(role, index)
-                .cast::<uqm_rust::graphics::native_abi::frame_desc>())
-            .HotSpot = uqm_rust::graphics::native_abi::POINT {
+        self.raw_frame(role, index)
+            .set_hot_spot(uqm_rust::graphics::geometry::Point {
                 x: hot_spot[0],
                 y: hot_spot[1],
-            };
-        }
+            });
     }
     /// # Safety
     /// The source must be a live element in this fixture's retained battle pool.
@@ -685,17 +663,12 @@ impl FrameSet {
     }
     pub fn with_bounds(count: u16, bounds: [i16; 2]) -> Self {
         let native = NativeFrameSet::new(count);
-        // SAFETY: the fixture owns all frame slots in this registered drawable.
-        unsafe {
-            for index in 0..count {
-                (*native
-                    .frame(index as usize)
-                    .cast::<uqm_rust::graphics::native_abi::frame_desc>())
-                .Bounds = uqm_rust::graphics::native_abi::EXTENT {
-                    width: bounds[0],
-                    height: bounds[1],
-                };
-            }
+        for index in 0..usize::from(count) {
+            native
+                .frame(index)
+                .set_bounds(uqm_rust::graphics::geometry::Extent::new(
+                    bounds[0], bounds[1],
+                ));
         }
         Self(Rc::new(native))
     }
@@ -707,28 +680,8 @@ impl FrameSet {
         self.0.array()
     }
     pub fn make_opaque(&mut self) {
-        use uqm_rust::graphics::{
-            native_canvas::{
-                lifecycle::TFB_DrawCanvas_New_Paletted, pixels::TFB_DrawCanvas_SetPixelIndexes,
-            },
-            tfb_draw_abi::{TFB_DrawImage_Delete, TFB_DrawImage_New},
-        };
-        // SAFETY: each registered frame owns a separate canvas and image; allocation leases retain them.
-        unsafe {
-            for index in 0..=(*self.0 .0).MaxIndex {
-                let frame = &mut *(*self.0 .0).Frame.add(index as usize);
-                let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
-                assert!(!canvas.is_null());
-                assert_ne!(
-                    TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
-                    0
-                );
-                if !frame.image.is_null() {
-                    TFB_DrawImage_Delete(frame.image);
-                }
-                frame.image = TFB_DrawImage_New(canvas);
-                assert!(!frame.image.is_null());
-            }
+        for index in 0..self.0.count() {
+            uqm_rust::engine::test_support::native_probe::make_opaque(self.0.frame(index));
         }
     }
     pub fn frame(&self, index: usize) -> FRAME {
@@ -917,46 +870,27 @@ pub fn element(
     handle.cast()
 }
 
-pub struct NativeFrameSet(*mut uqm_rust::graphics::native_abi::drawable_desc);
+pub struct NativeFrameSet(uqm_rust::graphics::drawable::LoadedDrawable);
 impl NativeFrameSet {
     pub fn new(count: u16) -> Self {
-        // SAFETY: the serialized fixture owns this drawable and all of its frame slots.
-        unsafe {
-            let drawable = uqm_rust::graphics::drawable_abi::AllocDrawable(count);
-            assert!(!drawable.is_null());
-            (*drawable).MaxIndex = count - 1;
-            for index in 0..count {
-                let frame = &mut *(*drawable).Frame.add(usize::from(index));
-                frame.Index = index;
-                frame.Bounds = uqm_rust::graphics::native_abi::EXTENT {
-                    width: 4,
-                    height: 4,
-                };
-            }
-            Self(drawable)
-        }
+        Self(
+            uqm_rust::graphics::drawable::LoadedDrawable::create(0, 4, 4, count)
+                .unwrap_or_else(|| panic!("fixture drawable")),
+        )
+    }
+    pub fn count(&self) -> usize {
+        usize::from(self.0.first_frame().count())
     }
     pub fn frame(&self, index: usize) -> FRAME {
-        // SAFETY: the fixture retains the allocation throughout the returned handle's use.
-        unsafe {
-            assert!(index <= usize::from((*self.0).MaxIndex));
-            (*self.0).Frame.add(index).cast()
-        }
+        assert!(index < self.count());
+        self.0.first_frame().at(index as u16)
     }
     pub fn selection(&self, index: usize) -> uqm_rust::engine::battle::frames::FrameSelection {
-        uqm_rust::engine::battle::frames::FrameSelection::retain(self.frame(index).cast())
+        uqm_rust::engine::battle::frames::FrameSelection::retain(self.frame(index))
     }
 
     pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
         let frame = self.frame(0);
-        uqm_rust::engine::battle::frames::FrameArray::from_native([frame.cast(); 3])
-    }
-}
-impl Drop for NativeFrameSet {
-    fn drop(&mut self) {
-        // SAFETY: this fixture uniquely owns the drawable's logical release.
-        unsafe {
-            uqm_rust::graphics::drawable_abi::DestroyDrawable(self.0);
-        }
+        uqm_rust::engine::battle::frames::FrameArray::from_native([frame; 3])
     }
 }

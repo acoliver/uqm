@@ -367,7 +367,7 @@ pub struct SisState {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CStarDesc {
-    pub star_pt: crate::graphics::native_abi::POINT,
+    pub star_pt: crate::graphics::geometry::Point,
     pub star_type: u8,
     pub index: u8,
     pub prefix: u8,
@@ -511,7 +511,6 @@ mod default_tests {
         let world = WorldData::default();
         assert_eq!(world.game.glob_flags, 0);
         assert!(world.game.module_cost.iter().all(|cost| *cost == 0));
-        assert!(world.game._display_array.is_null());
         assert_eq!(world.calendar_date(), (0, 0, 0));
     }
 }

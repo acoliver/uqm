@@ -65,7 +65,7 @@ pub enum Event {
     FailureSound,
     FlushInput,
     LoadGraphic(String, FrameId),
-    DestroyDrawable(FrameId),
+    FreeDrawable(FrameId),
     LoadMusic(String, MusicId),
     PlayMusic(MusicId),
     StopMusic,
@@ -317,7 +317,7 @@ impl RecordingPlatform {
         for event in events.iter() {
             match event {
                 Event::LoadGraphic(_, frame) => frames.push(*frame),
-                Event::DestroyDrawable(frame) => frames.retain(|f| f != frame),
+                Event::FreeDrawable(frame) => frames.retain(|f| f != frame),
                 Event::LoadMusic(_, id) => music.push(*id),
                 Event::DestroyMusic(id) => music.retain(|m| m != id),
                 _ => {}
@@ -726,7 +726,7 @@ impl Platform for RecordingPlatform {
     }
 
     fn destroy_drawable(&self, frame: FrameId) {
-        self.record(Event::DestroyDrawable(frame));
+        self.record(Event::FreeDrawable(frame));
     }
 
     fn load_color_map(&self, resource: &str) -> Result<ColorMapId, StarbaseError> {

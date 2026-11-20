@@ -2,8 +2,8 @@
 
 use super::Harness;
 use uqm_rust::battle::gendef::SOL_DEFINED;
-
-use uqm_rust::engine::graphics::{dcqueue_abi as queue, native_surface::CapturedSurface};
+use uqm_rust::engine::graphics::surface::CapturedSurface;
+use uqm_rust::engine::test_support::native_probe;
 use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
@@ -131,89 +131,63 @@ fn check_bomb_queue(h: &mut Harness) {
     });
 }
 
-fn allocations() -> i32 {
-    unsafe { sdl2::sys::SDL_GetNumAllocations() }
+fn allocations() -> (usize, usize) {
+    uqm_rust::graphics::state::flush_ex(true);
+    native_probe::allocations()
 }
 
 fn check_drawable_ownership(h: &mut Harness) {
-    let _formats = uqm_rust::engine::graphics::native_offscreen::OffscreenFormats::new().unwrap();
-    unsafe {
-        queue::Init_DrawCommandQueue();
-    }
-    // Warm SDL's format cache before measuring resource-owned allocations.
-    unsafe {
-        drop(CapturedSurface::pixmap(2, 2, 1));
-        queue::TFB_FlushGraphicsEx(1);
-    }
+    let _graphics = native_probe::DrawQueue::init();
     let baseline = allocations();
-    assert!(baseline >= 0);
     let map_width = MAP_WIDTH as i16;
     let map_height = MAP_HEIGHT as i16;
     for (width, height) in [(map_width, map_height), (map_width / 2, map_height / 2)] {
         let definition = CapturedSurface::pixmap(width, height, 2);
-        let frame = definition.as_frame();
+        let frame = definition.first_frame();
         assert!(!frame.is_null());
         let created = allocations();
-        assert!(created > baseline);
-        unsafe {
-            assert_eq!(
-                ((*frame).Bounds.width, (*frame).Bounds.height),
-                (width, height)
-            );
-            assert!(!(*frame).image.is_null());
-        }
+        assert!(created.0 > baseline.0 && created.1 > baseline.1);
+        let (bounds, pixels) = native_probe::frame_bounds(frame);
+        assert_eq!((bounds.width, bounds.height), (width, height));
+        assert!(pixels);
         let retained = if (width, height) == (map_width, map_height) {
             definition
         } else {
             let scaled = definition.rescaled(i32::from(map_width), i32::from(map_height));
-            assert!(!scaled.as_frame().is_null());
-            assert_ne!(scaled.as_frame(), frame);
+            assert!(!scaled.first_frame().is_null());
+            assert_ne!(scaled.first_frame(), frame);
             let both = allocations();
-            assert!(both > created);
+            assert!(both.0 > created.0 && both.1 > created.1);
             drop(scaled);
-            unsafe { queue::TFB_FlushGraphicsEx(1) };
             assert_eq!(allocations(), created);
             let normalized = definition.into_definition(map_width, map_height).unwrap();
-            assert_ne!(normalized.as_frame(), frame);
-            unsafe {
-                queue::TFB_FlushGraphicsEx(1);
-                let elevation = normalized.as_frame().add(1);
-                assert_eq!((*elevation).Index, 1);
-                assert_eq!((*elevation).parent, (*normalized.as_frame()).parent);
-                assert_eq!(
-                    ((*elevation).Bounds.width, (*elevation).Bounds.height),
-                    (map_width, map_height)
-                );
-                assert!(!(*elevation).image.is_null());
-            }
+            assert_ne!(normalized.first_frame(), frame);
+            let elevation = normalized.first_frame().at(1);
+            assert_eq!(elevation.index(), 1);
+            assert_eq!(elevation.drawable(), normalized.first_frame().drawable());
+            let (bounds, pixels) = native_probe::frame_bounds(elevation);
+            assert_eq!((bounds.width, bounds.height), (map_width, map_height));
+            assert!(pixels);
             assert_eq!(allocations(), created);
             normalized
         };
-        let live = retained.as_frame();
-        unsafe {
-            assert_eq!(
-                ((*live).Bounds.width, (*live).Bounds.height),
-                (map_width, map_height)
-            );
-        }
+        let live = retained.first_frame();
+        let (bounds, _) = native_probe::frame_bounds(live);
+        assert_eq!((bounds.width, bounds.height), (map_width, map_height));
         let owned = retained.into_drawable().unwrap();
         assert_eq!(owned.lease().frame(0), Some(live));
         drop(owned);
-        // SAFETY: all surface owners have dropped; drain their deferred image releases.
-        unsafe {
-            queue::TFB_FlushGraphicsEx(1);
-        }
         assert_eq!(
             allocations(),
             baseline,
-            "source/rescale owners leaked SDL allocations"
+            "source/rescale owners leaked graphics allocations"
         );
-        println!("Sol drawable ownership: {width}x{height} two-frame allocation -> retained {map_width}x{map_height} -> owned release; SDL allocations {created} -> {baseline}");
+        println!("Sol drawable ownership: {width}x{height} two-frame allocation -> retained {map_width}x{map_height} -> owned release; allocations {created:?} -> {baseline:?}");
     }
     // DEBUG's early-return LoadPlanet path must release an unconsumed non-null
     // definition as well, rather than proving only a missing-resource branch.
     let quiet = crate::battle_context::with(|cx| cx.kernel.diagnostics.suppress_interaction());
-    unsafe {
+    {
         crate::battle_context::with(|cx| {
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let game = std::cell::RefCell::new(cx.reborrow());
@@ -244,12 +218,8 @@ fn check_drawable_ownership(h: &mut Harness) {
                 .is_none());
             });
         });
-        queue::TFB_FlushGraphicsEx(1);
     }
     drop(quiet);
     assert_eq!(allocations(), baseline);
     super::sol_resources::check(h);
-    unsafe {
-        queue::Uninit_DrawCommandQueue();
-    }
 }

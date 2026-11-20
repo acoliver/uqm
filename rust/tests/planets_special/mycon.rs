@@ -41,7 +41,6 @@ impl MyconOps for Harness {
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         self.state.sys.info = mycon::scan_info(case);
-        self.state.sys.info.planet_info.discovery_string = std::ptr::null_mut();
         self.state.sys.report =
             uqm_rust::engine::world::generation::ReportSlot::new(case.strings.then(|| {
                 uqm_rust::engine::strings::owned_table::LoadedTextTable::new(vec![

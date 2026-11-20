@@ -30,30 +30,28 @@ pub const fn classify(entry: i32, exit: i32) -> BatchVerdict {
     }
 }
 
-use crate::graphics::batch_depth::{correct_by, depth};
-
 /// Invoke a native callback that must run unbatched, and hold it to that.
 ///
 /// Fails if the depth is not zero on entry, or if the callback returns having
 /// changed it. `operation` names the boundary for diagnostics.
 pub fn calling_native_unbatched<T>(
-    context: &crate::graphics::context_abi::ContextLease,
+    context: &crate::graphics::context::ContextLease,
     operation: &'static str,
     body: impl FnOnce() -> T,
 ) -> Result<T, AdapterError> {
-    let entry = depth(context);
+    let entry = context.batch_depth();
     if let BatchVerdict::EntryNotUnbatched(_) = classify(entry, entry) {
         return Err(AdapterError::new(operation));
     }
 
     let value = body();
 
-    match classify(entry, depth(context)) {
+    match classify(entry, context.batch_depth()) {
         BatchVerdict::Balanced => Ok(value),
         BatchVerdict::EntryNotUnbatched(_) => Err(AdapterError::new(operation)),
         BatchVerdict::Drift(levels) => {
             // Put the queue back before reporting, so the failure can be drawn.
-            correct_by(context, levels);
+            context.correct_batch_by(levels);
             Err(AdapterError {
                 operation,
                 batch_depth_corrections: levels,
@@ -69,9 +67,10 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn batch_observation_rejects_an_uninitialized_queue() {
-        let context = crate::graphics::context_abi::LoadedContext::create(c"queue-admission");
+        let context = crate::graphics::context::LoadedContext::create(c"queue-admission");
         let context = context.lease();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| depth(&context)));
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| context.batch_depth()));
         assert!(
             result.is_err(),
             "batch observation accepted an absent queue"
@@ -81,10 +80,11 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn production_boundary_rejects_drift_and_restores_the_queue() {
-        use uqm_engine::test_support::native_probe::{
-            batch_depth, batch_graphics, unbatch_graphics, DrawQueue,
-        };
-        let context = crate::graphics::context_abi::LoadedContext::create(c"queue-callback");
+        use uqm_engine::test_support::native_probe::batch_depth;
+        use uqm_engine::test_support::native_probe::batch_graphics;
+        use uqm_engine::test_support::native_probe::unbatch_graphics;
+        use uqm_engine::test_support::native_probe::DrawQueue;
+        let context = crate::graphics::context::LoadedContext::create(c"queue-callback");
         let context = context.lease();
         let _queue = DrawQueue::init();
         let error = calling_native_unbatched(&context, "pickup_drift", || {

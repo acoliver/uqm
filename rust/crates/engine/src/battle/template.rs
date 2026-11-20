@@ -1,7 +1,7 @@
 //! Plain descriptor inputs; legacy resource pointer construction stays in the engine.
 
 use crate::battle::{record::*, views::*, Race, RaceDesc, RaceState};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 use std::ffi::CStr;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -37,7 +37,7 @@ pub struct RaceTemplate {
     pub characteristics: CHARACTERISTIC_STUFF,
     pub intelligence: Intelligence,
     pub fleet_strength: u16,
-    pub fleet_location: POINT,
+    pub fleet_location: Point,
     pub resources: RaceResources,
     pub state: RaceState,
 }
@@ -49,7 +49,7 @@ impl Default for RaceTemplate {
             characteristics: RaceDesc::empty().raw.characteristics,
             intelligence: Intelligence::default(),
             fleet_strength: 0,
-            fleet_location: POINT { x: 0, y: 0 },
+            fleet_location: Point { x: 0, y: 0 },
             resources: RaceResources::default(),
             state: RaceState::None,
         }

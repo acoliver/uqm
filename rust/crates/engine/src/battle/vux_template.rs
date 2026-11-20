@@ -4,7 +4,7 @@ use crate::battle::{
     views::{Info, Intelligence},
     Race, RaceDesc, RaceResources, RaceTemplate,
 };
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 pub fn descriptor(race: &'static Race) -> RaceDesc {
     RaceTemplate {
@@ -30,7 +30,7 @@ pub fn descriptor(race: &'static Race) -> RaceDesc {
             ship_mass: 6,
         },
         fleet_strength: 900 / 11 * 2,
-        fleet_location: POINT { x: 4412, y: 1558 },
+        fleet_location: Point { x: 4412, y: 1558 },
         intelligence: Intelligence {
             weapon_range: 50 << 2,
             ..Intelligence::default()

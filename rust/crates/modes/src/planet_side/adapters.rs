@@ -1,12 +1,11 @@
 //! Production-facing PlanetSide adapters available without sharing gameplay state.
 
-use crate::engine::battle::Cx;
-use std::cell::RefCell;
-
 use super::runtime::{AdapterError, PlanetSideClock, PlanetSideInput, ShipStatusPort, Tick};
 use super::session::{ShipDelta, ShipStatus};
 use super::simulation::FrameInput;
+use crate::engine::battle::Cx;
 use crate::engine::{input::InputControls, world::activity::ActivityControl};
+use std::cell::RefCell;
 
 /// Input adapter retaining the resolved player-one controls and activity signal.
 pub struct CffiPlanetSideInput {
@@ -195,7 +194,7 @@ mod tests {
         )) {
             return;
         }
-        let owner = crate::graphics::context_abi::LoadedContext::create(c"uninitialized pacing");
+        let owner = crate::graphics::context::LoadedContext::create(c"uninitialized pacing");
         let mut pacer = crate::threading::pacing::GameThreadPacer::new(owner.lease());
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             pacer.sleep_until(0);
@@ -208,16 +207,13 @@ mod tests {
     fn nonzero_settlement_updates_only_the_supplied_campaign_and_draws_real_gauges() {
         super::super::resources::tests::with_packaged_resources(|owners| {
             use crate::graphics::{
-                context_abi::{ContextFrame, ContextLease},
-                drawable_abi::LoadedDrawable,
+                context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
             };
             use crate::starbase::sis_modules::ModuleType;
             let frames = LoadedDrawable::load(c"graphics.flagshipstatus").unwrap();
             owners.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
             let context = ContextLease::require(owners.kernel.status_context);
-            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-                owners.kernel.screen,
-            )));
+            context.set_frame(ContextFrame::retain(owners.kernel.screen));
             let sis = &mut owners.world.data.flagship;
             sis.module_slots[0] = ModuleType::CrewPod as u8;
             sis.module_slots[1] = ModuleType::StorageBay as u8;
@@ -337,8 +333,7 @@ mod tests {
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
-        let context =
-            crate::graphics::context_abi::ContextLease::require(game.kernel.status_context);
+        let context = crate::graphics::context::ContextLease::require(game.kernel.status_context);
         let mut clock =
             CffiPlanetSideClock(crate::threading::pacing::GameThreadPacer::new(context));
         let before = crate::time::counter_abi::GetTimeCounter();

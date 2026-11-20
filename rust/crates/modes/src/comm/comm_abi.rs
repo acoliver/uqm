@@ -1,11 +1,11 @@
 //! Supplied conversation state and retained subtitle rendering.
 
-use super::{
-    locdata::{CPoint, CRect},
-    sis_graphics::{suffix, Text},
-    Comm,
-};
-use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
+use super::locdata::CPoint;
+use super::locdata::CRect;
+use super::sis_graphics::suffix;
+use super::sis_graphics::Text;
+use super::Comm;
+use crate::graphics::{context::ContextLease, font::FontLease};
 use crate::sound::trackplayer::{SubtitleIdentity, SubtitleSnapshot};
 use std::ffi::CString;
 
@@ -77,7 +77,7 @@ fn layout_subtitle(comm: &Comm, cache: &ContextLease, font: &FontLease, text: &m
             font,
             &line,
             text.baseline,
-            text.align as u32,
+            crate::graphics::geometry::TextAlign::from_c(text.align),
             comm.data.definition.alien_text_fcolor,
             comm.data.definition.alien_text_bcolor,
         );
@@ -227,7 +227,6 @@ impl Default for RuntimeState {
 #[cfg(test)]
 mod owner_tests {
     use super::*;
-    use std::ptr::NonNull;
 
     #[test]
     #[serial_test::serial]
@@ -274,7 +273,8 @@ mod owner_tests {
     #[serial_test::serial]
     fn subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes() {
         super::super::sis_graphics_font_tests::with_display("comm::comm_abi::owner_tests::subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes", |comm, context| {
-            use crate::graphics::{context_abi::LoadedContext, drawable_abi::LoadedDrawable, native_abi::{Color, POINT}};
+            use crate::graphics::context::LoadedContext;
+use crate::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::Point};
             use crate::sound::trackplayer;
             trackplayer::stop_track().unwrap();
             trackplayer::splice_track(Some("subtitle"), Some("A A"), None, None, vec![]).unwrap();
@@ -287,18 +287,18 @@ mod owner_tests {
             comm.display.resources.as_mut().unwrap().display.as_mut().unwrap().subtitles = super::super::sis_graphics::SubtitleCache {
                 target: context.clone(), context: cache_context.clone(),
                 frame: drawable.lease().context_frame(0),
-                font: FontLease::retain(NonNull::new(comm.presentation.tiny_font).unwrap()),
+                font: FontLease::retain(comm.presentation.tiny_font.unwrap()),
             };
             comm.data.definition.alien_text_width = 100;
             comm.data.definition.alien_text_fcolor = Color { r: 255, g: 255, b: 255, a: 255 };
-            comm.display.subtitle.baseline = POINT { x: 10, y: 20 };
+            comm.display.subtitle.baseline = Point { x: 10, y: 20 };
             comm.display.subtitle.current = Some(snapshot.clone());
             super::super::subtitle_display::SubtitleDisplay::redraw(comm, false);
             assert_eq!(comm.display.last_subtitle, None);
             super::super::subtitle_display::SubtitleDisplay::redraw(comm, true);
             context.flush();
             assert_eq!(comm.display.last_subtitle, Some(snapshot.identity));
-            let pixels = || (0..122).flat_map(|y| (0..242).map(move |x| POINT { x, y })).map(|point| drawable.lease().context_frame(0).pixel(point)).map(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a)).collect::<Vec<_>>();
+            let pixels = || (0..122).flat_map(|y| (0..242).map(move |x| Point { x, y })).map(|point| drawable.lease().context_frame(0).pixel(point)).map(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a)).collect::<Vec<_>>();
             let original = pixels();
             assert!(original.contains(&(255, 255, 255, 255)));
             comm_redraw_subtitles(comm, true);
@@ -307,7 +307,7 @@ mod owner_tests {
             clear_subtitles(comm);
             assert!(comm.display.subtitle.current.is_none());
             assert_eq!(comm.display.last_subtitle, None);
-            let leading = FontLease::retain(NonNull::new(comm.presentation.tiny_font).unwrap()).leading();
+            let leading = FontLease::retain(comm.presentation.tiny_font.unwrap()).leading();
             for (valign, expected) in [(0, 20 + leading), (1, 20 - leading / 2 + leading), (2, 20), (3, 20 + leading)] {
                 clear_subtitles(comm);
                 comm.data.definition.alien_text_valign = valign;

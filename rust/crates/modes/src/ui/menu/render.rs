@@ -1,14 +1,12 @@
 //! Campaign menus rendered from retained display and text owners.
 use super::*;
-use crate::starbase::ids;
-use crate::{
-    engine::World,
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_font::FontLease,
-    },
+use crate::engine::World;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
-use std::{ffi::CString, ptr::NonNull};
+use crate::starbase::ids;
+use std::ffi::CString;
 
 const INACTIVE_COLOR: Color = Color {
     r: 82,
@@ -17,7 +15,7 @@ const INACTIVE_COLOR: Color = Color {
     a: 255,
 };
 
-fn draw_pc_frame(context: &ContextLease, rect: &mut RECT) {
+fn draw_pc_frame(context: &ContextLease, rect: &mut Rect) {
     context.draw_rectangle(PCMENU_TOP_LEFT_BORDER_COLOR, *rect);
     rect.corner.x += 1;
     rect.corner.y += 1;
@@ -35,7 +33,7 @@ fn draw_pc_menu(
     context: &ContextLease,
     range: (u8, u8),
     selection: (u8, bool),
-    rect: &mut RECT,
+    rect: &mut Rect,
 ) {
     const ITEM_HEIGHT: i16 = 8;
     let (begin, end) = range;
@@ -56,9 +54,11 @@ fn draw_pc_menu(
     rect.extent.height = i16::from(count) * ITEM_HEIGHT + 4;
     draw_pc_frame(context, rect);
     let font = FontLease::retain(
-        NonNull::new(kernel.star_con_font).unwrap_or_else(|| panic!("PC menu requires its font")),
+        kernel
+            .star_con_font
+            .unwrap_or_else(|| panic!("PC menu requires its font")),
     );
-    let mut baseline = POINT {
+    let mut baseline = Point {
         x: rect.corner.x + 2,
         y: rect.corner.y + ITEM_HEIGHT - 1,
     };
@@ -93,7 +93,7 @@ fn draw_pc_menu(
             } else {
                 PCMENU_TEXT_COLOR
             };
-            context.draw_text(&font, &label, baseline, TEXT_ALIGN_ALIGN_LEFT, color);
+            context.draw_text(&font, &label, baseline, TextAlign::Left, color);
             baseline.y += ITEM_HEIGHT;
         }
     });
@@ -118,7 +118,7 @@ fn pc_selection(begin: u8, state: i16) -> (u8, u8) {
     (end, selected)
 }
 
-fn draw_cost(kernel: &Kernel, world: &World, context: &ContextLease, begin: u8, origin: POINT) {
+fn draw_cost(kernel: &Kernel, world: &World, context: &ContextLease, begin: u8, origin: Point) {
     let value = if begin == PM_CREW {
         world.data.game.crew_cost
     } else {
@@ -132,11 +132,11 @@ fn draw_cost(kernel: &Kernel, world: &World, context: &ContextLease, begin: u8, 
     context.draw_text(
         &font,
         &text,
-        POINT {
+        Point {
             x: origin.x + 54,
             y: origin.y + 51,
         },
-        TEXT_ALIGN_ALIGN_RIGHT,
+        TextAlign::Right,
         THREEDOMENU_TEXT_COLOR,
     );
 }
@@ -162,25 +162,23 @@ pub fn draw_menu_state(
         state -= 1;
     }
     let frame = (state <= i16::from(end_state(begin)) - i16::from(begin))
-        .then_some(NonNull::new(kernel.play_frame))
+        .then_some(kernel.play_frame.non_null())
         .flatten()
-        .map(|raw| {
-            ContextFrame::retain(Some(raw)).wrapped_frame((i16::from(begin) + state) as u16)
-        });
+        .map(|raw| ContextFrame::retain(raw).wrapped_frame((i16::from(begin) + state) as u16));
     kernel.sis_highlight.pre_update_flash_rect();
     let context = ContextLease::require(kernel.status_context);
     context.with_selected(|| {
         let clip = context.clip_rect();
-        let origin = POINT {
+        let origin = Point {
             x: (dimensions.0 - 60) as i16 - clip.corner.x,
             y: (dimensions.1 - 56) as i16 - clip.corner.y,
         };
-        let mut rect = RECT {
-            corner: POINT {
+        let mut rect = Rect {
+            corner: Point {
                 x: origin.x - 1,
                 y: origin.y - 11,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: 58,
                 height: clip.extent.height,
             },

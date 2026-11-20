@@ -1,22 +1,23 @@
 use super::*;
+use crate::graphics::geometry::Point;
 
 pub(super) struct MapState {
-    pub cursor: POINT,
+    pub cursor: Point,
     pub projection: Projection,
 }
 
 pub(super) struct CursorMove {
-    pub old: POINT,
-    pub next: POINT,
+    pub old: Point,
+    pub next: Point,
     pub recentered: bool,
 }
 
 impl MapState {
-    pub fn new((width, height): (i32, i32), cursor: POINT) -> Self {
+    pub fn new((width, height): (i32, i32), cursor: Point) -> Self {
         Self {
             cursor,
             projection: Projection {
-                origin: POINT { x: 4999, y: 4999 },
+                origin: Point { x: 4999, y: 4999 },
                 zoom: 0,
                 width: width - 78,
                 height: height - 13,
@@ -24,12 +25,12 @@ impl MapState {
         }
     }
 
-    pub fn screen_cursor(&self) -> POINT {
+    pub fn screen_cursor(&self) -> Point {
         self.screen(self.cursor)
     }
 
-    pub fn screen(&self, point: POINT) -> POINT {
-        POINT {
+    pub fn screen(&self, point: Point) -> Point {
+        Point {
             x: self.projection.x(c_long::from(point.x)),
             y: self.projection.y(c_long::from(point.y)),
         }
@@ -44,7 +45,7 @@ impl MapState {
             projection.origin = if projection.zoom > 1 {
                 self.cursor
             } else {
-                POINT { x: 4999, y: 4999 }
+                Point { x: 4999, y: 4999 }
             };
             projection.zoom -= 1;
         } else {
@@ -53,7 +54,7 @@ impl MapState {
         true
     }
 
-    pub fn move_cursor(&mut self, mut sx: i32, mut sy: i32, absolute: Option<POINT>) -> CursorMove {
+    pub fn move_cursor(&mut self, mut sx: i32, mut sy: i32, absolute: Option<Point>) -> CursorMove {
         let old = self.screen_cursor();
         let mut screen = if let Some(point) = absolute {
             sx = 0;
@@ -61,7 +62,7 @@ impl MapState {
             self.cursor = point;
             self.screen(point)
         } else {
-            POINT {
+            Point {
                 x: (i32::from(old.x) + sx) as i16,
                 y: (i32::from(old.y) + sy) as i16,
             }
@@ -114,7 +115,7 @@ impl MapState {
             }
         }
         self.cursor = best.map_or_else(
-            || POINT {
+            || Point {
                 x: self.projection.inverse_x(screen.x).clamp(0, 9999),
                 y: self.projection.inverse_y(screen.y).clamp(0, 9999),
             },

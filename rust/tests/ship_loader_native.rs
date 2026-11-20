@@ -9,7 +9,7 @@ use std::{
     ffi::CString,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use uqm_rust::{resource::ffi_bridge, ships::native::abi::*};
+use uqm_rust::ships::native::abi::*;
 
 unsafe extern "C" {
     fn log_init(max: i32);
@@ -68,7 +68,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
             crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
             let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
-            ffi_bridge::InitResourceSystem();
+            uqm_rust::resource::init();
             mount.load_index("ships.rmp");
             let keys = [
                 "arilou",
@@ -183,8 +183,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     descriptor: address, icons: false, battle: false
                 }] if *address == descriptor)
             );
-            let decoy =
-                uqm_rust::graphics::drawable_abi::LoadedDrawable::create(2, 0, 0, 1).unwrap();
+            let decoy = uqm_rust::graphics::drawable::LoadedDrawable::create(2, 0, 0, 1).unwrap();
             let decoy_frames = decoy.lease();
             crate::battle_context::with(|cx| {
                 let id = cx.world.avail_races().alloc().unwrap();
@@ -207,7 +206,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             assert!(uqm_rust::collections::observation::drain().is_empty());
             assert!(decoy_frames.frame(0).is_some());
             drop(decoy);
-            ffi_bridge::UninitResourceSystem();
+            uqm_rust::resource::uninit();
             drop(mount);
         }
     })

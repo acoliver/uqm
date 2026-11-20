@@ -1,11 +1,14 @@
 use super::{args::Arguments, records::PresentationState, *};
-use crate::graphics::native_canvas::{GSCALE_IDENTITY, TFB_SCALE_BILINEAR, TFB_SCALE_NEAREST};
+use crate::graphics::{
+    canvas::scale::TFB_SCALE_BILINEAR, canvas::scale::TFB_SCALE_NEAREST, geometry::Point,
+    state::GSCALE_IDENTITY,
+};
 use crate::starbase::ids::{DRIVE_TOP, JET_TOP, MODULE_TOP, NUM_MODULES, SHIP_PIECE_OFFSET};
 
 pub(super) fn text(
     state: &PresentationState,
     string: &CStr,
-    baseline: POINT,
+    baseline: Point,
     fore: Color,
     back: Color,
 ) {
@@ -13,11 +16,22 @@ pub(super) fn text(
         return;
     };
     if state.text_effect == b'T' {
-        state
-            .context
-            .draw_traced_text(&font, string, baseline, 1, fore, back);
+        state.context.draw_traced_text(
+            &font,
+            string,
+            baseline,
+            crate::graphics::geometry::TextAlign::Center,
+            fore,
+            back,
+        );
     } else {
-        state.context.draw_text(&font, string, baseline, 1, fore);
+        state.context.draw_text(
+            &font,
+            string,
+            baseline,
+            crate::graphics::geometry::TextAlign::Center,
+            fore,
+        );
     }
 }
 
@@ -50,7 +64,7 @@ pub(super) fn generate_sis(cx: &Cx<'_>) -> Option<LoadedDrawable> {
         context.set_background(background);
         context.clear();
         frame.transparent_color(background);
-        context.draw_stamp(&skeleton_frame, POINT { x: 0, y: 0 });
+        context.draw_stamp(&skeleton_frame, Point { x: 0, y: 0 });
         let flagship = &cx.world.data.flagship;
         for (pieces, top) in [
             (flagship.drive_slots.as_slice(), DRIVE_TOP),
@@ -61,7 +75,7 @@ pub(super) fn generate_sis(cx: &Cx<'_>) -> Option<LoadedDrawable> {
                 if u16::from(piece) < NUM_MODULES {
                     context.draw_stamp(
                         &modules.lease().context_frame(usize::from(piece)),
-                        POINT {
+                        Point {
                             x: top.x + slot as i16 * SHIP_PIECE_OFFSET,
                             y: top.y - 79,
                         },
@@ -71,7 +85,7 @@ pub(super) fn generate_sis(cx: &Cx<'_>) -> Option<LoadedDrawable> {
         }
         drop(skeleton);
         drop(modules);
-        frame.replace_hotspot(POINT {
+        frame.replace_hotspot(Point {
             x: bounds.extent.width / 2,
             y: bounds.extent.height / 2,
         });
@@ -123,15 +137,12 @@ pub(super) fn draw(cx: &Cx<'_>, state: &mut PresentationState, source: &[u8]) {
     } else {
         &state.frame
     };
-    let mut frame = source.as_ref().map_or_else(
-        || ContextFrame::retain(None),
-        |image| {
-            image
-                .lease()
-                .context_frame(0)
-                .wrapped_frame(if sis { 0 } else { index as u16 })
-        },
-    );
+    let mut frame = source.as_ref().map_or_else(ContextFrame::default, |image| {
+        image
+            .lease()
+            .context_frame(0)
+            .wrapped_frame(if sis { 0 } else { index as u16 })
+    });
     if angle != 0 {
         if angle != state.last_angle || kind != state.last_draw_kind {
             drop(state.rotated.take());
@@ -139,14 +150,16 @@ pub(super) fn draw(cx: &Cx<'_>, state: &mut PresentationState, source: &[u8]) {
             state.last_angle = angle;
             state.last_draw_kind = kind;
         }
-        frame = state.rotated.as_ref().map_or_else(
-            || ContextFrame::retain(None),
-            |image| image.lease().context_frame(0),
-        );
+        frame = state
+            .rotated
+            .as_ref()
+            .map_or_else(ContextFrame::default, |image| {
+                image.lease().context_frame(0)
+            });
     }
     state.context.draw_scaled_stamp(
         &frame,
-        POINT {
+        Point {
             x: x as i16,
             y: y as i16,
         },

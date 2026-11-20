@@ -1,14 +1,11 @@
 //! Context and landing cursor retained by one orbit visit.
 
 use crate::comm::locdata::{CPoint, CRect};
-use crate::engine::{
-    graphics::{
-        context_abi::{ContextFrame, ContextLease, LoadedContext},
-        drawable_abi::LoadedDrawable,
-    },
-    Kernel,
+use crate::engine::graphics::{
+    context::ContextLease, context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable,
 };
-use std::{cell::RefCell, ptr::NonNull};
+use crate::engine::Kernel;
+use std::cell::RefCell;
 
 #[derive(Default)]
 pub struct ScanCursor {
@@ -43,7 +40,7 @@ pub(crate) fn create_context(kernel: &Kernel, width: i16) -> LoadedContext {
         let mut rect = space.clip_rect();
         let context = LoadedContext::create(c"ScanContext");
         let lease = context.lease();
-        lease.set_frame(ContextFrame::retain(NonNull::new(kernel.screen)));
+        lease.set_frame(ContextFrame::retain(kernel.screen));
         rect.corner.x += rect.extent.width - width;
         rect.corner.y += rect.extent.height - 75;
         rect.extent.width = width;
@@ -66,7 +63,7 @@ impl ScanState {
             reports,
             context: create_context(kernel, width),
             background,
-            cursor_image: ContextFrame::retain(NonNull::new(kernel.misc_data_frame)),
+            cursor_image: ContextFrame::retain(kernel.misc_data_frame),
             offscreen: ContextLease::require(kernel.off_screen_context),
             cursor: RefCell::new(ScanCursor::default()),
         }
@@ -97,10 +94,10 @@ mod tests {
                 .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let space = ContextLease::require(game.kernel.space_context);
-        space.set_frame(ContextFrame::retain(NonNull::new(game.kernel.screen)));
-        space.set_clip(crate::graphics::native_abi::RECT {
-            corner: crate::graphics::native_abi::POINT { x: 7, y: 13 },
-            extent: crate::graphics::native_abi::EXTENT {
+        space.set_frame(ContextFrame::retain(game.kernel.screen));
+        space.set_clip(crate::graphics::geometry::Rect {
+            corner: crate::graphics::geometry::Point { x: 7, y: 13 },
+            extent: crate::graphics::geometry::Extent {
                 width: 242,
                 height: 227,
             },
@@ -123,7 +120,7 @@ mod tests {
             Default::default(),
             None,
         );
-        game.kernel.misc_data_frame = std::ptr::null_mut();
+        game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
         drop(cursor_image);
         drop(background);
         assert_eq!(first.cursor_image.indexed_frame(105).frame_count(), 106);
@@ -136,8 +133,8 @@ mod tests {
         assert_eq!((expected.extent.width, expected.extent.height), (242, 75));
         first.cursor.borrow_mut().move_to(CPoint { x: 32, y: 40 });
         second.cursor.borrow_mut().move_to(CPoint { x: 44, y: 52 });
-        first.context().set_clip(crate::graphics::native_abi::RECT {
-            corner: crate::graphics::native_abi::POINT { x: 20, y: 30 },
+        first.context().set_clip(crate::graphics::geometry::Rect {
+            corner: crate::graphics::geometry::Point { x: 20, y: 30 },
             ..expected
         });
         second.context().select();

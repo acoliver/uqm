@@ -1,16 +1,12 @@
 //! A retained graphics view supplied by the running campaign.
 
 use super::gfx::*;
-use crate::{
-    engine::Kernel,
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        menu as draw, native_abi as native,
-        native_font::FontLease,
-    },
-    strings::owned_table::LoadedTextTable,
+use crate::engine::Kernel;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, font::FontLease, menu as draw,
 };
-use std::{ffi::CString, ptr::NonNull, rc::Rc};
+use crate::strings::owned_table::LoadedTextTable;
+use std::{ffi::CString, rc::Rc};
 
 pub struct Graphics {
     dimensions: (i32, i32),
@@ -41,11 +37,11 @@ impl Graphics {
                 kernel.status_context,
                 kernel.space_context,
             ]
-            .map(|raw| NonNull::new(raw).map(ContextLease::retain)),
-            fonts: fonts.map(|font| NonNull::new(font).map(FontLease::retain)),
-            off_screen: NonNull::new(kernel.off_screen_context).map(ContextLease::retain),
-            play: ContextFrame::retain(NonNull::new(kernel.play_frame)),
-            gradient: ContextFrame::retain(NonNull::new(kernel.font_grad_frame)),
+            .map(|context| context.map(ContextLease::retain)),
+            fonts: fonts.map(|font| font.map(FontLease::retain)),
+            off_screen: kernel.off_screen_context.map(ContextLease::retain),
+            play: ContextFrame::retain(kernel.play_frame),
+            gradient: ContextFrame::retain(kernel.font_grad_frame),
             text: kernel.game_text_table(),
             highlight: kernel.sis_highlight.clone(),
             pc_menu: kernel.configuration.preferences().menu == 2,
@@ -66,15 +62,15 @@ impl Graphics {
         .unwrap_or_else(|| panic!("menu context is absent"))
     }
 }
-fn color(c: Rgba) -> native::Color {
-    native::Color {
+fn color(c: Rgba) -> crate::graphics::geometry::Color {
+    crate::graphics::geometry::Color {
         r: c.r,
         g: c.g,
         b: c.b,
         a: c.a,
     }
 }
-fn rgba(c: native::Color) -> Rgba {
+fn rgba(c: crate::graphics::geometry::Color) -> Rgba {
     Rgba {
         r: c.r,
         g: c.g,
@@ -82,19 +78,19 @@ fn rgba(c: native::Color) -> Rgba {
         a: c.a,
     }
 }
-fn point(p: Point) -> native::POINT {
-    native::POINT { x: p.x, y: p.y }
+fn point(p: Point) -> crate::graphics::geometry::Point {
+    crate::graphics::geometry::Point { x: p.x, y: p.y }
 }
-fn rect(r: Rect) -> native::RECT {
-    native::RECT {
+fn rect(r: Rect) -> crate::graphics::geometry::Rect {
+    crate::graphics::geometry::Rect {
         corner: point(r.corner),
-        extent: native::EXTENT {
+        extent: crate::graphics::geometry::Extent {
             width: r.width,
             height: r.height,
         },
     }
 }
-fn rectangle(r: native::RECT) -> Rect {
+fn rectangle(r: crate::graphics::geometry::Rect) -> Rect {
     Rect {
         corner: Point {
             x: r.corner.x,
@@ -112,17 +108,19 @@ impl Gfx for Graphics {
         if let Some(previous) = self.context(id).selected_context() {
             self.saved_contexts.borrow_mut().push(previous);
         }
-        ContextHandle(draw::select(self.context(id).as_raw()) as usize)
+        ContextHandle(
+            draw::select(Some(self.context(id).context())).map_or(0, |context| context.bits()),
+        )
     }
     fn restore_context(&self, old: ContextHandle) {
         if old.0 == 0 {
-            draw::select(std::ptr::null_mut());
+            draw::select(None);
             self.restored_context.replace(None);
         } else {
             let mut saved = self.saved_contexts.borrow_mut();
             let index = saved
                 .iter()
-                .rposition(|context| context.as_raw() as usize == old.0)
+                .rposition(|context| context.context().bits() == old.0)
                 .unwrap_or_else(|| panic!("menu context handle was not saved"));
             let context = saved.remove(index);
             context.select();
@@ -147,7 +145,8 @@ impl Gfx for Graphics {
                 FontId::Micro => 2,
             }]
             .clone(),
-        ) as usize;
+        )
+        .map_or(0, |font| font.bits());
         self.saved_fonts.borrow_mut().push((old, previous));
         FontHandle(old)
     }
@@ -161,11 +160,8 @@ impl Gfx for Graphics {
     }
     fn set_font_effect(&self, index: Option<u16>) -> FontEffectHandle {
         let previous = draw::selected_effect();
-        let effect = index.map_or_else(
-            || ContextFrame::retain(None),
-            |i| self.gradient.wrapped_frame(i),
-        );
-        let old = draw::select_effect(effect) as usize;
+        let effect = index.map_or_else(ContextFrame::default, |i| self.gradient.wrapped_frame(i));
+        let old = draw::select_effect(effect).bits();
         self.saved_effects.borrow_mut().push((old, previous));
         FontEffectHandle(old)
     }
@@ -193,10 +189,16 @@ impl Gfx for Graphics {
         draw::point(point(p));
     }
     fn draw_stamp(&self, s: Stamp) {
-        draw::stamp(s.frame as native::FRAME, point(s.origin));
+        draw::stamp(
+            crate::graphics::drawable::FrameId::from_bits(s.frame),
+            point(s.origin),
+        );
     }
     fn draw_filled_stamp(&self, s: Stamp) {
-        draw::filled_stamp(s.frame as native::FRAME, point(s.origin));
+        draw::filled_stamp(
+            crate::graphics::drawable::FrameId::from_bits(s.frame),
+            point(s.origin),
+        );
     }
     fn draw_text(&self, t: &TextDraw) {
         let text =
@@ -205,18 +207,18 @@ impl Gfx for Graphics {
             &text,
             point(t.baseline),
             match t.align {
-                Align::Left => 0,
-                Align::Center => 1,
-                Align::Right => 2,
+                Align::Left => crate::graphics::geometry::TextAlign::Left,
+                Align::Center => crate::graphics::geometry::TextAlign::Center,
+                Align::Right => crate::graphics::geometry::TextAlign::Right,
             },
             u16::MAX,
         );
     }
     fn abs_frame(&self, f: FrameId, i: u16) -> FrameId {
-        draw::frame(f as native::FRAME, i) as FrameId
+        draw::frame(crate::graphics::drawable::FrameId::from_bits(f), i).bits()
     }
     fn rel_frame(&self, f: FrameId, i: i16) -> FrameId {
-        draw::relative_frame(f as native::FRAME, i) as FrameId
+        draw::relative_frame(crate::graphics::drawable::FrameId::from_bits(f), i).bits()
     }
     fn inc_frame(&self, f: FrameId) -> FrameId {
         self.rel_frame(f, 1)
@@ -225,13 +227,13 @@ impl Gfx for Graphics {
         self.rel_frame(f, -1)
     }
     fn frame_count(&self, f: FrameId) -> u16 {
-        draw::frame_count(f as native::FRAME)
+        draw::frame_count(crate::graphics::drawable::FrameId::from_bits(f))
     }
     fn frame_index(&self, f: FrameId) -> u16 {
-        draw::frame_index(f as native::FRAME)
+        draw::frame_index(crate::graphics::drawable::FrameId::from_bits(f))
     }
     fn play_frame(&self) -> FrameId {
-        self.play.as_raw() as FrameId
+        self.play.frame().bits()
     }
     fn batch(&self) {
         draw::batch();
@@ -245,8 +247,8 @@ impl Gfx for Graphics {
     fn set_transition_source_none(&self) {
         draw::transition_source();
     }
-    fn screen_transition(&self, kind: i32) {
-        draw::transition(kind);
+    fn screen_transition(&self, _kind: i32) {
+        draw::transition();
     }
     fn set_flash(&self, target: FlashTarget) {
         if matches!(target, FlashTarget::Off) || (target == FlashTarget::Menu3do && self.pc_menu) {
@@ -262,12 +264,12 @@ impl Gfx for Graphics {
                         &self.highlight,
                         screen,
                         clip,
-                        Some(native::RECT {
-                            corner: native::POINT {
+                        Some(crate::graphics::geometry::Rect {
+                            corner: crate::graphics::geometry::Point {
                                 x: (self.dimensions.0 - 60) as i16 - clip.corner.x,
                                 y: (self.dimensions.1 - 56) as i16 - clip.corner.y,
                             },
-                            extent: native::EXTENT {
+                            extent: crate::graphics::geometry::Extent {
                                 width: 56,
                                 height: 53,
                             },

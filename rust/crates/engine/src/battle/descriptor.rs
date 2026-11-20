@@ -1,6 +1,6 @@
 //! Empty native descriptors have explicit scalar and optional-handle initialization.
 use super::record::*;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 impl RaceDescriptor {
     pub const EMPTY: Self = Self {
@@ -18,13 +18,13 @@ impl RaceDescriptor {
             race_strings_rsc: std::ptr::null(),
             icons_rsc: std::ptr::null(),
             melee_icon_rsc: std::ptr::null(),
-            race_strings: std::ptr::null_mut(),
-            icons: std::ptr::null_mut(),
-            melee_icon: std::ptr::null_mut(),
+            race_strings: None,
+            icons: crate::graphics::drawable::FrameId::NULL,
+            melee_icon: crate::graphics::drawable::FrameId::NULL,
         },
         fleet: FLEET_STUFF {
             strength: 0,
-            known_loc: POINT { x: 0, y: 0 },
+            known_loc: Point { x: 0, y: 0 },
         },
         __bindgen_padding_0: [0; 5],
         characteristics: CHARACTERISTIC_STUFF {
@@ -46,10 +46,10 @@ impl RaceDescriptor {
             special_rsc: [std::ptr::null(); 3],
             captain_control: CAPTAIN_STUFF {
                 captain_rsc: std::ptr::null(),
-                background: std::ptr::null_mut(),
-                turn: std::ptr::null_mut(),
-                thrust: std::ptr::null_mut(),
-                weapon: std::ptr::null_mut(),
+                background: crate::graphics::drawable::FrameId::NULL,
+                turn: crate::graphics::drawable::FrameId::NULL,
+                thrust: crate::graphics::drawable::FrameId::NULL,
+                weapon: crate::graphics::drawable::FrameId::NULL,
                 special: crate::battle::frames::FrameSelection::ABSENT,
             },
             victory_ditty_rsc: std::ptr::null(),
@@ -58,7 +58,7 @@ impl RaceDescriptor {
             weapon: crate::battle::frames::FrameArray::EMPTY,
             special: crate::battle::frames::FrameArray::EMPTY,
             victory_ditty: std::ptr::null_mut(),
-            ship_sounds: std::ptr::null_mut(),
+            ship_sounds: None,
         },
         cyborg_control: INTEL_STUFF {
             ManeuverabilityIndex: 0,

@@ -2,17 +2,17 @@
 use crate::battle::record::CHARACTERISTIC_STUFF;
 use crate::battle::record::VELOCITY_DESC as VelocityDesc;
 use crate::battle::{CollisionHook, ElementHook};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Laser {
-    pub origin: POINT,
-    pub end: POINT,
+    pub origin: Point,
+    pub end: Point,
     pub flags: u16,
     pub sender: i16,
     pub pixoffs: i16,
     pub face: u16,
-    pub color: crate::graphics::native_abi::Color,
+    pub color: crate::graphics::geometry::Color,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -34,7 +34,7 @@ pub struct Image {
 }
 #[derive(Clone)]
 pub struct Visual {
-    pub location: POINT,
+    pub location: Point,
     pub image: Image,
 }
 #[derive(Clone)]
@@ -178,7 +178,7 @@ pub struct Subject {
     pub state: ElementState,
     pub target: Option<ElementId>,
     pub parent: crate::battle::Parent,
-    pub(super) intersect: crate::battle::record::INTERSECT_CONTROL,
+    pub(super) intersect: crate::graphics::intersection::IntersectControl,
     pub(super) primitive: u16,
     pub(super) intersect_frame: FrameSelection,
 }
@@ -197,11 +197,11 @@ impl std::ops::DerefMut for Subject {
 #[derive(Clone, Copy)]
 pub struct PrimitiveStyle {
     pub kind: u8,
-    pub color: crate::graphics::native_abi::Color,
+    pub color: crate::graphics::geometry::Color,
 }
 
 impl Subject {
-    pub fn intersection(&self) -> crate::graphics::native_abi::INTERSECT_CONTROL {
+    pub fn intersection(&self) -> crate::graphics::intersection::IntersectControl {
         self.intersect
     }
 }

@@ -5,21 +5,18 @@ mod battle;
 mod battle_context;
 
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
-use uqm_rust::{
-    automation::{
-        battle_fight::BattleSnapshot,
-        script::{parse_script, validate_script},
-        AutomationObserver,
-    },
-    battle::{
-        element::{Element, ElementFlags},
-        netplay::CrcState,
-    },
-    collections::observation::{self, Event},
-    engine::battle::{frames::FrameArray, views::FrameSelection},
-    graphics::native_abi::frame_desc,
-    ships::native::abi::*,
-};
+use uqm_rust::automation::battle_fight::BattleSnapshot;
+use uqm_rust::automation::script::parse_script;
+use uqm_rust::automation::script::validate_script;
+use uqm_rust::automation::AutomationObserver;
+use uqm_rust::battle::element::Element;
+use uqm_rust::battle::element::ElementFlags;
+use uqm_rust::battle::netplay::CrcState;
+use uqm_rust::collections::observation;
+use uqm_rust::collections::observation::Event;
+use uqm_rust::engine::battle::frames::FrameArray;
+use uqm_rust::engine::battle::views::FrameSelection;
+use uqm_rust::ships::native::abi::*;
 
 #[path = "parity_state/graph.rs"]
 mod graph;
@@ -594,27 +591,14 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
-    // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
     let native = battle::NativeFrameSet::new(16);
-    // SAFETY: the fixture retains this registered allocation throughout every snapshot.
-    let (drawable, frame) = unsafe {
-        let frame = &mut *native.frame(9).cast::<frame_desc>();
-        (&mut *frame.parent, frame)
-    };
-    let mut strings = uqm_rust::strings::string_table::StringTableEntry {
-        data: ptr::null_mut(),
-        length: 0,
-        index: 3,
-        parent: ptr::null_mut(),
-    };
+    let strings = Some(uqm_rust::strings::owned_table::EntryRef::new(0x5000, 3));
     let mut music = ptr::null_mut();
-    frame.parent = ptr::from_mut(drawable);
-    frame.Index = 9;
-    let frame_pointer = ptr::from_mut(frame).cast();
+    let frame_pointer = native.frame(9);
     descriptor.ship_info.race_strings_rsc = c"test.strings".as_ptr();
     descriptor.ship_info.icons_rsc = c"test.icons".as_ptr();
     descriptor.ship_info.melee_icon_rsc = c"test.melee".as_ptr();
-    descriptor.ship_info.race_strings = &mut strings;
+    descriptor.ship_info.race_strings = strings;
     descriptor.ship_info.icons = frame_pointer;
     descriptor.ship_info.melee_icon = frame_pointer;
     descriptor.ship_data.ship_rsc = [c"test.ship".as_ptr(); 3];
@@ -635,7 +619,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     };
     descriptor.ship_data.victory_ditty_rsc = c"test.victory".as_ptr();
     descriptor.ship_data.ship_sounds_rsc = c"test.sounds".as_ptr();
-    descriptor.ship_data.ship_sounds = &mut strings;
+    descriptor.ship_data.ship_sounds = strings;
     descriptor.ship_data.victory_ditty = &mut music;
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
@@ -650,11 +634,14 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     unsafe {
         install_ship(&mut ship);
     }
-    observation::record(Event::Drawable(ptr::from_mut(drawable) as usize));
+    let drawable = frame_pointer
+        .drawable()
+        .map_or(0, |drawable| drawable.bits());
+    observation::record(Event::Drawable(drawable));
     observation::record(Event::Frame {
-        address: ptr::from_mut(frame) as usize,
-        owner: ptr::from_mut(drawable) as usize,
-        index: frame.Index,
+        address: frame_pointer.bits(),
+        owner: drawable,
+        index: frame_pointer.index(),
     });
     let (fields, _) = snapshot(observer, directory);
     assert_eq!(fields["ships.0.0.race.icons.resource"], "test.icons");
@@ -755,7 +742,7 @@ fn observe_test_frames(views: &FrameArray, role: &str) {
         frames: views
             .views()
             .iter()
-            .map(|frame| frame.raw() as usize)
+            .map(|frame| (frame.raw()).bits())
             .collect(),
         role: role.into(),
     });
@@ -767,14 +754,9 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
     let native = battle::NativeFrameSet::new(3);
-    // SAFETY: the registered drawable owns these distinct frame slots throughout all snapshots.
-    let (drawable, first, second) = unsafe {
-        let first = &mut *native.frame(1).cast::<frame_desc>();
-        let second = &mut *native.frame(2).cast::<frame_desc>();
-        (&mut *first.parent, first, second)
-    };
-    // SAFETY: native owns the registered first frame throughout this fixture.
-    let view = FrameSelection::retain(ptr::from_mut(first).cast());
+    let (first, second) = (native.frame(1), native.frame(2));
+    let drawable = first.drawable().map_or(0, |drawable| drawable.bits());
+    let view = FrameSelection::retain(first);
     descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     let mut element = graph::ElementRecord::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
@@ -786,12 +768,12 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
         install_ship(&mut ship);
     }
     observation::record(Event::Allocate(element.pointer() as usize));
-    observation::record(Event::Drawable(ptr::from_mut(drawable) as usize));
-    for frame in [&mut *first, &mut *second] {
+    observation::record(Event::Drawable(drawable));
+    for frame in [first, second] {
         observation::record(Event::Frame {
-            address: ptr::from_mut(frame) as usize,
-            owner: ptr::from_mut(drawable) as usize,
-            index: frame.Index,
+            address: frame.bits(),
+            owner: drawable,
+            index: frame.index(),
         });
     }
     observe_test_frames(&descriptor.ship_data.ship, "test-ship");
@@ -806,10 +788,7 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     let (before, _) = snapshot(observer, directory);
     // SAFETY: the fixture retains the same drawable and its array through the next snapshot.
     unsafe {
-        observation::assign_view(
-            &mut *descriptor.ship_data.ship.as_ptr().add(1),
-            ptr::from_mut(second).cast(),
-        );
+        observation::assign_view(&mut *descriptor.ship_data.ship.as_ptr().add(1), second);
     }
     let (after, _) = snapshot(observer, directory);
     assert_eq!(before["elements.0.current.farray.0.index"], "1");
@@ -861,24 +840,13 @@ fn media_identity(
     directory: &Path,
     descriptor: &mut RaceDescriptor,
 ) {
-    use uqm_rust::strings::string_table::{StringTable, StringTableEntry};
-    // SAFETY: StringTable contains only integers and pointers; zero is valid.
-    let mut table_a: StringTable = unsafe { std::mem::zeroed() };
-    // SAFETY: StringTable contains only integers and pointers; zero is valid.
-    let mut table_b: StringTable = unsafe { std::mem::zeroed() };
-    let mut entry = StringTableEntry {
-        data: ptr::null_mut(),
-        length: 0,
-        index: 3,
-        parent: &mut table_a,
-    };
+    use uqm_rust::strings::owned_table::EntryRef;
     let mut music_a = ptr::null_mut();
     let mut music_b = ptr::null_mut();
-    descriptor.ship_info.race_strings = &mut entry;
+    descriptor.ship_info.race_strings = Some(EntryRef::new(0xa000, 3));
     descriptor.ship_data.victory_ditty = &mut music_a;
     let (before, _) = snapshot(observer, directory);
-    let entry = &mut entry;
-    entry.parent = &mut table_b;
+    descriptor.ship_info.race_strings = Some(EntryRef::new(0xb000, 3));
     descriptor.ship_data.victory_ditty = &mut music_b;
     let (after, _) = snapshot(observer, directory);
     assert_eq!(
@@ -893,7 +861,7 @@ fn media_identity(
         before["ships.0.0.data.victory.resource_owner"],
         after["ships.0.0.data.victory.resource_owner"]
     );
-    descriptor.ship_info.race_strings = ptr::null_mut();
+    descriptor.ship_info.race_strings = None;
     descriptor.ship_data.victory_ditty = ptr::null_mut();
 }
 
@@ -905,7 +873,7 @@ fn retired_space_does_not_borrow_released_frames(observer: &AutomationObserver, 
     let mut element = graph::ElementRecord::new();
     let native = battle::NativeFrameSet::new(24);
     // SAFETY: the registered fixture retains all 24 frame slots.
-    let frame = FrameSelection::retain(native.frame(23).cast());
+    let frame = FrameSelection::retain(native.frame(23));
     element.current.image.frame = frame.clone();
     element.next.image.frame = frame;
     drop(native);
@@ -918,7 +886,7 @@ fn retired_space_does_not_borrow_released_frames(observer: &AutomationObserver, 
     observation::record(Event::Allocate(element.pointer() as usize));
     observation::record(Event::Drawable(17));
     observation::record(Event::Frame {
-        address: element.current.image.frame.raw() as usize,
+        address: (element.current.image.frame.raw()).bits(),
         owner: 17,
         index: 23,
     });

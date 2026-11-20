@@ -5,6 +5,7 @@ use crate::engine::{
     observe::{Observer, Unobserved},
     Game,
 };
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -69,21 +70,20 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     let context = ContextLease::require(game.kernel.status_context);
     game.kernel.screen_context = game.kernel.status_context;
-    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
-    let screen = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
+    let screen = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 320,
             height: 240,
         },
     };
     context.set_clip(screen);
-    context.set_font(&crate::graphics::native_font::FontLease::retain(
-        std::ptr::NonNull::new(game.kernel.tiny_font).unwrap(),
+    context.set_font(&crate::graphics::font::FontLease::retain(
+        game.kernel.tiny_font.unwrap(),
     ));
     let original_font = context.font_lease().unwrap();
+
     let driver = Rc::new(Driver::default());
     game.kernel.install_input_runtime(driver.clone());
     let mut battle = Battle::new();
@@ -119,7 +119,7 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
     assert!(state.time_out_on_skip);
     assert_eq!(driver.yields.get(), 0);
     context.flush();
-    let pixel = context.target().pixel(POINT { x: 4, y: 3 });
+    let pixel = context.target().pixel(Point { x: 4, y: 3 });
     assert_eq!((pixel.r, pixel.g, pixel.b), (255, 0, 0));
     state.movie_frame = 0;
     state.movie_frame();
@@ -133,19 +133,19 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
     state.movie_frame = 1;
     state.movie_frame();
     context.flush();
-    assert_eq!(context.target().pixel(POINT { x: 0, y: 0 }).b, 255);
+    assert_eq!(context.target().pixel(Point { x: 0, y: 0 }).b, 255);
     state.movie_frame = -1;
     state.text_effect = b'T';
     render::text(
         &state,
         c"A",
-        POINT { x: 20, y: 20 },
+        Point { x: 20, y: 20 },
         crate::ui::rgb15(31, 31, 31),
         BLACK_COLOR,
     );
     context.flush();
     assert!((16..24).any(|y| (16..24).any(|x| {
-        let pixel = context.target().pixel(POINT { x, y });
+        let pixel = context.target().pixel(Point { x, y });
         (pixel.r, pixel.g, pixel.b) == (255, 255, 255)
     })));
     state.time_out = u32::MAX;
@@ -207,19 +207,16 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
         |game| {
             let context = ContextLease::require(game.kernel.status_context);
             game.kernel.screen_context = game.kernel.status_context;
-            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-                game.kernel.screen,
-            )));
-            context.set_clip(RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            context.set_frame(ContextFrame::retain(game.kernel.screen));
+            context.set_clip(Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: 320,
                     height: 240,
                 },
             });
-            let offscreen =
-                crate::graphics::context_abi::LoadedContext::create(c"intro SIS fixture");
-            game.kernel.off_screen_context = offscreen.lease().as_raw();
+            let offscreen = crate::graphics::context::LoadedContext::create(c"intro SIS fixture");
+            game.kernel.off_screen_context = Some(offscreen.context());
             let driver = Rc::new(Driver::default());
             game.kernel.install_input_runtime(driver.clone());
             game.world.data.game.glob_flags = 8;
@@ -273,7 +270,7 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                 context.clone(),
                 false,
             );
-            state.fonts[0] = crate::graphics::native_font::LoadedFont::load(c"fixture.tiny");
+            state.fonts[0] = crate::graphics::font::LoadedFont::load(c"fixture.tiny");
             assert!(matches!(
                 commands::advance(&mut cx, &mut io, &mut state),
                 commands::Step::Input(true)
@@ -317,11 +314,11 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
             assert!(state.context.font_lease().is_none());
             assert!(state.sis.is_some());
             context.flush();
-            let pixel = context.target().pixel(POINT { x: 40, y: 40 });
+            let pixel = context.target().pixel(Point { x: 40, y: 40 });
             assert_eq!((pixel.r, pixel.g, pixel.b), (255, 255, 255));
             render::draw(&cx, &mut state, b"SIS 50 50 256 90");
             context.flush();
-            assert_eq!(context.target().pixel(POINT { x: 50, y: 50 }).r, 255);
+            assert_eq!(context.target().pixel(Point { x: 50, y: 50 }).r, 255);
             render::draw(&cx, &mut state, b"SIS 50 50 256 90");
             state.frame = Some(LoadedDrawable::create(2, 2, 2, 1).unwrap());
             render::draw(&cx, &mut state, b"0 60 60 256 90");

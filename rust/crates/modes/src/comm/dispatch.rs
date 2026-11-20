@@ -11,18 +11,15 @@ mod encounter;
 pub(super) use encounter::finish_callbacks;
 mod routing;
 use crate::comm::Comm;
-
-use routing::conversation_setup;
-
+use crate::engine::battle::link_queue::LinkId;
 use crate::engine::battle::Cx;
 use crate::engine::observe::{CheckpointView, Io};
 use crate::engine::world::activity::ActivityKind;
+use crate::engine::world::queues::Fragment;
 use crate::engine::StoryKey;
 use crate::engine::World;
+use routing::conversation_setup;
 use std::os::raw::c_void;
-
-use crate::engine::battle::link_queue::LinkId;
-use crate::engine::world::queues::Fragment;
 use uqm_save::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
 
 // ---------------------------------------------------------------------------
@@ -31,7 +28,7 @@ use uqm_save::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
 
 /// C: `typedef struct point { COORD x, y; } POINT;`
 /// COORD is `SIZE` which is `SWORD` = `i16`.
-pub use crate::graphics::native_abi::point as CPoint;
+pub use crate::graphics::geometry::Point as CPoint;
 
 /// C: `typedef void* STRING` (STRING_TABLE_ENTRY_DESC*)
 pub type CStringHandle = *mut c_void;
@@ -334,7 +331,7 @@ pub fn init_communication_with_options(
                 crate::ui::sis::draw_hyper_coords(
                     cx.kernel,
                     dimensions.0,
-                    crate::graphics::native_abi::POINT {
+                    crate::graphics::geometry::Point {
                         x: point.x,
                         y: point.y,
                     },
@@ -353,7 +350,7 @@ pub fn init_communication_with_options(
                 crate::ui::sis::draw_hyper_coords(
                     cx.kernel,
                     dimensions.0,
-                    crate::graphics::native_abi::POINT {
+                    crate::graphics::geometry::Point {
                         x: point.x,
                         y: point.y,
                     },

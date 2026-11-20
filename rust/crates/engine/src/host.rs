@@ -26,9 +26,10 @@ mod files;
 pub use files::{File, FileStat, FileStream, Files};
 
 pub mod clock;
-pub mod display;
+mod display;
 mod platform;
 pub use clock::Clock;
+pub use display::{Display, Layer, PresentFrame};
 pub use platform::{
     advance_to, async_wait_ms, dispatch, install, is_replay, now_ms, now_ticks, platform,
     process_async, steps, AudioPort, Platform,

@@ -7,9 +7,8 @@ use crate::engine::{
     Kernel,
 };
 use crate::graphics::{
-    context_abi::ContextLease,
-    native_abi::{EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
-    native_font::FontLease,
+    context::ContextLease, font::FontLease, geometry::Extent, geometry::Point, geometry::Rect,
+    geometry::TextAlign,
 };
 use std::ffi::{CStr, CString};
 use uqm_engine::time::counter_abi::ONE_SECOND;
@@ -20,12 +19,12 @@ const QUITMENU_STRING_BASE: usize = 464;
 
 fn draw_confirmation(context: &ContextLease, font: &FontLease, kernel: &Kernel, answer: bool) {
     let (width, height) = context.screen_dimensions();
-    let rect = RECT {
-        corner: POINT {
+    let rect = Rect {
+        corner: Point {
             x: (width - i32::from(CONFIRM_WIN_WIDTH)) as i16 >> 1,
             y: (height - i32::from(CONFIRM_WIN_HEIGHT)) as i16 >> 1,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: CONFIRM_WIN_WIDTH,
             height: CONFIRM_WIN_HEIGHT,
         },
@@ -42,11 +41,11 @@ fn draw_confirmation(context: &ContextLease, font: &FontLease, kernel: &Kernel, 
                 context.draw_text(
                     font,
                     kernel.game_text(QUITMENU_STRING_BASE),
-                    POINT {
+                    Point {
                         x: rect.corner.x + (rect.extent.width >> 1),
                         y: rect.corner.y + 8,
                     },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    TextAlign::Center,
                     MENU_TEXT_COLOR,
                 );
                 for (index, x, selected) in [
@@ -60,11 +59,11 @@ fn draw_confirmation(context: &ContextLease, font: &FontLease, kernel: &Kernel, 
                     context.draw_text(
                         font,
                         kernel.game_text(QUITMENU_STRING_BASE + index),
-                        POINT {
+                        Point {
                             x,
                             y: rect.corner.y + 18,
                         },
-                        TEXT_ALIGN_ALIGN_CENTER,
+                        TextAlign::Center,
                         if selected {
                             MENU_HIGHLIGHT_COLOR
                         } else {
@@ -123,19 +122,20 @@ pub fn do_confirm_exit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
     highlight.pause_flash();
     let context = ContextLease::require(cx.kernel.screen_context);
     let font = FontLease::retain(
-        std::ptr::NonNull::new(cx.kernel.star_con_font.cast())
+        cx.kernel
+            .star_con_font
             .unwrap_or_else(|| panic!("confirmation font")),
     );
     let runtime = cx.kernel.input_runtime();
     let result = context.with_selected(|| {
         context.with_unclipped(|| {
             let bounds = context.clip_rect();
-            let rect = RECT {
-                corner: POINT {
+            let rect = Rect {
+                corner: Point {
                     x: (bounds.extent.width - CONFIRM_WIN_WIDTH - 4) >> 1,
                     y: (bounds.extent.height - CONFIRM_WIN_HEIGHT - 4) >> 1,
                 },
-                extent: EXTENT {
+                extent: Extent {
                     width: CONFIRM_WIN_WIDTH + 4,
                     height: CONFIRM_WIN_HEIGHT + 4,
                 },
@@ -166,7 +166,7 @@ pub fn do_confirm_exit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
     result
 }
 
-fn draw_popup(context: &ContextLease, font: &FontLease, lines: &[CString]) -> RECT {
+fn draw_popup(context: &ContextLease, font: &FontLease, lines: &[CString]) -> Rect {
     let (width, height) = context.screen_dimensions();
     let window_width = lines
         .iter()
@@ -176,12 +176,12 @@ fn draw_popup(context: &ContextLease, font: &FontLease, lines: &[CString]) -> RE
         * 6
         + 16;
     let window_height = lines.len() as i32 * 8 + 16;
-    let mut rect = RECT {
-        corner: POINT {
+    let mut rect = Rect {
+        corner: Point {
             x: ((width - window_width) >> 1) as i16,
             y: ((height - window_height) >> 1) as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: window_width as i16,
             height: window_height as i16,
         },
@@ -199,11 +199,11 @@ fn draw_popup(context: &ContextLease, font: &FontLease, lines: &[CString]) -> RE
                     context.draw_text(
                         font,
                         line,
-                        POINT {
+                        Point {
                             x: rect.corner.x + (rect.extent.width >> 1),
                             y: rect.corner.y + 16 + i as i16 * 8,
                         },
-                        TEXT_ALIGN_ALIGN_CENTER,
+                        TextAlign::Center,
                         super::rgb15(0, 0, 0),
                     );
                 }
@@ -223,7 +223,8 @@ pub fn do_popup_window(cx: &mut Cx<'_>, io: &mut Io<'_>, message: &CStr) {
     let input = runtime.input();
     let context = ContextLease::require(cx.kernel.screen_context);
     let font = FontLease::retain(
-        std::ptr::NonNull::new(cx.kernel.star_con_font.cast())
+        cx.kernel
+            .star_con_font
             .unwrap_or_else(|| panic!("popup font")),
     );
     let lines: Vec<_> = message

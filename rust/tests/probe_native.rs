@@ -20,7 +20,7 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
             CStr::from_ptr(info.melee_icon_rsc),
             c"ship.drone.meleeicons"
         );
-        assert!(info.race_strings.is_null());
+        assert!(info.race_strings.is_none());
         assert!(info.icons.is_null());
         assert!(info.melee_icon.is_null());
         assert_eq!(d.fleet.strength, 0);
@@ -72,7 +72,7 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
         assert!(d.ship_data.victory_ditty_rsc.is_null());
         assert!(d.ship_data.ship_sounds_rsc.is_null());
         assert!(d.ship_data.victory_ditty.is_null());
-        assert!(d.ship_data.ship_sounds.is_null());
+        assert!(d.ship_data.ship_sounds.is_none());
         assert_eq!(
             (
                 d.cyborg_control.ManeuverabilityIndex,

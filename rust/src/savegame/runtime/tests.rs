@@ -5,15 +5,9 @@
 //! compared with the bytes of a save written by the C runtime; event checks
 //! use the owned fixed-capacity game-clock pool.
 
-use crate::engine::battle::schema::GAME_STATE;
-use std::mem::{offset_of, size_of};
-use std::ops::{Deref, DerefMut};
-
-use serial_test::serial;
-
 use super::*;
-
 use crate::engine::battle::link_queue::LinkId;
+use crate::engine::battle::schema::GAME_STATE;
 use crate::engine::clock::NUM_EVENTS;
 use crate::engine::clock::{GameClock, ScheduledEvent};
 use crate::savegame::decode::decode_save;
@@ -21,6 +15,9 @@ use crate::savegame::types::{
     ClockState, EventEntry, Extent, GlobalState, Point, Velocity, GAME_STATE_BYTES,
 };
 use crate::state::ffi::{snapshot_game_state, GameStateOwnerError};
+use serial_test::serial;
+use std::mem::{offset_of, size_of};
+use std::ops::{Deref, DerefMut};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
@@ -116,7 +113,6 @@ mod c_offset {
     pub const AUTOPILOT: usize = offset_of!(GAME_STATE, autopilot);
     pub const IP_LOCATION: usize = offset_of!(GAME_STATE, ip_location);
     pub const STAMP_ORIGIN: usize = offset_of!(GAME_STATE, ship_stamp.origin);
-    pub const STAMP_FRAME: usize = offset_of!(GAME_STATE, ship_stamp.frame);
     pub const SHIP_FACING: usize = offset_of!(GAME_STATE, ship_facing);
     pub const IP_PLANET: usize = offset_of!(GAME_STATE, ip_planet);
     pub const IN_ORBIT: usize = offset_of!(GAME_STATE, in_orbit);
@@ -126,7 +122,6 @@ mod c_offset {
     pub const VELOCITY_ERROR: usize = offset_of!(GAME_STATE, velocity.error);
     pub const VELOCITY_INCR: usize = offset_of!(GAME_STATE, velocity.incr);
     pub const BATTLE_GROUP_REF: usize = offset_of!(GAME_STATE, battle_group_ref);
-    pub const DISPLAY_ARRAY: usize = offset_of!(GAME_STATE, _display_array);
 }
 
 /// `SaveGameState` writes the 75 "GlSt" bytes in this order: (position in the
@@ -360,7 +355,7 @@ fn restore_writes_every_glst_field_at_its_c_offset() {
 #[test]
 fn restore_leaves_what_glst_does_not_carry() {
     let mut game = LiveGame::new();
-    let frame = 0x1000usize as crate::graphics::native_abi::FRAME;
+    let frame = crate::graphics::drawable::FrameId::from_bits(0x1_0001);
     game.ship_stamp.frame = frame;
     game.battle_group_ref = 0xdead_beef;
 
@@ -378,14 +373,9 @@ fn restore_leaves_what_glst_does_not_carry() {
 
     assert_eq!(queue_state(&game.1), before);
     assert_eq!(
-        get(&game, c_offset::STAMP_FRAME, 8),
-        (0x1000u64).to_le_bytes()
-    );
-    assert_eq!(
         get(&game, c_offset::BATTLE_GROUP_REF, 4),
         0xdead_beefu32.to_le_bytes()
     );
-    assert_eq!(get(&game, c_offset::DISPLAY_ARRAY, 8), vec![0; 8]);
 }
 
 #[test]

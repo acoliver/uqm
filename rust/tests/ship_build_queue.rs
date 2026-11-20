@@ -58,7 +58,7 @@ fn ship_construction_clears_payload_and_preserves_allocation_order() {
     assert_eq!(fresh.crew_level, 0);
     assert_eq!(fresh.species_id, 0);
     assert_eq!(fresh.index, 0);
-    assert!(fresh.race_strings.is_null());
+    assert!(fresh.race_strings.is_none());
     assert!(fresh.icons.is_null());
     assert!(fresh.melee_icon.is_null());
     fragments.put(reused);

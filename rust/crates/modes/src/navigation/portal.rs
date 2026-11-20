@@ -1,18 +1,18 @@
 //! Portal animation state used by hyperspace radar and contact elements.
 
 use super::hyper_units::{ARILOU_SPACE_X, ARILOU_SPACE_Y, QUASI_SPACE_X, QUASI_SPACE_Y};
-use crate::engine::graphics::native_abi::POINT;
+use crate::engine::graphics::geometry::Point;
 use crate::engine::{Kernel, StoryKey, World};
 
 pub(super) fn portals(
     world: &mut World,
     kernel: &mut Kernel,
-    universe: POINT,
-) -> ([(POINT, u16); 2], usize) {
+    universe: Point,
+) -> ([(Point, u16); 2], usize) {
     let counter = world.story_state(StoryKey::ARILOU_SPACE_COUNTER) as u8;
     let side = world.story_state(StoryKey::ARILOU_SPACE_SIDE) as u8;
     let mut portal = world.story_state(StoryKey::PORTAL_COUNTER) as u8;
-    let mut portals = [(POINT { x: 0, y: 0 }, 0u16); 2];
+    let mut portals = [(Point { x: 0, y: 0 }, 0u16); 2];
     let mut count = 0usize;
     if portal != 0 {
         if portal == 1 {
@@ -29,7 +29,7 @@ pub(super) fn portals(
     if counter != 0 {
         let (point, index) = if side <= 1 {
             (
-                POINT {
+                Point {
                     x: ARILOU_SPACE_X as i16,
                     y: ARILOU_SPACE_Y as i16,
                 },
@@ -37,7 +37,7 @@ pub(super) fn portals(
             )
         } else {
             (
-                POINT {
+                Point {
                     x: QUASI_SPACE_X as i16,
                     y: QUASI_SPACE_Y as i16,
                 },
@@ -64,7 +64,7 @@ mod tests {
     fn inactive_portals_produce_no_elements() {
         let mut world = world();
         let mut kernel = Kernel::new();
-        let (_, count) = portals(&mut world, &mut kernel, POINT { x: 12, y: 34 });
+        let (_, count) = portals(&mut world, &mut kernel, Point { x: 12, y: 34 });
         assert_eq!(count, 0);
     }
 
@@ -73,12 +73,12 @@ mod tests {
         let mut world = world();
         let mut kernel = Kernel::new();
         world.set_story_state(StoryKey::PORTAL_COUNTER, 1);
-        let (entries, count) = portals(&mut world, &mut kernel, POINT { x: 12, y: 34 });
+        let (entries, count) = portals(&mut world, &mut kernel, Point { x: 12, y: 34 });
         assert_eq!(count, 1);
         assert_eq!((entries[0].0.x, entries[0].0.y, entries[0].1), (12, 34, 18));
         assert_eq!(world.story_state(StoryKey::PORTAL_COUNTER), 2);
         world.set_story_state(StoryKey::PORTAL_COUNTER, 10);
-        let (entries, _) = portals(&mut world, &mut kernel, POINT { x: 56, y: 78 });
+        let (entries, _) = portals(&mut world, &mut kernel, Point { x: 56, y: 78 });
         assert_eq!((entries[0].0.x, entries[0].0.y, entries[0].1), (12, 34, 22));
         assert_eq!(world.story_state(StoryKey::PORTAL_COUNTER), 10);
     }
@@ -91,7 +91,7 @@ mod tests {
             world.set_story_state(StoryKey::PORTAL_COUNTER, 2);
             world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 8);
             world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
-            let (entries, count) = portals(&mut world, &mut kernel, POINT { x: 0, y: 0 });
+            let (entries, count) = portals(&mut world, &mut kernel, Point { x: 0, y: 0 });
             assert_eq!(count, 2);
             let (point, frame) = entries[1];
             let expected = if side <= 1 {

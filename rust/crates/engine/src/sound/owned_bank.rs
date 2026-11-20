@@ -4,18 +4,13 @@ use super::{
     sfx,
     types::{SoundPosition, SoundSample},
 };
-use crate::strings::string_table::{StringTable, StringTableEntry};
+use crate::strings::owned_table::EntryRef;
 use std::{ffi::CStr, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct LoadedSoundBank(Rc<Bank>);
 
-// The table header remains available to the unconverted sound consumers.
-#[repr(C)]
 pub(super) struct Bank {
-    table: StringTable,
-    entries: Box<[StringTableEntry]>,
-    _slots: Box<[*mut SoundSample]>,
     samples: Box<[SoundSample]>,
 }
 
@@ -47,66 +42,27 @@ impl LoadedSoundBank {
             !samples.is_empty() && samples.len() <= i32::MAX as usize,
             "sound bank requires a bounded nonempty sample list"
         );
-        let mut samples = samples.into_boxed_slice();
-        let mut slots: Box<[_]> = samples.iter_mut().map(std::ptr::from_mut).collect();
-        let mut entries: Box<[_]> = slots
-            .iter_mut()
-            .enumerate()
-            .map(|(index, slot)| StringTableEntry {
-                data: std::ptr::from_mut(slot).cast(),
-                length: std::mem::size_of::<*mut SoundSample>() as i32,
-                index: index as i32,
-                parent: std::ptr::null_mut(),
-            })
-            .collect();
-        let mut bank = Rc::new(Bank {
-            table: StringTable {
-                flags: 0,
-                size: samples.len() as i32,
-                strings: entries.as_mut_ptr(),
-                name_index: std::ptr::null_mut(),
-                owned_text: false,
-            },
-            entries,
-            _slots: slots,
-            samples,
-        });
-        let unique =
-            Rc::get_mut(&mut bank).unwrap_or_else(|| panic!("new sound bank must be unique"));
-        let parent = std::ptr::from_mut(&mut unique.table);
-        for entry in &mut unique.entries {
-            entry.parent = parent;
-        }
-        Self(bank)
-    }
-
-    pub(crate) fn into_raw(self) -> *mut std::ffi::c_void {
-        assert_eq!(
-            Rc::strong_count(&self.0),
-            1,
-            "cannot transfer a sound bank with retained clips"
-        );
-        Rc::into_raw(self.0).cast_mut().cast()
+        Self(Rc::new(Bank {
+            samples: samples.into_boxed_slice(),
+        }))
     }
 
     pub fn load(resource: &CStr) -> Option<Self> {
-        crate::resource::ffi_bridge::detach_resource_of_type(resource, "SNDRES").map(|bank| {
-            // SAFETY: the SNDRES loader transfers one Rc<Bank> with its table header first.
-            unsafe { Self::from_raw(bank.as_ptr()) }
-        })
+        let path = crate::resource::path_of(resource, "SNDRES")?;
+        super::heart_ffi::load_sound_bank(path.to_str().ok()?)
     }
 
-    /// Take back a bank handed out by [`LoadedSoundBank::into_raw`].
-    ///
-    /// # Safety
-    /// `raw` must come from `into_raw` and not have been taken back before.
-    pub(crate) unsafe fn from_raw(raw: *mut std::ffi::c_void) -> Self {
-        // SAFETY: the caller supplies the one reference `into_raw` released.
-        Self(unsafe { Rc::from_raw(raw.cast::<Bank>()) })
+    pub fn len(&self) -> usize {
+        self.0.samples.len()
     }
 
-    pub fn as_raw(&self) -> *mut StringTableEntry {
-        self.0.entries.as_ptr().cast_mut()
+    pub fn is_empty(&self) -> bool {
+        self.0.samples.is_empty()
+    }
+
+    /// This bank with sound `index` current, as game records name it.
+    pub fn entry_ref(&self, index: u16) -> EntryRef {
+        EntryRef::new(Rc::as_ptr(&self.0) as usize, index)
     }
 
     pub fn clip(&self, index: u16) -> SoundClip {
@@ -118,8 +74,9 @@ impl LoadedSoundBank {
 }
 
 impl SoundClip {
+    /// The address of this clip's sample: equal for clips of one sample.
     pub fn identity(&self) -> usize {
-        self.bank.as_raw().wrapping_add(self.index) as usize
+        std::ptr::from_ref(&self.bank.0.samples[self.index]) as usize
     }
 
     pub fn play(&self, channel: usize, position: SoundPosition, object: usize, priority: u8) {
@@ -147,21 +104,12 @@ mod tests {
     }
 
     #[test]
-    fn native_handoff_preserves_sample_slots_and_release_authority() {
+    fn entry_refs_name_the_bank_and_the_current_sound() {
         let bank = LoadedSoundBank::from_samples(vec![SoundSample::new(), SoundSample::new()]);
-        let entries = bank.as_raw();
-        let weak = Rc::downgrade(&bank.0);
-        let raw = bank.into_raw();
-        // SAFETY: the production handoff owns a header followed by its Rust bank storage.
-        unsafe {
-            let table = &*raw.cast::<StringTable>();
-            assert_eq!(table.strings, entries);
-            assert_eq!(table.size, 2);
-            assert_eq!((*entries.add(1)).parent, raw.cast());
-            let sample = (*entries.add(1)).data.cast::<*mut SoundSample>().read();
-            assert!(!sample.is_null());
-            drop(LoadedSoundBank::from_raw(raw));
-        }
-        assert!(weak.upgrade().is_none());
+        let other = LoadedSoundBank::from_samples(vec![SoundSample::new()]);
+        assert_eq!(bank.len(), 2);
+        assert_eq!(bank.entry_ref(1), bank.entry_ref(0).with_index(1));
+        assert_ne!(bank.entry_ref(0).table(), other.entry_ref(0).table());
+        assert_ne!(bank.clip(0).identity(), bank.clip(1).identity());
     }
 }

@@ -5,7 +5,6 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{Battle, FrameSet, Ship};
-
 use std::ffi::CStr;
 use std::{mem, ptr};
 use uqm_rust::ships::native::abi::*;
@@ -13,7 +12,7 @@ use uqm_rust::ships::native::abi::*;
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
 unsafe fn index_of(frame: FRAME) -> u16 {
-    uqm_rust::graphics::pixmap_abi::GetFrameIndex(frame.cast())
+    frame.index()
 }
 unsafe fn queue_tail() -> *mut std::ffi::c_void {
     battle::tail()

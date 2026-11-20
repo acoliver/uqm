@@ -107,16 +107,7 @@ fn real_sol_site_preserves_pluto_fatal_survivor_and_luna_acceptance() {
 #[test]
 #[serial_test::serial]
 fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes() {
-    struct Queue;
-    impl Drop for Queue {
-        fn drop(&mut self) {
-            // SAFETY: this serialized fixture owns the initialized queue.
-            unsafe { uqm_rust::graphics::dcqueue_abi::Uninit_DrawCommandQueue() };
-        }
-    }
-    // SAFETY: the serialized fixture owns the queue until its guard drops.
-    unsafe { uqm_rust::graphics::dcqueue_abi::Init_DrawCommandQueue() };
-    let _queue = Queue;
+    let _queue = uqm_rust::engine::test_support::native_probe::DrawQueue::init();
 
     let mut game = campaign();
     game.world.set_catalog(std::borrow::Cow::Borrowed(
@@ -140,8 +131,7 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
     );
     solar.sys.sun.num_planets = 9;
     solar.sys.planets[2].num_planets = 2;
-    let scan =
-        uqm_rust::engine::graphics::context_abi::LoadedContext::create(c"pickup-provider-test");
+    let scan = uqm_rust::engine::graphics::context::LoadedContext::create(c"pickup-provider-test");
     for (pluto, crew) in [(true, 3), (true, 12), (false, 12)] {
         let target = if pluto {
             Body::Planet(8)
@@ -225,8 +215,7 @@ fn production_site_keeps_its_report_when_typography_is_missing() {
 fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() {
     use uqm_rust::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
     use uqm_rust::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        drawable_abi::LoadedDrawable,
+        context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
     };
     use uqm_rust::planets::{
         generate::host::ReportSite,
@@ -239,9 +228,7 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
             .unwrap();
     game.kernel.space_context = game.kernel.off_screen_context;
     let context = ContextLease::require(game.kernel.space_context);
-    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
     game.kernel.solar_presentation.assets =
         Some(uqm_rust::engine::kernel::solar_resources::SolarResources {
             flagship: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
@@ -299,7 +286,7 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
             uqm_rust::engine::world::generation::ReportDisposition::Once
         ));
         assert!(system.report.current().is_none());
-        assert_eq!(uqm_rust::graphics::batch_depth::depth(&context), 0);
+        assert_eq!(context.batch_depth(), 0);
     }
     context.flush();
     drop((context, resources));

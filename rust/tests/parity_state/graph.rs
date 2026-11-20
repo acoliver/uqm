@@ -164,38 +164,30 @@ pub(super) fn frame_fields(
     neutral: &mut ElementRecord,
 ) {
     let native = battle::NativeFrameSet::new(8);
-    // SAFETY: the fixture retains this registered drawable through every image observation.
-    let (drawable, frame) = unsafe {
-        let frame = &mut *native.frame(7).cast::<frame_desc>();
-        (&mut *frame.parent, frame)
-    };
-    let pointer: *mut std::ffi::c_void = ptr::from_mut(frame).cast();
-    // SAFETY: native retains this registered drawable through every image observation.
-    let view = uqm_rust::engine::battle::views::FrameSelection::retain(pointer.cast());
+    let pointer = native.frame(7);
+    let drawable = pointer.drawable().map_or(0, |drawable| drawable.bits());
+    let view = uqm_rust::engine::battle::views::FrameSelection::retain(pointer);
     let array = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
     let set = uqm_rust::engine::battle::frames::Frames::shared(
         uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
         array.clone(),
     );
-    observation::record(Event::Drawable(ptr::from_mut(drawable) as usize));
+    observation::record(Event::Drawable(drawable));
     observation::record(Event::Frame {
-        address: ptr::from_mut(frame) as usize,
-        owner: ptr::from_mut(drawable) as usize,
-        index: frame.Index,
+        address: pointer.bits(),
+        owner: drawable,
+        index: pointer.index(),
     });
     observation::record(Event::FrameSet {
         address: array.as_ptr() as usize,
-        frames: vec![pointer as usize; 3],
+        frames: vec![pointer.bits(); 3],
         role: "test-views".into(),
     });
     observation::assign_frame(&mut first.current.image.frame, view.clone());
     observation::assign_set(&mut first.current.image.frames, set.clone(), None);
     observation::assign_frame(&mut first.next.image.frame, view.clone());
     observation::assign_set(&mut first.next.image.frames, set.clone(), None);
-    observation::assign_frame(
-        &mut first.IntersectControl.IntersectStamp.frame,
-        pointer.cast(),
-    );
+    observation::assign_frame(&mut first.IntersectControl.IntersectStamp.frame, pointer);
     let (fields, _) = snapshot(observer, directory);
     for name in [
         "current.frame",
@@ -232,7 +224,7 @@ pub(super) fn frame_fields(
     );
     observation::assign_frame(
         &mut first.IntersectControl.IntersectStamp.frame,
-        ptr::null_mut(),
+        uqm_rust::graphics::drawable::FrameId::NULL,
     );
     // SAFETY: both fixture owners retain their slots throughout this read.
     let successor = unsafe { battle::succ(second.pointer()) };

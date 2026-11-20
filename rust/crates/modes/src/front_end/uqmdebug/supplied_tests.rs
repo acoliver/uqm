@@ -159,7 +159,7 @@ fn event_dump_walks_the_supplied_fifo_without_mutating_it() {
 #[serial_test::serial]
 fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     use crate::engine::battle::{Race, RaceTemplate};
-    use crate::graphics::context_abi::LoadedContext;
+    use crate::graphics::context::LoadedContext;
     fn descriptor(_: &mut World) -> crate::engine::battle::RaceDesc {
         RaceTemplate::default().descriptor(&RACE)
     }
@@ -176,7 +176,7 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     game.world.set_activity(IN_BATTLE);
     game.kernel.reset_ship_capacity(RPG_PLAYER_NUM as usize, 1);
     let status = LoadedContext::create(c"refill status");
-    game.kernel.status_context = status.lease().as_raw();
+    game.kernel.status_context = Some(status.context());
     let previous = LoadedContext::create(c"refill previous");
     let previous_context = previous.lease();
     previous_context.select();
@@ -249,7 +249,7 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
         return;
     }
     use crate::engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
-    use crate::graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable};
+    use crate::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
     let mut game = crate::engine::Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_INTERPLANETARY);
@@ -266,9 +266,7 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     game.kernel.flag_stat_frame = frame;
     game.kernel.font_grad_frame = frame;
     let context = ContextLease::require(game.kernel.status_context);
-    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
     for species in 0..=u32::from(BLACK_URQUAN_SHIP) {
         let mut fleets = game.world.avail_races();
         let id = fleets.alloc().unwrap();
@@ -309,7 +307,7 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     ) {
         return;
     }
-    use crate::graphics::context_abi::ContextFrame;
+    use crate::graphics::drawable::ContextFrame;
     let mut game = crate::engine::Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_INTERPLANETARY);
@@ -317,9 +315,7 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     let context = ContextLease::require(game.kernel.status_context);
-    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
     let clock = &mut game.world.data.game.game_clock;
     clock.year_index = 2155;
     clock.month_index = 2;

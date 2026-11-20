@@ -7,10 +7,9 @@ mod battle_context;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
@@ -105,7 +104,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 c"ship.thraddash.meleeicons"
             );
             assert!(
-                d.ship_info.race_strings.is_null()
+                d.ship_info.race_strings.is_none()
                     && d.ship_info.icons.is_null()
                     && d.ship_info.melee_icon.is_null()
             );
@@ -167,7 +166,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 CStr::from_ptr(d.ship_data.ship_sounds_rsc),
                 c"ship.thraddash.sounds"
             );
-            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
                     d.cyborg_control.ManeuverabilityIndex,
@@ -552,7 +551,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 (*e).turn = 0;
                 (*e).state_flags &= !(CHANGING as u16);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
-                assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), expected);
+                assert_eq!(((*e).next.image.frame.raw()).index(), expected);
                 assert_eq!((*e).turn, 5);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_eq!((*e).life, life);
@@ -735,10 +734,7 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
             let input = with_rng(8, 0, || think(&mut ship, &mut c, 0, 1));
             assert_ne!(input & RIGHT as u8, 0);
             assert_eq!(input & (LEFT | SPECIAL) as u8, 0);
-            assert_eq!(
-                GetFrameIndex((*ship.ptr()).next.image.frame.raw().cast()),
-                1
-            );
+            assert_eq!(((*ship.ptr()).next.image.frame.raw()).index(), 1);
         }
     })
 }
@@ -777,7 +773,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(
                 uqm_rust::battle::tactrans_native::cleanup_dead_ship,
             ));
-            _GraphicsStatusFlags |= 4;
+            set_graphics_status(graphics_status() | 4);
             let result = crate::battle_context::with(|cx| {
                 let next = cx.elements().id(std::ptr::NonNull::new(ship.handle));
                 let element = cx
@@ -869,8 +865,9 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     };
                     (*t).IntersectControl = (*weapon).IntersectControl;
                     (*t).IntersectControl.IntersectStamp.frame = target.raw_frame(0, 0);
-                    let mut context: uqm_rust::graphics::native_abi::context_desc = mem::zeroed();
-                    let old_context = uqm_rust::graphics::context_abi::SetContext(&mut context);
+                    let context =
+                        uqm_rust::graphics::context::LoadedContext::create(c"collision fixture");
+                    let old_context = uqm_rust::graphics::menu::select(Some(context.context()));
                     crate::battle_context::with(|cx| {
                         let next = cx.elements().id(std::ptr::NonNull::new(target.handle));
                         let element = cx
@@ -885,7 +882,8 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                             PRE_PROCESS as u16,
                         )
                     });
-                    uqm_rust::graphics::context_abi::SetContext(old_context);
+                    uqm_rust::graphics::menu::select(old_context);
+                    drop(context);
                     let expected = if damage {
                         hp - if napalm { 2.min(hp) } else { 1 }
                     } else {

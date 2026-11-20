@@ -1,8 +1,6 @@
 use super::*;
 use crate::engine::graphics::{
-    context_abi::LoadedContext,
-    drawable_abi::LoadedDrawable,
-    native_abi::{Color, POINT},
+    context::LoadedContext, drawable::LoadedDrawable, geometry::Color, geometry::Point,
 };
 
 #[test]
@@ -21,7 +19,7 @@ fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
             a: 255,
         };
         frame.write_colors(&[color; 6], 3, 2);
-        frame.replace_hotspot(POINT { x: -2, y: 7 });
+        frame.replace_hotspot(Point { x: -2, y: 7 });
         drop(owner);
         let sentinel = Color {
             r: 1,
@@ -41,7 +39,7 @@ fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
         }
         assert_eq!(frame.rect().corner.x, 2);
         assert_eq!(frame.rect().corner.y, -7);
-        assert_eq!(frame.pixel(POINT { x: 2, y: 1 }).g, 45);
+        assert_eq!(frame.pixel(Point { x: 2, y: 1 }).g, 45);
         let context = LoadedContext::create(c"planet pixel regression");
         context.lease().set_frame(frame);
     }
@@ -51,16 +49,16 @@ fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
 #[test]
 fn real_rotation_and_zoom_compile_in_the_library_test_target() {
     let _: fn(&mut SphereState, i32, bool) = live::init_sphere_rotation;
-    let _: fn(&crate::graphics::context_abi::ContextLease, &std::cell::RefCell<SphereState>) =
+    let _: fn(&crate::graphics::context::ContextLease, &std::cell::RefCell<SphereState>) =
         live::zoom_in_planet_sphere;
-    let _: fn(&crate::graphics::context_abi::ContextLease, &SphereState) =
+    let _: fn(&crate::graphics::context::ContextLease, &SphereState) =
         live::draw_default_planet_sphere;
 }
 
 #[test]
 #[serial_test::serial]
 fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
-    use crate::engine::graphics::native_abi::{DrawMode, EXTENT, RECT};
+    use crate::engine::graphics::{geometry::DrawMode, geometry::Extent, geometry::Rect};
     let mut game = crate::engine::Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
@@ -96,16 +94,16 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
                 rng: &mut rng,
                 planet: &planet,
                 info: &info,
-                location: crate::graphics::drawable::Point { x: 10, y: -7 },
+                location: crate::graphics::geometry::Point { x: 10, y: -7 },
                 width: 242,
             },
             Some(definition),
         );
         assert_eq!(sphere.rotation.point, 241);
         assert_eq!(sphere.elevation().len(), 242 * 75);
-        let transparent = sphere.sphere_frame().pixel(POINT { x: 0, y: 0 });
+        let transparent = sphere.sphere_frame().pixel(Point { x: 0, y: 0 });
         assert_eq!(transparent.a, 0);
-        let center = sphere.sphere_frame().pixel(POINT { x: 37, y: 37 });
+        let center = sphere.sphere_frame().pixel(Point { x: 37, y: 37 });
         assert_eq!(center.a, 255);
         assert!(center.r > center.g);
         let shield = sphere
@@ -116,15 +114,15 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
             .lease()
             .context_frame(0);
         assert_eq!((shield.rect().corner.x, shield.rect().corner.y), (-45, -45));
-        assert_eq!(shield.pixel(POINT { x: 0, y: 0 }).a, 0);
+        assert_eq!(shield.pixel(Point { x: 0, y: 0 }).a, 0);
         assert!(sphere.images().throb.is_some());
         let owner = LoadedContext::create(c"sphere drawing regression");
         let context = owner.lease();
         let target = LoadedDrawable::create(2, 242, 147, 1).unwrap();
         context.set_frame(target.lease().context_frame(0));
-        context.set_clip(RECT {
-            corner: POINT { x: 0, y: 0 },
-            extent: EXTENT {
+        context.set_clip(Rect {
+            corner: Point { x: 0, y: 0 },
+            extent: Extent {
                 width: 242,
                 height: 147,
             },
@@ -170,7 +168,7 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
 #[test]
 #[serial_test::serial]
 fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
-    use crate::engine::graphics::native_surface::CapturedSurface;
+    use crate::engine::graphics::surface::CapturedSurface;
     let mut game = crate::engine::Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
@@ -192,7 +190,7 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
         ];
         for (index, color) in colors.into_iter().enumerate() {
             let frame = uqm_engine::test_support::native_probe::frame_at(
-                source.as_frame().cast(),
+                source.first_frame(),
                 index as u16,
             );
             assert!(uqm_engine::test_support::native_probe::write_pixels(
@@ -233,14 +231,12 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
                     == (expected.r, expected.g, expected.b, expected.a)));
         }
         let same = CapturedSurface::pixmap(4, 6, 1);
-        let frame = same.as_frame();
+        let frame = same.first_frame();
         let normalized = same.into_definition(4, 6).unwrap();
-        assert_eq!(normalized.as_frame(), frame);
+        assert_eq!(normalized.first_frame(), frame);
 
         let source = CapturedSurface::pixmap(2, 2, 1);
-        let retained = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-            source.as_frame(),
-        ));
+        let retained = crate::graphics::drawable::ContextFrame::retain(source.first_frame());
         let expected = [Color {
             r: 11,
             g: 23,

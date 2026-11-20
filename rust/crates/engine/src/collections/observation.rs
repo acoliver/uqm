@@ -128,6 +128,11 @@ impl<T> ImagePointer for *mut T {
         *self as usize
     }
 }
+impl ImagePointer for crate::graphics::drawable::FrameId {
+    fn address(&self) -> usize {
+        self.bits()
+    }
+}
 
 /// Assignments are observed even when the numeric pointer does not change.
 pub fn assign_frame<T: ImagePointer>(slot: &mut T, frame: T) {
@@ -189,7 +194,7 @@ macro_rules! image {
     }};
     (single; $slot:expr, $value:expr, $frame:expr) => {{
         let value = $value;
-        let frame = $frame as usize;
+        let frame = $crate::collections::observation::ImagePointer::address(&$frame);
         $crate::collections::observation::assign_set(&mut $slot, value, Some(frame));
     }};
     (copy; $slot:expr, $source:expr) => {{

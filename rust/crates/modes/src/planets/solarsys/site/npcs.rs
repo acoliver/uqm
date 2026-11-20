@@ -210,26 +210,26 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
         // SAFETY: the reference was stored in this world's group files.
         initialize_solar_groups(world, reference, &solar_frame);
     }
-    fn planet_outer_location(&self, planet: u16) -> crate::engine::graphics::native_abi::POINT {
+    fn planet_outer_location(&self, planet: u16) -> crate::engine::graphics::geometry::Point {
         let game = self.game.borrow();
         crate::planets::solar_coords::outer_location(game.solar_geometry(), planet)
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         Npcs::for_each_ip_group(self, visit);
     }
-    fn ip_location(&self) -> crate::engine::graphics::native_abi::POINT {
+    fn ip_location(&self) -> crate::engine::graphics::geometry::Point {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
         let point = world.data.game.ip_location;
-        crate::engine::graphics::native_abi::POINT {
+        crate::engine::graphics::geometry::Point {
             x: point.x,
             y: point.y,
         }
     }
     fn set_and_transform_ip_location(
         &mut self,
-        location: crate::engine::graphics::native_abi::POINT,
+        location: crate::engine::graphics::geometry::Point,
     ) {
         let mut game = self.game.borrow_mut();
         let solar_frame = *game.solar_geometry();

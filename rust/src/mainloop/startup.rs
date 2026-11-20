@@ -20,12 +20,6 @@ use crate::mainloop::{dir_prep, options, options_abi as globals};
 use crate::sound::volume_globals::update_sound_options;
 use std::ffi::CString;
 
-fn c_option(value: &Option<String>) -> Option<CString> {
-    value
-        .as_ref()
-        .map(|value| CString::new(value.as_str()).expect("option contains NUL"))
-}
-
 /// Bring every subsystem up on the SDL owner thread, once, after command-line
 /// parsing. Returns the process exit status: zero when the game may start.
 pub fn initialize(
@@ -164,16 +158,13 @@ fn start_media(
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
 ) -> bool {
     let (driver, flags) = graphics_config(parsed);
-    let backend = graphics_options(c_option(&parsed.graphics_backend), observer);
-    if !crate::engine::host::display::init_graphics(
+    crate::graphics::present::init_graphics(
         driver,
         flags,
-        &backend,
+        graphics_options(observer),
         parsed.resolution_width,
         parsed.resolution_height,
-    ) {
-        return false;
-    }
+    );
     let gamma = if globals::setGammaCorrection(parsed.gamma) {
         parsed.gamma
     } else {
@@ -182,7 +173,6 @@ fn start_media(
     input
         .configuration
         .update_preferences(|preferences| preferences.gamma = gamma);
-    crate::graphics::cmap_abi::InitColorMaps();
     if let Err(error) = crate::input::sdl_input::init_input(input.controls()) {
         log::error!("{error}");
         return false;

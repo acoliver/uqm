@@ -1,10 +1,10 @@
 //! Copyable callbacks shared by legacy records and id-based consumers.
 
 use super::{record::ElementRecord, Cx, ElementId};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 pub type ElementFn = fn(&mut Cx<'_>, ElementId);
-pub type CollisionFn = fn(&mut Cx<'_>, ElementId, &mut POINT, ElementId, &mut POINT);
+pub type CollisionFn = fn(&mut Cx<'_>, ElementId, &mut Point, ElementId, &mut Point);
 
 #[derive(Clone, Copy, Debug)]
 pub enum ElementHook {
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn installation_preserves_callback_addresses_and_clears_absent_hooks() {
         fn element(_: &mut Cx<'_>, _: ElementId) {}
-        fn collision(_: &mut Cx<'_>, _: ElementId, _: &mut POINT, _: ElementId, _: &mut POINT) {}
+        fn collision(_: &mut Cx<'_>, _: ElementId, _: &mut Point, _: ElementId, _: &mut Point) {}
 
         let mut record = ElementRecord::default();
         ElementHooks {

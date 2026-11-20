@@ -1,13 +1,12 @@
 //! Resource ownership follows a descriptor through attachment and detachment.
 use crate::battle::{frames::FrameArray, record::*, RaceDesc};
-use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
-use crate::graphics::{drawable_abi::LoadedDrawable, native_abi::FRAME};
+use crate::graphics::drawable::{FrameId, LoadedDrawable};
 use crate::strings::owned_table::LoadedTextTable;
 
 #[derive(Debug)]
 pub struct ShipAssets {
     navigation: ShipNavigationAssets,
-    captain: FRAME,
+    captain: FrameId,
     victory: Option<crate::sound::resource_types::LoadedMusic>,
     sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     animations: [FrameArray; 3],
@@ -25,11 +24,11 @@ impl std::fmt::Debug for ShipNavigationAssets {
         f.debug_struct("ShipNavigationAssets")
             .field(
                 "melee_icon",
-                &self.melee_icon.as_ref().map(|icon| icon.lease().frame(0)),
+                &self.melee_icon.as_ref().map(LoadedDrawable::first_frame),
             )
             .field(
                 "icons",
-                &self.icons.as_ref().map(|icon| icon.lease().frame(0)),
+                &self.icons.as_ref().map(LoadedDrawable::first_frame),
             )
             .field("strings", &self.strings)
             .finish()
@@ -42,11 +41,10 @@ pub struct CampaignProbeAssets {
     _navigation: ShipNavigationAssets,
 }
 
-fn icon_frame(owner: &Option<LoadedDrawable>) -> FRAME {
+fn icon_frame(owner: &Option<LoadedDrawable>) -> FrameId {
     owner
         .as_ref()
-        .and_then(|icon| icon.lease().frame(0))
-        .unwrap_or(std::ptr::null_mut())
+        .map_or(FrameId::NULL, LoadedDrawable::first_frame)
 }
 
 impl RaceDesc {
@@ -81,6 +79,31 @@ impl RaceDescriptor {
             .as_ref()
             .map_or((c"", 0), |table| table.label(index))
     }
+    /// Give a fixture descriptor `count` silent sounds, the first current.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn install_sound_fixture(&mut self, count: usize) {
+        let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(
+            (0..count)
+                .map(|_| crate::sound::types::SoundSample::new())
+                .collect(),
+        );
+        self.ship_data.ship_sounds = Some(bank.entry_ref(0));
+        self.assets
+            .get_or_insert_with(|| {
+                Box::new(ShipAssets {
+                    navigation: ShipNavigationAssets {
+                        melee_icon: None,
+                        icons: None,
+                        strings: None,
+                    },
+                    captain: FrameId::NULL,
+                    victory: None,
+                    sounds: None,
+                    animations: Default::default(),
+                })
+            })
+            .sounds = Some(bank);
+    }
     pub fn sound_bank(&self) -> Option<&crate::sound::owned_bank::LoadedSoundBank> {
         self.assets
             .as_ref()
@@ -92,18 +115,18 @@ impl RaceDescriptor {
             .as_ref()
             .and_then(|assets| assets.victory.as_ref())
     }
-    pub fn take_captain_background(&mut self) -> FRAME {
+    pub fn take_captain_background(&mut self) -> FrameId {
         let assets = self
             .assets
             .as_mut()
             .unwrap_or_else(|| panic!("captain release requires loaded ship assets"));
-        self.ship_data.captain_control.background = std::ptr::null_mut();
-        std::mem::replace(&mut assets.captain, std::ptr::null_mut())
+        self.ship_data.captain_control.background = FrameId::NULL;
+        std::mem::replace(&mut assets.captain, FrameId::NULL)
     }
 }
 
 fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<FrameArray> {
-    let mut raw = [std::ptr::null_mut(); 3];
+    let mut raw = [FrameId::NULL; 3];
     if load_animation(&mut raw, keys, "animation") == 0 {
         free_image(&mut raw, "animation");
         return None;
@@ -136,9 +159,7 @@ impl RaceDesc {
         let info = &mut self.raw.ship_info;
         info.icons = icon_frame(&icons);
         info.melee_icon = icon_frame(&melee_icon);
-        info.race_strings = strings
-            .as_ref()
-            .map_or(std::ptr::null_mut(), |table| table.as_raw().cast());
+        info.race_strings = strings.as_ref().map(|table| table.entry_ref(0));
         ShipNavigationAssets {
             melee_icon,
             icons,
@@ -191,7 +212,7 @@ impl RaceDesc {
                 .raw
                 .loaded_sounds
                 .as_ref()
-                .map_or(std::ptr::null_mut(), |bank| bank.as_raw().cast());
+                .map(|bank| bank.entry_ref(0));
             if self.raw.loaded_sounds.is_none() {
                 return false;
             }
@@ -265,8 +286,7 @@ impl ShipAssets {
             }
         }
         if battle {
-            // SAFETY: the matching loader transferred this captured captain's release authority.
-            unsafe { DestroyDrawable(ReleaseDrawable(self.captain.cast())) };
+            drop(LoadedDrawable::from_frame(self.captain));
             drop(self.victory);
             drop(self.sounds);
         }
@@ -307,7 +327,7 @@ mod tests {
                 icons: Some(icons),
                 strings: Some(strings),
             },
-            captain: std::ptr::null_mut(),
+            captain: FrameId::NULL,
             victory: None,
             sounds: None,
             animations: std::array::from_fn(|_| FrameArray::EMPTY),
@@ -354,7 +374,7 @@ mod tests {
                 melee_icon: None,
                 strings: Some(table),
             },
-            captain: std::ptr::null_mut(),
+            captain: FrameId::NULL,
             victory: None,
             sounds: None,
             animations: std::array::from_fn(|_| FrameArray::EMPTY),
@@ -369,7 +389,7 @@ mod tests {
 
     #[test]
     fn early_captain_release_consumes_captured_authority_not_the_mutable_view() {
-        let captain = std::ptr::dangling_mut();
+        let captain = FrameId::from_bits(1 << 16);
         let mut descriptor = RaceDesc::empty();
         descriptor.raw.assets = Some(Box::new(ShipAssets {
             navigation: ShipNavigationAssets {
@@ -382,7 +402,7 @@ mod tests {
             sounds: None,
             animations: std::array::from_fn(|_| FrameArray::EMPTY),
         }));
-        descriptor.raw.ship_data.captain_control.background = captain.wrapping_add(1);
+        descriptor.raw.ship_data.captain_control.background = FrameId::from_bits(1 << 16 | 1);
         assert_eq!(descriptor.raw.take_captain_background(), captain);
         assert!(descriptor
             .raw

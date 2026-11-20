@@ -99,16 +99,16 @@ fn set_node_not_retrieved(info: &mut PlanetInfo, scan: u8, node: u8) {
 pub(crate) mod live;
 
 pub(crate) fn repair_back_rect(
-    context: &crate::graphics::context_abi::ContextLease,
+    context: &crate::graphics::context::ContextLease,
     rect: &crate::comm::locdata::CRect,
 ) {
     let old = context.clip_rect();
-    let mut new = crate::graphics::native_abi::RECT {
-        corner: crate::graphics::native_abi::POINT {
+    let mut new = crate::graphics::geometry::Rect {
+        corner: crate::graphics::geometry::Point {
             x: rect.corner.x + old.corner.x,
             y: rect.corner.y + old.corner.y,
         },
-        extent: crate::graphics::native_abi::EXTENT {
+        extent: crate::graphics::geometry::Extent {
             width: rect.width,
             height: rect.height,
         },

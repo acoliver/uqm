@@ -8,7 +8,8 @@ use super::super::battle::link_queue::{
     queue_record, LinkId, LinkQueue, MutableQueueRecord, QueueRecord,
 };
 use crate::collections::pool::OrderedPool;
-use crate::graphics::native_abi::{FRAME, POINT, STRING};
+use crate::graphics::{drawable::FrameId, geometry::Point};
+use crate::strings::owned_table::EntryRef;
 
 pub const SAMATRA_RACE: u8 = 23;
 
@@ -22,9 +23,9 @@ pub struct ShipFragment {
     pub max_crew: u16,
     pub energy_level: u8,
     pub max_energy: u8,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
+    pub race_strings: Option<EntryRef>,
+    pub icons: FrameId,
+    pub melee_icon: FrameId,
 }
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -37,16 +38,16 @@ pub struct FleetInfo {
     pub max_crew: u16,
     pub growth: u8,
     pub max_energy: u8,
-    pub loc: POINT,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
+    pub loc: Point,
+    pub race_strings: Option<EntryRef>,
+    pub icons: FrameId,
+    pub melee_icon: FrameId,
     pub actual_strength: u16,
     pub known_strength: u16,
-    pub known_loc: POINT,
+    pub known_loc: Point,
     pub growth_err_term: u8,
     pub func_index: u8,
-    pub dest_loc: POINT,
+    pub dest_loc: Point,
 }
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -61,12 +62,12 @@ pub struct BriefShipInfo {
 pub struct EncounterRecord {
     pub h_element: *mut std::ffi::c_void,
     pub transition_state: i16,
-    pub origin: POINT,
+    pub origin: Point,
     pub radius: u16,
     pub race_id: u8,
     pub num_ships: u8,
     pub flags: u8,
-    pub loc_pt: POINT,
+    pub loc_pt: Point,
     pub ship_list: [BriefShipInfo; 7usize],
     pub log_x: i32,
     pub log_y: i32,
@@ -82,8 +83,8 @@ pub struct IpGroup {
     pub dest_loc: u8,
     pub orbit_pos: u8,
     pub group_id: u8,
-    pub loc: POINT,
-    pub melee_icon: FRAME,
+    pub loc: Point,
+    pub melee_icon: FrameId,
 }
 
 impl IpGroup {

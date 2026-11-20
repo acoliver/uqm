@@ -3,14 +3,10 @@
 use super::locdata::CColor;
 use super::Comm;
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_abi::{Color, EXTENT, POINT, RECT},
-    native_font::FontLease,
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect,
 };
-use std::{
-    ffi::{CStr, CString},
-    ptr::NonNull,
-};
+use std::ffi::{CStr, CString};
 
 pub(crate) struct ConversationResources {
     pub commander_name: CString,
@@ -41,8 +37,10 @@ impl ConversationDisplay {
         assets: &super::assets::Assets,
         kernel: &crate::engine::Kernel,
     ) -> Result<Self, &'static str> {
-        let history =
-            NonNull::new(comm.presentation.tiny_font).ok_or("conversation history font")?;
+        let history = comm
+            .presentation
+            .tiny_font
+            .ok_or("conversation history font")?;
         Ok(Self {
             space: ContextLease::require(comm.presentation.space_context),
             player_font: assets.player.lease(),
@@ -93,12 +91,12 @@ impl Comm {
 #[derive(Clone, Copy)]
 pub(crate) struct Text<'a> {
     pub text: &'a CStr,
-    pub baseline: POINT,
+    pub baseline: Point,
     pub align: i32,
     pub char_count: u16,
 }
 impl<'a> Text<'a> {
-    pub fn new(text: &'a CStr, baseline: POINT, align: i32, char_count: u16) -> Self {
+    pub fn new(text: &'a CStr, baseline: Point, align: i32, char_count: u16) -> Self {
         Self {
             text,
             baseline,
@@ -119,7 +117,12 @@ impl<'a> Text<'a> {
             width,
             max_chars,
             |count| {
-                let measured = font.measure(self.text, self.baseline, self.align as u32, count);
+                let measured = font.measure(
+                    self.text,
+                    self.baseline,
+                    crate::graphics::geometry::TextAlign::from_c(self.align),
+                    count,
+                );
                 (measured.rect.extent.width, measured.characters)
             },
         );
@@ -132,7 +135,7 @@ impl<'a> Text<'a> {
             font,
             self.text,
             self.baseline,
-            self.align as u32,
+            crate::graphics::geometry::TextAlign::from_c(self.align),
             color,
             self.char_count,
         );
@@ -176,13 +179,13 @@ const COMM_HISTORY_BACKGROUND_COLOR: CColor = make_rgb15(0x00, 0x05, 0x00);
 const COMM_HISTORY_TEXT_COLOR: CColor = make_rgb15(0x00, 0x10, 0x00);
 const COMM_MORE_TEXT_COLOR: CColor = make_rgb15(0x00, 0x17, 0x00);
 
-fn window_rect() -> RECT {
-    RECT {
-        corner: POINT {
+fn window_rect() -> Rect {
+    Rect {
+        corner: Point {
             x: 0,
             y: SLIDER_Y + SLIDER_HEIGHT,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: SIS_SCREEN_WIDTH,
             height: SIS_SCREEN_HEIGHT - SLIDER_Y - SLIDER_HEIGHT,
         },
@@ -258,7 +261,7 @@ pub fn feedback_player_phrase(comm: &Comm, activity: u16, text: Option<&CStr>) {
                 with_player_font(&context, &font, || {
                     let mut text = Text::new(
                         game_string(comm, FEEDBACK_STRING_BASE),
-                        POINT {
+                        Point {
                             x: SIS_SCREEN_WIDTH >> 1,
                             y: SLIDER_Y + SLIDER_HEIGHT + 13,
                         },
@@ -285,16 +288,19 @@ fn response_page_text(text: &str) -> CString {
 }
 
 fn scroll_indicator(context: &ContextLease, comm: &Comm, index: u16, origin_y: i16) {
-    if let Some(frame) = NonNull::new(comm.presentation.activity_frame)
-        .map(|frame| ContextFrame::retain(Some(frame)))
+    if let Some(frame) = comm
+        .presentation
+        .activity_frame
+        .non_null()
+        .map(ContextFrame::retain)
     {
         let frame = frame.wrapped_frame(index);
         context.draw_stamp(&frame, scroll_indicator_origin(&frame, origin_y));
     }
 }
 
-fn scroll_indicator_origin(frame: &ContextFrame, origin_y: i16) -> POINT {
-    POINT {
+fn scroll_indicator_origin(frame: &ContextFrame, origin_y: i16) -> Point {
+    Point {
         x: SIS_SCREEN_WIDTH - frame.rect().extent.width - 1,
         y: origin_y,
     }
@@ -320,7 +326,7 @@ pub fn refresh_responses(comm: &mut Comm, activity: u16, top: u8, count: u8, sel
                 };
                 let mut text = Text::new(
                     &input,
-                    POINT {
+                    Point {
                         x: TEXT_X_OFFS + 8,
                         y: y + font.leading(),
                     },
@@ -329,7 +335,7 @@ pub fn refresh_responses(comm: &mut Comm, activity: u16, top: u8, count: u8, sel
                 );
                 let bullet = Text {
                     text: c"•",
-                    baseline: POINT {
+                    baseline: Point {
                         x: text.baseline.x - 8,
                         y: text.baseline.y,
                     },
@@ -392,7 +398,7 @@ fn draw_summary_page_contents(comm: &Comm, state: &mut SummaryLoopState) {
         context.set_font(&font);
         let mut text = Text::new(
             c"",
-            POINT {
+            Point {
                 x: 2,
                 y: SLIDER_Y + SLIDER_HEIGHT + DELTA_Y_SUMMARY,
             },
@@ -430,7 +436,7 @@ fn draw_summary_page_contents(comm: &Comm, state: &mut SummaryLoopState) {
             let prompt = more_prompt(game_string(comm, FEEDBACK_STRING_BASE + 1));
             Text::new(
                 &prompt,
-                POINT {
+                Point {
                     x: SIS_SCREEN_WIDTH >> 1,
                     y: text.baseline.y,
                 },
@@ -568,7 +574,7 @@ mod tests {
             assert_eq!(state.next_sub, MAX_SUMM_ROWS as usize);
             assert!(state.has_next());
             context.flush();
-            assert!((122..227).any(|y| context.target().pixel(POINT { x: 2, y }).g != 0));
+            assert!((122..227).any(|y| context.target().pixel(Point { x: 2, y }).g != 0));
             draw_summary_page_contents(comm, &mut state);
             assert_eq!(state.next_sub, 20);
             assert!(!state.has_next());
@@ -576,14 +582,14 @@ mod tests {
             assert!(!do_summary_page_frame(comm, &input, &mut state, CHECK_ABORT));
             state.print_next = false;
             assert!(do_summary_page_frame(comm, &input, &mut state, 0));
-            let frames = crate::graphics::drawable_abi::LoadedDrawable::create(8, 13, 5, 8).unwrap();
+            let frames = crate::graphics::drawable::LoadedDrawable::create(8, 13, 5, 8).unwrap();
             let frame = frames.lease().context_frame(0);
-            assert_eq!(scroll_indicator_origin(&frame, 124), POINT { x: 228, y: 124 });
-            comm.presentation.activity_frame = frame.as_raw();
+            assert_eq!(scroll_indicator_origin(&frame, 124), Point { x: 228, y: 124 });
+            comm.presentation.activity_frame = frame.frame();
             scroll_indicator(context, comm, 6, 123);
             scroll_indicator(context, comm, 7, 225);
             context.flush();
-            comm.presentation.activity_frame = std::ptr::null_mut();
+            comm.presentation.activity_frame = crate::graphics::drawable::FrameId::NULL;
         });
     }
     #[test]
@@ -593,9 +599,9 @@ mod tests {
             "comm::sis_graphics::tests::text_wraps_at_the_measured_word_boundary_with_the_real_font",
             |comm, context| {
                 let font = player_font(comm);
-                let baseline = POINT { x: 10, y: 135 };
+                let baseline = Point { x: 10, y: 135 };
                 let mut text = Text::new(c"AAA AAA", baseline, 0, u16::MAX);
-                let width = font.measure(text.text, baseline, 0, u16::MAX).rect.extent.width;
+                let width = font.measure(text.text, baseline, crate::graphics::geometry::TextAlign::Left, u16::MAX).rect.extent.width;
                 let line = text.fit(&font, width, u16::MAX);
                 assert!(!line.end_of_line);
                 assert_eq!((line.characters, line.next), (3, 4));
@@ -603,7 +609,7 @@ mod tests {
                 context.flush();
                 let frame = context.target();
                 assert!((125..145).any(|y| (0..100).any(|x| {
-                    let pixel = frame.pixel(POINT { x, y });
+                    let pixel = frame.pixel(Point { x, y });
                     pixel.r == 255 && pixel.g == 255 && pixel.b == 255
                 })));
                 text.text = suffix(text.text, line.next);

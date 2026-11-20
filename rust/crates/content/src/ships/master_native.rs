@@ -17,8 +17,8 @@ pub fn choices(queue: &MasterCatalog) -> Vec<ShipChoice> {
         let info = queue.get(id).descriptor.info();
         result.push(ShipChoice {
             cost: u16::from(info.ship_cost),
-            icon: FrameSelection::retain(info.icons.cast()),
-            melee_icon: FrameSelection::retain(info.melee_icon.cast()),
+            icon: FrameSelection::retain(info.icons),
+            melee_icon: FrameSelection::retain(info.melee_icon),
         });
         next = queue.succ(id);
     }

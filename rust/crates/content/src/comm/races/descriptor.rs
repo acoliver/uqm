@@ -1,6 +1,6 @@
 //! Immutable definitions used by conversation content.
 
-pub(crate) use crate::graphics::native_abi::{point as Point, Color};
+pub(crate) use crate::graphics::geometry::{Color, Point};
 use std::ffi::CStr;
 
 pub const MAX_ANIMATIONS: usize = 20;

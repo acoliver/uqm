@@ -2,6 +2,7 @@
 
 use crate::battle::context_access::ContextOps;
 use crate::battle::context_access::StatusOps;
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign};
 use crate::ships::native::abi::*;
 
 pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
@@ -12,8 +13,8 @@ pub(crate) fn has_crew_counter(maximum: COUNT, flags: u16) -> bool {
     maximum > MAX_CREW_SIZE as COUNT || flags & PLAYER_CAPTAIN as u16 != 0
 }
 
-fn crew_counter_layout(y: COORD, pc_menu: bool) -> (POINT, RECT) {
-    let baseline = POINT {
+fn crew_counter_layout(y: COORD, pc_menu: bool) -> (Point, Rect) {
+    let baseline = Point {
         x: if pc_menu { 4 } else { 12 },
         y: y.wrapping_add(64),
     };
@@ -55,10 +56,10 @@ fn rgb15(r: u8, g: u8, b: u8) -> Color {
     }
 }
 
-fn rect(x: COORD, y: COORD, width: SIZE, height: SIZE) -> RECT {
-    RECT {
-        corner: POINT { x, y },
-        extent: EXTENT { width, height },
+fn rect(x: COORD, y: COORD, width: SIZE, height: SIZE) -> Rect {
+    Rect {
+        corner: Point { x, y },
+        extent: Extent { width, height },
     }
 }
 
@@ -112,7 +113,7 @@ fn turn_frames(delta: STATUS_FLAGS, current: STATUS_FLAGS, pass: COUNT) -> ([i16
     }
 }
 
-pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool)) {
+pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, Rect, bool)) {
     let black = rgb15(0, 0, 0);
     let mut i = (35u16.wrapping_sub(life)) as BYTE;
     let (color, r) = if i <= 4 {
@@ -198,7 +199,7 @@ pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color,
     draw(color, r, true);
 }
 
-fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, RECT)) {
+fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, Rect)) {
     let dark = rgb15(8, 8, 8);
     let light = rgb15(16, 16, 16);
     fill(
@@ -237,8 +238,8 @@ fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, RECT)) {
 }
 
 pub(crate) fn draw_battle_crew_amount(
-    context: &crate::graphics::context_abi::ContextLease,
-    font: &crate::graphics::native_font::FontLease,
+    context: &crate::graphics::context::ContextLease,
+    font: &crate::graphics::font::FontLease,
     crew: COUNT,
     y_offs: COORD,
     pc_menu: bool,
@@ -248,13 +249,7 @@ pub(crate) fn draw_battle_crew_amount(
         .unwrap_or_else(|_| unreachable!("crew text is NUL-terminated"));
     let (baseline, background) = crew_counter_layout(y_offs, pc_menu);
     context.fill_rectangle(rgb15(0x0a, 0x0a, 0x0a), background);
-    context.draw_text(
-        font,
-        string,
-        baseline,
-        TEXT_ALIGN_ALIGN_LEFT,
-        rgb15(0, 0, 0),
-    );
+    context.draw_text(font, string, baseline, TextAlign::Left, rgb15(0, 0, 0));
 }
 
 #[allow(non_snake_case)]
@@ -271,7 +266,7 @@ pub mod engine {
         pass: COUNT,
     ) {
         let captain = cx.captain_controls(ship);
-        let origin = POINT {
+        let origin = Point {
             x: 4,
             y: y.wrapping_add(69),
         };
@@ -319,7 +314,7 @@ pub mod engine {
     pub fn draw_captains_window(
         cx: &mut Cx<'_>,
         ship: crate::engine::battle::ShipId,
-        context: Option<&crate::graphics::context_abi::ContextLease>,
+        context: Option<&crate::graphics::context::ContextLease>,
         height: SIZE,
         pc_menu: bool,
     ) {
@@ -331,10 +326,8 @@ pub mod engine {
             let y = cx.status_offset(ship);
             captain_border(y, height, |color, r| context.fill_rectangle(color, r));
             let cy = y.wrapping_add(69);
-            let background = crate::graphics::context_abi::ContextFrame::retain(
-                std::ptr::NonNull::new(captain.background),
-            );
-            context.draw_stamp(&background, POINT { x: 4, y: cy });
+            let background = crate::graphics::drawable::ContextFrame::retain(captain.background);
+            context.draw_stamp(&background, Point { x: 4, y: cy });
             if cx.ship(ship).captains_name_index == 0
                 && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
             {
@@ -344,11 +337,11 @@ pub mod engine {
                 context.draw_text(
                     &font,
                     captain_name(&cx.world.data.flagship.commander_name),
-                    POINT {
+                    Point {
                         x: 32,
                         y: cy.wrapping_add(6),
                     },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    TextAlign::Center,
                     rgb15(0, 20, 0),
                 );
             }

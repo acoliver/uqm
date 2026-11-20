@@ -1,17 +1,17 @@
 //! Resource identities borrowed from the live graph, never pointer values.
 use super::{value, Fields};
-use crate::strings::string_table::StringTableEntry;
-use crate::{automation::parity::Journal, graphics::native_abi::frame_desc};
+use crate::automation::parity::Journal;
+use crate::graphics::drawable::FrameId;
+use crate::strings::owned_table::EntryRef;
 use std::ffi::CStr;
 
 #[derive(Clone, Copy)]
-pub(super) struct Frame<'a>(pub(super) Option<&'a frame_desc>);
+pub(super) struct Frame(pub(super) FrameId);
 
-impl Frame<'_> {
+impl Frame {
     pub(super) fn write(self, fields: &mut Fields, prefix: &str, journal: &Journal) {
-        let (owner, index) = self
-            .0
-            .map_or((0, 0), |frame| (frame.parent as usize, frame.Index));
+        let owner = self.0.drawable().map_or(0, |drawable| drawable.bits());
+        let index = self.0.index();
         value(fields, prefix, "owner", journal.resource(owner));
         value(fields, prefix, "index", index);
     }
@@ -32,22 +32,16 @@ impl Resource<'_> {
     }
 }
 
-pub(super) struct StringEntry<'a>(pub(super) Option<&'a StringTableEntry>);
-impl StringEntry<'_> {
+pub(super) struct StringEntry(pub(super) Option<EntryRef>);
+impl StringEntry {
     pub(super) fn address(&self) -> usize {
-        self.0.map_or(0, |entry| {
-            if entry.parent.is_null() {
-                std::ptr::from_ref(entry) as usize
-            } else {
-                entry.parent as usize
-            }
-        })
+        self.0.map_or(0, EntryRef::table)
     }
     pub(super) fn write(&self, fields: &mut Fields, prefix: &str, journal: &Journal) {
         value(fields, prefix, "table", journal.resource(self.address()));
         value(fields, prefix, "loaded", self.0.is_some());
         if let Some(entry) = self.0 {
-            value(fields, prefix, "index", entry.index);
+            value(fields, prefix, "index", i32::from(entry.index()));
         }
     }
 }
@@ -60,19 +54,13 @@ mod tests {
         let directory = super::super::test_directory();
         let mut journal =
             Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
-        // SAFETY: frame_desc contains only scalar, pointer and optional callback fields.
-        let mut frame: frame_desc = unsafe { std::mem::zeroed() };
-        frame.Index = 4;
-        let views: [*mut frame_desc; 2] = [std::ptr::from_mut(&mut frame), std::ptr::null_mut()];
+        let frame = FrameId::from_bits(7 << 16 | 4);
+        journal.register_resource(7 << 16 | 0xffff, "drawable");
+        let views = [frame, FrameId::NULL];
         journal.register_parent(views.as_ptr() as usize, "test-views".into());
         let mut fields = Fields::new();
         for (index, view) in views.iter().enumerate() {
-            // SAFETY: the local frame and views remain live through serialization.
-            Frame(unsafe { view.cast::<frame_desc>().as_ref() }).write(
-                &mut fields,
-                &format!("views.{index}"),
-                &journal,
-            );
+            Frame(*view).write(&mut fields, &format!("views.{index}"), &journal);
         }
         assert_eq!(journal.parent(views.as_ptr() as usize), "test-views");
         assert_eq!(fields["views.0.index"], "4");
@@ -85,7 +73,7 @@ mod tests {
         let journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create resource test journal: {error}"));
         let mut fields = Fields::new();
-        Frame(None).write(&mut fields, "frame", &journal);
+        Frame(FrameId::NULL).write(&mut fields, "frame", &journal);
         Resource(Some(c"ship.pkunk.sounds")).write(&mut fields, "sounds", "resource");
         StringEntry(None).write(&mut fields, "sounds", &journal);
         assert_eq!(fields["frame.owner"], "none");

@@ -1,7 +1,7 @@
 //! Integer coordinate transforms used by interplanetary flight.
-use crate::engine::graphics::native_abi::POINT;
+use crate::engine::graphics::geometry::Point;
 
-pub(crate) fn star_seed(point: POINT) -> u32 {
+pub(crate) fn star_seed(point: Point) -> u32 {
     (u32::from(point.y as u16) << 16) | u32::from(point.x as u16)
 }
 
@@ -27,10 +27,10 @@ impl SolarCoordinates {
         (self.width >> 1) - 8
     }
 
-    pub fn to_display(self, point: POINT, radius: i16) -> POINT {
+    pub fn to_display(self, point: Point, radius: i16) -> Point {
         let (width, height) = self.dimensions();
         let scale = self.display_factor() >> 1;
-        POINT {
+        Point {
             x: (i64::from(width >> 1) + i64::from(point.x) * i64::from(scale) / i64::from(radius))
                 as i16,
             y: (i64::from(height >> 1) + i64::from(point.y) * i64::from(scale) / i64::from(radius))
@@ -38,10 +38,10 @@ impl SolarCoordinates {
         }
     }
 
-    pub fn to_location(self, point: POINT, radius: i16) -> POINT {
+    pub fn to_location(self, point: Point, radius: i16) -> Point {
         let (width, height) = self.dimensions();
         let scale = self.display_factor() >> 1;
-        POINT {
+        Point {
             x: ((i64::from(point.x) - i64::from(width >> 1)) * i64::from(radius) / i64::from(scale))
                 as i16,
             y: ((i64::from(point.y) - i64::from(height >> 1)) * i64::from(radius)
@@ -53,7 +53,7 @@ impl SolarCoordinates {
 pub(crate) fn outer_location(
     solar: &crate::engine::world::generation::SolarSnapshot,
     planet: u16,
-) -> crate::graphics::native_abi::POINT {
+) -> crate::graphics::geometry::Point {
     SolarCoordinates::new(solar.screen).to_location(
         solar.planets[usize::from(planet)].display_origin,
         solar.zoom_radius,
@@ -73,7 +73,7 @@ mod tests {
         assert_eq!(small.display_factor(), 113);
         assert_eq!(large.display_factor(), 273);
         for (geometry, center) in [(small, (121, 93)), (large, (281, 173))] {
-            let point = geometry.to_display(POINT { x: 0, y: 0 }, 8192);
+            let point = geometry.to_display(Point { x: 0, y: 0 }, 8192);
             assert_eq!((point.x, point.y), center);
             let origin = geometry.to_location(point, 8192);
             assert_eq!((origin.x, origin.y), (0, 0));
@@ -88,7 +88,7 @@ mod tests {
             (i16::MIN, i16::MAX, 0x7fff_8000),
             (0, 0, 0),
         ] {
-            assert_eq!(star_seed(POINT { x, y }), expected);
+            assert_eq!(star_seed(Point { x, y }), expected);
         }
     }
 
@@ -101,7 +101,7 @@ mod tests {
         let mut visit =
             crate::planets::solar_system::SolarSystem::new(&world, crate::engine::StarId(0));
         visit.sys.sun.radius = 8192;
-        visit.sys.planets[2].image.origin = POINT { x: -1, y: 3 };
+        visit.sys.planets[2].image.origin = Point { x: -1, y: 3 };
         let observation = visit.snapshot((320, 200));
         visit.sys.sun.radius = 4096;
         visit.sys.planets[2].image.origin.x = 37;
@@ -111,12 +111,12 @@ mod tests {
 
     #[test]
     fn center_and_cardinals_keep_the_original_truncation() {
-        let center = SolarCoordinates::new((320, 200)).to_display(POINT { x: 0, y: 0 }, 8192);
+        let center = SolarCoordinates::new((320, 200)).to_display(Point { x: 0, y: 0 }, 8192);
         assert_eq!((center.x, center.y), (121, 93));
         let negative =
-            SolarCoordinates::new((320, 200)).to_display(POINT { x: -8192, y: -1 }, 8192);
+            SolarCoordinates::new((320, 200)).to_display(Point { x: -8192, y: -1 }, 8192);
         assert_eq!((negative.x, negative.y), (65, 93));
-        let corner = SolarCoordinates::new((320, 200)).to_location(POINT { x: 0, y: 0 }, 8192);
+        let corner = SolarCoordinates::new((320, 200)).to_location(Point { x: 0, y: 0 }, 8192);
         assert_eq!((corner.x, corner.y), (-17700, -13604));
     }
 
@@ -129,7 +129,7 @@ mod tests {
             for radius in [1024, 2048, 4096, 8192] {
                 for x in -3..=3 {
                     for y in -3..=3 {
-                        let point = POINT {
+                        let point = Point {
                             x: (x * radius) as i16,
                             y: (y * radius) as i16,
                         };

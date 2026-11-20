@@ -1,17 +1,20 @@
 //! Production visual selection with retained frames and collision masks.
-use super::{
-    assembly::{EntityVisual, SurfaceVisualPort, WorldVisualPort},
-    creatures::CreatureKind,
-    entities::{SurfaceEntity, SurfaceEntityKind},
-    generation::GeneratedEntity,
-    graphics_adapter::SurfaceFrame,
-    hazards::HazardKind,
-    mask_adapter::extract_frame_mask,
-    resources::{LanderGraphic, PlanetSideAssets},
-    runtime::AdapterError,
-    scan_frames::{mineral_surface_sprite, ScanFrameError},
-};
-use crate::graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable};
+use super::assembly::EntityVisual;
+use super::assembly::SurfaceVisualPort;
+use super::assembly::WorldVisualPort;
+use super::creatures::CreatureKind;
+use super::entities::SurfaceEntity;
+use super::entities::SurfaceEntityKind;
+use super::generation::GeneratedEntity;
+use super::graphics_adapter::SurfaceFrame;
+use super::hazards::HazardKind;
+use super::mask_adapter::extract_frame_mask;
+use super::resources::LanderGraphic;
+use super::resources::PlanetSideAssets;
+use super::runtime::AdapterError;
+use super::scan_frames::mineral_surface_sprite;
+use super::scan_frames::ScanFrameError;
+use crate::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
 
 pub struct CffiSurfaceVisuals {
     misc_data: ContextFrame,
@@ -323,11 +326,7 @@ mod tests {
     #[test]
     fn visual_context_requires_misc_frame() {
         assert!(matches!(
-            CffiSurfaceVisuals::new(
-                ContextFrame::retain(None),
-                None,
-                std::array::from_fn(|_| None)
-            ),
+            CffiSurfaceVisuals::new(ContextFrame::default(), None, std::array::from_fn(|_| None)),
             Err(AdapterError {
                 operation: "misc_data_frame",
                 batch_depth_corrections: 0

@@ -1,11 +1,7 @@
 //! Resource and movie lifecycle through the engine's normal library build.
-use std::ffi::CString;
 use std::ptr;
-use uqm_rust::graphics::sdl::lifecycle_abi::{
-    GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics,
-};
-use uqm_rust::resource::ffi_bridge::_cur_resfile_name;
-use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::load_string_table_file};
+use uqm_rust::graphics::present::GraphicsOptions;
+use uqm_rust::strings::owned_table::LoadedTextTable;
 use uqm_rust::video::{control::*, ffi::*, legacy::*};
 
 fn retained_playback_keeps_its_clip_after_descriptor_drop() {
@@ -71,15 +67,8 @@ fixture.absent = 3DOVID:missing.duk
         let mount = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         let dir = uqm_rust::io::content_dir().unwrap();
         retained_string_table_loads_owned_text();
-        assert!((*ptr::addr_of!(_cur_resfile_name)).is_null());
-        _cur_resfile_name = c"busy".as_ptr();
-        assert!(load_string_table_file(&dir, c"strings.txt".as_ptr()).is_null());
-        _cur_resfile_name = ptr::null();
         let options = GraphicsOptions::default();
-        assert_eq!(
-            TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
-            0
-        );
+        uqm_rust::graphics::present::init_graphics(1, 0, options, 320, 240);
         assert_eq!(InitVideoPlayer(0), 1);
         assert_eq!(VidPlay(ptr::null_mut()), 0);
         assert_eq!(VidProcessFrame(), 0);
@@ -100,12 +89,8 @@ fixture.absent = 3DOVID:missing.duk
         assert!(VidPlaying().is_null());
         assert_eq!(DestroyVideo(clip), 1);
         assert_eq!(DestroyVideo(ptr::null_mut()), 0);
-        uqm_rust::resource::ffi_bridge::InitResourceSystem();
-        uqm_rust::resource::ffi_bridge::load_resource_index(
-            &dir,
-            c"video.rmp".as_ptr(),
-            ptr::null(),
-        );
+        uqm_rust::resource::init();
+        uqm_rust::resource::load_index(&dir, c"video.rmp", None);
         retained_playback_keeps_its_clip_after_descriptor_drop();
         assert!(VidPlaying().is_null());
         assert!(!rust_present_video_to_window(ptr::null(), 0, 0, 0));
@@ -119,70 +104,10 @@ fixture.absent = 3DOVID:missing.duk
         UninitVideoPlayer();
         assert!(!rust_process_video_frame());
         uqm_rust::sound::rodio_audio::rust_audio_uninit();
-        TFB_UninitGraphics();
+        uqm_rust::graphics::present::uninit_graphics();
         drop(mount);
     }
     replay_audio_exports_follow_sample_completion_and_transport();
-}
-
-#[test]
-fn string_bank_deduplicates_across_chunks_and_preserves_split_tails() {
-    use std::ffi::CStr;
-    use uqm_rust::resource::stringbank::*;
-
-    // SAFETY: this test owns the bank and all returned pointers remain live until it is freed.
-    unsafe {
-        let bank = StringBank_Create();
-        assert!(!bank.is_null());
-        let alpha = StringBank_AddString(bank, c"alpha".as_ptr());
-        assert_ne!(alpha, StringBank_AddString(bank, c"alpha".as_ptr()));
-        assert_eq!(alpha, StringBank_AddOrFindString(bank, c"alpha".as_ptr()));
-        assert_eq!(
-            alpha,
-            StringBank_AddOrFindSubstring(bank, c"alphabet".as_ptr(), 5)
-        );
-        let beta = StringBank_AddSubstring(bank, c"betamax".as_ptr(), 4);
-        assert_eq!(CStr::from_ptr(beta), c"beta");
-        for i in 0..300 {
-            let value = CString::new(format!("bank-entry-{i:04}")).unwrap();
-            let saved = StringBank_AddString(bank, value.as_ptr());
-            assert_eq!(CStr::from_ptr(saved), value.as_c_str());
-        }
-        assert_eq!(CStr::from_ptr(alpha), c"alpha");
-        assert_eq!(alpha, StringBank_AddOrFindString(bank, c"alpha".as_ptr()));
-        let tail = StringBank_AddOrFindString(bank, c"bank-entry-0299".as_ptr());
-        assert_eq!(CStr::from_ptr(tail), c"bank-entry-0299");
-        let too_long = CString::new(vec![b'x'; 2048]).unwrap();
-        assert!(StringBank_AddString(bank, too_long.as_ptr()).is_null());
-        let mut pieces = [ptr::null(); 4];
-        assert_eq!(
-            SplitString(
-                c"alpha,,alpha,tail,rest".as_ptr(),
-                b',' as _,
-                4,
-                pieces.as_mut_ptr(),
-                bank
-            ),
-            4
-        );
-        assert_eq!(pieces[0], alpha);
-        assert_eq!(pieces[2], alpha);
-        assert_eq!(CStr::from_ptr(pieces[1]), c"");
-        assert_eq!(CStr::from_ptr(pieces[3]), c"tail,rest");
-        assert_eq!(
-            SplitString(
-                c"whole,tail".as_ptr(),
-                b',' as _,
-                1,
-                pieces.as_mut_ptr(),
-                bank
-            ),
-            1
-        );
-        assert_eq!(CStr::from_ptr(pieces[0]), c"whole,tail");
-        StringBank_Free(bank);
-        StringBank_Free(ptr::null_mut());
-    }
 }
 
 fn replay_audio_exports_follow_sample_completion_and_transport() {

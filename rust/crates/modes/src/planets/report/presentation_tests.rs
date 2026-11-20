@@ -8,15 +8,12 @@ use crate::engine::{
     Game,
 };
 use crate::graphics::{
-    batch_depth::depth,
-    context_abi::{ContextFrame, ContextLease},
-    drawable_abi::LoadedDrawable,
-    native_abi::{Color, POINT, TEXT_ALIGN_ALIGN_LEFT},
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
+    geometry::Point, geometry::TextAlign,
 };
 use crate::planet_side::report_adapter::{DiscoveryReport, DiscoveryReportPort, ReportDisposition};
 use std::{
     cell::{Cell, RefCell},
-    ptr::NonNull,
     rc::Rc,
 };
 
@@ -24,7 +21,7 @@ struct Driver {
     input: InputSession,
     context: ContextLease,
     frame: ContextFrame,
-    point: POINT,
+    point: Point,
     updates: Cell<usize>,
     flushes: Cell<usize>,
     pixels: RefCell<Vec<Color>>,
@@ -57,7 +54,7 @@ impl InputRuntime for Driver {
         let index = self.updates.get();
         let pressed = [false, false, true, false, true, false][index];
         self.updates.set(index + 1);
-        assert_eq!(depth(&self.context), 0, "report waited under a batch");
+        assert_eq!(self.context.batch_depth(), 0, "report waited under a batch");
         self.context.flush();
         self.pixels.borrow_mut().push(self.frame.pixel(self.point));
         let mut state = InputState::default();
@@ -119,12 +116,12 @@ fn real_report_presents_before_nested_input_and_restores_retained_background() {
             .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let context = ContextLease::require(game.kernel.space_context);
-        let frame = ContextFrame::retain(NonNull::new(game.kernel.screen));
+        let frame = ContextFrame::retain(game.kernel.screen);
         context.set_frame(frame.clone());
         let typography = reports.snapshot().unwrap();
         let point = typography
             .font()
-            .measure(c"A", POINT { x: 0, y: 2 }, TEXT_ALIGN_ALIGN_LEFT, 1)
+            .measure(c"A", Point { x: 0, y: 2 }, TextAlign::Left, 1)
             .rect
             .corner;
         let background = Color {
@@ -200,7 +197,7 @@ fn real_report_presents_before_nested_input_and_restores_retained_background() {
             (pixels[5].r, pixels[5].g, pixels[5].b),
             (background.r, background.g, background.b)
         );
-        assert_eq!(depth(&context), 0);
+        assert_eq!(context.batch_depth(), 0);
         drop(pixels);
         drop((
             driver, context, frame, junk_frame, typography, reports, slot,

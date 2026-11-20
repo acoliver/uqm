@@ -4,7 +4,7 @@ use crate::battle::{
     views::{Info, Intelligence},
     Race, RaceDesc, RaceResources, RaceTemplate,
 };
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 const MAX_ENERGY: u8 = 24;
 const ENERGY_REGENERATION: u8 = 1;
 const ENERGY_WAIT: u8 = 8;
@@ -33,7 +33,7 @@ pub fn descriptor(race: &'static Race) -> RaceDesc {
             max_energy: MAX_ENERGY,
         },
         fleet_strength: INFINITE_RADIUS,
-        fleet_location: POINT {
+        fleet_location: Point {
             x: (MAX_UNIVERSE >> 1) as i16,
             y: (MAX_UNIVERSE >> 1) as i16,
         },

@@ -78,11 +78,8 @@ const HOOK_SAMPLE: u16 = 0x7e57;
 
 #[test]
 fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_not_update() {
-    // SAFETY: the serialized fixture owns input and the draw queue on the game thread.
-    battle_context::run(|input| unsafe {
-        use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
-        lifecycle_abi::GameActive = 1;
-        dcqueue_abi::Init_DrawCommandQueue();
+    battle_context::run(|input| {
+        uqm_rust::graphics::state::init_headless(Default::default());
         input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
         input.set_menu_sounds(32, 64);
         uqm_rust::mainloop::input_abi::SetInputCallback(
@@ -134,7 +131,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         });
         assert_eq!(*events.borrow(), ["before"]);
         uqm_rust::mainloop::input_abi::SetInputCallback(input, None);
-        dcqueue_abi::Uninit_DrawCommandQueue();
+        uqm_rust::graphics::state::uninit_headless();
     });
 }
 
@@ -168,11 +165,8 @@ impl uqm_rust::engine::input::Frame for AdmittedFrame {
 
 #[test]
 fn mode_owned_frame_admission_keeps_the_native_observer_order() {
-    // SAFETY: this serialized fixture owns input and initializes its draw queue before dispatch.
-    battle_context::run(|input| unsafe {
-        use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
-        lifecycle_abi::GameActive = 1;
-        dcqueue_abi::Init_DrawCommandQueue();
+    battle_context::run(|input| {
+        uqm_rust::graphics::state::init_headless(Default::default());
         input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
@@ -204,6 +198,6 @@ fn mode_owned_frame_admission_keeps_the_native_observer_order() {
                 "complete"
             ]
         );
-        dcqueue_abi::Uninit_DrawCommandQueue();
+        uqm_rust::graphics::state::uninit_headless();
     });
 }

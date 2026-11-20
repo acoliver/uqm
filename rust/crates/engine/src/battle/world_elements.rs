@@ -1,12 +1,10 @@
 //! Live planet, asteroid, rubble, damage and floating-crew callbacks.
 
 use super::flags::*;
-use crate::graphics::native_abi::Color;
-use crate::graphics::native_abi::EMPTY_PRIMITIVE as gfx_object_NUM_PRIMS;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::{geometry::Color, geometry::Point};
 use crate::math::battle_types::{FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, MAX_REDUCTION, ONE_SHIFT};
 const POINT_PRIMITIVE: u8 = 0;
-use crate::graphics::STAMP_PRIMITIVE;
+use crate::battle::STAMP_PRIMITIVE;
 
 fn damage_object(mass: u8, hp: &mut u16, life: &mut u16, flags: &mut u16, damage: i16) {
     if mass > 100 {
@@ -157,7 +155,7 @@ mod engine {
         let Some(e) = cx.alloc_element() else {
             if let Some(source) = source {
                 cx.element_mut(source).flags &= !(DISAPPEARING as u16);
-                cx.primitive_style_mut(source).kind = gfx_object_NUM_PRIMS;
+                cx.primitive_style_mut(source).kind = 7;
                 cx.element_mut(source).set_life_span(1);
             }
             return;
@@ -263,9 +261,9 @@ mod engine {
     pub fn crew_collision(
         cx: &mut Cx<'_>,
         crew: ElementId,
-        _cp: &mut POINT,
+        _cp: &mut Point,
         hit: ElementId,
-        _hp: &mut POINT,
+        _hp: &mut Point,
     ) {
         if cx.element(hit).flags & PLAYER_SHIP as u16 != 0
             && cx.element(hit).life_span() >= NORMAL_LIFE as u16
@@ -323,7 +321,7 @@ mod engine {
             let frame = cx.element(crew).current.image.frame;
             let mut crew_intersect = intersect;
             crew_intersect.last_time_val = 0;
-            crew_intersect.IntersectStamp.origin = POINT { x: 0, y: 0 };
+            crew_intersect.IntersectStamp.origin = Point { x: 0, y: 0 };
             image!(frame; crew_intersect.IntersectStamp.frame, frame.raw());
             if dx == 0 && dy == 0 {
                 crew_intersect.EndPoint.x = crew_intersect
@@ -392,7 +390,7 @@ mod tests {
 
     #[test]
     fn crew_motion_preserves_signed_wrapping_and_exact_half_extent_ties() {
-        use crate::graphics::native_abi::POINT as Point;
+        use crate::graphics::geometry::Point;
         fn point(x: i16, y: i16) -> Point {
             Point { x, y }
         }

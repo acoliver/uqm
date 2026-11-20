@@ -1,7 +1,7 @@
 //! Image assignments and copies retain the identity observed at the write boundary.
 use super::{Fields, Journal};
 use crate::engine::battle::record::{state__bindgen_ty_1, ElementRecord as Element, STATE};
-use crate::graphics::native_abi::{INTERSECT_CONTROL, STAMP};
+use crate::graphics::{intersection::IntersectControl, intersection::Stamp};
 use std::collections::BTreeMap;
 
 type Frame = (String, u16);
@@ -96,7 +96,8 @@ impl Journal {
     // An in-place animation edit changes this resource generation, not references
     // to an earlier resource that occupied the same array storage.
     fn update_source_view(&mut self, slot: usize, frame: &Frame) -> bool {
-        let width = std::mem::size_of::<usize>();
+        // a source array holds one frame handle per view
+        let width = std::mem::size_of::<crate::graphics::drawable::FrameId>();
         let Some((&base, source)) = self.bindings.sources.range_mut(..=slot).next_back() else {
             return false;
         };
@@ -223,8 +224,8 @@ impl Journal {
                 "next.farray" => next + set,
                 "intersect.frame" => {
                     std::mem::offset_of!(Element, IntersectControl)
-                        + std::mem::offset_of!(INTERSECT_CONTROL, IntersectStamp)
-                        + std::mem::offset_of!(STAMP, frame)
+                        + std::mem::offset_of!(IntersectControl, IntersectStamp)
+                        + std::mem::offset_of!(Stamp, frame)
                 }
                 _ => panic!("unknown element image slot {name}"),
             }

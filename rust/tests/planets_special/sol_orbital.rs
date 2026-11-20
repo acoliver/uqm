@@ -106,7 +106,7 @@ impl Drop for DebugTraversal {
 
 pub fn check(c: &mut Harness, table: &[PlanetFrame]) {
     let _traversal = DebugTraversal::enter();
-    assert_eq!(unsafe { ScreenWidth }, 320);
+    assert_eq!(ScreenWidth, 320);
     let actual = sol_orbital::render(c, table);
     assert_eq!(actual.lines().count(), 3_168);
     crate::check_fixture("sol_orbital.txt", &actual);

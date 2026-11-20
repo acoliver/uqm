@@ -86,7 +86,7 @@ fn race_record_projections_do_not_require_mode_installation_or_publication() {
     with_context(|cx| {
         cx.set_flagship_crew(43);
         assert_eq!(cx.world.flagship_config().crew, 43);
-        cx.set_autopilot(uqm_engine::graphics::native_abi::POINT { x: 17, y: 29 });
+        cx.set_autopilot(uqm_engine::graphics::geometry::Point { x: 17, y: 29 });
         assert_eq!((cx.autopilot().x, cx.autopilot().y), (17, 29));
         let mut velocity = cx.flagship_velocity();
         velocity.vector.width = 31;

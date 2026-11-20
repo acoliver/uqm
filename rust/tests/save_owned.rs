@@ -27,7 +27,7 @@ fn snapshot_derives_summary_from_owned_story_clock_and_escort_order() {
         save::SessionView {
             solar: save::summary::SessionSummary::None,
             star: saved.star,
-            ip_location: uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+            ip_location: uqm_rust::graphics::geometry::Point { x: 0, y: 0 },
         },
         &[b'x'; 80],
     )
@@ -128,7 +128,7 @@ fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
     let view = save::SessionView {
         solar: save::summary::SessionSummary::None,
         star: saved.star,
-        ip_location: uqm_rust::graphics::native_abi::POINT { x: 91, y: 92 },
+        ip_location: uqm_rust::graphics::geometry::Point { x: 91, y: 92 },
     };
     let captured = save::snapshot(&mut world, view, summary.save_name.as_bytes()).unwrap();
     assert_eq!(

@@ -1,9 +1,8 @@
 //! Retained navigation graphics with separate kernel and campaign release boundaries.
 
 use crate::graphics::{
-    context_abi::{ContextFrame, LoadedContext},
-    drawable_abi::LoadedDrawable,
-    native_abi::{FRAME, RECT},
+    context::LoadedContext, drawable::ContextFrame, drawable::FrameId, drawable::LoadedDrawable,
+    geometry::Rect,
 };
 
 #[derive(Default)]
@@ -16,11 +15,12 @@ pub(super) struct NavigationResources {
     play: Option<LoadedDrawable>,
 }
 
-fn first_frame(drawable: &Option<LoadedDrawable>) -> FRAME {
+fn first_frame(drawable: &Option<LoadedDrawable>) -> FrameId {
     drawable
         .as_ref()
-        .and_then(|owner| owner.lease().frame(0))
-        .unwrap_or(std::ptr::null_mut())
+        .map_or(crate::graphics::drawable::FrameId::NULL, |owner| {
+            owner.first_frame()
+        })
 }
 
 impl NavigationResources {
@@ -53,7 +53,7 @@ impl crate::Kernel {
         self.play_frame = first_frame(&self.assets.navigation.play);
     }
 
-    pub fn load_navigation_graphics(&mut self, radar_clip: RECT) -> bool {
+    pub fn load_navigation_graphics(&mut self, radar_clip: Rect) -> bool {
         let loaded = self
             .assets
             .navigation
@@ -68,43 +68,43 @@ impl crate::Kernel {
             let radar = LoadedContext::create(c"RadarContext");
             let context = radar.lease();
             context.with_selected(|| {
-                context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(self.screen)));
+                context.set_frame(ContextFrame::retain(self.screen));
                 context.set_clip(radar_clip);
             });
             self.assets.navigation.radar = Some(radar);
         }
-        self.radar_context = self
-            .assets
-            .navigation
-            .radar
-            .as_ref()
-            .unwrap_or_else(|| panic!("navigation radar is not initialized"))
-            .lease()
-            .as_raw();
+        self.radar_context = Some(
+            self.assets
+                .navigation
+                .radar
+                .as_ref()
+                .unwrap_or_else(|| panic!("navigation radar is not initialized"))
+                .context(),
+        );
         true
     }
 
     pub fn release_navigation_graphics(&mut self) {
         drop(self.assets.navigation.radar.take());
-        self.radar_context = std::ptr::null_mut();
+        self.radar_context = None;
         drop(self.assets.navigation.gradient.take());
-        self.font_grad_frame = std::ptr::null_mut();
+        self.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
         drop(self.assets.navigation.misc.take());
-        self.misc_data_frame = std::ptr::null_mut();
+        self.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
         drop(self.assets.navigation.status.take());
-        self.flag_stat_frame = std::ptr::null_mut();
+        self.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
     }
 
     pub fn release_navigation_play(&mut self) {
         drop(self.assets.navigation.play.take());
-        self.play_frame = std::ptr::null_mut();
+        self.play_frame = crate::graphics::drawable::FrameId::NULL;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::{context_abi::LoadedContext, drawable_abi::LoadedDrawable};
+    use crate::graphics::{context::LoadedContext, drawable::LoadedDrawable};
 
     #[test]
     #[serial_test::serial]
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn radar_setup_projects_owned_assets_and_restores_the_selected_context() {
-        use crate::graphics::native_abi::{EXTENT, POINT};
+        use crate::graphics::geometry::{Extent, Point};
         let screen = LoadedDrawable::create(2, 0, 0, 1).unwrap();
         let previous = LoadedContext::create(c"navigation-previous");
         let selected = previous.lease();
@@ -170,21 +170,21 @@ mod tests {
             .assets
             .navigation
             .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1)));
-        let clip = RECT {
-            corner: POINT { x: 256, y: 184 },
-            extent: EXTENT {
+        let clip = Rect {
+            corner: Point { x: 256, y: 184 },
+            extent: Extent {
                 width: 56,
                 height: 53,
             },
         };
         assert!(kernel.load_navigation_graphics(clip));
         assert_eq!(
-            selected.selected_context().unwrap().as_raw(),
-            selected.as_raw()
+            selected.selected_context().unwrap().context(),
+            selected.context()
         );
-        let radar = crate::graphics::context_abi::ContextLease::require(kernel.radar_context);
+        let radar = crate::graphics::context::ContextLease::retain(kernel.radar_context.unwrap());
         let (target, actual) = radar.with_selected(|| (radar.target(), radar.clip_rect()));
-        assert_eq!(target.as_raw(), kernel.screen);
+        assert_eq!(target.frame(), kernel.screen);
         assert_eq!(
             (
                 actual.corner.x,
@@ -213,8 +213,8 @@ mod tests {
         drop(screen);
         assert!(target.frame_count() > 0);
         assert_eq!(
-            selected.selected_context().unwrap().as_raw(),
-            selected.as_raw()
+            selected.selected_context().unwrap().context(),
+            selected.context()
         );
     }
 
@@ -237,12 +237,12 @@ mod tests {
         let misc = kernel.assets.navigation.misc.as_ref().unwrap().lease();
         let status = kernel.assets.navigation.status.as_ref().unwrap().lease();
         let allocations = observation::drain();
-        let address = |lease: &crate::graphics::drawable_abi::DrawableLease| {
+        let address = |lease: &crate::graphics::drawable::DrawableLease| {
             allocations
                 .iter()
                 .find_map(|event| match event {
                     Event::Frame { address, owner, .. }
-                        if Some(*address) == lease.frame(0).map(|frame| frame as usize) =>
+                        if Some(*address) == lease.frame(0).map(|frame| frame.bits()) =>
                     {
                         Some(*owner)
                     }
@@ -262,15 +262,15 @@ mod tests {
             })
             .collect();
         assert_eq!(freed, expected);
-        assert!(kernel.radar_context.is_null());
+        assert!(kernel.radar_context.is_none());
         assert!(kernel.font_grad_frame.is_null());
         assert!(kernel.misc_data_frame.is_null());
         assert!(kernel.flag_stat_frame.is_null());
         assert!(kernel.assets.navigation.play.is_some());
-        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::graphics::context_abi::ContextLease::require(radar.as_raw())
-        }))
-        .is_err());
+        // the projection's lease keeps the released radar context alive (#961)
+        drop(crate::graphics::context::ContextLease::retain(
+            radar.context(),
+        ));
         assert!(gradient.frame(0).is_some());
         assert!(misc.frame(0).is_some());
         assert!(status.frame(0).is_some());

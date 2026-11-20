@@ -27,7 +27,6 @@ pub fn captured_labels(mut text: String) -> String {
         ("plan_data_ptr:", "PlanDataPtr:"),
         ("scan_seed:", "ScanSeed:"),
         ("scan_retrieve_mask:", "ScanRetrieveMask:"),
-        ("discovery_string:", "DiscoveryString:"),
         ("star_size:", "StarSize:"),
         ("star_intensity:", "StarIntensity:"),
         ("star_energy:", "StarEnergy:"),
@@ -35,12 +34,26 @@ pub fn captured_labels(mut text: String) -> String {
         ("num_planets:", "NumPlanets:"),
         ("next_index:", "NextIndex:"),
         ("prev_desc:", "pPrevDesc:"),
+        ("Point {", "point {"),
+        ("Stamp {", "stamp {"),
+        ("frame: FrameId(None)", "frame: 0x0"),
     ] {
         text = text.replace(rust, captured);
     }
-    // Generation captures contain no presentation assets. Preserve the retired C columns here.
-    text.replace(
-        "DiscoveryString: 0x0",
-        "DiscoveryString: 0x0, LanderFont: 0x0, LanderFontEff: 0x0",
-    )
+    // Generation captures contain no presentation assets. Preserve the retired
+    // C columns, which follow the scan masks, here.
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    while let Some(at) = rest.find("ScanRetrieveMask: [") {
+        let end = at
+            + rest[at..]
+                .find(']')
+                .unwrap_or_else(|| panic!("unterminated scan mask"))
+            + 1;
+        out.push_str(&rest[..end]);
+        out.push_str(", DiscoveryString: 0x0, LanderFont: 0x0, LanderFontEff: 0x0");
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }

@@ -1,20 +1,20 @@
 //! Hyperspace radar, nearby star and portal elements.
-use crate::engine::battle::{CollisionHook, ElementHook};
-use crate::engine::{
-    battle::{hyperspace as resources, Cx},
-    StoryKey,
-};
-use crate::graphics::native_abi::{EXTENT, POINT, RECT};
-use crate::planets::generate::consts::{NUM_STAR_COLORS, SUPER_GIANT_STAR};
-
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
 use super::hyper_units::{Geometry, ARILOU_HOME_X, ARILOU_HOME_Y};
 use super::{color, get};
 use crate::engine::battle::views::FrameSelection as Frame;
-use crate::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::engine::battle::{CollisionHook, ElementHook};
+use crate::engine::{
+    battle::{hyperspace as resources, Cx},
+    StoryKey,
+};
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
+    geometry::Rect,
+};
+use crate::planets::generate::consts::{NUM_STAR_COLORS, SUPER_GIANT_STAR};
 use crate::planets::starmap::find_star_id;
-use std::ptr::NonNull;
 
 fn grid(context: &ContextLease, ux: i16, uy: i16, ox: i16, oy: i16) {
     context.clear();
@@ -22,12 +22,12 @@ fn grid(context: &ContextLease, ux: i16, uy: i16, ox: i16, oy: i16) {
     let ex = (ux as i32 + 378).min(10000);
     let sy = (uy as i32 - 300).max(0) / 200 * 200;
     let ey = (uy as i32 + 300).min(10000);
-    let mut rect = RECT {
-        corner: POINT {
+    let mut rect = Rect {
+        corner: Point {
             x: 0,
             y: (((9999 - ey) * 53 / 600) as i16).wrapping_sub(oy),
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 1,
             height: 0,
         },
@@ -51,8 +51,8 @@ fn grid(context: &ContextLease, ux: i16, uy: i16, ox: i16, oy: i16) {
         context.fill_rectangle(color(0, 16, 0), rect);
     }
 }
-fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
-    POINT {
+fn radar(point: Point, ox: i16, oy: i16) -> Point {
+    Point {
         x: ((point.x as i32 * 56 / 756) as i16).wrapping_sub(ox),
         y: (((9999 - point.y as i32) * 53 / 600) as i16).wrapping_sub(oy),
     }
@@ -61,9 +61,9 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
 pub fn seed_universe(
     cx: &mut Cx<'_>,
     catalog: &[crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN],
-) -> Option<POINT> {
+) -> Option<Point> {
     let geometry = Geometry::new(cx.screen_dimensions());
-    let universe = POINT {
+    let universe = Point {
         x: geometry.universe_x(cx.world.data.flagship.log_x),
         y: geometry.universe_y(cx.world.data.flagship.log_y),
     };
@@ -177,31 +177,31 @@ pub fn seed_universe(
             cx.insert_before(element, head);
         }
         process_all(cx, universe, ox, oy);
-        draw(&context, blip, POINT { x: 28, y: 26 });
-        let mut rect = RECT {
-            corner: POINT { x: 0, y: 0 },
-            extent: EXTENT {
+        draw(&context, blip, Point { x: 28, y: 26 });
+        let mut rect = Rect {
+            corner: Point { x: 0, y: 0 },
+            extent: Extent {
                 width: 55,
                 height: 1,
             },
         };
         context.fill_rectangle(color(14, 14, 14), rect);
-        rect.extent = EXTENT {
+        rect.extent = Extent {
             width: 1,
             height: 52,
         };
         context.fill_rectangle(color(14, 14, 14), rect);
-        rect.corner = POINT { x: 55, y: 1 };
+        rect.corner = Point { x: 55, y: 1 };
         context.fill_rectangle(color(6, 6, 6), rect);
-        rect.corner = POINT { x: 1, y: 52 };
-        rect.extent = EXTENT {
+        rect.corner = Point { x: 1, y: 52 };
+        rect.extent = Extent {
             width: 54,
             height: 1,
         };
         context.fill_rectangle(color(6, 6, 6), rect);
         rect.corner.x = 0;
         context.draw_point(color(8, 8, 8), rect.corner);
-        rect.corner = POINT { x: 55, y: 0 };
+        rect.corner = Point { x: 55, y: 0 };
         context.draw_point(color(8, 8, 8), rect.corner);
     });
     resources::status_context(cx.kernel).select();
@@ -218,8 +218,8 @@ pub fn seed_universe(
     }
 }
 
-fn draw(context: &ContextLease, frame: Frame, origin: POINT) {
-    context.draw_stamp(&ContextFrame::retain(NonNull::new(frame.raw())), origin);
+fn draw(context: &ContextLease, frame: Frame, origin: Point) {
+    context.draw_stamp(&ContextFrame::retain(frame.raw()), origin);
 }
 
 #[cfg(test)]
@@ -228,16 +228,16 @@ mod tests {
     #[test]
     fn radar_projection_centers_ship_and_preserves_axis_scaling() {
         for point in [
-            POINT { x: 0, y: 0 },
-            POINT { x: 1752, y: 1450 },
-            POINT { x: 9999, y: 9999 },
+            Point { x: 0, y: 0 },
+            Point { x: 1752, y: 1450 },
+            Point { x: 9999, y: 9999 },
         ] {
             let ox = (point.x as i32 * 56 / 756 - 28) as i16;
             let oy = ((9999 - point.y as i32) * 53 / 600 - 26) as i16;
             let center = radar(point, ox, oy);
             assert_eq!((center.x, center.y), (28, 26));
         }
-        let point = radar(POINT { x: 756, y: 9399 }, 0, 0);
+        let point = radar(Point { x: 756, y: 9399 }, 0, 0);
         assert_eq!((point.x, point.y), (56, 53));
     }
 }

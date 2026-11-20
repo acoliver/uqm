@@ -1,5 +1,5 @@
 use super::{args::Arguments, records::PresentationState, *};
-use crate::graphics::native_font::LoadedFont;
+use crate::graphics::{font::LoadedFont, geometry::Extent, geometry::Point, geometry::Rect};
 
 pub(super) enum Step {
     Input(bool),
@@ -182,7 +182,7 @@ fn text_command(cx: &mut Cx<'_>, state: &mut PresentationState, opcode: &[u8], s
                 render::text(
                     state,
                     &bounded(line, 255),
-                    POINT {
+                    Point {
                         x: x as i16,
                         y: y as i16,
                     },
@@ -196,7 +196,7 @@ fn text_command(cx: &mut Cx<'_>, state: &mut PresentationState, opcode: &[u8], s
                 .into_iter()
                 .map(|text| text::TextLine {
                     text,
-                    baseline: POINT { x: 0, y: 0 },
+                    baseline: Point { x: 0, y: 0 },
                 })
                 .collect();
             state.unbatch(cx, true);
@@ -225,12 +225,12 @@ fn graphics_command(state: &mut PresentationState, opcode: &[u8], source: &[u8])
         b"DIMS" => {
             if let (Some(width), Some(height)) = (args.integer(), args.integer()) {
                 let (screen_width, screen_height) = state.context.screen_dimensions();
-                state.clip = RECT {
-                    corner: POINT {
+                state.clip = Rect {
+                    corner: Point {
                         x: ((screen_width - width) / 2) as i16,
                         y: ((screen_height - height) / 2) as i16,
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: width as i16,
                         height: height as i16,
                     },
@@ -251,11 +251,11 @@ fn graphics_command(state: &mut PresentationState, opcode: &[u8], source: &[u8])
             ) {
                 state.context.draw_line(
                     state.text_color,
-                    POINT {
+                    Point {
                         x: x1 as i16,
                         y: y1 as i16,
                     },
-                    POINT {
+                    Point {
                         x: x2 as i16,
                         y: y2 as i16,
                     },

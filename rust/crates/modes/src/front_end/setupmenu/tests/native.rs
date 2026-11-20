@@ -1,8 +1,7 @@
 #![cfg(test)]
 use super::*;
 use crate::graphics::{
-    context_abi::LoadedContext, drawable_abi::LoadedDrawable, native_abi::POINT,
-    native_font::LoadedFont,
+    context::LoadedContext, drawable::LoadedDrawable, font::LoadedFont, geometry::Point,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -228,9 +227,9 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
     session.draw();
     session.resources.context.flush();
     let frame = fixture.screen.as_ref().unwrap().lease().context_frame(0);
-    let title = frame.pixel(POINT { x: 160, y: 9 });
+    let title = frame.pixel(Point { x: 160, y: 9 });
     assert_eq!((title.r, title.g, title.b), (255, 255, 255));
-    let active = frame.pixel(POINT { x: 160, y: 67 });
+    let active = frame.pixel(Point { x: 160, y: 67 });
     assert_eq!((active.r, active.g, active.b), (255, 255, 0));
     let _retained = fixture.configuration().runtime.directory.clone();
     drop(_retained);

@@ -308,7 +308,7 @@ pub(crate) mod engine {
                 });
             }
         }
-        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+        let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
         let (width, height) = cx.screen_dimensions();
         let rect = RECT {
             corner: POINT {
@@ -424,7 +424,7 @@ pub(crate) mod engine {
             cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
             reset_observation(io);
             if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
-                crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context)
+                crate::graphics::context::ContextLease::require(cx.kernel.space_context)
                     .scale_mode(cx.kernel.configuration.preferences().melee_scale);
             }
             let mut session = BattleSession {

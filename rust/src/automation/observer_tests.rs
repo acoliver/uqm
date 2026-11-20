@@ -363,13 +363,13 @@ fn report_visibility_belongs_to_the_supplied_observer_and_survives_trip_updates(
 #[test]
 fn map_observation_freezes_projection_and_cursor_per_observer_and_clears_on_exit() {
     use crate::engine::observe_port::starmap::{Projection, StarMapView};
-    use crate::graphics::native_abi::POINT;
+    use crate::graphics::geometry::Point;
     let (_first_output, mut first) = observer();
     let (_second_output, second) = observer();
     let mut view = StarMapView {
-        cursor: POINT { x: 1000, y: 2000 },
+        cursor: Point { x: 1000, y: 2000 },
         projection: Projection {
-            origin: POINT { x: 4999, y: 4999 },
+            origin: Point { x: 4999, y: 4999 },
             zoom: 1,
             width: 242,
             height: 227,

@@ -4,7 +4,7 @@
 //! the same order and count as C so node lists (and the scan-retrieved masks
 //! saved against them) stay stable.
 
-use crate::engine::graphics::native_abi::POINT;
+use crate::engine::graphics::geometry::Point;
 use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
@@ -26,7 +26,7 @@ const fn make_word(lo: u16, hi: u16) -> u16 {
 }
 
 /// `GenerateRandomLocation`.
-pub fn generate_random_location(rng: &mut RandomContext, loc: &mut POINT) {
+pub fn generate_random_location(rng: &mut RandomContext, loc: &mut Point) {
     let rand_val = rng.next_random() as u16;
     loc.x = (8 + u16::from(rand_val as u8) % (MAP_WIDTH - (8 << 1))) as i16;
     loc.y = (8 + (rand_val >> 8) % (MAP_HEIGHT - (8 << 1))) as i16;
@@ -221,14 +221,13 @@ mod tests {
                 plan_data_ptr: std::ptr::null(),
                 scan_seed: [104729, 7, 65537],
                 scan_retrieve_mask: [0; 3],
-                discovery_string: std::ptr::null_mut(),
             },
         }
     }
 
     fn node() -> NodeInfo {
         NodeInfo {
-            loc_pt: POINT { x: 13, y: 17 },
+            loc_pt: Point { x: 13, y: 17 },
             density: 0xBEEF,
             type_: 0xCAFE,
         }

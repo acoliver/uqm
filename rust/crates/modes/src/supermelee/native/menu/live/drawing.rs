@@ -1,5 +1,6 @@
 //! Super Melee menu rendering and selection feedback.
 use super::*;
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign};
 
 pub(super) fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -16,14 +17,14 @@ pub(crate) fn draw_melee_icon(state: &MeleeSession, index: u16) {
         .unwrap_or_else(|| panic!("menu context not admitted"))
         .draw_stamp(
             &state.menu_frames().context_frame(usize::from(index)),
-            crate::graphics::native_abi::POINT { x: 0, y: 0 },
+            crate::graphics::geometry::Point { x: 0, y: 0 },
         );
 }
-pub(super) fn slot_rect(side: u16, row: u16, col: u16) -> RECT {
+pub(super) fn slot_rect(side: u16, row: u16, col: u16) -> Rect {
     let (x, y, width, height) = super::super::rules::slot_bounds(side, row, col);
-    RECT {
-        corner: POINT { x, y },
-        extent: EXTENT { width, height },
+    Rect {
+        corner: Point { x, y },
+        extent: Extent { width, height },
     }
 }
 pub(super) fn ship_box(state: &MeleeSession, side: u16, index: usize, ship: u32, highlight: bool) {
@@ -50,13 +51,13 @@ pub(super) fn ship_box(state: &MeleeSession, side: u16, index: usize, ship: u32,
             let frame = state
                 .catalog
                 .get(ship as usize)
-                .map(|ship| ship.melee_icon.raw());
-            let icon = crate::graphics::context_abi::ContextFrame::retain(
-                frame.and_then(|frame| std::ptr::NonNull::new(frame.cast())),
-            );
+                .map_or(crate::graphics::drawable::FrameId::NULL, |ship| {
+                    ship.melee_icon.raw()
+                });
+            let icon = crate::graphics::drawable::ContextFrame::retain(frame);
             context.draw_stamp(
                 &icon,
-                POINT {
+                Point {
                     x: r.corner.x + (r.extent.width >> 1),
                     y: r.corner.y + (r.extent.height >> 1),
                 },
@@ -106,7 +107,7 @@ pub(super) fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession
 }
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, rect: &RECT) {
+pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, rect: &Rect) {
     let mut r = *rect;
     r.corner.x += SAFE_X as i16;
     r.corner.y += SAFE_Y as i16;
@@ -120,7 +121,7 @@ pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession
         .unwrap_or_else(|| panic!("menu context not admitted"));
     context.with_clip(r, || {
         context.with_origin(
-            POINT {
+            Point {
                 x: -r.corner.x + SAFE_X as i16,
                 y: -r.corner.y + SAFE_Y as i16,
             },
@@ -146,22 +147,22 @@ pub(super) fn redraw(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSessio
         .unwrap_or_else(|| panic!("menu target not admitted"))
         .rect()
         .extent;
-    let r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: extent.width,
             height: extent.height,
         },
     };
     repair_frame(cx, state, &r);
 }
-pub(super) fn name_rect(side: u16) -> RECT {
-    RECT {
-        corner: POINT {
+pub(super) fn name_rect(side: u16) -> Rect {
+    Rect {
+        corner: Point {
             x: 1,
             y: (side as i16 + 1) * 93,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 216,
             height: 13,
         },
@@ -173,12 +174,12 @@ pub(super) fn worth(
     side: u16,
     highlight: u16,
 ) {
-    let r = RECT {
-        corner: POINT {
+    let r = Rect {
+        corner: Point {
             x: 217,
             y: (side as i16 + 1) * 93,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 29,
             height: 13,
         },
@@ -199,11 +200,11 @@ pub(super) fn worth(
     context.draw_text(
         font,
         &value,
-        POINT {
+        Point {
             x: r.corner.x + r.extent.width,
             y: r.corner.y + r.extent.height - 3,
         },
-        TEXT_ALIGN_ALIGN_RIGHT,
+        TextAlign::Right,
         if highlight & 2 == 0 {
             rgb(15, 16, 27)
         } else {
@@ -232,7 +233,7 @@ pub(super) fn name(
         .as_ref()
         .unwrap_or_else(|| panic!("menu font not admitted"));
     let value = value.unwrap_or_else(|| state.melee_setup.teams[side as usize].c_name());
-    let baseline = POINT {
+    let baseline = Point {
         x: r.corner.x + 1,
         y: r.corner.y + r.extent.height - 3,
     };
@@ -243,7 +244,7 @@ pub(super) fn name(
                 font,
                 value,
                 baseline,
-                TEXT_ALIGN_ALIGN_LEFT,
+                TextAlign::Left,
                 if highlight & 2 == 0 {
                     rgb(15, 16, 27)
                 } else {
@@ -254,7 +255,7 @@ pub(super) fn name(
             let measured = font.measure(
                 value,
                 baseline,
-                TEXT_ALIGN_ALIGN_LEFT,
+                TextAlign::Left,
                 value.to_bytes().len() as u16,
             );
             if measured.rect.extent.width + 2 >= r.extent.width {
@@ -279,7 +280,7 @@ pub(super) fn name(
             bounds.corner.y += 1;
             bounds.extent.height -= 2;
             context.fill_rectangle(rgb(31, 31, 31), bounds);
-            context.draw_text(font, value, baseline, TEXT_ALIGN_ALIGN_LEFT, rgb(0, 0, 0));
+            context.draw_text(font, value, baseline, TextAlign::Left, rgb(0, 0, 0));
         }
         1
     })
@@ -294,9 +295,9 @@ pub(super) fn status(
         .as_ref()
         .unwrap_or_else(|| panic!("menu context not admitted"));
     context.with_selected(|| {
-        let r = RECT {
-            corner: POINT { x: 1, y: 201 },
-            extent: EXTENT {
+        let r = Rect {
+            corner: Point { x: 1, y: 201 },
+            extent: Extent {
                 width: 245,
                 height: 38,
             },
@@ -310,10 +311,8 @@ pub(super) fn status(
             .as_ref()
             .unwrap_or_else(|| panic!("menu font not admitted"));
         context.set_font(font);
-        let mut baseline = POINT { x: 1, y: 0 };
-        let leading = font
-            .measure(c"", baseline, TEXT_ALIGN_ALIGN_LEFT, 0)
-            .leading;
+        let mut baseline = Point { x: 1, y: 0 };
+        let leading = font.measure(c"", baseline, TextAlign::Left, 0).leading;
         context.draw_batch(|| {
             context.with_clip(r, || {
                 let mut remaining = message;
@@ -325,8 +324,7 @@ pub(super) fn status(
                         r.extent.width - 1,
                         u16::MAX,
                         |count| {
-                            let bounds =
-                                font.measure(remaining, baseline, TEXT_ALIGN_ALIGN_LEFT, count);
+                            let bounds = font.measure(remaining, baseline, TextAlign::Left, count);
                             (bounds.rect.extent.width, bounds.characters)
                         },
                     );
@@ -334,7 +332,7 @@ pub(super) fn status(
                         font,
                         remaining,
                         baseline,
-                        TEXT_ALIGN_ALIGN_LEFT,
+                        TextAlign::Left,
                         rgb(0, 20, 0),
                         line.characters,
                     );
@@ -366,16 +364,17 @@ pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kerne
         .unwrap_or_else(|| panic!("menu target not admitted"))
         .rect()
         .extent;
-    let font = crate::graphics::native_font::FontLease::retain(
-        std::ptr::NonNull::new(kernel.star_con_font.cast())
+    let font = crate::graphics::font::FontLease::retain(
+        kernel
+            .star_con_font
             .unwrap_or_else(|| panic!("connection dialog font not admitted")),
     );
-    let rect = RECT {
-        corner: POINT {
+    let rect = Rect {
+        corner: Point {
             x: (size.width - 200) >> 1,
             y: (size.height - 30) >> 1,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 200,
             height: 30,
         },
@@ -390,11 +389,11 @@ pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kerne
                 context.draw_text(
                     &font,
                     message,
-                    POINT {
+                    Point {
                         x: size.width >> 1,
                         y,
                     },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    TextAlign::Center,
                     rgb(0, 0, 0),
                 );
             }
@@ -506,19 +505,19 @@ pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeS
     let extent = target.rect().extent;
     context.set_frame(target.clone());
     context.clear_clip();
-    context.set_background(crate::graphics::native_abi::Color {
+    context.set_background(crate::graphics::geometry::Color {
         r: 0,
         g: 0,
         b: 0,
         a: 255,
     });
     context.clear();
-    context.set_clip(crate::graphics::native_abi::RECT {
-        corner: crate::graphics::native_abi::POINT {
+    context.set_clip(crate::graphics::geometry::Rect {
+        corner: crate::graphics::geometry::Point {
             x: SAFE_X as i16,
             y: SAFE_Y as i16,
         },
-        extent: crate::graphics::native_abi::EXTENT {
+        extent: crate::graphics::geometry::Extent {
             width: extent.width - 2 * SAFE_X as i16,
             height: extent.height - 2 * SAFE_Y as i16,
         },
@@ -529,7 +528,8 @@ pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeS
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, ship: u32) {
     let context = ContextLease::retain(
-        NonNull::new(cx.kernel.status_context.cast())
+        cx.kernel
+            .status_context
             .unwrap_or_else(|| panic!("melee status context not admitted")),
     );
     let font = cx.kernel.battle_font();
@@ -548,9 +548,9 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
                     context.set_font(font);
                     context.draw_rectangle(
                         rgb(0, 0, 0),
-                        RECT {
-                            corner: POINT { x: 3, y: 4 },
-                            extent: EXTENT {
+                        Rect {
+                            corner: Point { x: 3, y: 4 },
+                            extent: Extent {
                                 width: 57,
                                 height: 60,
                             },
@@ -561,11 +561,11 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
                         context.draw_text(
                             font,
                             cx.kernel.game_text(index),
-                            POINT {
+                            Point {
                                 x: STATUS_WIDTH as i16 >> 1,
                                 y,
                             },
-                            TEXT_ALIGN_ALIGN_CENTER,
+                            TextAlign::Center,
                             rgb(0, 0, 0),
                         );
                     }
@@ -576,10 +576,8 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
                     let mut info = *descriptor.info();
                     let graphics =
                         crate::ui::shipstat::StatusGraphics::new(cx.kernel, font.clone());
-                    let portrait = crate::graphics::context_abi::ContextFrame::retain(
-                        std::ptr::NonNull::new(info.icons),
-                    )
-                    .next_frame();
+                    let portrait =
+                        crate::graphics::drawable::ContextFrame::retain(info.icons).next_frame();
                     let (name, name_count) = descriptor.label(1);
                     let cost = std::ffi::CString::new(info.ship_cost.to_string())
                         .unwrap_or_else(|error| panic!("ship cost caption: {error}"));

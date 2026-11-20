@@ -1,6 +1,6 @@
 use super::*;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 impl<S: Story, H: crate::planets::generate::special::FleetGroups, R, L, F>
     crate::planets::generate::special::FleetGroups for Effects<'_, S, H, R, L, F>
@@ -64,16 +64,16 @@ impl<S: Story, H: crate::planets::generate::sam::GuardSite, R, L, F>
     fn init_ip_groups(&mut self, reference: u32) {
         crate::planets::generate::sam::GuardSite::init_ip_groups(&mut *self.site, reference)
     }
-    fn planet_outer_location(&self, planet: u16) -> POINT {
+    fn planet_outer_location(&self, planet: u16) -> Point {
         crate::planets::generate::sam::GuardSite::planet_outer_location(&*self.site, planet)
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         crate::planets::generate::sam::GuardSite::for_each_ip_group(&mut *self.site, visit)
     }
-    fn ip_location(&self) -> POINT {
+    fn ip_location(&self) -> Point {
         crate::planets::generate::sam::GuardSite::ip_location(&*self.site)
     }
-    fn set_and_transform_ip_location(&mut self, location: POINT) {
+    fn set_and_transform_ip_location(&mut self, location: Point) {
         crate::planets::generate::sam::GuardSite::set_and_transform_ip_location(
             &mut *self.site,
             location,

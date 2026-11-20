@@ -1,4 +1,4 @@
-use crate::graphics::native_abi::{POINT, RECT};
+use crate::graphics::{geometry::Point, geometry::Rect};
 use std::ffi::CString;
 
 pub(in crate::front_end) fn owned_lines(bytes: &[u8], capacity: usize) -> Vec<CString> {
@@ -24,19 +24,19 @@ pub(in crate::front_end) fn owned_lines(bytes: &[u8], capacity: usize) -> Vec<CS
 
 pub(super) struct TextLine {
     pub text: CString,
-    pub baseline: POINT,
+    pub baseline: Point,
 }
 
 pub(super) fn position_lines(
     lines: &mut [TextLine],
-    clip: RECT,
+    clip: Rect,
     leading: i16,
     alignment: i32,
     width: i32,
-) -> RECT {
+) -> Rect {
     let (fade, mut y) = layout(clip, lines.len() as i32, leading, alignment);
     for line in lines {
-        line.baseline = POINT {
+        line.baseline = Point {
             x: (width / 2) as i16,
             y,
         };
@@ -45,7 +45,7 @@ pub(super) fn position_lines(
     fade
 }
 
-pub(super) fn layout(mut clip: RECT, count: i32, leading: i16, alignment: i32) -> (RECT, i16) {
+pub(super) fn layout(mut clip: Rect, count: i32, leading: i16, alignment: i32) -> (Rect, i16) {
     let height = count * i32::from(leading);
     let first = match alignment {
         84 => leading,
@@ -60,20 +60,20 @@ pub(super) fn layout(mut clip: RECT, count: i32, leading: i16, alignment: i32) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::native_abi::EXTENT;
+    use crate::graphics::geometry::Extent;
 
     #[test]
     fn position_lines_updates_baselines_without_changing_the_text() {
-        let clip = RECT {
-            corner: POINT { x: 4, y: 10 },
-            extent: EXTENT {
+        let clip = Rect {
+            corner: Point { x: 4, y: 10 },
+            extent: Extent {
                 width: 160,
                 height: 100,
             },
         };
         let mut lines: [_; 2] = std::array::from_fn(|_| TextLine {
             text: c"hello".to_owned(),
-            baseline: POINT { x: 0, y: 0 },
+            baseline: Point { x: 0, y: 0 },
         });
         let fade = position_lines(&mut lines, clip, 8, 77, 320);
         assert_eq!((lines[0].baseline.x, lines[0].baseline.y), (160, 42));
@@ -84,9 +84,9 @@ mod tests {
 
     #[test]
     fn vertical_layout_preserves_script_alignment_and_fade_padding() {
-        let clip = RECT {
-            corner: POINT { x: 4, y: 10 },
-            extent: EXTENT {
+        let clip = Rect {
+            corner: Point { x: 4, y: 10 },
+            extent: Extent {
                 width: 160,
                 height: 100,
             },

@@ -1,4 +1,4 @@
-use crate::engine::graphics::drawable_abi::{DrawableLease, LoadedDrawable};
+use crate::engine::graphics::{drawable::DrawableLease, drawable::LoadedDrawable};
 
 pub(crate) fn image(flags: u8, width: usize, height: usize, count: u16) -> LoadedDrawable {
     let width =

@@ -1,24 +1,21 @@
 //! Save-compatible battle-group records and encounter group construction.
 
+use crate::engine::graphics::geometry::Point;
+use crate::engine::math::battle_types::CIRCLE_SHIFT;
+use crate::engine::math::battle_types::FACING_SHIFT;
+use crate::engine::save::groups::MAX_BATTLE_GROUPS;
 use crate::engine::species::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
-use crate::engine::{
-    graphics::native_abi::POINT,
-    math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT},
-    save::groups::MAX_BATTLE_GROUPS,
-    world::{
-        fleet::SPHERE_RADIUS_INCREMENT,
-        queues::{FleetInfo as FLEET_INFO, MAX_REVOLUTIONS, STATION_RADIUS},
-    },
-};
+use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+use crate::engine::world::queues::FleetInfo as FLEET_INFO;
+use crate::engine::world::queues::MAX_REVOLUTIONS;
+use crate::engine::world::queues::STATION_RADIUS;
+use crate::engine::world::queues::{IpGroup as IP_GROUP, ShipFragment as SHIP_FRAGMENT};
+use crate::engine::world::state_file::{FileMode, SeekWhence, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
+use crate::engine::StoryKey;
+use crate::engine::World;
 use crate::math::{random as TFB_Random, square_root};
 use crate::navigation::get;
 use crate::planets::generate::identities::*;
-
-use crate::engine::world::state_file::{FileMode, SeekWhence, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
-
-use crate::engine::world::queues::{IpGroup as IP_GROUP, ShipFragment as SHIP_FRAGMENT};
-use crate::engine::StoryKey;
-use crate::engine::World;
 use uqm_save::statefiles::GroupHeader;
 
 fn read<const N: usize>(world: &mut World, file: usize) -> [u8; N] {
@@ -306,7 +303,7 @@ fn clone_npc(
     )
 }
 
-fn encounter_chance(fleet: &FLEET_INFO, universe: POINT, base: u16) -> Option<u16> {
+fn encounter_chance(fleet: &FLEET_INFO, universe: Point, base: u16) -> Option<u16> {
     let infinite = fleet.actual_strength == u16::MAX;
     let radius = if infinite {
         20000
@@ -882,7 +879,7 @@ mod record_tests {
         let mut fleets = world.avail_races();
         let fleet = fleets.alloc().unwrap();
         fleets.put(fleet);
-        let icon = 0x200usize as crate::graphics::native_abi::FRAME;
+        let icon = crate::graphics::drawable::FrameId::from_bits(0x200usize);
         fleets.get_mut(fleet).melee_icon = icon;
         assert!(super::build_group(&mut world, 1).is_none());
         assert_eq!(world.ip_groups_ref().count(), 0);
@@ -960,13 +957,16 @@ mod record_tests {
         fragment.max_crew = 511;
         fragment.energy_level = 6;
         fragment.max_energy = 7;
-        fragment.race_strings = 0x100usize as crate::graphics::native_abi::STRING;
-        fragment.icons = 0x200usize as crate::graphics::native_abi::FRAME;
+        fragment.race_strings = Some(crate::strings::owned_table::EntryRef::new(0x100, 0));
+        fragment.icons = crate::graphics::drawable::FrameId::from_bits(0x200 << 16);
         let bytes = encode_fragment(fragment);
         assert_eq!(bytes, [0, 0, 3, 0, 0, 0, 4, 5, 44, 255, 6, 7, 0, 0, 0, 0]);
         decode_fragment(&bytes, fragment);
-        assert_eq!(fragment.race_strings as usize, 0x100);
-        assert_eq!(fragment.icons as usize, 0x200);
+        assert_eq!(
+            fragment.race_strings,
+            Some(crate::strings::owned_table::EntryRef::new(0x100, 0))
+        );
+        assert_eq!(fragment.icons.bits(), 0x200 << 16);
         assert_eq!(fragment.crew_level, 44);
         assert_eq!(fragment.max_crew, 255);
         assert_eq!(fragment.captains_name_index, 3);

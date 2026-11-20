@@ -30,35 +30,28 @@ use uqm_rust::planets::solar_system::SolarSystem;
 mod late_abi;
 mod late_gen;
 mod mycon;
-mod shield_additive;
 mod sol;
 mod sol_abi;
 mod sol_npcs;
 mod sol_orbital;
 mod sol_resources;
 
-use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
-
-use std::fmt::Write as _;
-
 use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};
 use crate::planets_common::{fresh_node, scan_seeds, write_node};
+use std::fmt::Write as _;
 use uqm_rust::battle::gendef::{
     AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
     SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
 };
-
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::SystemGenerator;
-use uqm_rust::state::game_state_keys::set_game_state;
-
+use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 use uqm_rust::state::ffi::rust_init_game_state;
-extern "C" {
-
-    static mut ScreenWidth: i32;
-
-}
+use uqm_rust::state::game_state_keys::set_game_state;
+/// The fixed screen width (C: `ScreenWidth`).
+#[allow(non_upper_case_globals)]
+const ScreenWidth: i32 = uqm_rust::graphics::state::SCREEN_WIDTH;
 
 struct Harness {
     state: Box<SolarSystem>,
@@ -71,11 +64,8 @@ struct Harness {
 
 impl Harness {
     fn new() -> Self {
-        unsafe {
-            // `set_game_state` is a no-op until the game state exists.
-            crate::battle_context::with(|cx| rust_init_game_state(cx.world));
-            ScreenWidth = 320;
-        }
+        // `set_game_state` is a no-op until the game state exists.
+        crate::battle_context::with(|cx| rust_init_game_state(cx.world));
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
         let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
         // SAFETY: the serialized harness copies the initialized integer-only catalog.

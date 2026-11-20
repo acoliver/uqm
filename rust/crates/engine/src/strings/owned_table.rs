@@ -1,92 +1,64 @@
-//! Shared ownership of detached string tables and bounded entry views.
+//! Owned string tables: text (`STRTAB`) and binary (`BINTAB`) entries shared
+//! by their owners and the entry views they hand out.
 
-use super::string_table::{StringTable, StringTableEntry};
 use std::{ffi::CStr, rc::Rc};
 
-// The existing ABI observes only the header; Rust owns the entries and their bytes.
-#[repr(C)]
-pub(crate) struct TableAllocation {
-    header: StringTable,
-    entries: Box<[StringTableEntry]>,
+/// A table entry a game record names: which table (its identity, never
+/// dereferenced) and which entry is current (C: a `STRING` pointer).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EntryRef {
+    table: usize,
+    index: u16,
+}
+
+impl EntryRef {
+    /// The entry `index` of the table identified by `table`.
+    pub fn new(table: usize, index: u16) -> Self {
+        Self { table, index }
+    }
+
+    pub fn table(self) -> usize {
+        self.table
+    }
+
+    pub fn index(self) -> u16 {
+        self.index
+    }
+
+    /// The same table with entry `index` current (C: `SetAbsStringTableIndex`).
+    pub fn with_index(self, index: u16) -> Self {
+        Self { index, ..self }
+    }
+}
+
+struct TextData {
     strings: Vec<Vec<u8>>,
     counts: Vec<u16>,
 }
 
-impl TableAllocation {
-    fn new(mut strings: Vec<Vec<u8>>, counts: Vec<u16>) -> Rc<Self> {
-        assert!(
-            strings.len() <= i32::MAX as usize,
-            "too many string entries"
-        );
-        let mut entries: Box<[_]> = strings
-            .iter_mut()
-            .enumerate()
-            .map(|(index, bytes)| StringTableEntry {
-                data: if bytes.is_empty() {
-                    std::ptr::null_mut()
-                } else {
-                    bytes.as_mut_ptr().cast()
-                },
-                length: i32::try_from(bytes.len())
-                    .unwrap_or_else(|error| panic!("string entry too long: {error}")),
-                index: index as i32,
-                parent: std::ptr::null_mut(),
-            })
-            .collect();
-        let mut allocation = Rc::new(Self {
-            header: StringTable {
-                flags: 0,
-                size: strings.len() as i32,
-                strings: entries.as_mut_ptr(),
-                name_index: std::ptr::null_mut(),
-                owned_text: true,
-            },
-            entries,
-            strings,
-            counts,
-        });
-        let unique = Rc::get_mut(&mut allocation)
-            .unwrap_or_else(|| panic!("new string allocation must be unique"));
-        let parent = std::ptr::from_mut(&mut unique.header);
-        for entry in &mut unique.entries {
-            entry.parent = parent;
-        }
-        allocation
-    }
-}
-
 #[derive(Clone)]
-pub(super) struct LoadedBinaryTable(Rc<TableAllocation>);
+pub struct LoadedBinaryTable(Rc<Vec<Vec<u8>>>);
 
 impl LoadedBinaryTable {
     pub(super) fn from_entries(entries: Vec<Vec<u8>>) -> Self {
-        let counts = vec![0; entries.len()];
-        Self(TableAllocation::new(entries, counts))
+        Self(Rc::new(entries))
     }
 
-    pub(super) fn load(resource: &CStr) -> Option<Self> {
-        crate::resource::ffi_bridge::detach_resource_of_type(resource, "BINTAB").map(|table| {
-            // SAFETY: the binary loader transfers one Rc<TableAllocation>, header first.
-            Self(unsafe { Rc::from_raw(table.as_ptr().cast()) })
-        })
+    pub(crate) fn load(resource: &CStr) -> Option<Self> {
+        super::getstr::load_binary_table(&crate::resource::path_of(resource, "BINTAB")?)
     }
 
-    pub(super) fn entries(&self) -> &[Vec<u8>] {
-        &self.0.strings
+    pub(crate) fn entries(&self) -> &[Vec<u8>] {
+        &self.0
     }
 
-    pub(super) fn entry(&self, index: u16) -> Option<&[u8]> {
-        (!self.0.strings.is_empty())
-            .then(|| self.0.strings[usize::from(index) % self.0.strings.len()].as_slice())
-    }
-
-    pub(super) fn into_raw(self) -> *mut StringTable {
-        Rc::into_raw(self.0).cast_mut().cast()
+    pub(crate) fn entry(&self, index: u16) -> Option<&[u8]> {
+        (!self.0.is_empty()).then(|| self.0[usize::from(index) % self.0.len()].as_slice())
     }
 }
 
 #[derive(Clone)]
-pub struct LoadedTextTable(Rc<TableAllocation>);
+pub struct LoadedTextTable(Rc<TextData>);
 
 impl std::fmt::Debug for LoadedTextTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -101,6 +73,7 @@ pub struct TextEntry {
     table: LoadedTextTable,
     index: usize,
 }
+
 impl TextEntry {
     pub fn index(&self) -> usize {
         self.index
@@ -109,16 +82,15 @@ impl TextEntry {
     pub fn next_entry(&self) -> Self {
         Self {
             table: self.table.clone(),
-            index: (self.index + 1) % self.table.0.entries.len(),
+            index: (self.index + 1) % self.table.len(),
         }
     }
 
-    pub fn record(&self) -> &StringTableEntry {
-        &self.table.0.entries[self.index]
+    /// The record form of this entry.
+    pub fn entry_ref(&self) -> EntryRef {
+        self.table.entry_ref(self.index as u16)
     }
-    pub fn as_raw(&self) -> *mut StringTableEntry {
-        self.table.as_raw().wrapping_add(self.index)
-    }
+
     pub fn label(&self, index: u16) -> (&CStr, u16) {
         self.table.label(index)
     }
@@ -132,22 +104,6 @@ impl TextEntry {
 }
 
 impl LoadedTextTable {
-    /// # Safety
-    /// The entry must belong to a live plain-text table produced by this loader.
-    pub unsafe fn retain(entry: std::ptr::NonNull<StringTableEntry>) -> Self {
-        // SAFETY: the caller lends this loader's live entry and its parent allocation.
-        unsafe {
-            let table = entry.as_ref().parent;
-            assert!(
-                (*table).owned_text,
-                "game labels require an owned text table"
-            );
-            let allocation = table.cast::<TableAllocation>();
-            Rc::increment_strong_count(allocation);
-            Self(Rc::from_raw(allocation))
-        }
-    }
-
     pub fn new(strings: Vec<std::ffi::CString>) -> Self {
         Self::from_strings(
             strings
@@ -158,27 +114,19 @@ impl LoadedTextTable {
     }
 
     pub fn entry(&self, index: u16) -> Option<TextEntry> {
-        (!self.0.entries.is_empty()).then(|| TextEntry {
+        (!self.is_empty()).then(|| TextEntry {
             table: self.clone(),
-            index: usize::from(index) % self.0.entries.len(),
-        })
-    }
-    pub fn load(resource: &CStr) -> Option<Self> {
-        crate::resource::ffi_bridge::detach_resource_of_type(resource, "STRTAB").map(|table| {
-            // SAFETY: the plain text loader transfers one Rc<TableAllocation>, header first.
-            Self(unsafe { Rc::from_raw(table.as_ptr().cast()) })
+            index: usize::from(index) % self.len(),
         })
     }
 
+    pub fn load(resource: &CStr) -> Option<Self> {
+        Self::load_file(&crate::resource::path_of(resource, "STRTAB")?)
+    }
+
+    /// A `STRTAB`-format file in the content directory.
     pub fn load_file(path: &CStr) -> Option<Self> {
-        crate::graphics::ffi::assert_owner_thread();
-        // SAFETY: the serialized game thread retains the content mount and terminated path;
-        // the text loader transfers one Rc<TableAllocation> with its header first.
-        unsafe {
-            let content = crate::io::content_dir()?;
-            let table = super::sfileins::load_string_table_file(&content, path.as_ptr());
-            std::ptr::NonNull::new(table).map(|table| Self(Rc::from_raw(table.as_ptr().cast())))
-        }
+        super::getstr::load_text_table(&crate::io::content_dir()?, path)
     }
 
     pub(super) fn from_strings(strings: Vec<Vec<u8>>) -> Self {
@@ -192,15 +140,12 @@ impl LoadedTextTable {
                 super::unicode::count_utf8_bytes(text) as u16
             })
             .collect();
-        Self(TableAllocation::new(strings, counts))
+        Self(Rc::new(TextData { strings, counts }))
     }
 
-    pub(crate) fn into_raw(self) -> *mut StringTable {
-        Rc::into_raw(self.0).cast_mut().cast()
-    }
-
-    pub fn as_raw(&self) -> *mut StringTableEntry {
-        self.0.entries.as_ptr().cast_mut()
+    /// This table with entry `index` current, as game records name it.
+    pub fn entry_ref(&self, index: u16) -> EntryRef {
+        EntryRef::new(Rc::as_ptr(&self.0) as usize, index)
     }
 
     pub fn len(&self) -> usize {
@@ -220,10 +165,10 @@ impl LoadedTextTable {
     }
 
     pub fn label(&self, index: u16) -> (&CStr, u16) {
-        if self.0.strings.is_empty() {
+        if self.is_empty() {
             return (c"", 0);
         }
-        let index = usize::from(index) % self.0.strings.len();
+        let index = usize::from(index) % self.len();
         (self.text(index).unwrap_or(c""), self.0.counts[index])
     }
 
@@ -238,49 +183,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn borrowed_native_text_retains_labels_after_its_original_owner_drops() {
-        let original = LoadedTextTable::new(vec![c"You say:".to_owned(), c"MORE".to_owned()]);
-        // SAFETY: the original owner lends its live native entry throughout admission.
-        let retained =
-            unsafe { LoadedTextTable::retain(std::ptr::NonNull::new(original.as_raw()).unwrap()) };
-        drop(original);
-        assert_eq!(retained.label(256), (c"You say:", 8));
-        assert_eq!(retained.label(257), (c"MORE", 4));
-    }
-
-    #[test]
     fn text_views_use_entry_bounds_and_preserve_embedded_terminators() {
         let owner = LoadedTextTable::from_strings(vec![b"ab\0cd\0".to_vec(), Vec::new()]);
         assert_eq!(owner.text(0), Some(c"ab"));
         assert_eq!(owner.text(1), None);
         assert!(std::panic::catch_unwind(|| owner.text(2)).is_err());
-        assert_eq!(owner.0.entries[0].length, 6);
-        assert_eq!(
-            owner.0.entries[0].parent,
-            std::ptr::from_ref(&owner.0.header).cast_mut()
-        );
     }
 
     #[test]
-    fn binary_views_retain_full_entries_and_native_release_preserves_the_owner() {
+    fn binary_views_retain_full_entries_and_wrap() {
         let large = vec![0x7b; 65537];
         let owner = LoadedBinaryTable::from_entries(vec![large.clone(), Vec::new(), vec![1, 0, 4]]);
         assert_eq!(owner.entry(3), Some(large.as_slice()));
         assert_eq!(owner.entry(1), Some([].as_slice()));
-        let raw = owner.clone().into_raw();
-        // SAFETY: this handoff transfers one strong reference while owner retains another.
-        unsafe {
-            assert_eq!((*raw).size, 3);
-            let entries = std::slice::from_raw_parts((*raw).strings, 3);
-            assert_eq!(entries[0].length, 65537);
-            assert_eq!(entries[0].parent, raw);
-            assert_eq!(entries[2].index, 2);
-            assert_eq!(
-                std::slice::from_raw_parts(entries[2].data.cast::<u8>(), 3),
-                [1, 0, 4]
-            );
-            super::super::string_table::FreeStringTable(raw);
-        }
         assert_eq!(owner.entries(), [large, Vec::new(), vec![1, 0, 4]]);
         assert!(LoadedBinaryTable::from_entries(Vec::new())
             .entry(0)
@@ -288,15 +203,12 @@ mod tests {
     }
 
     #[test]
-    fn labels_wrap_and_keep_unicode_character_counts_after_native_release() {
+    fn labels_wrap_and_keep_unicode_character_counts_after_the_owner_drops() {
         let owner = LoadedTextTable::from_strings(vec![
             b"ab\0cd\0".to_vec(),
             Vec::new(),
             "éclair\0".as_bytes().to_vec(),
         ]);
-        let raw = owner.clone().into_raw();
-        // SAFETY: the raw handoff owns one strong reference, independently of owner.
-        unsafe { super::super::string_table::FreeStringTable(raw) };
         assert_eq!(owner.label(3), (c"ab", 2));
         assert_eq!(owner.label(1), (c"", 0));
         assert_eq!(owner.label(2), (c"éclair", 6));
@@ -306,16 +218,35 @@ mod tests {
         assert_eq!(selected.next_entry().current_label(), (c"ab", 2));
     }
 
+    /// #952: a string table loaded from the index belongs to its loader;
+    /// dropping it frees its own storage and the resource loads again.
     #[test]
-    fn native_handoff_preserves_storage_until_the_abi_release() {
-        let owner = LoadedTextTable::from_strings(vec![c"ab".to_bytes_with_nul().to_vec()]);
-        let entries = owner.as_raw();
-        let raw = owner.into_raw();
-        // SAFETY: the loader handoff transfers one table reference and its owned entries.
-        unsafe {
-            assert_eq!((*raw).strings, entries);
-            assert_eq!(CStr::from_ptr((*entries).data), c"ab");
-            super::super::string_table::FreeStringTable(raw);
+    #[serial_test::serial]
+    fn indexed_string_tables_release_by_drop_and_load_again() {
+        let mount = crate::io::fixture::TempMount::new().as_content();
+        mount.write("text.rmp", b"test.strings = STRTAB:strings.txt\n");
+        mount.write("strings.txt", b"#(first)\nhello\n#(second)\nworld\n");
+        crate::resource::init();
+        crate::resource::load_index(&mount.dir(), c"text.rmp", None);
+        for _ in 0..2 {
+            let table = LoadedTextTable::load(c"test.strings")
+                .unwrap_or_else(|| panic!("indexed string table"));
+            assert_eq!(table.text(1), Some(c"world"));
+            let storage = Rc::downgrade(&table.0);
+            drop(table);
+            assert!(storage.upgrade().is_none(), "dropping frees the table");
         }
+        assert!(crate::resource::remove("test.strings"));
+    }
+
+    #[test]
+    fn entry_refs_name_one_table_and_the_current_entry() {
+        let owner = LoadedTextTable::new(vec![c"a".to_owned(), c"b".to_owned()]);
+        let other = LoadedTextTable::new(vec![c"a".to_owned()]);
+        let first = owner.entry_ref(0);
+        assert_eq!(owner.entry(1).unwrap().entry_ref(), first.with_index(1));
+        assert_eq!(first.index(), 0);
+        assert_ne!(first.table(), other.entry_ref(0).table());
+        assert_eq!(owner.clone().entry_ref(0), first);
     }
 }

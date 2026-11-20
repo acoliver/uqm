@@ -1,5 +1,4 @@
 use super::*;
-use crate::resource::ffi_bridge::{InitResourceSystem, UninitResourceSystem};
 use sdl2::keyboard::Keycode;
 use sdl2::mouse::MouseButton;
 use serial_test::serial;
@@ -266,19 +265,14 @@ fn joystick_events_drive_bindings_and_only_deliberate_moves_become_gestures() {
 }
 
 fn put(key: &str, value: &str) {
-    let (key, value) = (CString::new(key).unwrap(), CString::new(value).unwrap());
-    // SAFETY: both strings are terminated and live for the call.
-    unsafe { res_PutString(key.as_ptr(), value.as_ptr()) };
+    crate::resource::settings::Settings.put_string(key, value);
 }
 
 #[test]
 #[serial]
 fn resource_controls_register_menu_alternates_templates_and_removal() {
-    // SAFETY: serial tests own the resource system.
-    unsafe {
-        UninitResourceSystem();
-        InitResourceSystem();
-    }
+    crate::resource::uninit();
+    crate::resource::init();
     put("menu.pause.1", "key Space");
     put("menu.pause.2", "key Return");
     put("menu.pause.4", "key Escape");
@@ -315,25 +309,20 @@ fn resource_controls_register_menu_alternates_templates_and_removal() {
     assert_eq!(control_name(0, 0, 1), "w");
     assert_eq!(control_name(5, 0, 0), "");
     remove_input_state(0, 0, 1);
-    // SAFETY: the key is a terminated string.
-    assert_eq!(unsafe { res_HasKey(c"keys.1.up.2".as_ptr()) }, 0);
+    assert!(!crate::resource::has_key("keys.1.up.2"));
     assert_eq!(control_name(0, 0, 1), "");
     driver.controls.vcontrol(|vc| vc.reset_states());
     process_input_event(&key_event(true, i32::from(b'w'), Mod::empty(), false));
     assert_eq!(driver.controls.immediate().key[0][0], 0, "no longer bound");
     drop(driver);
-    // SAFETY: as above.
-    unsafe { UninitResourceSystem() };
+    crate::resource::uninit();
 }
 
 #[test]
 #[serial]
 fn rebinding_waits_for_a_gesture_then_binds_and_saves_it() {
-    // SAFETY: serial tests own the resource system.
-    unsafe {
-        UninitResourceSystem();
-        InitResourceSystem();
-    }
+    crate::resource::uninit();
+    crate::resource::init();
     put("keys.1.up.1", "key Up");
     let driver = Driver::new();
     let mut polls = 0;
@@ -346,9 +335,10 @@ fn rebinding_waits_for_a_gesture_then_binds_and_saves_it() {
     assert_eq!(polls, 3);
     assert_eq!(control_name(0, 0, 0), "Space");
     let key = flight_key(0, "up", 0);
-    // SAFETY: the key is a terminated string; the value is copied at once.
-    let saved = unsafe { CStr::from_ptr(res_GetString(key.as_ptr())) };
-    assert_eq!(saved, c"key Space");
+    assert_eq!(
+        crate::resource::string(key.to_str().unwrap()).as_deref(),
+        Some("key Space")
+    );
     process_input_event(&key_event(true, 32, Mod::empty(), false));
     assert_eq!(driver.controls.immediate().key[0][0] & 0xff, 1);
     process_input_event(&key_event(true, sdl2_keys::SDLK_UP, Mod::empty(), false));
@@ -358,8 +348,7 @@ fn rebinding_waits_for_a_gesture_then_binds_and_saves_it() {
         "the old key no longer drives it"
     );
     drop(driver);
-    // SAFETY: as above.
-    unsafe { UninitResourceSystem() };
+    crate::resource::uninit();
 }
 
 #[test]

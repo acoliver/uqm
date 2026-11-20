@@ -2,11 +2,9 @@
 
 use crate::comm::dispatch::{CPoint, ONE_SECOND};
 use crate::engine::species::ship;
-use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
-
 pub use crate::log_abi::log_init;
-
 pub use crate::planets::orbit::live::{free_planet, load_planet};
+use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
 /// Clear the guard encounter so the interplanetary groups do not chase.
 pub fn reset_encounter(world: &mut crate::engine::World) {
@@ -139,7 +137,7 @@ pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16))
 }
 
 /// Fade to black while the supplied graphics owner admits presentation and pacing.
-pub fn fade_to_black_for_two_seconds(context: crate::engine::graphics::context_abi::ContextLease) {
+pub fn fade_to_black_for_two_seconds(context: crate::engine::graphics::context::ContextLease) {
     let interval = i16::try_from(ONE_SECOND * 2)
         .unwrap_or_else(|_| panic!("two seconds must fit the fade interval"));
     let deadline = context.fade_screen(crate::graphics::menu::ScreenFade::Black as u32, interval);

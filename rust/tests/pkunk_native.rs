@@ -13,13 +13,8 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use uqm_rust::collections::observation;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
-};
-
-use uqm_rust::strings::string_table::{
-    AllocStringTable, CaptureStringTable, FreeStringTable, StringTable,
 };
 
 // races.h / intel.h flags that are macros with casts rather than constants.
@@ -50,25 +45,6 @@ impl Battle {
 
 // The same engine-readable drawable layout used by the other native race tests.
 use shared::FrameSet;
-
-/// Owns a string table so `GetSoundCount` reports a real size.
-struct Sounds(*mut StringTable);
-
-impl Sounds {
-    unsafe fn new(count: i32) -> Self {
-        Self(AllocStringTable(count, 0))
-    }
-
-    unsafe fn first(&self) -> SOUND {
-        CaptureStringTable(self.0).cast()
-    }
-}
-
-impl Drop for Sounds {
-    fn drop(&mut self) {
-        unsafe { FreeStringTable(self.0) }
-    }
-}
 
 #[derive(Clone, Copy)]
 struct SavedState {
@@ -411,7 +387,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 CStr::from_ptr(d.ship_info.melee_icon_rsc),
                 c"ship.pkunk.meleeicons"
             );
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
             // 666 / SPHERE_RADIUS_INCREMENT * 2
@@ -470,7 +446,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 c"ship.pkunk.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null());
-            assert!(d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(d.cyborg_control.ManeuverabilityIndex, 0);
             // CLOSE_RANGE_WEAPON + 1
             assert_eq!(d.cyborg_control.WeaponRange, 201);
@@ -654,7 +630,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
             assert!(out[1].is_null());
             assert!(out[2].is_null());
             assert_eq!(
-                GetFrameIndex((*shared::element(out[0])).current.image.frame.raw().cast()),
+                ((*shared::element(out[0])).current.image.frame.raw()).index(),
                 0,
                 "the first missile is the forward one"
             );
@@ -677,7 +653,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             (*m).state_flags &= !(CHANGING as u16);
             assert_eq!((*m).turn, 0);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 3);
+            assert_eq!(((*m).next.image.frame.raw()).index(), 3);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
             assert_eq!((*m).turn, 1);
@@ -687,11 +663,11 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             hooks::invoke_element_pointer(animate, m);
             assert_eq!((*m).turn, 0);
             assert_eq!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 6);
+            assert_eq!(((*m).next.image.frame.raw()).index(), 6);
 
             (*m).current.image.frame = ship.weapon_frames.selection(7);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 0);
+            assert_eq!(((*m).next.image.frame.raw()).index(), 0);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!((*m).turn, 1);
             for h in out {
@@ -906,8 +882,8 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 9, 6);
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
-            assert_eq!(GetFrameIndex((*el).current.image.frame.raw().cast()), 5);
-            assert_eq!(GetFrameIndex((*el).next.image.frame.raw().cast()), 5);
+            assert_eq!(((*el).current.image.frame.raw()).index(), 5);
+            assert_eq!(((*el).next.image.frame.raw()).index(), 5);
             assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             let control = (*el).IntersectControl;
             assert_eq!(
@@ -919,7 +895,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             );
             assert_eq!((control.EndPoint.x, control.EndPoint.y), (300, 19));
             // next.image.frame was overwritten before InitIntersectFrame runs.
-            assert_eq!(GetFrameIndex(control.IntersectStamp.frame.cast()), 5);
+            assert_eq!((control.IntersectStamp.frame).index(), 5);
             assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
             assert_eq!(
                 (*el).state_flags & (NONSOLID | FINITE_LIFE) as u16,
@@ -1293,10 +1269,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
-            assert_eq!(
-                GetFrameIndex((*el).current.image.frame.raw().cast()),
-                facing
-            );
+            assert_eq!(((*el).current.image.frame.raw()).index(), facing);
             assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
@@ -1371,41 +1344,12 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
 }
 
 #[test]
-fn new_pkunk_macro_expansion_draws_again_for_a_negative_coordinate() {
-    battle_context::run(|_| {
-        let _battle = Battle::new();
-        unsafe {
-            // A 1280-wide screen makes LOG_SPACE_WIDTH exceed what a COORD holds, so
-            // the COORD narrowing can go negative and WRAP_VAL takes its first arm.
-            ScreenWidth = 1280;
-            let extent_x = (1280 - 64) * 4 * 8;
-            let (seed, draws) = (1..20_000u32)
-                .map(|seed| (seed, rolls(seed, 8)))
-                .find(|(_, r)| align(r[1], extent_x) < 0)
-                .expect("a seed with a negative first X draw");
-            let (x, n) = expanded_coord(&draws, 1, extent_x);
-            let (y, n) = expanded_coord(&draws, n, SPACE_H);
-            assert_eq!(n, 1 + 2 + 3, "two draws for X, three for Y");
-            // The second draw plus the extent is the wrapped value.
-            assert_eq!(x, (align(draws[2], extent_x) + extent_x) as u16 as i16);
-
-            let mut ship = Ship::new(&_battle, 0);
-            let new_pkunk = ship.armed_new_pkunk();
-            let el = ship.ptr();
-            with_rng(seed, 6, || hooks::invoke_element_pointer(new_pkunk, el));
-            assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
-        }
-    })
-}
-
-#[test]
 fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
     battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
-            let sounds = Sounds::new(4);
             let mut ship = Ship::new(&_battle, 0);
-            ship.inner.descriptor_mut().ship_data.ship_sounds = sounds.first();
+            ship.inner.descriptor_mut().install_sound_fixture(4);
 
             ship.inner.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.inner.descriptor_mut().ship_info.energy_level = 5;
@@ -1456,9 +1400,8 @@ fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
     battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
-            let sounds = Sounds::new(4);
             let mut ship = Ship::new(&_battle, 0);
-            ship.inner.descriptor_mut().ship_data.ship_sounds = sounds.first();
+            ship.inner.descriptor_mut().install_sound_fixture(4);
 
             let taunt = |ship: &mut Ship| {
                 ship.inner.descriptor_mut().characteristics.special_wait = 0;

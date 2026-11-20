@@ -1,19 +1,17 @@
 use super::*;
-use crate::{
-    comm::locdata::CRect,
-    engine::{
-        input::{InputFrameHook, InputSession},
-        observe::CheckpointView,
-    },
-    front_end::intro::{args::Arguments, text::owned_lines, BLACK_COLOR},
-    graphics::{
-        context_abi::{ContextFrame, ContextLease, LoadedContext},
-        drawable_abi::LoadedDrawable,
-        native_abi::{Color, EXTENT, POINT, RECT, TEXT_ALIGN},
-        native_font::LoadedFont,
-    },
-    strings::owned_table::LoadedTextTable,
+use crate::comm::locdata::CRect;
+use crate::engine::input::InputFrameHook;
+use crate::engine::input::InputSession;
+use crate::engine::observe::CheckpointView;
+use crate::front_end::intro::args::Arguments;
+use crate::front_end::intro::text::owned_lines;
+use crate::front_end::intro::BLACK_COLOR;
+use crate::graphics::{
+    context::ContextLease, context::LoadedContext, drawable::ContextFrame,
+    drawable::LoadedDrawable, font::LoadedFont, geometry::Color, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
 };
+use crate::strings::owned_table::LoadedTextTable;
 use std::{
     cell::{Cell, RefCell},
     ffi::CString,
@@ -43,10 +41,11 @@ impl Resources {
         })
     }
     pub fn background_frame(&self) -> ContextFrame {
-        self.background.as_ref().map_or_else(
-            || ContextFrame::retain(None),
-            |image| image.lease().context_frame(0),
-        )
+        self.background
+            .as_ref()
+            .map_or_else(ContextFrame::default, |image| {
+                image.lease().context_frame(0)
+            })
     }
 }
 
@@ -70,7 +69,7 @@ pub(super) struct Session {
     frames: [Option<CreditFrame>; MAX_CREDIT_FRAMES],
     pub resources: Rc<Resources>,
     pub controls: CreditsControl,
-    extent: EXTENT,
+    extent: Extent,
     first: usize,
     last: usize,
     total_height: i32,
@@ -97,7 +96,7 @@ fn transparent_frame(
 
 #[derive(Clone, Copy)]
 struct ColumnFormat {
-    align: TEXT_ALIGN,
+    align: TextAlign,
     x: i16,
 }
 struct CreditText {
@@ -165,7 +164,7 @@ fn record(line: &[u8]) -> Option<Record> {
 
 fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
     let mut result = [ColumnFormat {
-        align: 0,
+        align: crate::graphics::geometry::TextAlign::Left,
         x: width / 64,
     }; 5];
     for (format, column) in result.iter_mut().zip(
@@ -174,7 +173,7 @@ fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
             .filter(|column| !column.is_empty()),
     ) {
         *format = ColumnFormat {
-            align: 0,
+            align: crate::graphics::geometry::TextAlign::Left,
             x: margin,
         };
         let x = if column.get(1) == Some(&b'/') {
@@ -185,11 +184,11 @@ fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
         match column[0] {
             b'L' => format.x = x.unwrap_or(margin),
             b'C' => {
-                format.align = 1;
+                format.align = crate::graphics::geometry::TextAlign::Center;
                 format.x = x.unwrap_or(width / 2);
             }
             b'R' => {
-                format.align = 2;
+                format.align = crate::graphics::geometry::TextAlign::Right;
                 format.x = x.unwrap_or(width - margin);
             }
             _ => (),
@@ -273,7 +272,12 @@ impl Session {
         context.set_font(&font);
         let leading = font.leading();
         let margin = font
-            .measure(c" ", POINT { x: 100, y: 100 }, 0, 1)
+            .measure(
+                c" ",
+                Point { x: 100, y: 100 },
+                crate::graphics::geometry::TextAlign::Left,
+                1,
+            )
             .rect
             .extent
             .width;
@@ -291,7 +295,7 @@ impl Session {
                 context.draw_text(
                     &font,
                     &text.text,
-                    POINT {
+                    Point {
                         x: column.x,
                         y: (i32::from(text.row) * i32::from(leading)) as i16,
                     },
@@ -308,26 +312,26 @@ impl Session {
 
     fn render_screen(&self, window: CRect) {
         let context = self.local.lease();
-        context.draw_stamp(&self.resources.background_frame(), POINT { x: 0, y: 0 });
+        context.draw_stamp(&self.resources.background_frame(), Point { x: 0, y: 0 });
         let mut y = -self.offset;
         let mut i = self.first;
         while i != self.last {
             let frame = self.frames[i]
                 .as_ref()
                 .unwrap_or_else(|| panic!("empty credits ring entry {i}"));
-            context.draw_stamp(&frame.frame(), POINT { x: 0, y: y as i16 });
+            context.draw_stamp(&frame.frame(), Point { x: 0, y: y as i16 });
             y += frame.height();
             i = frame_index(i as i32 + 1);
         }
         if self.controls.outtakes {
             context.fill_rectangle(
                 TRANS_COLOR,
-                RECT {
-                    corner: POINT {
+                Rect {
+                    corner: Point {
                         x: window.corner.x,
                         y: window.corner.y,
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: window.width,
                         height: window.height,
                     },
@@ -361,7 +365,7 @@ impl Session {
         self.next_time = GetTimeCounter().wrapping_add(delay);
         self.draw
             .lease()
-            .draw_stamp(&self.frame.lease().context_frame(0), POINT { x: 0, y: 0 });
+            .draw_stamp(&self.frame.lease().context_frame(0), Point { x: 0, y: 0 });
         self.draw.lease().flush();
         let deficit = self.deficit_height();
         self.offset += step;

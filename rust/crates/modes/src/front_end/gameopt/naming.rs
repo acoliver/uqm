@@ -49,14 +49,12 @@ pub(super) fn save_label(date: &CStr, name: &CStr) -> SaveLabel {
 
 use super::layout::{self, BLACK_COLOR, CAPTAIN_NAME_TEXT_COLOR};
 use super::picker::{MAX_SAVED_GAMES, SAVES_PER_PAGE};
+use crate::engine::Kernel;
+use crate::engine::World;
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign};
+use crate::starbase::ids::MONTHS_STRING_BASE;
+use crate::starbase::ids::SAFE_X;
 use crate::ui::rgb15;
-use crate::{
-    engine::{Kernel, World},
-    graphics::native_abi::{
-        COUNT, EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER, TEXT_ALIGN_ALIGN_LEFT,
-    },
-    starbase::ids::{MONTHS_STRING_BASE, SAFE_X},
-};
 const SAVE_NAME_SIZE: usize = uqm_save::types::SAVE_NAME_SIZE;
 const DDSHS_EDIT: u16 = 1;
 const DDSHS_BLOCKCUR: u16 = 2;
@@ -68,7 +66,7 @@ pub(super) fn draw_name_string(
     cursor: usize,
     state: u16,
 ) -> bool {
-    use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
+    use crate::graphics::{context::ContextLease, font::FontLease};
     let context = ContextLease::require(kernel.status_context);
     context.select();
     if state & DDSHS_EDIT == 0 {
@@ -85,16 +83,17 @@ pub(super) fn draw_name_string(
             .unwrap_or_else(|| panic!("captain naming font"))
     } else {
         FontLease::retain(
-            std::ptr::NonNull::new(kernel.star_con_font)
+            kernel
+                .star_con_font
                 .unwrap_or_else(|| panic!("ship naming font")),
         )
     };
     let (rect, background, foreground) = layout::name_style(captain);
-    let baseline = POINT {
+    let baseline = Point {
         x: rect.corner.x + (rect.extent.width >> 1) - i16::from(captain),
         y: rect.corner.y + rect.extent.height - 1,
     };
-    let measured = font.measure(text, baseline, TEXT_ALIGN_ALIGN_CENTER, COUNT::MAX);
+    let measured = font.measure(text, baseline, TextAlign::Center, u16::MAX);
     if i32::from(measured.rect.extent.width) + 2 >= i32::from(rect.extent.width) {
         return false;
     }
@@ -120,7 +119,7 @@ pub(super) fn draw_name_string(
     caret.corner.y = rect.corner.y;
     caret.extent.height = rect.extent.height;
     context.fill_rectangle(BLACK_COLOR, caret);
-    context.draw_text(&font, text, baseline, TEXT_ALIGN_ALIGN_CENTER, foreground);
+    context.draw_text(&font, text, baseline, TextAlign::Center, foreground);
     kernel.sis_highlight.post_update_flash_rect();
     true
 }
@@ -132,7 +131,7 @@ pub(super) fn draw_save_name_string(
     state: u16,
     game_index: u16,
 ) -> bool {
-    use crate::graphics::context_abi::ContextLease;
+    use crate::graphics::context::ContextLease;
     let context = ContextLease::require(kernel.space_context);
     let (month, day, year) = world.data.calendar_date();
     let date = crate::ui::sis::format_date(
@@ -141,12 +140,12 @@ pub(super) fn draw_save_name_string(
         year,
     );
     let label = save_label(&date, text);
-    let mut rect = RECT {
-        corner: POINT {
+    let mut rect = Rect {
+        corner: Point {
             x: 8,
             y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 15 + if MAX_SAVED_GAMES > 99 { 5 } else { 0 },
             height: 11,
         },
@@ -156,7 +155,7 @@ pub(super) fn draw_save_name_string(
     rect.extent.width = 204 - SAFE_X;
     rect.corner.x = 30 + SAFE_X;
     context.draw_rectangle(background, rect);
-    let baseline = POINT {
+    let baseline = Point {
         x: rect.corner.x + 3,
         y: rect.corner.y + 8,
     };
@@ -169,13 +168,12 @@ pub(super) fn draw_save_name_string(
             &font,
             &label.text,
             baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
+            TextAlign::Left,
             CAPTAIN_NAME_TEXT_COLOR,
         );
         return true;
     }
-    let measured =
-        font.measure_bounded::<256>(&label.text, baseline, TEXT_ALIGN_ALIGN_LEFT, COUNT::MAX);
+    let measured = font.measure_bounded::<256>(&label.text, baseline, TextAlign::Left, u16::MAX);
     if i32::from(measured.rect.extent.width) + 2 >= i32::from(rect.extent.width) {
         return false;
     }
@@ -202,7 +200,7 @@ pub(super) fn draw_save_name_string(
         &font,
         &label.text,
         baseline,
-        TEXT_ALIGN_ALIGN_LEFT,
+        TextAlign::Left,
         rgb15(0, 0, 20),
     );
     kernel.sis_highlight.post_update_flash_rect();
@@ -218,7 +216,7 @@ mod tests {
     fn owned_name_renderers_measure_and_draw_without_published_campaign_owners() {
         if !uqm_engine::test_support::native_process::own_graphics_process("front_end::gameopt::naming::tests::owned_name_renderers_measure_and_draw_without_published_campaign_owners") { return; }
         use crate::engine::Game;
-        use crate::graphics::context_abi::{ContextFrame, ContextLease};
+        use crate::graphics::{context::ContextLease, drawable::ContextFrame};
         use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
@@ -234,9 +232,7 @@ mod tests {
         game.world.data.flagship.commander_name[..2].copy_from_slice(b"A\0");
         game.world.data.flagship.ship_name[..2].copy_from_slice(b"A\0");
         let context = ContextLease::require(game.kernel.status_context);
-        context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-            game.kernel.screen,
-        )));
+        context.set_frame(ContextFrame::retain(game.kernel.screen));
         for captain in [true, false] {
             assert!(draw_name_string(
                 &game.kernel,
@@ -292,7 +288,7 @@ mod tests {
         context.flush();
         let pixel = uqm_engine::test_support::native_probe::frame_pixel(
             game.kernel.screen,
-            POINT { x: 3, y: 10 },
+            Point { x: 3, y: 10 },
         );
         assert_eq!((pixel.r, pixel.g, pixel.b), (82, 82, 255));
         drop(context);

@@ -1,9 +1,8 @@
 //! Report assets retained across nested input callbacks without borrowing their owner.
 
 use crate::engine::graphics::{
-    context_abi::ContextLease,
-    drawable_abi::{DrawableLease, LoadedDrawable},
-    native_font::{FontLease, LoadedFont},
+    context::ContextLease, drawable::DrawableLease, drawable::LoadedDrawable, font::FontLease,
+    font::LoadedFont,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -53,7 +52,7 @@ pub struct ReportContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::graphics::native_abi::{POINT, TEXT_ALIGN_ALIGN_LEFT};
+    use crate::engine::graphics::{geometry::Point, geometry::TextAlign};
 
     #[test]
     #[serial_test::serial]
@@ -72,18 +71,18 @@ mod tests {
             .unwrap();
         let retained = first.snapshot().unwrap();
         let other = second.snapshot().unwrap();
-        assert_ne!(retained.font.as_raw(), other.font.as_raw());
+        assert_ne!(retained.font.font(), other.font.font());
         first.clear();
         assert!(first.snapshot().is_none());
         assert!(second.snapshot().is_some());
         let font = retained.font();
         let effect = retained.effect();
-        let metrics = font.measure(c"A", POINT { x: 0, y: 0 }, TEXT_ALIGN_ALIGN_LEFT, 1);
+        let metrics = font.measure(c"A", Point { x: 0, y: 0 }, TextAlign::Left, 1);
         assert!(metrics.visible);
         assert_eq!(metrics.rect.extent.width, 1);
         drop(retained);
         assert!(
-            font.measure(c"A", POINT { x: 0, y: 0 }, TEXT_ALIGN_ALIGN_LEFT, 1)
+            font.measure(c"A", Point { x: 0, y: 0 }, TextAlign::Left, 1)
                 .visible
         );
         assert_eq!(effect.frame_rect(0).extent.width, 1);

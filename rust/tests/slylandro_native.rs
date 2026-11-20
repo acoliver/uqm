@@ -10,7 +10,6 @@ use battle::{prim, Battle as PoolBattle, PoolElement, Ship};
 mod special_hooks;
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, normalize_facing, sine};
 
 struct Battle {
@@ -188,7 +187,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
             c"ship.slylandro.meleeicons"
         );
         assert!(
-            d.ship_info.race_strings.is_null()
+            d.ship_info.race_strings.is_none()
                 && d.ship_info.icons.is_null()
                 && d.ship_info.melee_icon.is_null()
         );
@@ -250,7 +249,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
             CStr::from_ptr(d.ship_data.ship_sounds_rsc),
             c"ship.slylandro.sounds"
         );
-        assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_null());
+        assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
         assert_eq!(
             (
                 d.cyborg_control.ManeuverabilityIndex,
@@ -703,10 +702,7 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
                 (*ship.ptr()).thrust,
                 if thrust_wait == 0 { 1 } else { thrust_wait }
             );
-            assert_eq!(
-                GetFrameIndex((*ship.ptr()).next.image.frame.raw().cast()),
-                0
-            );
+            assert_eq!(((*ship.ptr()).next.image.frame.raw()).index(), 0);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
             if thrust_wait == 0 {
                 assert_eq!(velocity(&(*ship.ptr()).velocity), vector(60, facing));

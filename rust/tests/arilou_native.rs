@@ -6,19 +6,15 @@ mod battle;
 mod battle_context;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
+use battle::FrameSet;
 use battle::{Battle, Ship};
-
 use std::ffi::CStr;
 use std::ptr;
 use uqm_rust::collections::observation;
 use uqm_rust::ships::native::abi::*;
 
-/// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
-/// walk a drawable built here.
-use battle::FrameSet;
-
-unsafe fn index_of(frame: FRAME) -> u16 {
-    (*frame.cast::<uqm_rust::graphics::native_abi::frame_desc>()).Index
+fn index_of(frame: FRAME) -> u16 {
+    frame.index()
 }
 
 unsafe fn prim_of(element: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
@@ -773,65 +769,6 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             assert_eq!((origin.x, origin.y), (-3, 3));
             let end = (*ship).IntersectControl.EndPoint;
             assert_eq!((end.x, end.y), (123, -456));
-        }
-    })
-}
-
-#[test]
-fn teleport_destination_scales_with_the_screen_size() {
-    battle_context::run(|_| {
-        unsafe {
-            let _battle = Battle::new(16);
-            ScreenWidth = 640;
-            ScreenHeight = 480;
-            let mut skiff = Skiff::new(&_battle);
-            let ship = skiff.ship;
-            start_teleport(&mut skiff);
-            // 640x480: 576 * 32 = 18432 by 480 * 32 = 15360, neither of which
-            // divides 65536, and both fit a COORD.
-            let seed = seed_where(2, |d| {
-                d[0] % 18432 != (d[0] as u16 as u32) % 18432
-                    && d[1] % 15360 != (d[1] as u16 as u32) % 15360
-            });
-            let sequence = draws(seed, 2);
-            TFB_SeedRandom(seed);
-            set_life(ship, 3);
-            skiff.preprocess();
-            let expect_x = (sequence[0] as u16 as i32 % 18432) & !3;
-            let expect_y = (sequence[1] as u16 as i32 % 15360) & !3;
-            assert_eq!(
-                ((*ship).next.location.x, (*ship).next.location.y),
-                (expect_x as i16, expect_y as i16)
-            );
-        }
-    })
-}
-
-#[test]
-fn teleport_wraps_negative_coord_remainders_back_into_logical_space() {
-    battle_context::run(|_| {
-        unsafe {
-            // At 1280x720 the horizontal extent (1216 * 32 = 38912) exceeds
-            // i16::MAX, so a remainder cast to COORD can go negative and WRAP_X
-            // adds the extent back.
-            let _battle = Battle::new(16);
-            ScreenWidth = 1280;
-            ScreenHeight = 720;
-            let mut skiff = Skiff::new(&_battle);
-            let ship = skiff.ship;
-            start_teleport(&mut skiff);
-            let seed = seed_where(2, |d| (d[0] as u16 as i32 % 38912) > i32::from(i16::MAX));
-            let sequence = draws(seed, 2);
-            TFB_SeedRandom(seed);
-            set_life(ship, 3);
-            skiff.preprocess();
-            let remainder = sequence[0] as u16 as i32 % 38912;
-            let as_coord = i32::from(remainder as i16) & !3;
-            assert!(as_coord < 0);
-            let expect_x = as_coord + 38912;
-            assert_eq!((*ship).next.location.x, expect_x as i16);
-            let expect_y = (sequence[1] as u16 as i32 % (720 * 32)) & !3;
-            assert_eq!((*ship).next.location.y, expect_y as i16);
         }
     })
 }

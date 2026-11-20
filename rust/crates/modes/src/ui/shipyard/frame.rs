@@ -1,7 +1,7 @@
 //! The shipyard hook retains its drawing context until registration is removed.
 
 use crate::engine::input::{InputFrameHook, InputSession};
-use crate::graphics::context_abi::ContextLease;
+use crate::graphics::context::ContextLease;
 
 pub(super) fn install(input: &InputSession, context: ContextLease, draw: impl Fn() + 'static) {
     input.replace_callback(Some(InputFrameHook::new(move |_, _| {
@@ -12,7 +12,7 @@ pub(super) fn install(input: &InputSession, context: ContextLease, draw: impl Fn
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::context_abi::LoadedContext;
+    use crate::graphics::context::LoadedContext;
     use std::{cell::Cell, rc::Rc};
 
     #[test]
@@ -52,6 +52,6 @@ mod tests {
         drop(suspended);
         assert!(retained.upgrade().is_none());
         drop(previous);
-        assert!(uqm_engine::test_support::native_probe::selected_context().is_null());
+        assert!(uqm_engine::test_support::native_probe::selected_context().is_none());
     }
 }

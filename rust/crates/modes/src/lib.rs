@@ -6,11 +6,22 @@
 // moved modules keep resolving (A7, until U8-C).
 pub use uqm_content::ships;
 pub use uqm_engine as engine;
+pub use uqm_engine::callback;
+pub use uqm_engine::collections;
+pub use uqm_engine::graphics;
 pub use uqm_engine::input_port as input;
-pub use uqm_engine::{
-    callback, collections, graphics, io, log_abi, logging, math, platform, resource, sound, state,
-    strings, threading, time, video,
-};
+pub use uqm_engine::io;
+pub use uqm_engine::log_abi;
+pub use uqm_engine::logging;
+pub use uqm_engine::math;
+pub use uqm_engine::platform;
+pub use uqm_engine::resource;
+pub use uqm_engine::sound;
+pub use uqm_engine::state;
+pub use uqm_engine::strings;
+pub use uqm_engine::threading;
+pub use uqm_engine::time;
+pub use uqm_engine::video;
 pub use uqm_engine::{log_debug, log_error, log_fatal, log_info, log_warning};
 
 pub mod battle;

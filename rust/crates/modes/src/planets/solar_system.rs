@@ -60,9 +60,9 @@ pub struct SolarSystem {
     pub thrust_counter: u8,
     pub max_ship_speed: u8,
     pub(super) coordinates: Option<super::solar_coords::SolarCoordinates>,
-    pub(super) system_image: Option<crate::graphics::drawable_abi::LoadedDrawable>,
-    pub(super) stars: Option<crate::graphics::drawable_abi::LoadedDrawable>,
-    pub(super) scale_rect: crate::graphics::native_abi::RECT,
+    pub(super) system_image: Option<crate::graphics::drawable::LoadedDrawable>,
+    pub(super) stars: Option<crate::graphics::drawable::LoadedDrawable>,
+    pub(super) scale_rect: crate::graphics::geometry::Rect,
 }
 
 impl SolarSystem {

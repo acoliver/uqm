@@ -9,7 +9,7 @@ pub struct Battle {
     pub max_zoom_out: i16,
     pub counters: [u8; 2],
     pub net: Option<std::rc::Rc<dyn super::net::BattleNet>>,
-    pub selection_frames: Option<[crate::graphics::context_abi::ContextFrame; 2]>,
+    pub selection_frames: Option<[crate::graphics::drawable::ContextFrame; 2]>,
 }
 
 impl Battle {

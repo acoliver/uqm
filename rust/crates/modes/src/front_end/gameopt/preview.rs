@@ -70,7 +70,7 @@ pub(super) fn lander(
     if let Some(owner) = &kernel.lander_resources {
         let assets = crate::planet_side::resources::PlanetSideAssets::retain(owner);
         crate::planet_side::init_lander::draw_lander(
-            &crate::graphics::context_abi::ContextLease::require(kernel.radar_context),
+            &crate::graphics::context::ContextLease::require(kernel.radar_context),
             &assets,
             crate::planet_side::init_lander::LanderStatus::preview(&summary.sis, summary.flags),
         );
@@ -86,17 +86,15 @@ mod tests {
     fn lander_preview_draws_saved_values_without_mutating_the_current_flagship() {
         crate::planet_side::resources::tests::with_packaged_resources(|game| {
             use crate::graphics::{
-                context_abi::{ContextFrame, ContextLease},
-                native_abi::{EXTENT, POINT, RECT},
+                context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
+                geometry::Rect,
             };
             game.kernel.radar_context = game.kernel.status_context;
             let radar = ContextLease::require(game.kernel.radar_context);
-            radar.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-                game.kernel.screen,
-            )));
-            radar.set_clip(RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            radar.set_frame(ContextFrame::retain(game.kernel.screen));
+            radar.set_clip(Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: 56,
                     height: 53,
                 },

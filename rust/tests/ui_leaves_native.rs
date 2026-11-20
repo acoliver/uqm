@@ -1,23 +1,27 @@
 //! Owned modal windows restore their pixels and input policy after cancellation.
-use uqm_engine::test_support::campaign_display;
-use uqm_engine::test_support::native_process;
-
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,
     rc::Rc,
 };
-use uqm_rust::{
-    engine::{
-        battle::{Battle, Cx},
-        input::{frames::*, Frame, InputRuntime, InputSession},
-        observe::{CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved},
-        Game,
-    },
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::{Color, POINT},
-    },
+use uqm_engine::test_support::campaign_display;
+use uqm_engine::test_support::native_process;
+use uqm_rust::engine::battle::Battle;
+use uqm_rust::engine::battle::Cx;
+use uqm_rust::engine::input::frames::*;
+use uqm_rust::engine::input::Frame;
+use uqm_rust::engine::input::InputRuntime;
+use uqm_rust::engine::input::InputSession;
+use uqm_rust::engine::observe::CheckpointView;
+use uqm_rust::engine::observe::Injected;
+use uqm_rust::engine::observe::InputView;
+use uqm_rust::engine::observe::Io;
+use uqm_rust::engine::observe::Observer;
+use uqm_rust::engine::observe::Presented;
+use uqm_rust::engine::observe::Unobserved;
+use uqm_rust::engine::Game;
+use uqm_rust::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Point,
 };
 
 struct Runtime {
@@ -68,7 +72,7 @@ impl InputRuntime for Runtime {
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {
         assert!(reset);
         self.context.flush();
-        let painted = self.context.target().pixel(POINT { x: 150, y: 105 });
+        let painted = self.context.target().pixel(Point { x: 150, y: 105 });
         assert_ne!((painted.r, painted.g, painted.b), (9, 17, 25));
         self.update(cx);
         assert!(!frame.frame(cx, io));
@@ -91,9 +95,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
     game.kernel.screen_context = game.kernel.status_context;
     game.kernel.star_con_font = game.kernel.tiny_font;
     let context = ContextLease::require(game.kernel.screen_context);
-    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
     context.set_background(Color {
         r: 9,
         g: 17,
@@ -139,7 +141,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
             assert!(!runtime.input.paused());
             assert!(!runtime.input.exit_requested());
             context.flush();
-            let restored = context.target().pixel(POINT { x: 140, y: 110 });
+            let restored = context.target().pixel(Point { x: 140, y: 110 });
             assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
             cx.world.set_activity(0);
         }
@@ -149,7 +151,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
         assert_eq!(runtime.input.menu_sounds(), (7, 11));
         assert!(runtime.input.callback().is_none());
         context.flush();
-        let restored = context.target().pixel(POINT { x: 150, y: 105 });
+        let restored = context.target().pixel(Point { x: 150, y: 105 });
         assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
     }
     assert_eq!(runtime.updates.get(), 4);

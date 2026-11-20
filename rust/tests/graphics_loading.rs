@@ -1,15 +1,9 @@
-//! Real UIO -> PNG -> font-page loading with the remaining engine linked.
-use std::ffi::CString;
+//! Real UIO -> PNG -> font and animation loading with the remaining engine linked.
 use std::io::Write;
-use std::ptr;
-use uqm_rust::graphics::{gfxload, native_abi as abi};
-
-fn content_dir() -> uqm_rust::io::Dir {
-    let Some(dir) = uqm_rust::io::content_dir() else {
-        panic!("no content directory installed");
-    };
-    dir
-}
+use uqm_rust::engine::test_support::native_probe;
+use uqm_rust::graphics::drawable::{FrameKind, LoadedDrawable};
+use uqm_rust::graphics::font::LoadedFont;
+use uqm_rust::graphics::geometry::{Extent, HotSpot};
 
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
@@ -26,136 +20,66 @@ fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8>
     output
 }
 
-unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
-    abi::_cur_resfile_name = path.as_ptr();
-    let fp = if zipped {
-        uqm_rust::resource::ffi_bridge::open_res_file(&content_dir(), path.as_ptr(), c"rb".as_ptr())
-    } else {
-        usize::MAX as *mut std::ffi::c_void
-    };
-    assert!(!fp.is_null());
-    let font = gfxload::get_font_data(fp.cast(), 0).cast::<abi::font_desc>();
-    if zipped {
-        assert_eq!(uqm_rust::resource::ffi_bridge::res_CloseResFile(fp), 1);
-    }
-    abi::_cur_resfile_name = ptr::null();
-    assert!(!font.is_null());
-    assert_eq!(((*font).Leading, (*font).LeadingWidth), (10, 4));
-    let page = (*font).fontPages;
-    assert!(!page.is_null());
-    assert_eq!(
-        ((*page).pageStart, (*page).firstChar, (*page).numChars),
-        (0, 65, 2)
-    );
-    assert!((*page).next.is_null());
-    let a = &*(*page).charDesc;
-    assert_eq!(
-        (
-            a.extent.width,
-            a.extent.height,
-            a.disp.width,
-            a.disp.height,
-            a.HotSpot.x,
-            a.HotSpot.y,
-            a.pitch
-        ),
-        (3, 8, 4, 9, 0, 7, 3)
-    );
-    assert_eq!(std::slice::from_raw_parts(a.data, 24), alpha);
-    let b = &*(*page).charDesc.add(1);
-    assert_eq!(
-        (
-            b.extent.width,
-            b.extent.height,
-            b.disp.width,
-            b.disp.height,
-            b.HotSpot.y,
-            b.pitch
-        ),
-        (3, 2, 4, 3, 2, 3)
-    );
-    assert_eq!(
-        std::slice::from_raw_parts(b.data, 6),
-        [0, 255, 18, 72, 145, 36]
-    );
-    assert_eq!(uqm_rust::graphics::font_abi::DestroyFont(font), 1);
-    // This loader fixture has no renderer; drain its queued bitmap deletions.
-    uqm_rust::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics();
-}
-
-unsafe fn check_animation(path: &std::ffi::CStr) {
-    abi::_cur_resfile_name = path.as_ptr();
-    let relative_path = CString::new(
-        path.to_bytes()
-            .strip_prefix(b"/")
-            .unwrap_or(path.to_bytes()),
-    )
-    .unwrap();
-    let fp = uqm_rust::resource::ffi_bridge::open_res_file(
-        &content_dir(),
-        relative_path.as_ptr(),
-        c"rb".as_ptr(),
-    );
-    assert!(!fp.is_null());
-    assert_eq!(
-        uqm_rust::resource::ffi_bridge::SeekResFile(fp, 0, libc::SEEK_END),
-        0
-    );
-    let length = uqm_rust::resource::ffi_bridge::TellResFile(fp) as u32;
-    assert_eq!(
-        uqm_rust::resource::ffi_bridge::SeekResFile(fp, 0, libc::SEEK_SET),
-        0
-    );
-    let drawable = gfxload::get_cel_data(fp.cast(), length).cast::<abi::drawable_desc>();
-    uqm_rust::resource::ffi_bridge::res_CloseResFile(fp);
-    abi::_cur_resfile_name = ptr::null();
-    assert!(!drawable.is_null());
-    assert_eq!(((*drawable).Flags, (*drawable).MaxIndex), (2, 1));
-    for i in 0..2 {
-        let frame = &mut *(*drawable).Frame.add(i);
+fn check_font(path: &std::ffi::CStr, alpha: &[u8]) {
+    let font = LoadedFont::load_file(path).unwrap_or_else(|| panic!("font loads"));
+    native_probe::with_font(font.font(), |font| {
+        assert_eq!((font.leading, font.leading_width), (10, 4));
+        assert_eq!(font.page_layout(), [(0, 65, 2)]);
+        let a = font.glyph(65).unwrap_or_else(|| panic!("glyph A"));
         assert_eq!(
             (
-                frame.Type,
-                frame.Index,
-                frame.Bounds.width,
-                frame.Bounds.height
+                a.extent.width,
+                a.extent.height,
+                a.disp.width,
+                a.disp.height,
+                a.hot_spot.x,
+                a.hot_spot.y,
+                a.pitch
             ),
-            (0, i as u16, 3, 2)
+            (3, 8, 4, 9, 0, 7, 3)
         );
-        assert_eq!(frame.parent, drawable);
+        assert_eq!(&a.data[..24], alpha);
+        let b = font.glyph(66).unwrap_or_else(|| panic!("glyph B"));
         assert_eq!(
-            (frame.HotSpot.x, frame.HotSpot.y),
-            if i == 0 { (-5, 11) } else { (0, 0) }
+            (
+                b.extent.width,
+                b.extent.height,
+                b.disp.width,
+                b.disp.height,
+                b.hot_spot.y,
+                b.pitch
+            ),
+            (3, 2, 4, 3, 2, 3)
         );
-        assert_eq!((*frame.image).colormap_index, if i == 0 { 17 } else { 0 });
-        let surface = (*frame.image).NormalImg.cast::<sdl2_sys::SDL_Surface>();
-        let mut key = 0;
+        assert_eq!(&b.data[..6], [0, 255, 18, 72, 145, 36]);
+    });
+}
+
+fn check_animation(path: &std::ffi::CStr) {
+    let drawable = LoadedDrawable::load_file(path).unwrap_or_else(|| panic!("animation loads"));
+    let first = drawable.first_frame();
+    assert_eq!(first.count(), 2);
+    for i in 0..2u16 {
+        let frame = first.at(i);
+        let probe = native_probe::probe_frame(frame);
         assert_eq!(
-            sdl2_sys::SDL_GetColorKey(surface, &mut key),
-            if i == 0 { 0 } else { -1 }
+            (probe.kind, probe.index, probe.bounds),
+            (Some(FrameKind::Rom), i, Extent::new(3, 2))
         );
-        if i == 0 {
-            assert_eq!(key, 1);
-        }
+        assert_eq!(
+            probe.hot_spot,
+            if i == 0 {
+                HotSpot::new(-5, 11)
+            } else {
+                HotSpot::new(0, 0)
+            }
+        );
+        assert_eq!(probe.colormap_index, if i == 0 { 17 } else { 0 });
+        assert_eq!(probe.key, (i == 0).then_some(1));
         for y in 0..2 {
-            assert_eq!(
-                std::slice::from_raw_parts(
-                    (*surface)
-                        .pixels
-                        .cast::<u8>()
-                        .add(y * (*surface).pitch as usize),
-                    3
-                ),
-                [0, 1, 2]
-            );
+            assert_eq!(native_probe::frame_index_row(frame, y, 3), [0, 1, 2]);
         }
-        abi::TFB_DrawImage_Delete(frame.image);
-        frame.image = ptr::null_mut();
     }
-    assert_ne!(
-        uqm_rust::graphics::drawable_abi::DestroyDrawable(drawable),
-        0
-    );
 }
 
 #[test]
@@ -220,22 +144,12 @@ sprite.png -1 0 0 0
         archive.write_all(bytes).unwrap();
     }
     archive.finish().unwrap();
-    unsafe {
+    {
         let mount = uqm_engine::test_support::native_session::ContentMount::new(temp.path());
-        check_font(c"font", false, &alpha);
-        check_font(c"font.zip", true, &alpha);
-        abi::_cur_resfile_name = c"busy".as_ptr();
-        assert!(uqm_rust::graphics::filegfx::LoadGraphicFile(c"frames.ani".as_ptr()).is_null());
-        assert!(uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr()).is_null());
-        abi::_cur_resfile_name = ptr::null();
-        assert!(uqm_rust::graphics::filegfx::LoadGraphicFile(c"missing.ani".as_ptr()).is_null());
-        assert!(ptr::addr_of!(abi::_cur_resfile_name).read().is_null());
-        let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
-        assert!(!font.is_null());
-        assert_eq!(((*font).Leading, (*font).LeadingWidth), (10, 4));
-        assert_eq!(uqm_rust::graphics::font_abi::DestroyFont(font), 1);
-        uqm_rust::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics();
-        assert!(ptr::addr_of!(abi::_cur_resfile_name).read().is_null());
+        let _graphics = native_probe::DrawQueue::init();
+        check_font(c"font", &alpha);
+        check_font(c"font.zip", &alpha);
+        assert!(LoadedDrawable::load_file(c"missing.ani").is_none());
         check_animation(c"frames.ani");
         check_animation(c"/animation/packed.ani");
         drop(mount);

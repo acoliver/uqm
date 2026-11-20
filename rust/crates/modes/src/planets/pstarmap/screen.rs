@@ -1,7 +1,9 @@
 use super::*;
-
 use crate::comm::locdata::{CPoint, CRect};
-use crate::graphics::native_batch::{DrawCommand, NativeBatch, NativeShape};
+use crate::graphics::{
+    batch::DrawCommand, batch::NativeBatch, batch::NativeShape, geometry::Extent, geometry::Point,
+    geometry::Rect,
+};
 use crate::planets::render::oval::{self, OvalGfx};
 
 pub(super) struct Display {
@@ -15,7 +17,7 @@ impl Display {
     pub fn new(kernel: &Kernel, dimensions: (i32, i32)) -> Self {
         Self {
             context: ContextLease::require(kernel.space_context),
-            frame: ContextFrame::retain(NonNull::new(kernel.misc_data_frame)).indexed_frame(48),
+            frame: ContextFrame::retain(kernel.misc_data_frame).indexed_frame(48),
             font: kernel
                 .tiny_font_lease()
                 .unwrap_or_else(|| panic!("map requires the tiny font")),
@@ -23,8 +25,8 @@ impl Display {
         }
     }
 
-    fn sphere_text(&self, rect: RECT) -> POINT {
-        POINT {
+    fn sphere_text(&self, rect: Rect) -> Point {
+        Point {
             x: rect.corner.x.wrapping_add(rect.extent.width >> 1),
             y: rect
                 .corner
@@ -39,7 +41,7 @@ impl Display {
         world: &World,
         fleet: &FleetInfo,
         projection: Projection,
-    ) -> (RECT, RECT) {
+    ) -> (Rect, Rect) {
         let diameter = c_long::from(i32::from(fleet.known_strength) * 11);
         let mut width = projection.x(diameter).wrapping_sub(projection.x(0));
         if width < 0 {
@@ -53,8 +55,8 @@ impl Display {
         } else if height == 0 {
             height = 1;
         }
-        let rect = RECT {
-            corner: POINT {
+        let rect = Rect {
+            corner: Point {
                 x: projection
                     .x(c_long::from(fleet.known_loc.x))
                     .wrapping_sub(width >> 1),
@@ -62,13 +64,18 @@ impl Display {
                     .y(c_long::from(fleet.known_loc.y))
                     .wrapping_sub(height >> 1),
             },
-            extent: EXTENT { width, height },
+            extent: Extent { width, height },
         };
         let resources = world.fleet_resources(fleet.species_id);
         let (text, length) = resources.label(1);
         let mut repair = self
             .font
-            .measure(text, self.sphere_text(rect), 1, length)
+            .measure(
+                text,
+                self.sphere_text(rect),
+                crate::graphics::geometry::TextAlign::Center,
+                length,
+            )
             .rect;
         let width = projection.width;
         let height = projection.height;
@@ -87,11 +94,16 @@ impl Display {
         (rect, repair)
     }
 
-    fn sphere_label(&self, world: &World, fleet: &FleetInfo, rect: RECT, color: Color) {
+    fn sphere_label(&self, world: &World, fleet: &FleetInfo, rect: Rect, color: Color) {
         let resources = world.fleet_resources(fleet.species_id);
         let (text, length) = resources.label(1);
         let mut baseline = self.sphere_text(rect);
-        let measurement = self.font.measure(text, baseline, 1, length);
+        let measurement = self.font.measure(
+            text,
+            baseline,
+            crate::graphics::geometry::TextAlign::Center,
+            length,
+        );
         let rect = measurement.rect;
         let width = self.dimensions.0 - 78;
         let height = self.dimensions.1 - 13;
@@ -113,7 +125,7 @@ impl Display {
             &self.font,
             text,
             baseline,
-            1,
+            crate::graphics::geometry::TextAlign::Center,
             color,
             measurement.characters,
         );
@@ -127,17 +139,17 @@ impl Display {
     }
 }
 
-fn rect_input(rect: RECT) -> CRect {
+fn rect_input(rect: Rect) -> CRect {
     CRect {
         corner: rect.corner,
         width: rect.extent.width,
         height: rect.extent.height,
     }
 }
-fn rect_output(rect: CRect) -> RECT {
-    RECT {
+fn rect_output(rect: CRect) -> Rect {
+    Rect {
         corner: rect.corner,
-        extent: EXTENT {
+        extent: Extent {
             width: rect.width,
             height: rect.height,
         },
@@ -171,7 +183,7 @@ impl OvalGfx for Display {
 }
 
 impl StarMap {
-    pub(super) fn draw_map(&mut self, world: &World, race: u16, clip: Option<RECT>, cursor: bool) {
+    pub(super) fn draw_map(&mut self, world: &World, race: u16, clip: Option<Rect>, cursor: bool) {
         let context = self.display.context.clone();
         context.select();
         if let Some(clip) = clip {
@@ -181,7 +193,7 @@ impl StarMap {
             screen.corner.y = screen.corner.y.wrapping_add(old.corner.y);
             context.with_clip(screen, || {
                 context.with_origin(
-                    POINT {
+                    Point {
                         x: clip.corner.x.wrapping_neg(),
                         y: clip.corner.y.wrapping_neg(),
                     },
@@ -197,7 +209,7 @@ impl StarMap {
         }
     }
 
-    fn draw_content(&mut self, world: &World, race: u16, clip: Option<RECT>) {
+    fn draw_content(&mut self, world: &World, race: u16, clip: Option<Rect>) {
         let context = self.display.context.clone();
         if self.transition {
             context.transition_source(None);
@@ -242,12 +254,12 @@ impl StarMap {
                 .wrapping_sub(projection.y(0))
                 .wrapping_abs();
             let center = self.state.screen(location);
-            let rect = RECT {
-                corner: POINT {
+            let rect = Rect {
+                corner: Point {
                     x: center.x.wrapping_sub(width >> 1),
                     y: center.y.wrapping_sub(height >> 1),
                 },
-                extent: EXTENT { width, height },
+                extent: Extent { width, height },
             };
             context.set_foreground(rgb15(3, 3, 3));
             oval::draw_filled_oval(&rect_input(rect), &mut self.display);
@@ -259,12 +271,12 @@ impl StarMap {
         let context = &self.display.context;
         let projection = self.state.projection;
         for i in (0..=10000).rev().step_by(500) {
-            let mut rect = RECT {
-                corner: POINT {
+            let mut rect = Rect {
+                corner: Point {
                     x: projection.x(0),
                     y: projection.y(i),
                 },
-                extent: EXTENT {
+                extent: Extent {
                     width: (projection.width << projection.zoom) as i16,
                     height: 1,
                 },
@@ -280,7 +292,7 @@ impl StarMap {
         }
     }
 
-    fn draw_spheres(&mut self, world: &World, race: u16, space: u8, clip: Option<RECT>) {
+    fn draw_spheres(&mut self, world: &World, race: u16, space: u8, clip: Option<Rect>) {
         let context = self.display.context.clone();
         let projection = self.state.projection;
         if space <= 1 {
@@ -377,13 +389,13 @@ impl StarMap {
     }
 }
 
-pub(super) fn repair_rectangle(last: RECT, next: RECT, width: i32, height: i32) -> RECT {
-    let mut r = RECT {
-        corner: POINT {
+pub(super) fn repair_rectangle(last: Rect, next: Rect, width: i32, height: i32) -> Rect {
+    let mut r = Rect {
+        corner: Point {
             x: (i32::from(next.corner.x) + i32::from(next.extent.width >> 1) - 25) as i16,
             y: (i32::from(next.corner.y) + i32::from(next.extent.height >> 1) - 9) as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 50,
             height: 9,
         },
@@ -419,7 +431,7 @@ pub(super) fn repair_rectangle(last: RECT, next: RECT, width: i32, height: i32) 
     r
 }
 
-pub(super) fn enlarge(r: &mut RECT) {
+pub(super) fn enlarge(r: &mut Rect) {
     r.extent.width = r.extent.width.wrapping_add(1);
     r.extent.height = r.extent.height.wrapping_add(1);
 }

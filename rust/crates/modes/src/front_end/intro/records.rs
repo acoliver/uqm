@@ -1,5 +1,5 @@
 use super::*;
-use crate::graphics::{context_abi::BatchGuard, native_font::LoadedFont};
+use crate::graphics::{context::BatchGuard, font::LoadedFont, geometry::Point, geometry::Rect};
 
 pub(super) struct PresentationState {
     pub table: LoadedTextTable,
@@ -26,8 +26,8 @@ pub(super) struct PresentationState {
     pub text_fade_color: Color,
     pub text_effect: u8,
     pub text_vpos: u8,
-    pub clip: RECT,
-    pub fade: RECT,
+    pub clip: Rect,
+    pub fade: Rect,
     pub lines: Vec<text::TextLine>,
 }
 
@@ -74,8 +74,8 @@ impl PresentationState {
             },
             text_effect: 0,
             text_vpos: b'B',
-            clip: RECT::default(),
-            fade: RECT::default(),
+            clip: Rect::default(),
+            fade: Rect::default(),
             lines: Vec::new(),
         }
     }
@@ -90,15 +90,15 @@ impl PresentationState {
     }
 
     pub fn movie_frame(&self) {
-        let frame = self.frame.as_ref().map_or_else(
-            || ContextFrame::retain(None),
-            |image| {
+        let frame = self
+            .frame
+            .as_ref()
+            .map_or_else(ContextFrame::default, |image| {
                 image
                     .lease()
                     .context_frame(0)
                     .wrapped_frame(self.movie_frame as u16)
-            },
-        );
-        self.context.draw_stamp(&frame, POINT { x: 0, y: 0 });
+            });
+        self.context.draw_stamp(&frame, Point { x: 0, y: 0 });
     }
 }

@@ -1,13 +1,11 @@
 //! Reviewed item macros. Expansion uses their current transcriber, not a second
 //! copy of the generated code, so changes to a macro remain measurable.
-use std::collections::{BTreeMap, BTreeSet};
-
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
+use std::collections::{BTreeMap, BTreeSet};
 use syn::parse::{discouraged::Speculative, ParseStream, Parser};
 
 pub const HANDLERS: &[(&str, &str)] = &[
-    ("src/graphics/gfx_common_abi.rs", "screen_global"),
     ("src/collections/hash_table.rs", "define_hash_table"),
     ("src/comm/live/comandr.rs", "callbacks"),
     ("src/world/story/schema.rs", "game_state_fields"),

@@ -3,14 +3,34 @@
 //! Packed-channel truncation and the order of fixed-point YUV operations are
 //! intentional: changing either changes pixels produced by the original game.
 
-use sdl2_sys::{SDL_PixelFormat, SDL_Rect, SDL_Surface};
+use super::canvas::Canvas;
 use std::sync::OnceLock;
 
 mod advanced;
 mod biadaptive;
 mod hq_rules;
 
-#[derive(Clone, Copy)]
+/// The channel shifts of a 32-bit pixel layout.
+#[derive(Clone, Copy, Debug)]
+struct Format {
+    r: u32,
+    g: u32,
+    b: u32,
+}
+
+/// The canvas layout: RGBX8888.
+const SCREEN_FORMAT: Format = Format { r: 24, g: 16, b: 8 };
+
+/// A pixel rectangle being filtered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Region {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Filter {
     Nearest,
     Bilinear,
@@ -40,11 +60,11 @@ const YUV_MATRIX: [[i32; 3]; 3] = [
     [3749, 8192, -1339],
 ];
 
-fn rgb(fmt: &SDL_PixelFormat, pixel: u32) -> [i32; 3] {
-    [fmt.Rshift, fmt.Gshift, fmt.Bshift].map(|shift| ((pixel >> shift) & 255) as i32)
+fn rgb(fmt: &Format, pixel: u32) -> [i32; 3] {
+    [fmt.r, fmt.g, fmt.b].map(|shift| ((pixel >> shift) & 255) as i32)
 }
 
-fn cmp_yuv(fmt: &SDL_PixelFormat, a: u32, b: u32, tolerance: i32) -> bool {
+fn cmp_yuv(fmt: &Format, a: u32, b: u32, tolerance: i32) -> bool {
     let a = rgb(fmt, a);
     let b = rgb(fmt, b);
     let mut delta = 0;
@@ -83,7 +103,7 @@ fn bilinear(p: [u32; 4]) -> [u32; 4] {
     ]
 }
 
-fn triscan(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4] {
+fn triscan(image: &Image<'_>, fmt: &Format, x: i32, y: i32) -> [u32; 4] {
     let c = image.pixel(x, y);
     let n = image.pixel(x, y - 1);
     let s = image.pixel(x, y + 1);
@@ -101,7 +121,7 @@ fn triscan(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4]
     out
 }
 
-fn expand_rect(rect: &mut SDL_Rect, expansion: i32, limits: &SDL_Rect) {
+fn expand_rect(rect: &mut Region, expansion: i32, limits: &Region) {
     if rect.x - expansion >= limits.x {
         rect.w += expansion;
         rect.x -= expansion;
@@ -128,30 +148,17 @@ fn expand_rect(rect: &mut SDL_Rect, expansion: i32, limits: &SDL_Rect) {
     }
 }
 
-// The SDL caller owns and locks both surfaces. They must be disjoint 32-bit
-// buffers in the same format, with a destination twice the source dimensions.
-unsafe fn scale(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
+/// Filter `region` of `image` into `output` (twice the size, `stride`
+/// words a row), growing the region by the filter's reach first.
+fn scale(
+    image: &Image<'_>,
+    fmt: &Format,
+    output: &mut [u32],
+    stride: usize,
+    region: &mut Region,
     filter: Filter,
 ) {
-    let src = &*src;
-    let dst = &mut *dst;
-    let region = &mut *region;
-    let fmt = &*dst.format;
-    assert_eq!(fmt.BytesPerPixel, 4);
-    assert_eq!((*src.format).BytesPerPixel, 4);
-    assert!(dst.w >= src.w * 2 && dst.h >= src.h * 2);
-    let image = Image {
-        pixels: std::slice::from_raw_parts(src.pixels.cast(), (src.pitch * src.h / 4) as usize),
-        stride: (src.pitch / 4) as usize,
-        width: src.w,
-        height: src.h,
-    };
-    let stride = (dst.pitch / 4) as usize;
-    let output = std::slice::from_raw_parts_mut(dst.pixels.cast::<u32>(), stride * dst.h as usize);
-    if !matches!(filter, Filter::Nearest) {
+    if filter != Filter::Nearest {
         expand_rect(
             region,
             if matches!(filter, Filter::Advanced | Filter::Biadaptive) {
@@ -159,11 +166,11 @@ unsafe fn scale(
             } else {
                 1
             },
-            &SDL_Rect {
+            &Region {
                 x: 0,
                 y: 0,
-                w: src.w,
-                h: src.h,
+                w: image.width,
+                h: image.height,
             },
         );
     }
@@ -177,47 +184,16 @@ unsafe fn scale(
                     image.pixel(x, y + 1),
                     image.pixel(x + 1, y + 1),
                 ]),
-                Filter::Triscan => triscan(&image, fmt, x, y),
-                Filter::Advanced => advanced::advanced(&image, fmt, x, y),
-                Filter::Biadaptive => biadaptive::biadaptive(&image, x, y),
-                Filter::Hq => hq(&image, fmt, x, y),
+                Filter::Triscan => triscan(image, fmt, x, y),
+                Filter::Advanced => advanced::advanced(image, fmt, x, y),
+                Filter::Biadaptive => biadaptive::biadaptive(image, x, y),
+                Filter::Hq => hq(image, fmt, x, y),
             };
             let offset = y as usize * 2 * stride + x as usize * 2;
             output[offset..offset + 2].copy_from_slice(&p[..2]);
             output[offset + stride..offset + stride + 2].copy_from_slice(&p[2..]);
         }
     }
-}
-
-/// # Safety
-/// Surfaces must be disjoint, locked 32-bit SDL surfaces in the same format;
-/// `dst` must have twice the source dimensions and `region` must be within `src`.
-pub unsafe extern "C" fn scale_nearest(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
-) {
-    scale(src, dst, region, Filter::Nearest);
-}
-
-/// # Safety
-/// Same surface and region requirements as `scale_nearest`.
-pub unsafe extern "C" fn scale_bilinear_filter(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
-) {
-    scale(src, dst, region, Filter::Bilinear);
-}
-
-/// # Safety
-/// Same surface and region requirements as `scale_nearest`.
-pub unsafe extern "C" fn scale_tri_scan_filter(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
-) {
-    scale(src, dst, region, Filter::Triscan);
 }
 
 #[cfg(test)]
@@ -272,13 +248,13 @@ fn blend_e11(a: u32, b: u32, c: u32) -> u32 {
         + 0x03030303
 }
 
-fn rgb_delta(fmt: &SDL_PixelFormat, a: u32, b: u32) -> i32 {
+fn rgb_delta(fmt: &Format, a: u32, b: u32) -> i32 {
     let a = rgb(fmt, a);
     let b = rgb(fmt, b);
     (0..3).map(|i| (a[i] - b[i]) * (a[i] - b[i])).sum()
 }
 
-fn intensity(fmt: &SDL_PixelFormat, p: u32) -> i32 {
+fn intensity(fmt: &Format, p: u32) -> i32 {
     rgb(fmt, p)
         .into_iter()
         .enumerate()
@@ -300,10 +276,10 @@ fn yuv_table() -> &'static [u32] {
     })
 }
 
-fn to_yuv(fmt: &SDL_PixelFormat, p: u32) -> u32 {
-    let index = (((p >> (fmt.Rshift + 3)) & 31) << 10)
-        | (((p >> (fmt.Gshift + 3)) & 31) << 5)
-        | ((p >> (fmt.Bshift + 3)) & 31);
+fn to_yuv(fmt: &Format, p: u32) -> u32 {
+    let index = (((p >> (fmt.r + 3)) & 31) << 10)
+        | (((p >> (fmt.g + 3)) & 31) << 5)
+        | ((p >> (fmt.b + 3)) & 31);
     yuv_table()[index as usize]
 }
 
@@ -315,7 +291,7 @@ fn diff_yuv(a: u32, b: u32) -> bool {
     ret < 0
 }
 
-fn hq(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4] {
+fn hq(image: &Image<'_>, fmt: &Format, x: i32, y: i32) -> [u32; 4] {
     let mut pix = [0; 10];
     for dy in -1..=1 {
         for dx in -1..=1 {
@@ -333,118 +309,47 @@ fn hq(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4] {
     hq_rules::rules(pattern, edges, &pix)
 }
 
-/// # Safety
-/// Same surface and region requirements as `scale_nearest`.
-pub unsafe extern "C" fn scale_bi_adapt_filter(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
-) {
-    scale(src, dst, region, Filter::Biadaptive);
+/// The 2x filter a set of `TFB_GFXFLAGS_SCALE_*` flags selects; the
+/// first flag in this order wins, nearest neighbour otherwise.
+fn filter_for(flags: i32) -> Filter {
+    [
+        (1 << 3, Filter::Bilinear),
+        (1 << 4, Filter::Biadaptive),
+        (1 << 5, Filter::Advanced),
+        (1 << 6, Filter::Triscan),
+        (1 << 7, Filter::Hq),
+    ]
+    .into_iter()
+    .find(|(flag, _)| flags & flag == *flag)
+    .map_or(Filter::Nearest, |(_, filter)| filter)
 }
 
-/// # Safety
-/// Same surface and region requirements as `scale_nearest`.
-pub unsafe extern "C" fn scale_bi_adapt_adv_filter(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
-) {
-    scale(src, dst, region, Filter::Advanced);
-}
-
-/// # Safety
-/// Same surface and region requirements as `scale_nearest`.
-pub unsafe extern "C" fn scale_hq_filter(
-    src: *mut SDL_Surface,
-    dst: *mut SDL_Surface,
-    region: *mut SDL_Rect,
-) {
-    scale(src, dst, region, Filter::Hq);
-}
-
-pub type ScaleFunc = unsafe extern "C" fn(*mut SDL_Surface, *mut SDL_Surface, *mut SDL_Rect);
-
-#[repr(C)]
-pub struct ScaleFuncDef {
-    pub flag: i32,
-    pub func: ScaleFunc,
-}
-
-pub static SCALE_C_FUNCTIONS: [ScaleFuncDef; 6] = [
-    ScaleFuncDef {
-        flag: 1 << 3,
-        func: scale_bilinear_filter,
-    },
-    ScaleFuncDef {
-        flag: 1 << 4,
-        func: scale_bi_adapt_filter,
-    },
-    ScaleFuncDef {
-        flag: 1 << 5,
-        func: scale_bi_adapt_adv_filter,
-    },
-    ScaleFuncDef {
-        flag: 1 << 6,
-        func: scale_tri_scan_filter,
-    },
-    ScaleFuncDef {
-        flag: 1 << 7,
-        func: scale_hq_filter,
-    },
-    ScaleFuncDef {
-        flag: 0,
-        func: scale_nearest,
-    },
-];
-
-// The command-line parser still writes this setting. As with the former
-// USE_RUST_GFX build, screen filters use the scalar integer implementation.
-pub static mut FORCE_PLATFORM: libc::c_int = 0;
-
-#[no_mangle]
-pub extern "C" fn Scale_Init() {
-    let _ = yuv_table();
-}
-
-pub extern "C" fn scale_prep_platform(
-    flags: libc::c_int,
-    _fmt: *const SDL_PixelFormat,
-) -> ScaleFunc {
-    SCALE_C_FUNCTIONS
-        .iter()
-        .find(|entry| flags & entry.flag == entry.flag)
-        .expect("the scaler table ends with its default entry")
-        .func
-}
-
-/// Render a complete SDL screen into the renderer's byte-oriented RGBX buffer.
-///
-/// # Safety
-/// `src` must point to a live 32-bit SDL screen surface. The output buffer
-/// must contain exactly four bytes per pixel at twice the source dimensions.
-/// Source pixels must not alias `buffer` and must remain stable during the call.
-pub(crate) unsafe fn scale_surface_to_rgbx(src: *mut SDL_Surface, flags: i32, buffer: &mut [u8]) {
-    let source = &*src;
-    let width = source.w * 2;
-    let height = source.h * 2;
-    let mut pixels = vec![0u32; (width * height) as usize];
+/// Render a whole screen canvas through the 2x filter `flags` select into
+/// the renderer's RGBX byte buffer (four bytes a pixel at twice the size).
+pub(crate) fn scale_screen(src: &Canvas, flags: i32, buffer: &mut [u8]) {
+    let image = Image {
+        pixels: src.words(),
+        stride: src.width() as usize,
+        width: src.width(),
+        height: src.height(),
+    };
+    let stride = image.stride * 2;
+    let mut pixels = vec![0u32; stride * image.height as usize * 2];
     assert_eq!(buffer.len(), pixels.len() * 4);
-    // This descriptor borrows aligned pixel storage and the source format;
-    // neither is an SDL resource owned by the descriptor.
-    let mut dst: SDL_Surface = std::mem::zeroed();
-    dst.w = width;
-    dst.h = height;
-    dst.pitch = width * 4;
-    dst.format = source.format;
-    dst.pixels = pixels.as_mut_ptr().cast();
-    let mut region = SDL_Rect {
+    let mut region = Region {
         x: 0,
         y: 0,
-        w: source.w,
-        h: source.h,
+        w: image.width,
+        h: image.height,
     };
-    scale_prep_platform(flags, source.format)(src, &mut dst, &mut region);
+    scale(
+        &image,
+        &SCREEN_FORMAT,
+        &mut pixels,
+        stride,
+        &mut region,
+        filter_for(flags),
+    );
     for (pixel, bytes) in pixels.into_iter().zip(buffer.as_chunks_mut::<4>().0) {
         *bytes = pixel.to_ne_bytes();
     }

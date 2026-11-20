@@ -122,7 +122,7 @@ mod integration_tests {
             last_time_val: 0,
             intersect_stamp: Stamp {
                 origin: Point::new(0, 0),
-                frame: std::ptr::null_mut(),
+                frame: crate::graphics::drawable::FrameId::NULL,
             },
             end_point: Point::new(10, 10),
         };

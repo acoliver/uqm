@@ -1,6 +1,6 @@
 //! Color conversion for graphics-context diagnostics.
 
-use crate::graphics::native_abi::Color;
+use crate::graphics::geometry::Color;
 use std::ffi::c_int;
 
 pub(super) fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: u8) -> Color {

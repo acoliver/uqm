@@ -13,89 +13,12 @@ use crate::sound::rodio_audio::{self, SoundCategory};
 use super::player::VideoPlayer;
 use super::scaler::VideoScaler;
 
-pub use crate::graphics::ffi::SDL_Surface;
-
 /// Rodio handle for the currently-playing video audio track.
 /// 0 means no audio is playing.
 static VIDEO_AUDIO_HANDLE: AtomicU32 = AtomicU32::new(0);
 
 /// Rodio handle for video speech track. 0 = none.
 static VIDEO_SPEECH_HANDLE: AtomicU32 = AtomicU32::new(0);
-
-// ============================================================================
-// UIO + gfx externs
-// ============================================================================
-
-// Unit tests never call the C canvas lock (see `tfb_drawcanvas_lock`), so the
-// declarations exist only outside them.
-#[cfg(not(test))]
-use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
-#[cfg(not(test))]
-use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
-
-use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
-
-extern "C" {
-    static mut SDL_Screen: *mut crate::graphics::ffi::SDL_Surface;
-}
-
-// Minimal SDL types needed for direct pixel writes.
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[allow(
-    non_snake_case,
-    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub struct SDL_PixelFormat {
-    pub format: u32,
-    pub palette: *mut c_void,
-    pub BitsPerPixel: u8,
-    pub BytesPerPixel: u8,
-    pub padding: [u8; 2],
-    pub Rmask: u32,
-    pub Gmask: u32,
-    pub Bmask: u32,
-    pub Amask: u32,
-    pub Rloss: u8,
-    pub Gloss: u8,
-    pub Bloss: u8,
-    pub Aloss: u8,
-    pub Rshift: u8,
-    pub Gshift: u8,
-    pub Bshift: u8,
-    pub Ashift: u8,
-    pub refcount: c_int,
-    pub next: *mut SDL_PixelFormat,
-}
-
-// ============================================================================
-// UIO helpers
-
-// Re-export minimal canvas lock/unlock for internal modules.
-/// Lock a legacy C canvas for direct access.
-///
-/// # Safety
-/// `canvas` must point to a valid canvas that can be locked by the current thread.
-#[inline]
-pub unsafe fn tfb_drawcanvas_lock(canvas: *mut c_void) {
-    // Unit tests hand in plain memory-backed surfaces that need no C-side lock.
-    #[cfg(not(test))]
-    TFB_DrawCanvas_Lock(canvas);
-    #[cfg(test)]
-    let _ = canvas;
-}
-
-/// Unlock a legacy C canvas after direct access.
-///
-/// # Safety
-/// `canvas` must be the valid canvas pointer previously locked by this thread.
-#[inline]
-pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
-    #[cfg(not(test))]
-    TFB_DrawCanvas_Unlock(canvas);
-    #[cfg(test)]
-    let _ = canvas;
-}
 
 // ============================================================================
 
@@ -184,9 +107,9 @@ pub fn rust_video_playing() -> bool {
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe extern "C" fn rust_process_video_frame() -> bool {
-    let screen = SDL_Screen;
-    if screen.is_null() {
-        rust_bridge_log_msg("RUST_VIDEO: SDL_Screen is null");
+    use crate::graphics::{dcq::Screen, present, state};
+    if !state::initialized() {
+        rust_bridge_log_msg("RUST_VIDEO: the main screen is not initialized");
         return false;
     }
 
@@ -194,10 +117,14 @@ pub unsafe extern "C" fn rust_process_video_frame() -> bool {
 
     if let Ok(mut guard) = PLAYER.lock() {
         if let Some(ref mut p) = *guard {
-            still_playing = p.process_frame(screen);
+            still_playing = p.process_frame(&mut |frame, x, y| {
+                state::draw_on_screen(Screen::Main, |canvas| {
+                    super::player::blit_frame(canvas, frame, x, y)
+                })
+            });
             if still_playing {
                 if !p.direct_window_mode() {
-                    TFB_SwapBuffers(1);
+                    present::swap_buffers(present::Redraw::Fading);
                 }
             } else {
                 *guard = None;
@@ -212,7 +139,7 @@ pub unsafe extern "C" fn rust_process_video_frame() -> bool {
     still_playing
 }
 
-/// Present a video frame directly to the window, bypassing the 320x240 SDL_Screen.
+/// Present a video frame directly to the window, bypassing the 320x240 main screen.
 /// The frame data should be RGBA format where frame.data[0] is the R component.
 /// Returns true on success, false on failure.
 ///
@@ -225,138 +152,25 @@ pub unsafe extern "C" fn rust_present_video_to_window(
     height: c_int,
     stride: c_int, // row stride in bytes, typically width * 4 for RGBA
 ) -> bool {
-    if frame_data.is_null() || width <= 0 || height <= 0 || stride <= 0 {
+    if frame_data.is_null() || width <= 0 || height <= 0 || stride < width * 4 {
         rust_bridge_log_msg(&format!(
             "RUST_VIDEO: rust_present_video_to_window invalid params data={:p} w={} h={} stride={}",
             frame_data, width, height, stride
         ));
         return false;
     }
-
-    let frame_len = (height * stride) as usize;
-    let frame_slice = std::slice::from_raw_parts(frame_data, frame_len);
-
-    let mut presented = false;
-    let mut saw_state = false;
-    let mut log_line = None;
-
-    crate::graphics::ffi::with_gfx_state(|canvas, window_width, window_height| {
-        saw_state = true;
-        let texture_creator = canvas.texture_creator();
-        let mut texture = match texture_creator.create_texture_streaming(
-            sdl2::pixels::PixelFormatEnum::RGBX8888,
-            width as u32,
-            height as u32,
-        ) {
-            Ok(tex) => tex,
-            Err(e) => {
-                rust_bridge_log_msg(&format!(
-                    "RUST_VIDEO: Failed to create video texture: {}",
-                    e
-                ));
-                return;
-            }
-        };
-
-        let mut upload_buffer: Vec<u8>;
-        let upload_slice = if stride as usize == (width as usize * 4) {
-            upload_buffer = Vec::with_capacity(frame_len);
-            let pixels = frame_slice.as_chunks::<4>().0;
-            for px in pixels {
-                let r = px[0];
-                let g = px[1];
-                let b = px[2];
-                upload_buffer.extend_from_slice(&[0, b, g, r]);
-            }
-            upload_buffer.as_slice()
-        } else {
-            upload_buffer = Vec::with_capacity((width as usize * height as usize) * 4);
-            for row in 0..height as usize {
-                let row_start = row * stride as usize;
-                let row_end = row_start + (width as usize * 4);
-                let row_slice = &frame_slice[row_start..row_end];
-                for px in row_slice.as_chunks::<4>().0 {
-                    let r = px[0];
-                    let g = px[1];
-                    let b = px[2];
-                    upload_buffer.extend_from_slice(&[0, b, g, r]);
-                }
-            }
-            upload_buffer.as_slice()
-        };
-
-        if let Err(e) = texture.update(None, upload_slice, (width * 4) as usize) {
-            rust_bridge_log_msg(&format!(
-                "RUST_VIDEO: Failed to update video texture: {}",
-                e
-            ));
-            return;
-        }
-
-        let (old_logical_w, old_logical_h) = canvas.logical_size();
-        if let Err(e) = canvas.set_logical_size(window_width, window_height) {
-            rust_bridge_log_msg(&format!(
-                "RUST_VIDEO: Failed to set logical size {}x{}: {}",
-                window_width, window_height, e
-            ));
-            return;
-        }
-
-        let video_width = width as u32;
-        let video_height = height as u32;
-
-        let scale_x = window_width as f32 / video_width as f32;
-        let scale_y = window_height as f32 / video_height as f32;
-        let scale = scale_x.min(scale_y);
-
-        let scaled_width = (video_width as f32 * scale) as u32;
-        let scaled_height = (video_height as f32 * scale) as u32;
-
-        let dst_x = (window_width - scaled_width) / 2;
-        let dst_y = (window_height - scaled_height) / 2;
-
-        let dst_rect =
-            sdl2::rect::Rect::new(dst_x as i32, dst_y as i32, scaled_width, scaled_height);
-
-        canvas.set_draw_color(sdl2::pixels::Color::BLACK);
-        canvas.clear();
-
-        if let Err(e) = canvas.copy(&texture, None, Some(dst_rect)) {
-            rust_bridge_log_msg(&format!("RUST_VIDEO: Failed to copy video texture: {}", e));
-            let _ = canvas.set_logical_size(old_logical_w, old_logical_h);
-            return;
-        }
-
-        canvas.present();
-        let _ = canvas.set_logical_size(old_logical_w, old_logical_h);
-
-        presented = true;
-        log_line = Some(format!(
-            "RUST_VIDEO: Presented frame {}x{} stride={} scaled to {}x{} at ({},{}) window={}x{}",
-            width,
-            height,
-            stride,
-            scaled_width,
-            scaled_height,
-            dst_x,
-            dst_y,
-            window_width,
-            window_height
-        ));
-    });
-
-    if !presented {
-        if !saw_state {
-            rust_bridge_log_msg("RUST_VIDEO: rust_present_video_to_window no graphics state");
-        }
-        return false;
-    }
-
-    if let Some(line) = log_line {
-        rust_bridge_log_msg(&line);
-    }
-
-    true
+    let bytes = std::slice::from_raw_parts(frame_data, (height * stride) as usize);
+    let pixels: Vec<u32> = bytes
+        .chunks(stride as usize)
+        .flat_map(|row| {
+            row[..width as usize * 4]
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|px| u32::from_le_bytes(*px))
+        })
+        .collect();
+    crate::graphics::present::present_video(&pixels, width as u32, height as u32)
 }
 
 pub fn rust_get_video_position() -> u32 {

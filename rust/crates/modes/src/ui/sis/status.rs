@@ -1,18 +1,17 @@
 //! Status labels rendered from the supplied campaign and display owners.
 use super::{rgb15, STATUS_MESSAGE_HEIGHT, STATUS_MESSAGE_WIDTH};
+use crate::engine::Kernel;
+use crate::engine::StoryKey;
+use crate::engine::World;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
+};
 use crate::starbase::ids;
 use crate::starbase::platform::StatusMessageMode;
-use crate::{
-    engine::{Kernel, StoryKey, World},
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::{EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
-    },
-};
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
-    ptr::NonNull,
 };
 
 pub fn format_date(month: &CStr, day: u8, year: u16) -> CString {
@@ -71,10 +70,10 @@ pub fn status_message_text(kernel: &Kernel, world: &World) -> CString {
         .unwrap_or_else(|error| panic!("invalid status label: {error}"))
 }
 
-pub fn message_rect() -> RECT {
-    RECT {
-        corner: POINT { x: 2, y: 130 },
-        extent: EXTENT {
+pub fn message_rect() -> Rect {
+    Rect {
+        corner: Point { x: 2, y: 130 },
+        extent: Extent {
             width: STATUS_MESSAGE_WIDTH,
             height: STATUS_MESSAGE_HEIGHT,
         },
@@ -84,7 +83,7 @@ pub fn message_rect() -> RECT {
 pub fn draw_status_message(kernel: &Kernel, world: &World, text: Option<&CStr>) {
     let status = ContextLease::require(kernel.status_context);
     let context = ContextLease::require(kernel.off_screen_context);
-    let screen = ContextFrame::retain(NonNull::new(kernel.screen));
+    let screen = ContextFrame::retain(kernel.screen);
     let font = kernel
         .tiny_font_lease()
         .unwrap_or_else(|| panic!("status message requires the tiny font"));
@@ -106,11 +105,11 @@ pub fn draw_status_message(kernel: &Kernel, world: &World, text: Option<&CStr>) 
                 context.draw_text(
                     &font,
                     &text,
-                    POINT {
+                    Point {
                         x: STATUS_MESSAGE_WIDTH >> 1,
                         y: STATUS_MESSAGE_HEIGHT - 1,
                     },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    TextAlign::Center,
                     rgb15(0, 16, 0),
                 );
             });

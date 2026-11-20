@@ -3,8 +3,8 @@ use super::flags::*;
 use super::hooks::animation_preprocess;
 use super::projectile;
 use super::{CollisionHook, Cx, ElementHook, ElementId};
-use crate::graphics::native_abi::{LINE_PRIMITIVE as gfx_object_LINE_PRIM, POINT};
-use crate::graphics::STAMP_PRIMITIVE;
+use crate::battle::STAMP_PRIMITIVE;
+use crate::graphics::geometry::Point;
 use crate::math::battle_types::HALF_CIRCLE;
 use crate::math::battle_types::{FULL_CIRCLE, ONE_SHIFT};
 use crate::math::{angle_to_facing, normalize_facing};
@@ -18,9 +18,9 @@ fn blast_index(angle: u16) -> u16 {
 pub fn collision_cb(
     cx: &mut crate::battle::Cx<'_>,
     w: crate::battle::ElementId,
-    wp: &mut POINT,
+    wp: &mut Point,
     h: crate::battle::ElementId,
-    hp: &mut POINT,
+    hp: &mut Point,
 ) {
     cx.weapon_collision(w, wp, h, hp);
 }
@@ -40,11 +40,11 @@ pub fn initialize_laser(cx: &mut Cx<'_>, b: &crate::battle::views::Laser) -> Opt
         b.pixoffs,
         (b.end.x, b.end.y),
     );
-    cx.element_mut(e).current.location = POINT {
+    cx.element_mut(e).current.location = Point {
         x: position.0,
         y: position.1,
     };
-    cx.primitive_style_mut(e).kind = gfx_object_LINE_PRIM;
+    cx.primitive_style_mut(e).kind = 3;
     cx.primitive_style_mut(e).color = b.color;
     cx.set_star_image(e);
     cx.element_mut(e)
@@ -68,7 +68,7 @@ pub fn initialize_missile(cx: &mut Cx<'_>, b: &crate::battle::views::Missile) ->
     cx.element_mut(e).collide = Some(CollisionHook::Native(collision_cb));
     cx.element_mut(e).thrust = b.blast_offs as u8;
     let (position, velocity) = projectile::missile((b.cx, b.cy), b.face, b.pixoffs, b.speed);
-    cx.element_mut(e).current.location = POINT {
+    cx.element_mut(e).current.location = Point {
         x: position.0,
         y: position.1,
     };
@@ -81,9 +81,9 @@ pub fn initialize_missile(cx: &mut Cx<'_>, b: &crate::battle::views::Missile) ->
 pub fn weapon_collision(
     cx: &mut Cx<'_>,
     w: ElementId,
-    wp: &mut POINT,
+    wp: &mut Point,
     hit: ElementId,
-    _hp: &mut POINT,
+    _hp: &mut Point,
 ) -> Option<ElementId> {
     if cx.element(w).flags & COLLISION as u16 != 0 {
         return None;
@@ -105,7 +105,7 @@ pub fn weapon_collision(
         if damage != 0 {
             cx.game_sound((2 + (damage >> 1)).min(5) as u16, hit);
         }
-        if cx.primitive_style(w).kind != gfx_object_LINE_PRIM {
+        if cx.primitive_style(w).kind != 3 {
             cx.element_mut(w).flags |= DISAPPEARING as u16;
         }
         cx.element_mut(w).hits = 0;
@@ -116,7 +116,7 @@ pub fn weapon_collision(
         cx.element_mut(b).player = cx.element(w).player;
         cx.element_mut(b).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
         cx.primitive_style_mut(b).kind = STAMP_PRIMITIVE;
-        cx.element_mut(b).current.location = POINT {
+        cx.element_mut(b).current.location = Point {
             x: (i32::from(wp.x) << ONE_SHIFT) as i16,
             y: (i32::from(wp.y) << ONE_SHIFT) as i16,
         };

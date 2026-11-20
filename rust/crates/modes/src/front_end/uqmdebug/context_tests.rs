@@ -1,15 +1,19 @@
-use crate::{
-    engine::{
-        battle::{input::InputContext, Battle, Cx},
-        input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-        observe::{Io, Observer, Unobserved},
-        Game,
-    },
-    front_end::uqmdebug::debug_contexts,
-    graphics::{
-        context_abi::{ContextFrame, ContextLease, LoadedContext},
-        native_abi::{Color, EXTENT, POINT, RECT},
-    },
+use crate::engine::battle::input::InputContext;
+use crate::engine::battle::Battle;
+use crate::engine::battle::Cx;
+use crate::engine::input::frames::InputState;
+use crate::engine::input::Frame;
+use crate::engine::input::InputControls;
+use crate::engine::input::InputRuntime;
+use crate::engine::input::InputSession;
+use crate::engine::observe::Io;
+use crate::engine::observe::Observer;
+use crate::engine::observe::Unobserved;
+use crate::engine::Game;
+use crate::front_end::uqmdebug::debug_contexts;
+use crate::graphics::{
+    context::ContextLease, context::LoadedContext, drawable::ContextFrame, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect,
 };
 use std::{cell::Cell, io, rc::Rc};
 use uqm_engine::test_support::campaign_display::CampaignDisplay;
@@ -55,7 +59,7 @@ impl InputRuntime for Driver {
         self.calls.set(self.calls.get() + 1);
         let pixel = self.screen.with_selected(|| {
             self.screen.flush();
-            self.screen.target().pixel(POINT { x: 10, y: 10 })
+            self.screen.target().pixel(Point { x: 10, y: 10 })
         });
         assert_ne!(
             rgba(pixel),
@@ -88,12 +92,10 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
     let display = CampaignDisplay::install(&mut game).unwrap();
     let screen = ContextLease::require(game.kernel.status_context);
     game.kernel.screen_context = game.kernel.status_context;
-    screen.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
-    screen.set_clip(RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    screen.set_frame(ContextFrame::retain(game.kernel.screen));
+    screen.set_clip(Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 320,
             height: 240,
         },
@@ -108,7 +110,7 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
     screen.flush();
     let original = screen.target();
     assert_eq!(
-        rgba(original.pixel(POINT { x: 10, y: 10 })),
+        rgba(original.pixel(Point { x: 10, y: 10 })),
         rgba(background)
     );
     let other = LoadedContext::create(c"non-screen selection");
@@ -151,7 +153,7 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
     );
     screen.with_selected(|| screen.flush());
     assert_eq!(
-        rgba(original.pixel(POINT { x: 10, y: 10 })),
+        rgba(original.pixel(Point { x: 10, y: 10 })),
         rgba(background)
     );
 
@@ -184,7 +186,7 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
     assert!(unwind.is_err());
     screen.with_selected(|| screen.flush());
     assert_eq!(
-        rgba(original.pixel(POINT { x: 10, y: 10 })),
+        rgba(original.pixel(Point { x: 10, y: 10 })),
         rgba(background)
     );
     assert_eq!(screen.diagnostic_contexts().len(), contexts_before);

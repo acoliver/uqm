@@ -2,7 +2,7 @@
 
 use crate::battle::element::PLAYER_SHIP;
 use crate::comm::dispatch::ONE_SHOT_ENCOUNTER;
-use crate::engine::graphics::native_abi::POINT;
+use crate::engine::graphics::geometry::Point;
 use crate::engine::species::ship::{MELNORME_SHIP, SLYLANDRO_SHIP};
 use crate::engine::world::activity::activity_flags::IN_BATTLE;
 use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
@@ -27,8 +27,9 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
 pub(crate) mod live {
 
     pub(crate) fn debit_sis_fuel(cx: &mut crate::engine::battle::Cx<'_>, amount: i16) {
-        let _context = crate::graphics::context_abi::ContextLease::retain(
-            std::ptr::NonNull::new(cx.kernel.status_context)
+        let _context = crate::graphics::context::ContextLease::retain(
+            cx.kernel
+                .status_context
                 .unwrap_or_else(|| panic!("fuel debit requires the status context")),
         );
         let _font = cx
@@ -58,7 +59,7 @@ pub fn move_sis(
             if cx.element(element).flags & PLAYER_SHIP == 0 {
                 handle = cx.elements().pred(element);
             } else {
-                cx.element_mut(element).next.location = POINT {
+                cx.element_mut(element).next.location = Point {
                     x: ((geometry.width() >> 1) - i32::from(x)) as i16,
                     y: ((geometry.height() >> 1) - i32::from(y)) as i16,
                 };
@@ -106,7 +107,7 @@ pub fn check_hyperspace_encounter(
     geometry: super::hyper_units::Geometry,
     random: &mut impl FnMut() -> u32,
 ) {
-    let universe = POINT {
+    let universe = Point {
         x: geometry.universe_x(world.data.flagship.log_x),
         y: geometry.universe_y(world.data.flagship.log_y),
     };
