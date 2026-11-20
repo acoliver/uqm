@@ -1,5 +1,6 @@
 //! Shared engine services: the game-facing subsystems and the host ports
 //! that `uqm-platform` implements.
+#![forbid(unsafe_code)]
 
 pub mod bridge_log;
 pub mod callback;

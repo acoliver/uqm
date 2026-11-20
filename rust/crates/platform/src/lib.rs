@@ -1,17 +1,24 @@
 //! The OS platform: system services, files, display, audio, network and
 //! paths behind the engine's host ports. The game installs it at start-up.
 
+// Unsafe code is allowed only in the modules xtask's UNSAFE_ALLOWED lists.
+#![deny(unsafe_code)]
+
 use std::path::PathBuf;
 
 pub mod audio_output;
 pub mod host;
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 pub mod macos;
 pub mod net;
+#[allow(unsafe_code)]
 pub mod os;
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 pub mod qos;
 pub mod rodio_device;
+#[allow(unsafe_code)]
 pub mod sdl;
 pub mod system;
 
