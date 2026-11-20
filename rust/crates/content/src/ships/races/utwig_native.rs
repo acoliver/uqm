@@ -244,7 +244,7 @@ pub mod engine {
             cx.primitive_style_mut(e).color = color(0x1f, 0x1c, 0);
             cx.element_mut(e).color_cycle = 0;
             cx.element_mut(e).life = NORMAL_LIFE as u16;
-            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
+            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
         } else {
             const COLORS: [Color; 7] = [
                 color(0x1f, 0x15, 0),
@@ -264,7 +264,7 @@ pub mod engine {
             }
             cx.primitive_style_mut(e).color = COLORS[usize::from(cx.element(e).color_cycle) - 1];
             cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
-            cx.primitive_style_mut(e).kind = STAMPFILL_PRIMITIVE as u8;
+            cx.primitive_style_mut(e).kind = STAMPFILL_PRIMITIVE;
         }
     }
 }

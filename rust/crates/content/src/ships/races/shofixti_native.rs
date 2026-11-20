@@ -169,7 +169,7 @@ pub mod engine {
         let life = cx.element(e).life;
         if life > DESTRUCT_SWITCH {
             let mut primitive = cx.primitive_style_mut(e);
-            primitive.kind = STAMPFILL_PRIMITIVE as u8;
+            primitive.kind = STAMPFILL_PRIMITIVE;
             primitive.color = if life == DESTRUCT_SWITCH + 2 {
                 rgb15(31, 31, 10)
             } else {
@@ -191,7 +191,7 @@ pub mod engine {
                 }
             }
         } else {
-            cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE as u8;
+            cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
             cx.element_mut(e).pre = None;
             if let Some(d) = cx.alloc_element() {
                 let ss = cx.owner(e);
@@ -201,7 +201,7 @@ pub mod engine {
                 cx.element_mut(d).mass = 0;
                 cx.element_mut(d).player = NEUTRAL_PLAYER_NUM as i16;
                 cx.element_mut(d).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-                cx.primitive_style_mut(d).kind = STAMPFILL_PRIMITIVE as u8;
+                cx.primitive_style_mut(d).kind = STAMPFILL_PRIMITIVE;
                 cx.primitive_style_mut(d).color = rgb15(31, 31, 31);
                 let frame = cx.ship_frame(ss, 2).to_owned();
                 cx.set_frames(d, false, cx.ship_frame_set(ss, 2));

@@ -269,7 +269,7 @@ pub mod engine {
             cx.element_mut(dog).player = cx.element(e).player;
             cx.element_mut(dog).flags = APPEARING as u16;
             cx.element_mut(dog).life = NORMAL_LIFE as u16;
-            cx.primitive_style_mut(dog).kind = STAMP_PRIMITIVE as u8;
+            cx.primitive_style_mut(dog).kind = STAMP_PRIMITIVE;
             cx.element_mut(dog).pre = Some(ElementHook::Native(doggy_preprocess));
             cx.element_mut(dog).post = None;
             cx.element_mut(dog).collide = Some(CollisionHook::Native(doggy_collision));

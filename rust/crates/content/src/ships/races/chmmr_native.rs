@@ -169,7 +169,7 @@ pub mod engine {
                         cx.set_frame(spot, false, frame);
                         cx.element_mut(spot).pre = Some(ElementHook::Native(animation_preprocess));
                         cx.set_parent(spot, Some(ss));
-                        cx.primitive_style_mut(spot).kind = STAMP_PRIMITIVE as u8;
+                        cx.primitive_style_mut(spot).kind = STAMP_PRIMITIVE;
                         cx.put(spot);
                     }
                 }
@@ -255,7 +255,7 @@ pub mod engine {
             if last != ship
                 && cx.element(last).player == cx.element(ship).player
                 && cx.element(last).flags & APPEARING as u16 != 0
-                && cx.primitive_style(last).kind == LINE_PRIMITIVE as u8
+                && cx.primitive_style(last).kind == LINE_PRIMITIVE
                 && cx.ship_state(ss).special_counter & 1 == 0
             {
                 if let Some(flash) = cx.alloc_element() {
@@ -273,7 +273,7 @@ pub mod engine {
                     );
                     cx.set_frame(flash, false, frame);
                     cx.set_parent(flash, Some(ss));
-                    cx.primitive_style_mut(flash).kind = STAMP_PRIMITIVE as u8;
+                    cx.primitive_style_mut(flash).kind = STAMP_PRIMITIVE;
                     cx.put(flash);
                 }
             }
@@ -349,7 +349,7 @@ pub mod engine {
                             cx.element_mut(shadow)
                                 .velocity
                                 .set_components(i32::from(vx), i32::from(vy));
-                            cx.primitive_style_mut(shadow).kind = STAMPFILL_PRIMITIVE as u8;
+                            cx.primitive_style_mut(shadow).kind = STAMPFILL_PRIMITIVE;
                             cx.primitive_style_mut(shadow).color = color(0, 0, colors[i]);
                             cx.insert_before(shadow, cx.elements().head());
                         }
@@ -581,7 +581,7 @@ pub mod engine {
                     cx.element_mut(satellite).collide =
                         Some(CollisionHook::Native(satellite_collision));
                     cx.set_parent(satellite, Some(ss));
-                    cx.primitive_style_mut(satellite).kind = STAMP_PRIMITIVE as u8;
+                    cx.primitive_style_mut(satellite).kind = STAMP_PRIMITIVE;
                     cx.put(satellite);
                 }
             }
@@ -597,7 +597,7 @@ pub mod engine {
             cx.element_mut(satellite).life = (HYPERJUMP_LIFE + 1) as u16;
             cx.element_mut(satellite).death = Some(ElementHook::Native(spawn_satellites));
             cx.set_parent(satellite, Some(ss));
-            cx.primitive_style_mut(satellite).kind = EMPTY_PRIMITIVE as u8;
+            cx.primitive_style_mut(satellite).kind = EMPTY_PRIMITIVE;
             cx.put(satellite);
         }
         cx.set_preprocess(ss, Selection::Disabled);

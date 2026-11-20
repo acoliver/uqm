@@ -726,7 +726,7 @@ pub mod engine {
                         step: scale_mode == SCALE_STEP,
                     };
                     let next;
-                    if kind == LINE_PRIMITIVE as u8 {
+                    if kind == LINE_PRIMITIVE {
                         let (location, first, second) = projection.line(
                             cx.elements()[e].current.location,
                             cx.elements()[e].next.location,
@@ -740,7 +740,7 @@ pub mod engine {
                             projection.scroll(cx.elements()[e].next.location, (delta_x, delta_y));
                         cx.display_primitive(index)
                             .set_point(projection.display(next));
-                        if kind == STAMP_PRIMITIVE as u8 || kind == STAMPFILL_PRIMITIVE as u8 {
+                        if kind == STAMP_PRIMITIVE || kind == STAMPFILL_PRIMITIVE {
                             if view_state == ViewState::Change || flags & CHANGE_BITS != 0 {
                                 let (index, scale) = if scale_mode == SCALE_STEP {
                                     (cx.b.zoom_out as u16, GSCALE_IDENTITY as u16)
@@ -776,7 +776,7 @@ pub mod engine {
                     cx.element_mut(e).next.location = next;
                 }
                 postprocess(cx, e);
-                if kind < EMPTY_PRIMITIVE as u8 {
+                if kind < EMPTY_PRIMITIVE {
                     cx.append_display(cx.elements()[e].prim_index);
                 }
                 next_handle = cx.elements().succ(e);
@@ -1024,14 +1024,14 @@ mod tests {
         let mut display = DisplayPool::new();
         for index in 0..330 {
             assert_eq!(display.alloc(), Some(index));
-            display.get_mut(index).kind = STAMP_PRIMITIVE as u8;
+            display.get_mut(index).kind = STAMP_PRIMITIVE;
         }
         display.free(0);
         display.free(1);
         assert_eq!(display.alloc(), Some(1));
         assert_eq!(display.alloc(), Some(0));
         assert!(display.alloc().is_none());
-        assert!((0..330).all(|index| display.get(index).kind == STAMP_PRIMITIVE as u8));
+        assert!((0..330).all(|index| display.get(index).kind == STAMP_PRIMITIVE));
     }
 
     #[test]

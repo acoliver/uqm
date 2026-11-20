@@ -100,7 +100,7 @@ pub mod engine {
         if cx.element(e).flags & NONSOLID as u16 != 0 {
             cx.element_mut(e).flags &= !(NONSOLID as u16);
             cx.element_mut(e).flags |= APPEARING as u16;
-            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
+            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
             cx.init_intersect(e);
             let frame = cx.equivalent_frame(
                 cx.element_frame_set_first(e, true),
@@ -208,7 +208,7 @@ pub mod engine {
             cx.set_target(trail, None);
             cx.element_mut(trail).turn = NAPALM_DECAY_RATE;
             cx.element_mut(trail).flags |= NONSOLID as u16;
-            cx.primitive_style_mut(trail).kind = EMPTY_PRIMITIVE as u8;
+            cx.primitive_style_mut(trail).kind = EMPTY_PRIMITIVE;
             cx.copy_visual_to_next(trail, cx.element(trail).current);
             cx.element_mut(trail).flags |= PRE_PROCESS as u16;
             cx.insert_before(trail, cx.elements().head());

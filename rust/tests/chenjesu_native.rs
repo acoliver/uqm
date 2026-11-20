@@ -465,7 +465,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 assert_eq!((*dog).hits, 3);
                 assert_eq!((*dog).mass, 4);
                 assert_eq!((*dog).thrust, 0);
-                assert_eq!((*prim(dog)).kind, STAMP_PRIMITIVE as u8);
+                assert_eq!((*prim(dog)).kind, STAMP_PRIMITIVE);
                 assert_eq!((*dog).current.image.frames, ship.frame_set(2));
                 assert_eq!(
                     (*dog).current.image.frame.raw(),
@@ -858,7 +858,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!((*dog).target, Some(battle::id((near.handle).cast())));
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 4));
-            (*prim(near.ptr())).kind = EMPTY_PRIMITIVE as u8;
+            (*prim(near.ptr())).kind = EMPTY_PRIMITIVE;
             uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!(

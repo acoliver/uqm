@@ -389,7 +389,7 @@ pub mod engine {
         if h.is_none() && cx.element(e).life != 0 {
             cx.element_mut(e).flags &= !(NONSOLID as u16);
             cx.element_mut(e).flags |= (CHANGING | CREW_OBJECT) as u16;
-            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
+            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
             let frame = cx.absolute_frame(cx.ship_frame(ss, 2), 21);
             cx.set_frame(e, false, frame.clone());
             cx.set_frame(e, true, frame);
@@ -409,7 +409,7 @@ pub mod engine {
             cx.element_mut(ion).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             cx.element_mut(ion).thrust = ION_LIFE;
             cx.element_mut(ion).life = u16::from(ION_LIFE);
-            cx.primitive_style_mut(ion).kind = POINT_PRIMITIVE as u8;
+            cx.primitive_style_mut(ion).kind = POINT_PRIMITIVE;
             cx.primitive_style_mut(ion).color = ION_COLORS[0];
             cx.element_mut(ion).color_cycle = 0;
             cx.element_mut(ion).current.location = cx.element(e).current.location;
@@ -610,7 +610,7 @@ pub mod engine {
                     );
                     cx.element_mut(a).flags |= NONSOLID as u16;
                     cx.element_mut(a).flags &= !(CREW_OBJECT as u16);
-                    cx.primitive_style_mut(a).kind = EMPTY_PRIMITIVE as u8;
+                    cx.primitive_style_mut(a).kind = EMPTY_PRIMITIVE;
                     cx.element_mut(a).pre = Some(ElementHook::Native(intruder_preprocess));
                     silhouette(cx, b, a, cx.element(a).next.image.frame, 0);
                 }
@@ -634,7 +634,7 @@ pub mod engine {
         if effect != e
             && cx.element(effect).player == cx.element(e).player
             && cx.element(effect).flags & APPEARING as u16 != 0
-            && cx.primitive_style(effect).kind == STAMP_PRIMITIVE as u8
+            && cx.primitive_style(effect).kind == STAMP_PRIMITIVE
         {
             let effect_h = cx.alloc_element();
             if let Some(effect_h) = effect_h {
@@ -670,7 +670,7 @@ pub mod engine {
                 );
                 cx.element_mut(effect).pre = Some(ElementHook::Native(animation_preprocess));
                 cx.set_parent(effect, Some(ss));
-                cx.primitive_style_mut(effect).kind = STAMP_PRIMITIVE as u8;
+                cx.primitive_style_mut(effect).kind = STAMP_PRIMITIVE;
                 cx.put(effect_h);
             }
         }
@@ -680,7 +680,7 @@ pub mod engine {
         if cx.element(e).life != 0 {
             return;
         }
-        cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE as u8;
+        cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
         let ss = cx.owner(e);
         if cx.optional_ship_element(ss).is_none() {
             return;
@@ -771,7 +771,7 @@ pub mod engine {
                 cx.element_mut(marine).pre = Some(ElementHook::Native(marine_preprocess));
                 cx.element_mut(marine).collide = Some(CollisionHook::Native(marine_collision));
                 cx.set_parent(marine, Some(ss));
-                cx.primitive_style_mut(marine).kind = STAMP_PRIMITIVE as u8;
+                cx.primitive_style_mut(marine).kind = STAMP_PRIMITIVE;
                 cx.put(h);
                 cx.delta_crew(ship, -1);
                 cx.process_ship_sound(ss, 1, marine);

@@ -209,7 +209,7 @@ pub mod engine {
             cx.process_ship_sound(ss, 3, p);
         }
         cx.put(p);
-        cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE as u8;
+        cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
         cx.element_mut(e).flags |= NONSOLID as u16;
     }
 
@@ -308,7 +308,7 @@ pub mod engine {
                     cx.copy_image_to_current(p, cx.element(e).next.image);
                     cx.copy_visual_to_next(p, cx.element(e).next);
                     cx.element_mut(p).pre = Some(ElementHook::Native(confuse_preprocess));
-                    cx.primitive_style_mut(p).kind = STAMP_PRIMITIVE as u8;
+                    cx.primitive_style_mut(p).kind = STAMP_PRIMITIVE;
                     cx.set_parent(p, Some(cx.owner(e)));
                     cx.set_target(p, cx.target(e));
                     cx.put(p);
@@ -357,7 +357,7 @@ pub mod engine {
                 cx.element_mut(p).player = cx.element(a).player;
                 cx.element_mut(p).flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
                 cx.element_mut(p).pre = Some(ElementHook::Native(confuse_preprocess));
-                cx.primitive_style_mut(p).kind = EMPTY_PRIMITIVE as u8;
+                cx.primitive_style_mut(p).kind = EMPTY_PRIMITIVE;
                 cx.set_parent(p, Some(ss));
                 let target_ss = cx.owner(b);
                 cx.set_target(p, Some(cx.ship_element(target_ss)));

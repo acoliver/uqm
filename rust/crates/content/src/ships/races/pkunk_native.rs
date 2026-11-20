@@ -344,7 +344,7 @@ pub mod engine {
         cx.set_frames(e, false, cx.ship_frame_set(ss, 0));
         let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
         cx.set_frame(e, false, frame.clone());
-        cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
+        cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
         let (width, height) = logical_dimensions(cx);
         loop {
             cx.element_mut(e).current.location.x = random_space_coord(cx, width);
@@ -408,7 +408,7 @@ pub mod engine {
             cx.element_mut(image).player = NEUTRAL_PLAYER_NUM as i16;
             cx.element_mut(image).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             cx.element_mut(image).life = TRANSITION_LIFE;
-            cx.primitive_style_mut(image).kind = STAMPFILL_PRIMITIVE as u8;
+            cx.primitive_style_mut(image).kind = STAMPFILL_PRIMITIVE;
             cx.primitive_style_mut(image).color = START_PHOENIX_COLOR;
             cx.element_mut(image).color_cycle = 0;
             cx.copy_image_to_current(image, cx.element(e).current.image);
@@ -485,7 +485,7 @@ pub mod engine {
             } else {
                 cx.process_ship_sound(ss, 1, e);
                 cx.element_mut(e).life = PHOENIX_LIFE;
-                cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE as u8;
+                cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
                 cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
                 let facing = cx.ship_state(ss).facing;
                 let mut angle = OCTANT;
@@ -507,7 +507,7 @@ pub mod engine {
                 );
                 cx.set_frame(e, false, frame.clone());
                 cx.set_frame(e, true, frame);
-                cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
+                cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
                 cx.init_intersect(e);
                 let frame = cx.equivalent_frame(
                     cx.element_frame_set_first(e, true),

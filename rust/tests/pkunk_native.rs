@@ -354,7 +354,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: Point, ang
         (APPEARING | FINITE_LIFE | NONSOLID) as u16
     );
     assert_eq!((*trail).life, 1);
-    assert_eq!((*prim(trail)).kind, STAMPFILL_PRIMITIVE as u8);
+    assert_eq!((*prim(trail)).kind, STAMPFILL_PRIMITIVE);
     // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x15, 0x00), 0x7A)
     assert_eq!(color_bytes((*prim(trail)).color), [0xFF, 0xAD, 0x00, 0xFF]);
     assert_eq!((*trail).color_cycle_index, 0);
@@ -590,7 +590,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         assert_eq!((*m).player_nr, 1);
                         assert_eq!((*m).current.image.frame.raw(), ship.weapon_frames.frame(0));
                         assert_eq!((*m).current.image.frames, ship.inner.frame_set(1));
-                        assert_eq!((*prim(m)).kind, STAMP_PRIMITIVE as u8);
+                        assert_eq!((*prim(m)).kind, STAMP_PRIMITIVE);
                         assert!((*m).collision_func.is_some());
                         assert!((*m).postprocess_func.is_none());
                         assert!((*m).death_func.is_none());
@@ -808,7 +808,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
 
                 let el = ship.ptr();
                 assert_eq!((*el).life, 12);
-                assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE as u8);
+                assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE);
                 assert_eq!(
                     (*el).state_flags,
                     (PLAYER_SHIP | APPEARING | NONSOLID | FINITE_LIFE | CHANGING) as u16
@@ -885,7 +885,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             ship.preprocess();
             assert_eq!(ship.inner.ship_mut().cur_status_flags, 0x3e0);
             assert!(ship.inner.descriptor_mut().callbacks()[1] != 0);
-            assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE as u8);
+            assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE);
 
             // At NORMAL_LIFE the ship becomes solid again.
             (*el).life = NORMAL_LIFE as u16;
@@ -900,7 +900,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             ship.preprocess();
             assert_eq!(((*el).current.image.frame.raw()).index(), 5);
             assert_eq!(((*el).next.image.frame.raw()).index(), 5);
-            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE as u8);
+            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE);
             let control = (*el).intersect_control;
             assert_eq!(
                 (
@@ -1210,7 +1210,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             (*el).life = 3;
             (*el).mass = 11;
             (*el).target = None;
-            (*prim(el)).kind = EMPTY_PRIMITIVE as u8;
+            (*prim(el)).kind = EMPTY_PRIMITIVE;
 
             let seed = 777;
             let draws = rolls(seed, 7);
@@ -1286,7 +1286,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
             assert_eq!(((*el).current.image.frame.raw()).index(), facing);
-            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE as u8);
+            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
                 (*el).target,
@@ -1344,7 +1344,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             (*planet).next = (*planet).current.clone();
             (*planet).current.image.frames = ship.inner.frame_set(0);
             (*planet).current.image.frame = ship.ship_frames.selection(0);
-            (*prim(planet)).kind = STAMP_PRIMITIVE as u8;
+            (*prim(planet)).kind = STAMP_PRIMITIVE;
             shared::put(planet_handle);
 
             let el = ship.ptr();

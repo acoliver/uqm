@@ -457,7 +457,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                     (7000 + cosine(angle, 256), 6000 + sine(angle, 256))
                 );
                 assert_eq!(((*s).current.image.frame.raw()).index(), index);
-                assert_eq!((*prim(s)).kind, STAMP_PRIMITIVE as u8);
+                assert_eq!((*prim(s)).kind, STAMP_PRIMITIVE);
                 assert!((*s).preprocess_func.is_some());
                 assert!((*s).postprocess_func.is_some());
                 assert!((*s).death_func.is_some());

@@ -290,7 +290,7 @@ impl<'a> Ship<'a> {
             ship.element_mut().intersect_control.IntersectStamp.frame = frames[0].frame(0);
             // SAFETY: this slot owns its allocated display primitive.
 
-            (*prim(ship.ptr())).kind = STAMP_PRIMITIVE as u8;
+            (*prim(ship.ptr())).kind = STAMP_PRIMITIVE;
 
             ship.frames = Some(frames);
             ship.queue();

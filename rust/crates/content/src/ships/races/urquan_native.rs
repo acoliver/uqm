@@ -298,7 +298,7 @@ pub mod engine {
             cx.element_mut(fighter).flags =
                 (APPEARING | FINITE_LIFE | CREW_OBJECT | IGNORE_SIMILAR) as u16;
             cx.element_mut(fighter).life = 400;
-            cx.primitive_style_mut(fighter).kind = STAMP_PRIMITIVE as u8;
+            cx.primitive_style_mut(fighter).kind = STAMP_PRIMITIVE;
             cx.element_mut(fighter).pre = Some(ElementHook::Native(fighter_preprocess));
             cx.element_mut(fighter).post = None;
             cx.element_mut(fighter).collide = Some(CollisionHook::Native(fighter_collision));

@@ -383,7 +383,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
             );
             for (i, h) in generators.iter().enumerate() {
                 hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
-                assert_eq!((*prim(gate)).kind, STAMP_PRIMITIVE as u8);
+                assert_eq!((*prim(gate)).kind, STAMP_PRIMITIVE);
                 let g = battle::element(*h);
                 hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
@@ -400,7 +400,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
             hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
             assert!((*gate).preprocess_func.is_none());
             assert_eq!((*gate).state_flags & FINITE_LIFE as u16, 0);
-            assert_eq!((*prim(gate)).kind, STAMPFILL_PRIMITIVE as u8);
+            assert_eq!((*prim(gate)).kind, STAMPFILL_PRIMITIVE);
             assert_eq!((*gate).life, 2);
         }
     })
