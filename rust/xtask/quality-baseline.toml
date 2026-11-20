@@ -3,13 +3,6 @@ layers = true
 coverage_capture = ["uqm::comm::races"]
 
 [coverage_debt]
-"crates/engine/src/graphics/ffi_video_macos.rs" = "native"
-"crates/engine/src/graphics/sdl/opengl.rs" = "native"
-"crates/engine/src/graphics/sdl/platform_abi.rs" = "U7-01"
-"crates/engine/src/graphics/sdl/pure_abi.rs" = "U7-01"
-"crates/engine/src/graphics/sdl/sdl2.rs" = "native"
-"crates/engine/src/graphics/widgets_abi.rs" = "U7-02"
-"crates/engine/src/threading/legacy_abi.rs" = "U7-05"
 
 [lint.linux]
 "clippy::expect_used|uqm-content::comm::races::blackur::api::@file" = 1
