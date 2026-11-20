@@ -54,8 +54,6 @@ pub const fn normalize_facing(facing: i32) -> u16 {
     (facing & ((1 << FACING_SHIFT) - 1)) as u16
 }
 
-use crate::memory::{rust_hfree, rust_hmalloc};
-use std::os::raw::c_void;
 
 // ---------------------------------------------------------------------------
 // Constants (Park-Miller LCG)
@@ -129,28 +127,6 @@ pub fn seed_random(new_seed: u32) -> u32 {
 #[derive(Debug, Clone)]
 pub struct RandomContext {
     seed: u32,
-}
-
-/// C: `RandomContext *new_context(void)`
-pub fn new_context() -> *mut RandomContext {
-    unsafe {
-        let ptr = rust_hmalloc(std::mem::size_of::<RandomContext>()) as *mut RandomContext;
-        if !ptr.is_null() {
-            (*ptr).seed = 12345;
-        }
-        ptr
-    }
-}
-
-/// Release a stream allocated by `new_context`.
-///
-/// # Safety
-/// The pointer must be null or an allocation returned by `new_context`,
-/// and must not be used after this call.
-pub unsafe fn delete_context(context: *mut RandomContext) {
-    if !context.is_null() {
-        unsafe { rust_hfree(context as *mut c_void) };
-    }
 }
 
 impl RandomContext {
@@ -346,12 +322,6 @@ mod tests {
             let previous = context.seed();
             assert_eq!(context.reseed(0), previous);
             assert_eq!(context.seed(), 1);
-        }
-        let context = new_context();
-        unsafe {
-            assert_eq!((*context).seed(), 12345);
-            delete_context(context);
-            delete_context(std::ptr::null_mut());
         }
     }
 

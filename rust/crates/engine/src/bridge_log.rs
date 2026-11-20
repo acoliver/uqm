@@ -13,7 +13,7 @@ const LOG_PATH: &str = "rust-bridge.log";
 /// Initialize the Rust bridge logging system.
 /// This function creates or truncates the log file and writes the Phase 0 marker.
 /// Returns 0 on success, -1 on failure.
-pub fn rust_bridge_init() -> libc::c_int {
+pub fn rust_bridge_init() -> std::ffi::c_int {
     // Use absolute path to ensure log file is created in project root
     let log_path = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))

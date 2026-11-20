@@ -14,5 +14,4 @@ pub fn teardown_subsystems() {
     crate::engine::host::dispatch().clear();
     crate::io::uninstall();
     crate::threading::uninit_game_thread();
-    crate::memory::rust_mem_uninit();
 }

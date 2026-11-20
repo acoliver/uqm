@@ -11,7 +11,6 @@ pub mod io;
 pub mod log_abi;
 pub mod logging;
 pub mod math;
-pub mod memory;
 pub mod network;
 pub mod observe_port;
 pub mod platform;

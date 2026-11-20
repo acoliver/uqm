@@ -25,7 +25,6 @@ pub use uqm_engine::log_abi;
 pub use uqm_engine::logging;
 pub mod mainloop;
 pub use uqm_engine::math;
-pub use uqm_engine::memory;
 pub use uqm_engine::network;
 pub use uqm_engine::platform;
 pub use uqm_engine::resource;

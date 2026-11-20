@@ -15,22 +15,17 @@ static ERROR_BOX: AtomicBool = AtomicBool::new(true);
 /// Level at or below which messages are echoed to the output stream.
 const MAX_STREAM_LEVEL: i32 = LOG_DEBUG;
 
-#[no_mangle]
-pub extern "C" fn log_init(_max_lines: c_int) {
+pub fn log_init(_max_lines: c_int) {
     INITIALIZED.store(true, Ordering::Relaxed);
-    // SAFETY: exit_callback is a plain extern "C" fn.
-    let status = unsafe { libc::atexit(exit_callback) };
-    assert_eq!(status, 0, "atexit registration failed");
+    crate::host::at_exit(exit_callback);
 }
 
-#[no_mangle]
-pub extern "C" fn log_exit(code: c_int) -> c_int {
+pub fn log_exit(code: c_int) -> c_int {
     SHOW_BOX.store(false, Ordering::Relaxed);
     code
 }
 
-#[no_mangle]
-pub extern "C" fn log_show_box(show: bool, err: bool) {
+pub fn log_show_box(show: bool, err: bool) {
     SHOW_BOX.store(show, Ordering::Relaxed);
     ERROR_BOX.store(err, Ordering::Relaxed);
 }
@@ -52,7 +47,7 @@ pub fn log_message(level: c_int, message: &str) {
     let _ = stderr.write_all(b"\n");
 }
 
-extern "C" fn exit_callback() {
+fn exit_callback() {
     if SHOW_BOX.load(Ordering::Relaxed) {
         display_log(ERROR_BOX.load(Ordering::Relaxed));
     }
