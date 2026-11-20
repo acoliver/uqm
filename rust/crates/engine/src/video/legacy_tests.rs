@@ -16,7 +16,7 @@ fn in_child(test: &str, body: impl FnOnce()) {
         assert!(status.success());
         return;
     }
-    crate::host::install(true);
+    crate::host::install_test(true);
     crate::graphics::state::init_headless(crate::graphics::state::VideoMode::default());
     body();
     stop_player();

@@ -33,6 +33,8 @@ mod platform;
 mod system;
 pub use clock::Clock;
 pub use display::{Display, Layer, PresentFrame};
+#[cfg(any(test, feature = "test-support"))]
+pub use platform::install_test;
 pub use platform::{
     advance_to, async_wait_ms, dispatch, install, install_platform, is_replay, now_ms, now_ticks,
     platform, process_async, steps, AudioPort, Platform,

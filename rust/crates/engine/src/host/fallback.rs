@@ -1,34 +1,44 @@
-//! The platform of a test process that installs none: the real clock and
-//! file system, the process audio device (which tests replace with a
-//! recorder), an in-memory network and a display that shows nothing.
+//! The platform of test processes: the real file system, an in-memory
+//! network and a display that shows nothing, on either the real clock with
+//! the process audio device (which tests replace with a recorder) or the
+//! replay clock with silent audio. A test process that installs no platform
+//! runs on the real-clock one.
 //!
 //! The game binary always installs a platform (`uqm-platform`); this stand-in
 //! exists only in test builds, so engine, content and mode unit tests run
 //! without the OS backends.
 
-use super::clock::{Clock, RealClock};
+use super::clock::{Clock, RealClock, ReplayClock};
 use super::files::{File, FileStat, FileStream, Files};
 use super::system::{System, Worker};
 use super::{AudioPort, Display, Net, Platform, PresentFrame};
 use crate::callback::Dispatch;
 use crate::graphics::presentation_diagnostics::PresentationSample;
 use crate::graphics::presented_frame::PresentedFrame;
-use crate::sound::rodio_audio::RODIO;
+use crate::sound::rodio_audio::{ReplayAudioPort, RODIO};
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) struct TestPlatform {
-    clock: RealClock,
+    clock: Arc<dyn Clock>,
+    replay_audio: Option<ReplayAudioPort>,
     dispatch: Dispatch,
     system: TestSystem,
 }
 
 impl TestPlatform {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(replay: bool) -> Self {
+        let (clock, replay_audio): (Arc<dyn Clock>, _) = if replay {
+            let clock = Arc::new(ReplayClock::default());
+            (clock.clone(), Some(ReplayAudioPort::new(clock)))
+        } else {
+            (Arc::new(RealClock), None)
+        };
         Self {
-            clock: RealClock,
+            clock,
+            replay_audio,
             dispatch: Dispatch::new(),
             system: TestSystem(Instant::now()),
         }
@@ -37,10 +47,13 @@ impl TestPlatform {
 
 impl Platform for TestPlatform {
     fn clock(&self) -> &dyn Clock {
-        &self.clock
+        &*self.clock
     }
     fn audio(&self) -> &dyn AudioPort {
-        &RODIO
+        match &self.replay_audio {
+            Some(audio) => audio,
+            None => &RODIO,
+        }
     }
     fn dispatch(&self) -> &Dispatch {
         &self.dispatch

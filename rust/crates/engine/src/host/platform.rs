@@ -71,7 +71,14 @@ pub fn platform() -> &'static dyn Platform {
 #[cfg(any(test, feature = "test-support"))]
 fn uninstalled() -> &'static dyn Platform {
     static FALLBACK: OnceLock<super::fallback::TestPlatform> = OnceLock::new();
-    FALLBACK.get_or_init(super::fallback::TestPlatform::new)
+    FALLBACK.get_or_init(|| super::fallback::TestPlatform::new(false))
+}
+
+/// Install the test platform; `replay` runs it on the replay clock with
+/// silent audio.
+#[cfg(any(test, feature = "test-support"))]
+pub fn install_test(replay: bool) {
+    install_platform(Box::new(super::fallback::TestPlatform::new(replay)));
 }
 
 #[cfg(not(any(test, feature = "test-support")))]
