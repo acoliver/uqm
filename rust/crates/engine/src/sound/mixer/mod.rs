@@ -13,7 +13,6 @@
 //! - `source` - Audio source management
 //! - `resample` - Resampling algorithms
 //! - `mix` - Main mixing logic
-//! - `ffi` - C FFI bindings
 //!
 //! # Example
 //!
@@ -32,7 +31,6 @@
 //! ```
 
 pub mod buffer;
-pub mod ffi;
 pub mod mix;
 pub mod resample;
 pub mod source;
@@ -72,3 +70,6 @@ mod tests {
         let _quality = MixerQuality::Medium;
     }
 }
+
+#[cfg(test)]
+pub(crate) mod playback_tests;
