@@ -220,10 +220,9 @@ fn check_measurement(
     } else {
         Baseline::default()
     };
-    unsafe_allowed::check(root, measurement)?;
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     initialize_layers(root, options, &mut baseline)?;
-    budgets::check(measurement, &baseline.budget)?;
+    check_rules(root, measurement, &baseline)?;
     if options.record {
         let current = budgets::without_budgeted(&measured, &baseline.budget);
         recorded::growth(&mut baseline, &current, options.allow_engine_os);
@@ -401,6 +400,17 @@ fn retire_budget(root: &Path, path: &Path, options: &Options) -> Result<(), Stri
     }
     baseline.budget.remove(name);
     baseline.write(path)
+}
+
+/// Rules that hold whatever the baseline records: unsafe only where
+/// `UNSAFE_ALLOWED` admits it, and every budget.
+fn check_rules(
+    root: &Path,
+    measurement: &metrics::Measurement,
+    baseline: &Baseline,
+) -> Result<(), String> {
+    unsafe_allowed::check(root, measurement)?;
+    budgets::check(measurement, &baseline.budget)
 }
 
 fn initialize_layers(

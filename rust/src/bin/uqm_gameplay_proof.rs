@@ -1,4 +1,3 @@
-#![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -7,9 +6,8 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use uqm_rust::automation::interrupt;
 use uqm_rust::automation::{
-    verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
+    interrupt, verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
     ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
     TraceRecord,
 };

@@ -17,7 +17,7 @@ const MAX_STREAM_LEVEL: i32 = LOG_DEBUG;
 
 pub fn log_init(_max_lines: c_int) {
     INITIALIZED.store(true, Ordering::Relaxed);
-    crate::host::at_exit(exit_callback);
+    crate::host::at_exit(flush_log_at_exit);
 }
 
 pub fn log_exit(code: c_int) -> c_int {
@@ -47,7 +47,7 @@ pub fn log_message(level: c_int, message: &str) {
     let _ = stderr.write_all(b"\n");
 }
 
-fn exit_callback() {
+fn flush_log_at_exit() {
     if SHOW_BOX.load(Ordering::Relaxed) {
         display_log(ERROR_BOX.load(Ordering::Relaxed));
     }

@@ -26,7 +26,7 @@ fn in_child(test: &str, body: impl FnOnce()) {
 
 fn addon(path: &str) -> Vec<u8> {
     std::fs::read(
-        Path::new(env!("UQM_RUST_ROOT"))
+        Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("../sc2/content/addons/3dovideo")
             .join(path),
     )

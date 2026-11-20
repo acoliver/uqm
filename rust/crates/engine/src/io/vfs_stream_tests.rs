@@ -4,7 +4,7 @@ use crate::host::{FileStream, Files};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 fn fixture(bytes: &[u8]) -> (tempfile::TempDir, Vfs, std::path::PathBuf) {
-    let root = concat!(env!("UQM_RUST_ROOT"), "/../tmp");
+    let root = concat!(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."), "/../tmp");
     std::fs::create_dir_all(root).unwrap();
     let directory = tempfile::tempdir_in(root).unwrap();
     let path = directory.path().join("data");

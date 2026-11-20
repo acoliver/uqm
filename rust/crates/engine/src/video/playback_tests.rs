@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 const LOGO_FRAMES: u32 = 231;
 
 fn logo_dir() -> PathBuf {
-    Path::new(env!("UQM_RUST_ROOT")).join("../sc2/content/addons/3dovideo/logo")
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+        .join("../sc2/content/addons/3dovideo/logo")
 }
 
 fn logo() -> DukVideoDecoder {
