@@ -117,7 +117,7 @@ fn update_starbase_screen(
             &graphics,
             &mut menu.animation,
             Some(frame as usize),
-            uqm_engine::time::source::now_ticks(),
+            uqm_engine::host::now_ticks(),
         );
         draw_base_state_strings(&graphics, None, menu.state);
         draw::transition(3);
@@ -147,7 +147,7 @@ fn update_starbase_screen(
             &graphics,
             &mut menu.animation,
             None,
-            uqm_engine::time::source::now_ticks(),
+            uqm_engine::host::now_ticks(),
         );
         draw::unbatch();
         cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);

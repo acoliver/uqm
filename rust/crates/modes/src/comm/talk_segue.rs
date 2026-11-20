@@ -70,7 +70,7 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
     use crate::sound::music::{remember_music, MusicRequest};
     use std::ffi::c_int;
-    pub use uqm_engine::time::source as clock;
+    pub use uqm_engine::host as clock;
 
     pub use crate::comm::comm_abi::check_subtitles;
 

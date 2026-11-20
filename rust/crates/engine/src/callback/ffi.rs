@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 type Callback = Box<dyn FnOnce() + Send>;
 
 fn now_ms() -> u32 {
-    crate::time::source::now_ms()
+    crate::host::now_ms()
 }
 
 /// Identity of a queued callback, valid until it runs or is cancelled.

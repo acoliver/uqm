@@ -61,7 +61,7 @@ struct PowerLines {
 }
 impl PowerLines {
     fn draw(&mut self, force: bool) {
-        let now = uqm_engine::time::source::now_ticks();
+        let now = uqm_engine::host::now_ticks();
         if now >= self.next_time || force {
             self.next_time = now.wrapping_add(ONE_SECOND / HANGAR_ANIM_RATE);
             self.palette.apply();
@@ -159,13 +159,13 @@ fn show_combat_ship(
             },
         };
         cx.kernel.input_runtime().flush();
-        let mut time_in = uqm_engine::time::source::now_ticks();
+        let mut time_in = uqm_engine::host::now_ticks();
         let mut j = 0;
         while j < SHIP_WIN_FRAMES && !all_finished {
             cx.kernel
                 .input_runtime()
                 .sleep_until(cx, time_in.wrapping_add(ONE_SECOND / 24));
-            time_in = uqm_engine::time::source::now_ticks();
+            time_in = uqm_engine::host::now_ticks();
             cx.kernel.input_runtime().update(cx);
             if input.current().any_button_pressed() {
                 if yanked.is_some() {

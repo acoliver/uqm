@@ -161,7 +161,7 @@ pub unsafe extern "C" fn TFB_UninitGraphics() {
 /// Called on the SDL main thread with input initialized.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_ProcessEvents() {
-    if crate::time::source::is_replay() {
+    if crate::host::is_replay() {
         return;
     }
     let mut event = std::mem::MaybeUninit::uninit();

@@ -191,7 +191,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         )));
         {
             {
-                use uqm_rust::{callback::ffi as alarms, time::source};
+                use uqm_rust::{callback::ffi as alarms, engine::host as source};
                 source::install(true);
                 alarms::Alarm_init();
                 let region = |x| RECT {

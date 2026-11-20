@@ -724,12 +724,12 @@ pub fn init_stream_decoder() -> AudioResult<()> {
         }
     }
 
-    if crate::time::source::is_replay() {
+    if crate::host::is_replay() {
         let previous = ENGINE
             .replay_mixer
             .lock()
             .replace(super::replay_audio::ReplayMixer::new(
-                crate::time::source::now_ticks(),
+                crate::host::now_ticks(),
             ));
         assert!(
             previous.is_none(),
@@ -1009,10 +1009,7 @@ pub(crate) fn advance_replay() {
         let Some(mixer) = mixer.as_mut() else {
             return;
         };
-        mixer.frames_until(
-            crate::time::source::now_ticks(),
-            mixer_mix::mixer_get_frequency(),
-        )
+        mixer.frames_until(crate::host::now_ticks(), mixer_mix::mixer_get_frequency())
     };
     consume_replay_frames(frames);
 }
