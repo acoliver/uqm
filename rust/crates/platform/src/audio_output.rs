@@ -31,48 +31,35 @@ pub fn start(fill: FillAudio) -> Option<Box<dyn AudioOutput>> {
     Some(Box::new(CpalOutput { shutdown, thread }))
 }
 
+/// Keep the stream alive until stopped. Without a device the pump idles the
+/// same way, so stopping it is the same either way.
 fn run(fill: FillAudio, shutdown: &AtomicBool) {
-    eprintln!("[mixer_pump] thread started, opening cpal output stream...");
-    let stream = match open(fill) {
-        Ok(stream) => stream,
-        Err(error) => {
-            eprintln!("[mixer_pump] {error}");
-            return;
-        }
-    };
-    eprintln!("[mixer_pump] started — feeding mixer output to cpal");
+    let stream = open(fill)
+        .inspect_err(|error| eprintln!("[mixer_pump] {error}"))
+        .ok();
     while !shutdown.load(Ordering::Acquire) {
         std::thread::sleep(Duration::from_millis(50));
     }
     drop(stream);
-    eprintln!("[mixer_pump] stopped");
 }
 
-/// Open and start the default device's 44.1 kHz stereo stream.
+/// The mixer's output format: 44.1 kHz stereo.
+const MIXER_FORMAT: cpal::StreamConfig = cpal::StreamConfig {
+    channels: 2,
+    sample_rate: cpal::SampleRate(44100),
+    buffer_size: cpal::BufferSize::Default,
+};
+
+/// Open and start the default device in the mixer's format.
 fn open(mut fill: FillAudio) -> Result<cpal::Stream, String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     let device = cpal::default_host()
         .default_output_device()
         .ok_or("no output audio device found")?;
-    let default = device
-        .default_output_config()
-        .map_err(|e| format!("failed to get default output config: {e}"))?;
-    eprintln!(
-        "[mixer_pump] using device {:?}: channels={} sample_rate={} sample_format={:?}",
-        device.name().unwrap_or_default(),
-        default.channels(),
-        default.sample_rate().0,
-        default.sample_format()
-    );
-    let config = cpal::StreamConfig {
-        channels: 2,
-        sample_rate: cpal::SampleRate(44100),
-        buffer_size: cpal::BufferSize::Default,
-    };
     let stream = device
         .build_output_stream(
-            &config,
+            &MIXER_FORMAT,
             move |output: &mut [f32], _: &cpal::OutputCallbackInfo| fill_output(&mut fill, output),
             |err| eprintln!("[mixer_pump] audio stream error: {err}"),
             None,
