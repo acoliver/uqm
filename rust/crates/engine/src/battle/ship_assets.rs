@@ -79,6 +79,31 @@ impl RaceDescriptor {
             .as_ref()
             .map_or((c"", 0), |table| table.label(index))
     }
+    /// Give a fixture descriptor `count` silent sounds, the first current.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn install_sound_fixture(&mut self, count: usize) {
+        let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(
+            (0..count)
+                .map(|_| crate::sound::types::SoundSample::new())
+                .collect(),
+        );
+        self.ship_data.ship_sounds = Some(bank.entry_ref(0));
+        self.assets
+            .get_or_insert_with(|| {
+                Box::new(ShipAssets {
+                    navigation: ShipNavigationAssets {
+                        melee_icon: None,
+                        icons: None,
+                        strings: None,
+                    },
+                    captain: FrameId::NULL,
+                    victory: None,
+                    sounds: None,
+                    animations: Default::default(),
+                })
+            })
+            .sounds = Some(bank);
+    }
     pub fn sound_bank(&self) -> Option<&crate::sound::owned_bank::LoadedSoundBank> {
         self.assets
             .as_ref()
@@ -134,9 +159,7 @@ impl RaceDesc {
         let info = &mut self.raw.ship_info;
         info.icons = icon_frame(&icons);
         info.melee_icon = icon_frame(&melee_icon);
-        info.race_strings = strings
-            .as_ref()
-            .map_or(std::ptr::null_mut(), |table| table.as_raw().cast());
+        info.race_strings = strings.as_ref().map(|table| table.entry_ref(0));
         ShipNavigationAssets {
             melee_icon,
             icons,
@@ -189,7 +212,7 @@ impl RaceDesc {
                 .raw
                 .loaded_sounds
                 .as_ref()
-                .map_or(std::ptr::null_mut(), |bank| bank.as_raw().cast());
+                .map(|bank| bank.entry_ref(0));
             if self.raw.loaded_sounds.is_none() {
                 return false;
             }

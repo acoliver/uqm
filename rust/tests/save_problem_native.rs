@@ -1,5 +1,5 @@
 //! The save-error popup restores its pixels and context after an observed wait.
-use std::{cell::Cell, ptr, rc::Rc};
+use std::{cell::Cell, rc::Rc};
 use uqm_rust::engine::battle::Cx;
 use uqm_rust::engine::input::Frame;
 use uqm_rust::engine::input::InputRuntime;
@@ -19,7 +19,6 @@ use uqm_rust::graphics::{
     geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
     menu::clear as ClearDrawable, menu::select as SetContext, present::GraphicsOptions,
 };
-use uqm_rust::strings::string_table::*;
 
 #[derive(Clone)]
 struct WaitObserver {
@@ -155,11 +154,8 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             assert_eq!((glyph.disp.width, glyph.disp.height), (2, 2));
             assert_eq!(glyph.data[0], 255);
         });
-        let strings = AllocStringTable(457, 0);
-        let message = (*strings).strings.add(456);
-        (*message).data = uqm_rust::memory::rust_hmalloc(2).cast();
-        ptr::copy_nonoverlapping(c"A".as_ptr(), (*message).data, 2);
-        (*message).length = 1;
+        let mut strings = vec![Vec::new(); 457];
+        strings[456] = c"A".to_bytes_with_nul().to_vec();
         let context_lease = uqm_rust::graphics::context::ContextLease::require(context);
         let font_lease = uqm_rust::graphics::font::FontLease::retain(font_owner.font());
         let waits = Rc::new(Cell::new(0));
@@ -168,7 +164,10 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         uqm_rust::battle::services::install(&mut game.kernel);
         game.kernel.space_context = context;
         game.kernel.star_con_font = font;
-        game.kernel.game_strings = CaptureStringTable(strings).cast();
+        game.kernel
+            .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+                strings,
+            ));
         game.kernel.install_input_runtime(Rc::new(Runtime(
             WaitObserver {
                 waits: waits.clone(),
@@ -893,16 +892,13 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     );
                 }
             }
-            for text in [b'A', 0] {
-                *(*message).data = text as std::ffi::c_char;
-                (*message).length = i32::from(text != 0);
+            for text in [c"A", c""] {
                 SetContext(previous);
                 game.with_context(|cx| {
                     let mut observer = cx.kernel_mut().input_runtime().observer();
                     let mut io = Io {
                         observer: &mut *observer,
                     };
-                    let text = std::ffi::CStr::from_ptr((*message).data);
                     uqm_rust::ui::save_problem::render_save_problem(
                         cx,
                         &mut io,
@@ -934,10 +930,8 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         };
         assert_eq!(waits.get(), 2);
         assert_eq!(polls.get(), 4);
-        game.kernel.game_strings = ptr::null_mut();
         game.kernel.star_con_font = None;
         game.kernel.space_context = None;
-        FreeStringTable(strings);
         SetContext(None);
         drop(drawable);
         drop(context_lease);

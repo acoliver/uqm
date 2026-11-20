@@ -216,12 +216,7 @@ fixture.absent = 3DOVID:missing.duk
             VidStop();
             assert!(VidPlaying().is_null());
             assert_eq!(DestroyVideo(clip), 1);
-            crate::video::legacy::InstallVideoResType();
-            crate::resource::ffi_bridge::load_resource_index(
-                &directory.dir(),
-                c"video.rmp".as_ptr(),
-                ptr::null(),
-            );
+            crate::resource::load_index(&directory.dir(), c"video.rmp", None);
             retained_playback_keeps_its_clip_after_descriptor_drop();
             assert!(VidPlaying().is_null());
             UninitVideoPlayer();

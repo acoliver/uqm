@@ -18,7 +18,7 @@ impl RaceDescriptor {
             race_strings_rsc: std::ptr::null(),
             icons_rsc: std::ptr::null(),
             melee_icon_rsc: std::ptr::null(),
-            race_strings: std::ptr::null_mut(),
+            race_strings: None,
             icons: crate::graphics::drawable::FrameId::NULL,
             melee_icon: crate::graphics::drawable::FrameId::NULL,
         },
@@ -58,7 +58,7 @@ impl RaceDescriptor {
             weapon: crate::battle::frames::FrameArray::EMPTY,
             special: crate::battle::frames::FrameArray::EMPTY,
             victory_ditty: std::ptr::null_mut(),
-            ship_sounds: std::ptr::null_mut(),
+            ship_sounds: None,
         },
         cyborg_control: INTEL_STUFF {
             ManeuverabilityIndex: 0,

@@ -24,8 +24,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
     .unwrap();
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    // SAFETY: this test process owns SDL, its UIO mount and all native fixture allocations.
-    unsafe {
+    {
         uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         content.init_resources("fixture.rmp");
@@ -206,7 +205,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         drop(game);
         drop(selected);
         drop((context_owner, previous_owner));
-        uqm_rust::resource::ffi_bridge::UninitResourceSystem();
+        uqm_rust::resource::uninit();
         drop(drawable);
         uqm_rust::graphics::present::uninit_graphics();
     }

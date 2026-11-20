@@ -2,7 +2,6 @@
 
 use crate::graphics::geometry::{Color, Point};
 use crate::graphics::intersection::Stamp;
-use crate::strings::string_table::StringPtr;
 
 pub type PlanetDesc = PlanetDescriptor;
 pub type NodeInfo = NodeRecord;
@@ -69,7 +68,6 @@ pub struct PlanetInfo {
     pub plan_data_ptr: *const PlanetFrame,
     pub scan_seed: [u32; 3usize],
     pub scan_retrieve_mask: [u32; 3usize],
-    pub discovery_string: StringPtr,
 }
 
 impl Default for PlanetInfo {
@@ -89,7 +87,6 @@ impl Default for PlanetInfo {
             plan_data_ptr: std::ptr::null(),
             scan_seed: [0; 3],
             scan_retrieve_mask: [0; 3],
-            discovery_string: std::ptr::null_mut(),
         }
     }
 }

@@ -11,10 +11,7 @@
 //!
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P00
 
-use std::ffi::{CStr, CString};
-
 use super::gesture::Gesture;
-use crate::resource::ffi_bridge::{res_GetString, res_IsString};
 
 /// The historical accessor formatted resource keys into a 40-byte buffer
 /// with `snprintf(buf, 39, ...)`, so a key longer than 38 bytes is queried
@@ -50,22 +47,9 @@ pub fn query_menu_binding(menu_name: &str) -> MenuBindingResult {
     let mut index: u32 = 1;
     loop {
         let full_key = format!("menu.{menu_name}.{index}");
-        let key = match CString::new(truncate_resource_key(&full_key)) {
-            Ok(key) => key,
-            // A menu name with an interior NUL can never address a loaded
-            // resource string; treat it as "no binding".
-            Err(_) => break,
-        };
-
-        // SAFETY: key is a valid, aligned, NUL-terminated C string.
-        if unsafe { res_IsString(key.as_ptr()) } == 0 {
+        let Some(spec) = crate::resource::string(truncate_resource_key(&full_key)) else {
             break;
-        }
-
-        // SAFETY: res_GetString never returns null and the returned pointer
-        // stays valid until the resource entry is modified or removed; the
-        // text is copied here.
-        let spec = unsafe { CStr::from_ptr(res_GetString(key.as_ptr())) }.to_string_lossy();
+        };
         let gesture = Gesture::parse(&spec);
 
         result.num_alternates += 1;
@@ -97,25 +81,17 @@ fn truncate_resource_key(full: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource::ffi_bridge::{res_PutString, InitResourceSystem, UninitResourceSystem};
     use serial_test::serial;
 
     /// Reset the resource system to a pristine initialized state so tests do
     /// not observe each other's strings.
     fn reset_resource_state() {
-        // SAFETY: called with no pointer arguments between serial tests.
-        unsafe {
-            UninitResourceSystem();
-            let sentinel = InitResourceSystem();
-            assert!(!sentinel.is_null());
-        }
+        crate::resource::uninit();
+        crate::resource::init();
     }
 
     fn put_string(key: &str, value: &str) {
-        let key_c = CString::new(key).unwrap();
-        let value_c = CString::new(value).unwrap();
-        // SAFETY: both arguments are valid NUL-terminated C strings.
-        unsafe { res_PutString(key_c.as_ptr(), value_c.as_ptr()) };
+        crate::resource::settings::Settings.put_string(key, value);
     }
 
     /// The historical accessor's 38-byte truncation.

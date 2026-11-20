@@ -112,7 +112,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 c"ship.umgah.meleeicons"
             );
             assert!(
-                d.ship_info.race_strings.is_null()
+                d.ship_info.race_strings.is_none()
                     && d.ship_info.icons.is_null()
                     && d.ship_info.melee_icon.is_null()
             );
@@ -177,7 +177,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 CStr::from_ptr(d.ship_data.ship_sounds_rsc),
                 c"ship.umgah.sounds"
             );
-            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
                     d.cyborg_control.ManeuverabilityIndex,

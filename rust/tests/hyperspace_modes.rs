@@ -267,7 +267,6 @@ fn load_palette_fixture(
 ) -> Result<[Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2], Box<dyn std::error::Error>>
 {
     use uqm_rust::graphics::palette_cycle::PaletteCycle;
-    use uqm_rust::resource::ffi_bridge::InitResourceSystem;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     std::fs::create_dir_all(&root)?;
     let directory = tempfile::tempdir_in(root)?;
@@ -284,12 +283,11 @@ fn load_palette_fixture(
         directory.path().join("palettes.rmp"),
         "fixture.hyper = BINTAB:12.ct\nfixture.quasi = BINTAB:90.ct\n",
     )?;
-    // SAFETY: this serialized fixture restores the content directory before closing its own mount.
-    unsafe {
+    {
         let content = uqm_engine::test_support::native_session::ContentMount::new(
             &directory.path().canonicalize()?,
         );
-        InitResourceSystem();
+        uqm_rust::resource::init();
         content.load_index("palettes.rmp");
         let palettes = [
             Some(

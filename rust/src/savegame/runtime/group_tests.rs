@@ -357,7 +357,7 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
             (
                 t.species_id,
                 t.crew_level,
-                t.race_strings as usize,
+                t.race_strings.map_or(0, |strings| strings.table()),
                 (t.icons).bits(),
                 (t.melee_icon).bits(),
             )
@@ -374,7 +374,7 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
             (
                 t.species_id,
                 t.crew_level,
-                t.race_strings as usize,
+                t.race_strings.map_or(0, |strings| strings.table()),
                 (t.icons).bits(),
                 (t.melee_icon).bits(),
             )

@@ -445,15 +445,12 @@ impl Cx<'_> {
 
 impl Cx<'_> {
     pub fn set_ship_sound_bank(&mut self, ship: ShipId, index: u16) {
-        let sounds = self.desc(ship).ship_data.ship_sounds;
         assert!(
             index < self.ship_sound_count(ship),
             "invalid sound bank index {index}"
         );
-        // SAFETY: the checked index names an entry in this ship's loaded sound bank.
-        let sound =
-            unsafe { crate::strings::string_table::SetAbsStringTableIndex(sounds.cast(), index) };
-        self.desc_mut(ship).ship_data.ship_sounds = sound.cast();
+        let sounds = self.desc(ship).ship_data.ship_sounds;
+        self.desc_mut(ship).ship_data.ship_sounds = sounds.map(|sounds| sounds.with_index(index));
     }
 }
 
@@ -826,9 +823,9 @@ impl Cx<'_> {
         self.link_storage(id, before);
     }
     pub fn ship_sound_count(&self, ship: ShipId) -> u16 {
-        let sounds = self.desc(ship).ship_data.ship_sounds;
-        // SAFETY: loaded sound entries are retained by the descriptor.
-        unsafe { crate::strings::string_table::GetStringTableCount(sounds.cast()) }
+        self.desc(ship)
+            .sound_bank()
+            .map_or(0, |bank| bank.len() as u16)
     }
 }
 

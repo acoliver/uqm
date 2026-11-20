@@ -15,9 +15,7 @@ use super::battle::{
     ShipId,
 };
 use crate::graphics::geometry::Point;
-use crate::strings::string_table::StringPtr as SOUND;
 pub use pilot_flash::{PilotFlash, PilotUpdate};
-use std::ptr;
 
 #[derive(Default)]
 pub struct SisHighlight {
@@ -107,7 +105,6 @@ pub struct Kernel {
     pub configuration: crate::configuration::Configuration,
     pub last_activity: u16,
     pub player_control: [u8; 2],
-    pub h_res_index: *mut std::ffi::c_void,
     pub screen_context: Option<crate::graphics::context::ContextId>,
     pub space_context: Option<crate::graphics::context::ContextId>,
     pub status_context: Option<crate::graphics::context::ContextId>,
@@ -138,7 +135,6 @@ pub struct Kernel {
     pub flag_stat_frame: crate::graphics::drawable::FrameId,
     pub misc_data_frame: crate::graphics::drawable::FrameId,
     pub font_grad_frame: crate::graphics::drawable::FrameId,
-    pub game_strings: crate::strings::string_table::StringPtr,
     pub using_speech: u32,
     pub radar_context: Option<crate::graphics::context::ContextId>,
     pub play_frame: crate::graphics::drawable::FrameId,
@@ -168,7 +164,6 @@ pub struct Kernel {
     pub ditty_playing: u32,
     pub winner: Option<ShipId>,
     pub status_offsets: [i16; 2],
-    pub menu_sounds: SOUND,
     pub game_sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     pub sounds: SoundQueue,
     pub channels: std::rc::Rc<std::cell::RefCell<Channels>>,
@@ -177,12 +172,10 @@ pub struct Kernel {
 }
 impl Kernel {
     pub fn install_game_text(&mut self, text: crate::strings::owned_table::LoadedTextTable) {
-        self.game_strings = text.as_raw().cast();
         self.assets.game_text = Some(text);
     }
     #[cfg(not(test))]
     pub fn install_menu_sounds(&mut self, bank: crate::sound::owned_bank::LoadedSoundBank) {
-        self.menu_sounds = bank.as_raw().cast();
         self.assets.menu_sound_bank = Some(bank);
     }
     #[cfg(not(test))]
@@ -191,7 +184,6 @@ impl Kernel {
     }
     #[cfg(not(test))]
     pub fn release_menu_sounds(&mut self) {
-        self.menu_sounds = std::ptr::null_mut();
         self.assets.menu_sound_bank = None;
     }
     pub fn game_text_table(&self) -> crate::strings::owned_table::LoadedTextTable {
@@ -226,7 +218,6 @@ impl Kernel {
     #[cfg(not(test))]
     pub fn release_encounter_text(&mut self) {
         self.micro_font = None;
-        self.game_strings = ptr::null_mut();
         self.assets.micro_font_owner = None;
         self.assets.game_text = None;
     }
@@ -306,7 +297,6 @@ impl Kernel {
             configuration: crate::configuration::Configuration::default(),
             last_activity: 0,
             player_control: [0; 2],
-            h_res_index: ptr::null_mut(),
             screen_context: None,
             space_context: None,
             status_context: None,
@@ -336,7 +326,6 @@ impl Kernel {
             flag_stat_frame: crate::graphics::drawable::FrameId::NULL,
             misc_data_frame: crate::graphics::drawable::FrameId::NULL,
             font_grad_frame: crate::graphics::drawable::FrameId::NULL,
-            game_strings: ptr::null_mut(),
             using_speech: 0,
             radar_context: None,
             play_frame: crate::graphics::drawable::FrameId::NULL,
@@ -363,7 +352,6 @@ impl Kernel {
             ditty_playing: 0,
             winner: None,
             status_offsets: [0; 2],
-            menu_sounds: ptr::null_mut(),
             game_sounds: None,
             sounds: SoundQueue::new(),
             channels: std::rc::Rc::new(std::cell::RefCell::new(Channels::new())),

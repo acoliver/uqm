@@ -7,7 +7,6 @@ use crate::engine::save::{snapshot, SessionView};
 use crate::engine::world::generation::SolarSnapshot;
 use crate::engine::{Kernel, World};
 use crate::savegame::types::{SaveFile, StarDesc};
-use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::fmt;
 
 /// `GAME_STRING (index)` over the loaded `GameStrings` table.
@@ -15,14 +14,12 @@ struct LiveGameStrings<'a>(&'a Kernel);
 
 impl GameStrings for LiveGameStrings<'_> {
     fn game_string(&self, index: u16) -> Vec<u8> {
-        // SAFETY: `GameStrings` is loaded for the whole game and every string
-        // of it is NUL-terminated; game thread only.
-        unsafe {
-            let entry = SetAbsStringTableIndex(self.0.game_strings.cast(), index);
-            let text = GetStringAddress(entry);
-            assert!(!text.is_null(), "GAME_STRING ({index}) has no text");
-            std::ffi::CStr::from_ptr(text).to_bytes().to_vec()
-        }
+        let table = self.0.game_text_table();
+        table
+            .text(usize::from(index) % table.len())
+            .unwrap_or_else(|| panic!("GAME_STRING ({index}) has no text"))
+            .to_bytes()
+            .to_vec()
     }
 }
 

@@ -957,12 +957,15 @@ mod record_tests {
         fragment.max_crew = 511;
         fragment.energy_level = 6;
         fragment.max_energy = 7;
-        fragment.race_strings = 0x100usize as crate::strings::string_table::StringPtr;
+        fragment.race_strings = Some(crate::strings::owned_table::EntryRef::new(0x100, 0));
         fragment.icons = crate::graphics::drawable::FrameId::from_bits(0x200 << 16);
         let bytes = encode_fragment(fragment);
         assert_eq!(bytes, [0, 0, 3, 0, 0, 0, 4, 5, 44, 255, 6, 7, 0, 0, 0, 0]);
         decode_fragment(&bytes, fragment);
-        assert_eq!(fragment.race_strings as usize, 0x100);
+        assert_eq!(
+            fragment.race_strings,
+            Some(crate::strings::owned_table::EntryRef::new(0x100, 0))
+        );
         assert_eq!(fragment.icons.bits(), 0x200 << 16);
         assert_eq!(fragment.crew_level, 44);
         assert_eq!(fragment.max_crew, 255);

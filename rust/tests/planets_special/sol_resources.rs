@@ -6,7 +6,6 @@ use uqm_rust::engine::test_support::native_probe;
 use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
-use uqm_rust::resource::ffi_bridge;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 pub fn check(h: &mut Harness) {
@@ -20,8 +19,8 @@ pub fn check(h: &mut Harness) {
         let Some(dir) = uqm_rust::io::content_dir() else {
             panic!("checked-in content directory must open");
         };
-        assert!(!ffi_bridge::InitResourceSystem().is_null());
-        ffi_bridge::load_resource_index(&dir, c"uqm.rmp".as_ptr(), std::ptr::null());
+        uqm_rust::resource::init();
+        uqm_rust::resource::load_index(&dir, c"uqm.rmp", None);
         names(h);
         binary_palettes();
         scenes(h);
@@ -124,7 +123,7 @@ pub fn check(h: &mut Harness) {
             baseline,
             "real Earth generation/rescale/cleanup must release all graphics allocations"
         );
-        ffi_bridge::UninitResourceSystem();
+        uqm_rust::resource::uninit();
         drop(mount);
     }
 }
@@ -144,7 +143,6 @@ unsafe fn names(h: &mut Harness) {
         let strings_owner =
             uqm_rust::engine::strings::owned_table::LoadedTextTable::load(c"text.starcon").unwrap();
         crate::battle_context::with(|cx| {
-            assert!(cx.kernel.game_strings.is_null());
             assert!(cx.kernel.micro_font.is_none());
             cx.kernel.install_game_text(strings_owner);
         });
@@ -344,28 +342,22 @@ unsafe fn indexed_rescale() {
 use uqm_rust::planets::generate::SystemGenerator;
 
 unsafe fn binary_palettes() {
-    use uqm_rust::strings::{sresins, string_table as strings};
+    use uqm_rust::strings::sresins;
     for planet in &uqm_rust::planets::tables::PLANET_ARRAY {
         for resource in [planet.cmap_instance, planet.xlat_tab_instance] {
+            let entries = sresins::load_binary_entries(resource)
+                .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
+            assert!(!entries.is_empty());
             for index in [0, 1, 2, 3, u16::MAX] {
-                let table = sresins::LoadStringTableInstance(resource.as_ptr());
-                assert!(!table.is_null());
-                let entry =
-                    strings::SetAbsStringTableIndex(strings::CaptureStringTable(table), index);
-                let expected = std::slice::from_raw_parts(
-                    strings::GetStringAddress(entry).cast::<u8>(),
-                    usize::from(strings::GetStringLengthBin(entry)),
-                )
-                .to_vec();
-                strings::FreeStringTable(table);
                 let owned = sresins::load_binary_entry(resource, index)
                     .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
                 assert_eq!(
-                    owned, expected,
+                    owned,
+                    entries[usize::from(index) % entries.len()],
                     "binary palette {resource:?} variant {index}"
                 );
             }
         }
     }
-    println!("Binary palette ownership: all 59 planet resource pairs, temperature entries and wrapped indices match legacy selected bytes after native release");
+    println!("Binary palette ownership: all 59 planet resource pairs, temperature entries and wrapped indices select whole entries");
 }

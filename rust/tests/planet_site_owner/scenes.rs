@@ -344,7 +344,7 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         assert_eq!(game.world.activity(), 0);
         uqm_rust::graphics::state::flush();
         drop(game);
-        uqm_rust::resource::ffi_bridge::UninitResourceSystem();
+        uqm_rust::resource::uninit();
         drop(content);
         uqm_rust::graphics::present::uninit_graphics();
     }

@@ -12,8 +12,8 @@ use std::ffi::CStr;
 pub(super) struct Assets<'a> {
     keys: Vec<(&'static str, Resource<'a>)>,
     frames: Vec<(&'static str, Frame)>,
-    strings: StringEntry<'a>,
-    sounds: StringEntry<'a>,
+    strings: StringEntry,
+    sounds: StringEntry,
     music: usize,
     sets: [(&'static str, &'a crate::engine::battle::frames::FrameArray); 3],
 }
@@ -39,8 +39,7 @@ impl<'a> Assets<'a> {
             .into_iter()
             .map(|(name, pointer)| (name, Frame(pointer)))
             .collect();
-        // SAFETY: both string entries belong to the immutable descriptor graph.
-        let (strings, sounds) = unsafe { (info.race_strings.as_ref(), data.ship_sounds.as_ref()) };
+        let (strings, sounds) = (info.race_strings, data.ship_sounds);
         Self {
             keys,
             frames,

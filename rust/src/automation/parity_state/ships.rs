@@ -105,7 +105,7 @@ impl<'a> Ship<'a> {
 
 pub(super) struct ShipResources<'a> {
     icons: Frame,
-    strings: StringEntry<'a>,
+    strings: StringEntry,
     race: Option<Race<'a>>,
 }
 impl ShipResources<'_> {

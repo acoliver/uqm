@@ -2,7 +2,7 @@
 use super::{value, Fields};
 use crate::automation::parity::Journal;
 use crate::graphics::drawable::FrameId;
-use crate::strings::string_table::StringTableEntry;
+use crate::strings::owned_table::EntryRef;
 use std::ffi::CStr;
 
 #[derive(Clone, Copy)]
@@ -32,22 +32,16 @@ impl Resource<'_> {
     }
 }
 
-pub(super) struct StringEntry<'a>(pub(super) Option<&'a StringTableEntry>);
-impl StringEntry<'_> {
+pub(super) struct StringEntry(pub(super) Option<EntryRef>);
+impl StringEntry {
     pub(super) fn address(&self) -> usize {
-        self.0.map_or(0, |entry| {
-            if entry.parent.is_null() {
-                std::ptr::from_ref(entry) as usize
-            } else {
-                entry.parent as usize
-            }
-        })
+        self.0.map_or(0, EntryRef::table)
     }
     pub(super) fn write(&self, fields: &mut Fields, prefix: &str, journal: &Journal) {
         value(fields, prefix, "table", journal.resource(self.address()));
         value(fields, prefix, "loaded", self.0.is_some());
         if let Some(entry) = self.0 {
-            value(fields, prefix, "index", entry.index);
+            value(fields, prefix, "index", i32::from(entry.index()));
         }
     }
 }

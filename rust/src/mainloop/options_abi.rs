@@ -14,7 +14,7 @@ pub fn loadIndices(dir: &Dir) -> usize {
             log::warn!("Skipping resource index '{name}': name contains NUL");
             continue;
         };
-        crate::io::load_resource_index(dir, &name, None);
+        crate::resource::load_index(dir, &name, None);
     }
     indices.len()
 }

@@ -876,21 +876,7 @@ pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
 pub use crate::graphics::geometry::Color;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct resource_index_desc {
-    _unused: [u8; 0],
-}
-pub type RESOURCE_INDEX_DESC = resource_index_desc;
-pub type RESOURCE_INDEX = *mut RESOURCE_INDEX_DESC;
 pub type RESOURCE = *const ::std::os::raw::c_char;
-pub type STRING_TABLE_ENTRY_DESC = crate::engine::strings::string_table::StringTableEntry;
-pub type STRING_TABLE_DESC = crate::engine::strings::string_table::StringTable;
-pub type STRING_TABLE = *mut STRING_TABLE_DESC;
-pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
-pub type STRINGPTR = *mut ::std::os::raw::c_char;
-pub type DIRENTRY_REF = STRING_TABLE;
-pub type DIRENTRY = STRING;
 pub type CONTEXT = Option<crate::graphics::context::ContextId>;
 pub type FRAME = crate::graphics::drawable::FrameId;
 pub type FONT = Option<crate::graphics::font::FontId>;
@@ -910,7 +896,6 @@ pub const TEXT_VALIGN_VALIGN_TOP: TEXT_VALIGN = 0;
 pub const TEXT_VALIGN_VALIGN_MIDDLE: TEXT_VALIGN = 1;
 pub const TEXT_VALIGN_VALIGN_BOTTOM: TEXT_VALIGN = 2;
 pub type TEXT_VALIGN = ::std::os::raw::c_uint;
-pub type COLORMAP = STRING;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
 pub const gfx_object_STAMP_PRIM: gfx_object = 1;
 pub const gfx_object_STAMPFILL_PRIM: gfx_object = 2;
@@ -938,8 +923,6 @@ pub use crate::graphics::state::{
 };
 pub use crate::graphics::menu::{background as SetContextBackGroundColor, clear as ClearDrawable, foreground as SetContextForeGroundColor};
 
-pub type SOUND_REF = STRING_TABLE;
-pub type SOUND = STRING;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct soundposition {
@@ -1479,25 +1462,6 @@ pub const LANDER_DEPARTS: _bindgen_ty_18 = 10;
 pub const LANDER_RETURNS: _bindgen_ty_18 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_18 = 12;
 pub type _bindgen_ty_18 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct menu_state {
-    pub InputFunc: ::std::option::Option<unsafe fn(cx: &mut crate::engine::battle::Cx<'_>, pMS: &mut menu_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
-    pub Initialized: SIZE,
-    pub CurState: BYTE,
-    pub CurFrame: FRAME,
-    pub CurString: STRING,
-    pub first_item: POINT,
-    pub delta_item: SIZE,
-    pub ModuleFrame: FRAME,
-    pub flash_rect0: RECT,
-    pub flash_rect1: RECT,
-    pub flash_frame0: FRAME,
-    pub flash_frame1: FRAME,
-    pub hMusic: MUSIC_REF,
-    pub privData: *mut ::std::os::raw::c_void,
-}
-pub type MENU_STATE = menu_state;
 pub const PM_SCAN: _bindgen_ty_19 = 0;
 pub const PM_STARMAP: _bindgen_ty_19 = 1;
 pub const PM_DEVICES: _bindgen_ty_19 = 2;

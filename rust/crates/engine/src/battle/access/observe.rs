@@ -91,7 +91,7 @@ pub fn ship_record(
 pub struct ShipResourceObservation<'a> {
     pub descriptor: Option<DescriptorRecordObservation<'a>>,
     pub icons: crate::graphics::drawable::FrameId,
-    pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
+    pub strings: Option<crate::strings::owned_table::EntryRef>,
 }
 pub struct DescriptorRecordObservation<'a> {
     pub address: usize,
@@ -137,7 +137,7 @@ pub fn ship_resources(
             .picker_resources
             .as_ref()
             .and_then(|resources| resources.strings.as_ref())
-            .map(crate::strings::owned_table::TextEntry::record),
+            .map(crate::strings::owned_table::TextEntry::entry_ref),
     }
 }
 
@@ -156,7 +156,8 @@ mod owner_tests {
         record.crew_level = 42;
         let mut descriptor = crate::battle::record::RaceDescriptor::EMPTY;
         descriptor.ship_info.icons = crate::graphics::drawable::FrameId::from_bits(0x1234 << 16);
-        descriptor.ship_info.race_strings = std::ptr::without_provenance_mut(0x5678);
+        descriptor.ship_info.race_strings =
+            Some(crate::strings::owned_table::EntryRef::new(0x5678, 0));
         record.descriptor = Some(Box::new(descriptor));
         ships.put(link);
         let observed = super::ship_record(&game.kernel.races[0], link, &game.kernel.elements);

@@ -2,7 +2,7 @@
 use crate::graphics::{drawable::FrameId, geometry::Point, intersection::IntersectControl};
 pub use crate::math::velocity::VelocityDesc as VELOCITY_DESC;
 use crate::resource::ResourceKey;
-use crate::strings::string_table::{StringPtr, StringPtr as SOUND};
+use crate::strings::owned_table::EntryRef;
 #[cfg(test)]
 use crate::World as WorldOwner;
 pub use abi::{
@@ -153,7 +153,7 @@ mod abi {
         pub race_strings_rsc: ResourceKey,
         pub icons_rsc: ResourceKey,
         pub melee_icon_rsc: ResourceKey,
-        pub race_strings: StringPtr,
+        pub race_strings: Option<EntryRef>,
         pub icons: FrameId,
         pub melee_icon: FrameId,
     }
@@ -178,7 +178,7 @@ mod abi {
         pub weapon: crate::battle::frames::FrameArray,
         pub special: crate::battle::frames::FrameArray,
         pub victory_ditty: MUSIC_REF,
-        pub ship_sounds: SOUND,
+        pub ship_sounds: Option<EntryRef>,
     }
 
     pub const MAX_DISPLAY_PRIMS: u32 = 330;
@@ -830,7 +830,6 @@ mod kernel_tests {
         assert_eq!(fresh.space_origin.y, 0);
         assert_eq!(fresh.status_offsets, [0; 2]);
         assert!(fresh.player_input.iter().all(Option::is_none));
-        assert!(fresh.menu_sounds.is_null());
         assert!(fresh.game_sounds.is_none());
         assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);

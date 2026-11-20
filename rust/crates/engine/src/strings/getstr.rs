@@ -6,20 +6,14 @@
 //! `phrases[:clip_dir[:timestamps]]`; the optional timestamp file carries one
 //! `#(NAME) t1,t2,...` line per header, in the same order.
 
-use std::ffi::{c_char, c_void, CStr, CString};
-use std::ptr::null_mut;
+use std::ffi::CStr;
 
-use crate::collections::hash_table::{string_add, string_new};
+use super::conversation::ConversationTable;
+use super::owned_table::{LoadedBinaryTable, LoadedTextTable};
 use crate::host::{FileStream, Files};
+use crate::io::Dir;
 use crate::log_abi::{log_message, LOG_WARNING};
-use crate::memory::{rust_hfree, rust_hmalloc};
-use crate::resource::ffi_bridge::{
-    open_res_file, res_CloseResFile, GetResourceData, LengthResFile,
-};
-use crate::resource::ffi_types::ResourceData;
-use crate::strings::string_table::{
-    AllocStringTable, StringTable, StringTableEntry, HAS_NAMEINDEX, HAS_SOUND_CLIPS, HAS_TIMESTAMP,
-};
+use std::io::Read;
 use std::path::Path;
 
 const MAX_STRINGS: usize = 2048;
@@ -114,6 +108,20 @@ impl Pool {
     fn push_empty(&mut self) {
         self.lens.push(0);
     }
+
+    /// The first `count` strings, each with its NUL; an empty string has none.
+    fn into_entries(self, count: usize) -> Vec<Vec<u8>> {
+        let mut offset = 0;
+        self.lens[..count]
+            .iter()
+            .map(|&len| {
+                let end = offset + len as usize;
+                let entry = self.bytes[offset..end].to_vec();
+                offset = end;
+                entry
+            })
+            .collect()
+    }
 }
 
 /// Splits `#(NAME) rest` like `strtok(line + 1, "()")`: the name, and the
@@ -169,55 +177,37 @@ fn read_strings(
     strings.lens.len()
 }
 
-/// Copies `data` into a fresh game-allocator buffer; empty data stays NULL.
-unsafe fn set_entry(entry: *mut StringTableEntry, data: &[u8]) {
-    if data.is_empty() {
-        return;
-    }
-    let buf = rust_hmalloc(data.len()).cast::<u8>();
-    std::ptr::copy_nonoverlapping(data.as_ptr(), buf, data.len());
-    (*entry).data = buf.cast();
-    (*entry).length = data.len() as i32;
-}
-
-/// Fills `count` entries starting at `first` from the pool.
-unsafe fn copy_pool(table: *mut StringTable, first: usize, count: usize, pool: &Pool) {
-    let mut offset = 0;
-    for (i, &len) in pool.lens[..count].iter().enumerate() {
-        let len = len as usize;
-        set_entry(
-            (*table).strings.add(first + i),
-            &pool.bytes[offset..offset + len],
-        );
-        offset += len;
-    }
-}
-
 /// Text strings, nothing else.
-fn load_plain_table(src: &mut impl LineSource, length: u32) -> *mut StringTable {
+fn load_plain_table(src: &mut impl LineSource, length: u32) -> Option<LoadedTextTable> {
     let mut strings = Pool::default();
     let count = read_strings(src, length, &mut strings, |_, _| {});
-    if count == 0 {
-        return null_mut();
-    }
-    let mut offset = 0;
-    let entries = strings
-        .lens
-        .iter()
-        .map(|&len| {
-            let end = offset + len as usize;
-            let entry = strings.bytes[offset..end].to_vec();
-            offset = end;
-            entry
-        })
-        .collect();
-    super::owned_table::LoadedTextTable::from_strings(entries).into_raw()
+    (count != 0).then(|| LoadedTextTable::from_strings(strings.into_entries(count)))
 }
 
-/// # Safety
-/// `fp` must be an open UIO stream.
-pub unsafe extern "C" fn _get_string_data(fp: *mut c_void, length: u32) -> *mut c_void {
-    load_plain_table(&mut FileLines(&mut *fp.cast::<FileStream>()), length).cast()
+/// Opens `path` in `dir` with its length.
+fn open_with_length(dir: &Dir, path: &[u8]) -> Option<(FileStream, u32)> {
+    let file = dir
+        .open_read(Path::new(std::str::from_utf8(path).ok()?))
+        .ok()?;
+    let length = file.len().ok()? as u32;
+    Some((file, length))
+}
+
+/// A whole resource file, as the resource loader opened one: `None` when it
+/// cannot be opened or is empty.
+fn open_resource(dir: &Dir, path: &[u8]) -> Option<(FileStream, u32)> {
+    let (file, length) = open_with_length(dir, path)?;
+    if length == 0 {
+        log::warn!("LoadResourceFromPath: zero-length file, closing and returning null");
+        return None;
+    }
+    Some((file, length))
+}
+
+/// A `STRTAB`-format file in `dir`.
+pub(super) fn load_text_table(dir: &Dir, path: &CStr) -> Option<LoadedTextTable> {
+    let (mut file, length) = open_resource(dir, path.to_bytes())?;
+    load_plain_table(&mut FileLines(&mut file), length)
 }
 
 /// Name, clip and timestamp data gathered next to the conversation strings.
@@ -283,13 +273,13 @@ fn timestamp_value<'a>(line: &'a [u8], name: &[u8]) -> Option<&'a [u8]> {
 }
 
 /// Builds the conversation table: strings, names (always), then clips and
-/// timestamps when any exist. Returns NULL when the file holds no strings.
-unsafe fn load_conversation_table<T: LineSource>(
+/// timestamps when any exist. `None` when the file holds no strings.
+fn load_conversation_table<T: LineSource>(
     src: &mut impl LineSource,
     length: u32,
     clip_dir: Option<Vec<u8>>,
     timestamp_src: Option<T>,
-) -> *mut StringTable {
+) -> Option<ConversationTable> {
     let mut strings = Pool::default();
     let mut extra = Companions {
         names: Pool::default(),
@@ -302,66 +292,30 @@ unsafe fn load_conversation_table<T: LineSource>(
         extra.on_header(name, rest)
     });
     if count == 0 {
-        return null_mut();
+        return None;
     }
-
-    let has_clips = !extra.clips.bytes.is_empty();
-    let has_timestamps = !extra.timestamps.bytes.is_empty();
-    let mut flags = HAS_NAMEINDEX;
-    if has_clips {
-        flags |= HAS_SOUND_CLIPS;
-    }
-    if has_timestamps {
-        flags |= HAS_TIMESTAMP;
-    }
-
-    let table = AllocStringTable(count as i32, i32::from(flags));
-    copy_pool(table, 0, count, &strings);
-    copy_pool(table, count, count, &extra.names);
-    let mut first = 2 * count;
-    if has_clips {
-        copy_pool(table, first, count, &extra.clips);
-        first += count;
-    }
-    if has_timestamps {
-        copy_pool(table, first, count, &extra.timestamps);
-    }
-
-    let index = string_new(0, 0.85, 0.9);
-    let names = (*table).strings.add(count);
-    for i in 0..count {
-        let entry = names.add(i);
-        string_add(index, (*entry).data, entry.cast());
-    }
-    (*table).name_index = index.cast();
-    table
+    let column = |pool: Pool| (!pool.bytes.is_empty()).then(|| pool.into_entries(count));
+    Some(ConversationTable {
+        strings: strings.into_entries(count),
+        names: extra.names.into_entries(count),
+        clips: column(extra.clips),
+        timestamps: column(extra.timestamps),
+    })
 }
 
-/// Loads a `phrases[:clip_dir[:timestamps]]` conversation resource into
-/// `resdata->ptr` (NULL on failure).
-///
-/// # Safety
-/// `path` must be NUL-terminated and `resdata` writable.
-pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *mut ResourceData) {
-    let full = CStr::from_ptr(path).to_bytes();
+/// Loads a `phrases[:clip_dir[:timestamps]]` conversation resource.
+pub(super) fn load_conversation(path: &CStr) -> Option<ConversationTable> {
+    let full = path.to_bytes();
     let paths = &full[..full.len().min(LINE_SIZE - 1)];
     let (phrases, clip_dir, ts_path) = split_conversation_path(paths);
-
-    let phrases_c = CString::new(phrases).expect("path has no NUL");
-    let content = crate::io::content_dir();
-    let fp = content.as_ref().map_or(null_mut(), |content| {
-        open_res_file(content, phrases_c.as_ptr(), c"rb".as_ptr())
-    });
-    if fp.is_null() {
+    let content = crate::io::content_dir()?;
+    let Some((mut file, data_len)) = open_with_length(&content, phrases) else {
         log_message(
             LOG_WARNING,
             &format!("Warning: Can't open '{}'", String::from_utf8_lossy(phrases)),
         );
-        (*resdata).ptr = null_mut();
-        return;
-    }
-
-    let data_len = LengthResFile(fp) as u32;
+        return None;
+    };
     log_message(
         LOG_INFO,
         &format!(
@@ -387,7 +341,6 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
         ),
         None => log_message(LOG_INFO, "\tNo associated timestamp file"),
     }
-
     if data_len == 0 {
         log_message(
             LOG_WARNING,
@@ -396,25 +349,18 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
                 String::from_utf8_lossy(full)
             ),
         );
-        res_CloseResFile(fp);
-        (*resdata).ptr = null_mut();
-        return;
+        return None;
     }
-
     let timestamp_src = ts_path.and_then(|ts| {
         let ts = std::str::from_utf8(ts).ok()?;
-        content?.open_read(Path::new(ts)).ok()
+        content.open_read(Path::new(ts)).ok()
     });
-    let clip_dir = clip_dir.map(<[u8]>::to_vec);
-
-    let table = load_conversation_table(
-        &mut FileLines(&mut *fp.cast::<FileStream>()),
+    load_conversation_table(
+        &mut FileLines(&mut file),
         data_len,
-        clip_dir,
+        clip_dir.map(<[u8]>::to_vec),
         timestamp_src,
-    );
-    res_CloseResFile(fp);
-    (*resdata).ptr = table.cast();
+    )
 }
 
 /// Splits `phrases[:clip_dir[:timestamps]]`.
@@ -433,23 +379,29 @@ fn split_conversation_path(paths: &[u8]) -> (&[u8], Option<&[u8]>, Option<&[u8]>
     }
 }
 
-/// Big-endian binary table: `[count, extra_words, lens[count], ...,
-/// string data]`, with the data starting after `extra_words` more words.
-///
-/// # Safety
-/// `fp` must be an open UIO stream.
-pub unsafe extern "C" fn _get_binary_table_data(fp: *mut c_void, length: u32) -> *mut c_void {
-    let file = GetResourceData(fp, length);
-    if file.is_null() {
-        return null_mut();
+/// A `BINTAB` file in the content directory: a `0xFFFFFFFF` marker (an
+/// uncompressed resource), then a big-endian binary table: `[count,
+/// extra_words, lens[count], ..., string data]`, with the data starting after
+/// `extra_words` more words.
+pub(super) fn load_binary_table(path: &CStr) -> Option<LoadedBinaryTable> {
+    let content = crate::io::content_dir()?;
+    let (mut file, length) = open_resource(&content, path.to_bytes())?;
+    let mut marker = [0; 4];
+    file.read_exact(&mut marker).ok()?;
+    if u32::from_ne_bytes(marker) != u32::MAX {
+        log::warn!("LZ-compressed binary data not supported");
+        return None;
     }
-    let bytes = std::slice::from_raw_parts(file.cast(), (length - 4) as usize);
-    let table = table_from_binary(bytes);
-    rust_hfree(file);
-    table.into_raw().cast()
+    let data_len = (length as usize).saturating_sub(4);
+    if data_len == 0 {
+        return None;
+    }
+    let mut bytes = vec![0; data_len];
+    file.read_exact(&mut bytes).ok()?;
+    Some(table_from_binary(&bytes))
 }
 
-fn table_from_binary(file: &[u8]) -> super::owned_table::LoadedBinaryTable {
+fn table_from_binary(file: &[u8]) -> LoadedBinaryTable {
     let word = |index: usize| {
         let offset = index * 4;
         u32::from_be_bytes([
@@ -469,7 +421,7 @@ fn table_from_binary(file: &[u8]) -> super::owned_table::LoadedBinaryTable {
             entry.to_vec()
         })
         .collect();
-    super::owned_table::LoadedBinaryTable::from_entries(entries)
+    LoadedBinaryTable::from_entries(entries)
 }
 
 #[cfg(test)]
@@ -512,38 +464,23 @@ mod tests {
         }
     }
 
-    unsafe fn entry_text(entry: *mut StringTableEntry) -> Option<Vec<u8>> {
-        if (*entry).data.is_null() {
-            return None;
-        }
-        Some(
-            std::slice::from_raw_parts((*entry).data.cast::<u8>(), (*entry).length as usize)
-                .to_vec(),
-        )
-    }
-
-    unsafe fn plain(text: &[u8]) -> *mut StringTable {
+    fn plain(text: &[u8]) -> Option<LoadedTextTable> {
         load_plain_table(&mut Memory::new(text), text.len() as u32)
     }
 
     #[test]
     fn plain_table_joins_lines_and_trims_trailing_newlines() {
-        unsafe {
-            let table = plain(b"junk\n#(A)\nhello\nworld\n\n\n#(B)\nsecond\n#(C)\n");
-            assert_eq!((*table).size, 3);
-            let a = entry_text((*table).strings).unwrap();
-            assert_eq!(a, b"hello\nworld\0");
-            assert_eq!(entry_text((*table).strings.add(1)).unwrap(), b"second\0");
-            assert_eq!(entry_text((*table).strings.add(2)), None);
-        }
+        let table = plain(b"junk\n#(A)\nhello\nworld\n\n\n#(B)\nsecond\n#(C)\n").unwrap();
+        assert_eq!(table.len(), 3);
+        assert_eq!(table.text(0), Some(c"hello\nworld"));
+        assert_eq!(table.text(1), Some(c"second"));
+        assert_eq!(table.text(2), None);
     }
 
     #[test]
-    fn plain_table_without_headers_is_null() {
-        unsafe {
-            assert!(plain(b"no headers\nat all\n").is_null());
-            assert!(plain(b"").is_null());
-        }
+    fn plain_table_without_headers_is_absent() {
+        assert!(plain(b"no headers\nat all\n").is_none());
+        assert!(plain(b"").is_none());
     }
 
     #[test]
@@ -579,43 +516,39 @@ mod tests {
 
     #[test]
     fn conversation_collects_names_clips_and_timestamps() {
-        unsafe {
-            let text = b"#(HELLO) h.ogg\nHi there\n#(BYE) b.ogg\nGoodbye\n";
-            let stamps = b"#(HELLO) 10,20\n#(BYE) 30\n";
-            let table = load_conversation_table(
-                &mut Memory::new(text),
-                text.len() as u32,
-                Some(b"voice/".to_vec()),
-                Some(Memory::new(stamps)),
-            );
-            let flags = (*table).flags;
-            assert_eq!(flags, HAS_NAMEINDEX | HAS_SOUND_CLIPS | HAS_TIMESTAMP);
-            let s = |slot: usize| entry_text((*table).strings.add(slot)).unwrap();
-            assert_eq!(s(0), b"Hi there\0");
-            assert_eq!(s(2), b"HELLO\0");
-            assert_eq!(s(3), b"BYE\0");
-            assert_eq!(s(4), b"voice/h.ogg\0");
-            assert_eq!(s(5), b"voice/b.ogg\0");
-            assert_eq!(s(6), b"10,20\n\0");
-            assert_eq!(s(7), b"30\n\0");
-            assert!(!(*table).name_index.is_null());
-        }
+        let text = b"#(HELLO) h.ogg\nHi there\n#(BYE) b.ogg\nGoodbye\n";
+        let stamps = b"#(HELLO) 10,20\n#(BYE) 30\n";
+        let table = load_conversation_table(
+            &mut Memory::new(text),
+            text.len() as u32,
+            Some(b"voice/".to_vec()),
+            Some(Memory::new(stamps)),
+        )
+        .unwrap();
+        let first = table.phrase(0).unwrap();
+        assert_eq!(first.text, Some(c"Hi there"));
+        assert_eq!(first.name, Some(c"HELLO"));
+        assert_eq!(first.clip, Some(c"voice/h.ogg"));
+        assert_eq!(first.timestamp, Some(c"10,20\n"));
+        let second = table.phrase(1).unwrap();
+        assert_eq!(second.name, Some(c"BYE"));
+        assert_eq!(second.clip, Some(c"voice/b.ogg"));
+        assert_eq!(second.timestamp, Some(c"30\n"));
     }
 
     #[test]
     fn bad_timestamp_line_disables_timestamps() {
-        unsafe {
-            let text = b"#(A) a.ogg\nx\n#(B)\ny\n";
-            let table = load_conversation_table(
-                &mut Memory::new(text),
-                text.len() as u32,
-                None,
-                Some(Memory::new(b"#(A) 1\nnot a header\n")),
-            );
-            assert_eq!((*table).flags, HAS_NAMEINDEX | HAS_SOUND_CLIPS);
-            assert_eq!(entry_text((*table).strings.add(4)).unwrap(), b"a.ogg\0");
-            assert_eq!(entry_text((*table).strings.add(5)), None);
-        }
+        let text = b"#(A) a.ogg\nx\n#(B)\ny\n";
+        let table = load_conversation_table(
+            &mut Memory::new(text),
+            text.len() as u32,
+            None,
+            Some(Memory::new(b"#(A) 1\nnot a header\n")),
+        )
+        .unwrap();
+        assert!(table.timestamps.is_none());
+        assert_eq!(table.phrase(0).unwrap().clip, Some(c"a.ogg"));
+        assert_eq!(table.phrase(1).unwrap().clip, None);
     }
 
     #[test]
@@ -624,10 +557,7 @@ mod tests {
         for i in 0..MAX_STRINGS + 5 {
             text.extend_from_slice(format!("#(S{i})\nv\n").as_bytes());
         }
-        unsafe {
-            let table = plain(&text);
-            assert_eq!((*table).size as usize, MAX_STRINGS);
-        }
+        assert_eq!(plain(&text).unwrap().len(), MAX_STRINGS);
     }
 
     #[test]
@@ -640,13 +570,38 @@ mod tests {
         file.extend_from_slice(b"abcde");
         let owner = table_from_binary(&file);
         assert_eq!(owner.entries(), [b"abc".to_vec(), b"de".to_vec()]);
-        let table = owner.into_raw();
-        // SAFETY: the handoff owns this table and its entry storage until release.
-        unsafe {
-            assert_eq!(entry_text((*table).strings).unwrap(), b"abc");
-            assert_eq!(entry_text((*table).strings.add(1)).unwrap(), b"de");
-            super::super::string_table::FreeStringTable(table);
+    }
+
+    #[test]
+    fn resource_files_load_through_the_content_directory() {
+        let mount = crate::io::fixture::TempMount::new().as_content();
+        mount.write("text.txt", b"#(A)\nalpha\n");
+        mount.write("empty.txt", b"");
+        let mut binary = u32::MAX.to_ne_bytes().to_vec();
+        for word in [1u32, 0, 2] {
+            binary.extend_from_slice(&word.to_be_bytes());
         }
+        binary.extend_from_slice(b"hi");
+        mount.write("table.bin", &binary);
+        mount.write("packed.bin", &[0, 0, 0, 1, 0, 0, 0, 0]);
+        mount.write("talk.txt", b"#(GREET) hi.ogg\nHello\n");
+        let text = load_text_table(&mount.dir(), c"text.txt").unwrap();
+        assert_eq!(text.text(0), Some(c"alpha"));
+        assert!(load_text_table(&mount.dir(), c"empty.txt").is_none());
+        assert!(load_text_table(&mount.dir(), c"missing.txt").is_none());
+        assert_eq!(
+            load_binary_table(c"table.bin").unwrap().entries(),
+            [b"hi".to_vec()]
+        );
+        assert!(load_binary_table(c"packed.bin").is_none());
+        let talk = load_conversation(c"talk.txt:voice/").unwrap();
+        let phrase = talk.phrase(0).unwrap();
+        assert_eq!(
+            (phrase.text, phrase.clip),
+            (Some(c"Hello"), Some(c"voice/hi.ogg"))
+        );
+        assert!(load_conversation(c"missing.txt").is_none());
+        assert!(load_conversation(c"empty.txt").is_none());
     }
 
     #[test]

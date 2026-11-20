@@ -147,12 +147,15 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
         unsafe {
             let mut first_fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let mut second_fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
-            use uqm_rust::strings::string_table::*;
-            let sounds = AllocStringTable(4, 0);
-            first_fixture.descriptor_mut().ship_data.ship_sounds =
-                CaptureStringTable(sounds).cast();
-            second_fixture.descriptor_mut().ship_data.ship_sounds =
-                CaptureStringTable(sounds).cast();
+            first_fixture.descriptor_mut().install_sound_fixture(4);
+            second_fixture.descriptor_mut().install_sound_fixture(4);
+            let sound_index = |fixture: &mut Ship| {
+                fixture
+                    .descriptor_mut()
+                    .ship_data
+                    .ship_sounds
+                    .map(|sounds| sounds.index())
+            };
             assert_ne!(
                 first_fixture.descriptor_mut() as *mut RaceDescriptor,
                 second_fixture.descriptor_mut() as *mut RaceDescriptor
@@ -210,14 +213,8 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                 20
             );
             assert_eq!(alternate(second_fixture.descriptor_mut()).max_thrust, 50);
-            assert_eq!(
-                GetStringTableIndex(first_fixture.descriptor_mut().ship_data.ship_sounds.cast()),
-                2
-            );
-            assert_eq!(
-                GetStringTableIndex(second_fixture.descriptor_mut().ship_data.ship_sounds.cast()),
-                0
-            );
+            assert_eq!(sound_index(&mut first_fixture), Some(2));
+            assert_eq!(sound_index(&mut second_fixture), Some(0));
 
             first_fixture.descriptor_mut().characteristics.turn_wait = 17;
             (*ship).current.image.frames = first_fixture.frame_set(2);
@@ -248,13 +245,7 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                 (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
             );
             first_fixture.uninit();
-            assert_eq!(
-                GetStringTableIndex(first_fixture.descriptor_mut().ship_data.ship_sounds.cast()),
-                0
-            );
-            first_fixture.descriptor_mut().ship_data.ship_sounds = std::ptr::null_mut();
-            second_fixture.descriptor_mut().ship_data.ship_sounds = std::ptr::null_mut();
-            FreeStringTable(sounds);
+            assert_eq!(sound_index(&mut first_fixture), Some(0));
             second_fixture.uninit();
             assert!(matches!(
                 first_fixture.descriptor_mut().race_state,

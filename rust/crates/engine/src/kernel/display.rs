@@ -57,14 +57,12 @@ impl Kernel {
     }
 
     pub fn init_resources(&mut self) -> bool {
-        // SAFETY: game thread, once, before any resource is loaded.
-        self.h_res_index = unsafe { crate::resource::ffi_bridge::InitResourceSystem() };
-        !self.h_res_index.is_null()
+        crate::resource::init();
+        true
     }
 
     pub fn uninit_resources(&mut self) {
-        // SAFETY: game thread, after every resource owner has released its resources.
-        unsafe { crate::resource::ffi_bridge::UninitResourceSystem() };
+        crate::resource::uninit();
     }
 
     /// Make `colortable.main` the active colour map.

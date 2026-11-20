@@ -50,14 +50,16 @@ pub trait MyconOps {
     fn scan(&mut self, case: ScanCase, node: &mut NodeInfo) -> (u16, u32);
 }
 
+thread_local! {
+    /// Whether the scanned planet's discovery report is loaded, for the energy hook.
+    pub static REPORT_LOADED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub fn scan_info(case: ScanCase) -> SystemInfo {
     let mut info: SystemInfo = unsafe { std::mem::zeroed() };
     info.planet_info.scan_seed = scan_seeds(case.seed);
     info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = u32::from(case.retrieved);
-    if case.strings {
-        // Neither scan hook dereferences this handle.
-        info.planet_info.discovery_string = std::ptr::NonNull::dangling().as_ptr();
-    }
+    REPORT_LOADED.set(case.strings);
     info
 }
 

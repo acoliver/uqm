@@ -3,9 +3,8 @@
 
 use super::descriptor::Descriptor;
 use super::ffi::TFB_VideoClip;
-use crate::resource::ffi_bridge::InstallResTypeVectors;
 use crate::sound::resource_types::LoadedMusic;
-use std::ffi::{c_int, CStr};
+use std::ffi::CStr;
 use std::ptr;
 use std::ptr::NonNull;
 
@@ -104,18 +103,6 @@ impl Drop for VideoPlayback {
         drop(self.speech.take());
         drop(self.audio.take());
     }
-}
-
-/// # Safety
-/// Called during resource registration.
-pub unsafe fn InstallVideoResType() -> c_int {
-    InstallResTypeVectors(
-        c"3DOVID".as_ptr(),
-        Some(crate::resource::type_registry::use_descriptor_as_res),
-        None,
-        None,
-    );
-    1
 }
 
 #[cfg(test)]

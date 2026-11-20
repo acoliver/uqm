@@ -592,18 +592,13 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
     let native = battle::NativeFrameSet::new(16);
-    let mut strings = uqm_rust::strings::string_table::StringTableEntry {
-        data: ptr::null_mut(),
-        length: 0,
-        index: 3,
-        parent: ptr::null_mut(),
-    };
+    let strings = Some(uqm_rust::strings::owned_table::EntryRef::new(0x5000, 3));
     let mut music = ptr::null_mut();
     let frame_pointer = native.frame(9);
     descriptor.ship_info.race_strings_rsc = c"test.strings".as_ptr();
     descriptor.ship_info.icons_rsc = c"test.icons".as_ptr();
     descriptor.ship_info.melee_icon_rsc = c"test.melee".as_ptr();
-    descriptor.ship_info.race_strings = &mut strings;
+    descriptor.ship_info.race_strings = strings;
     descriptor.ship_info.icons = frame_pointer;
     descriptor.ship_info.melee_icon = frame_pointer;
     descriptor.ship_data.ship_rsc = [c"test.ship".as_ptr(); 3];
@@ -624,7 +619,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     };
     descriptor.ship_data.victory_ditty_rsc = c"test.victory".as_ptr();
     descriptor.ship_data.ship_sounds_rsc = c"test.sounds".as_ptr();
-    descriptor.ship_data.ship_sounds = &mut strings;
+    descriptor.ship_data.ship_sounds = strings;
     descriptor.ship_data.victory_ditty = &mut music;
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
@@ -845,24 +840,13 @@ fn media_identity(
     directory: &Path,
     descriptor: &mut RaceDescriptor,
 ) {
-    use uqm_rust::strings::string_table::{StringTable, StringTableEntry};
-    // SAFETY: StringTable contains only integers and pointers; zero is valid.
-    let mut table_a: StringTable = unsafe { std::mem::zeroed() };
-    // SAFETY: StringTable contains only integers and pointers; zero is valid.
-    let mut table_b: StringTable = unsafe { std::mem::zeroed() };
-    let mut entry = StringTableEntry {
-        data: ptr::null_mut(),
-        length: 0,
-        index: 3,
-        parent: &mut table_a,
-    };
+    use uqm_rust::strings::owned_table::EntryRef;
     let mut music_a = ptr::null_mut();
     let mut music_b = ptr::null_mut();
-    descriptor.ship_info.race_strings = &mut entry;
+    descriptor.ship_info.race_strings = Some(EntryRef::new(0xa000, 3));
     descriptor.ship_data.victory_ditty = &mut music_a;
     let (before, _) = snapshot(observer, directory);
-    let entry = &mut entry;
-    entry.parent = &mut table_b;
+    descriptor.ship_info.race_strings = Some(EntryRef::new(0xb000, 3));
     descriptor.ship_data.victory_ditty = &mut music_b;
     let (after, _) = snapshot(observer, directory);
     assert_eq!(
@@ -877,7 +861,7 @@ fn media_identity(
         before["ships.0.0.data.victory.resource_owner"],
         after["ships.0.0.data.victory.resource_owner"]
     );
-    descriptor.ship_info.race_strings = ptr::null_mut();
+    descriptor.ship_info.race_strings = None;
     descriptor.ship_data.victory_ditty = ptr::null_mut();
 }
 

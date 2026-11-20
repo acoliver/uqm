@@ -9,7 +9,7 @@ use super::super::battle::link_queue::{
 };
 use crate::collections::pool::OrderedPool;
 use crate::graphics::{drawable::FrameId, geometry::Point};
-use crate::strings::string_table::StringPtr;
+use crate::strings::owned_table::EntryRef;
 
 pub const SAMATRA_RACE: u8 = 23;
 
@@ -23,7 +23,7 @@ pub struct ShipFragment {
     pub max_crew: u16,
     pub energy_level: u8,
     pub max_energy: u8,
-    pub race_strings: StringPtr,
+    pub race_strings: Option<EntryRef>,
     pub icons: FrameId,
     pub melee_icon: FrameId,
 }
@@ -39,7 +39,7 @@ pub struct FleetInfo {
     pub growth: u8,
     pub max_energy: u8,
     pub loc: Point,
-    pub race_strings: StringPtr,
+    pub race_strings: Option<EntryRef>,
     pub icons: FrameId,
     pub melee_icon: FrameId,
     pub actual_strength: u16,

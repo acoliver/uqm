@@ -36,6 +36,14 @@ const HUMAN_SHIP: u16 = 2;
 /// An owned campaign with a template for every race.
 pub(super) struct LiveGame(crate::engine::World);
 
+/// A distinct string-table identity for fixture ships; only identity is compared.
+pub(super) fn strings(race: usize) -> Option<crate::strings::owned_table::EntryRef> {
+    Some(crate::strings::owned_table::EntryRef::new(
+        handle(race, 1) as usize,
+        0,
+    ))
+}
+
 pub(super) fn handle(race: usize, which: usize) -> *mut std::ffi::c_void {
     (0x1_0000 + race * 0x100 + which * 0x10) as *mut std::ffi::c_void
 }
@@ -60,7 +68,7 @@ impl LiveGame {
                 growth: 0xa3,
                 max_energy: 30 + race as u8,
                 loc: CPoint { x: -1, y: -2 },
-                race_strings: handle(race, 1).cast(),
+                race_strings: strings(race),
                 icons: frame_handle(race, 2),
                 melee_icon: frame_handle(race, 3),
                 actual_strength: 0xa4a4,
@@ -383,7 +391,7 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     for race in 0..RACES {
         let t = game.template(race);
         assert_eq!(t.species_id, race as u32 + 1, "race {race}");
-        assert_eq!(t.race_strings, handle(race, 1).cast(), "race {race}");
+        assert_eq!(t.race_strings, strings(race), "race {race}");
         assert_eq!(t.icons, frame_handle(race, 2), "race {race}");
         assert_eq!(t.melee_icon, frame_handle(race, 3), "race {race}");
     }
@@ -400,7 +408,7 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     assert_eq!((ship.crew_level, ship.max_crew), (18, 18));
     assert_eq!((ship.energy_level, ship.max_energy), (0, 18));
     assert_eq!(ship.species_id, 3);
-    assert_eq!(ship.race_strings, handle(2, 1).cast());
+    assert_eq!(ship.race_strings, strings(2));
     assert_eq!(ship.icons, frame_handle(2, 2));
     assert_eq!(ship.melee_icon, frame_handle(2, 3));
     // One captain draw for the clone, whatever name the save then put on top.
@@ -463,7 +471,7 @@ fn restore_keeps_entry_order_and_replaces_what_was_queued() {
     );
     // The templates of races 2 and 5 were the source of each clone.
     assert_eq!(game.built_fragments()[0].species_id, 6);
-    assert_eq!(game.built_fragments()[1].race_strings, handle(2, 1).cast());
+    assert_eq!(game.built_fragments()[1].race_strings, strings(2));
     // The saved sections read back.
     assert_eq!(
         capture_queues(&game).unwrap().ship_queue,

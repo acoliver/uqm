@@ -87,7 +87,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                 CStr::from_ptr(d.ship_info.melee_icon_rsc),
                 c"ship.chmmr.meleeicons"
             );
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
             assert_eq!((d.fleet.strength, point(d.fleet.known_loc)), (0, (0, 0)));
@@ -150,7 +150,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                 c"ship.chmmr.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null());
-            assert!(d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
                     d.cyborg_control.ManeuverabilityIndex,

@@ -138,7 +138,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
             assert_eq!(s(d.ship_info.race_strings_rsc), c"ship.melnorme.text");
             assert_eq!(s(d.ship_info.icons_rsc), c"ship.melnorme.icons");
             assert_eq!(s(d.ship_info.melee_icon_rsc), c"ship.melnorme.meleeicons");
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null() && d.ship_info.melee_icon.is_null());
             assert_eq!(d.fleet.strength, u16::MAX);
             assert_eq!((d.fleet.known_loc.x, d.fleet.known_loc.y), (4999, 4999));
@@ -191,7 +191,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
                 .chain(d.ship_data.weapon.views())
                 .chain(d.ship_data.special.views())
                 .all(|f| f.is_absent()));
-            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
                     d.cyborg_control.ManeuverabilityIndex,

@@ -16,9 +16,6 @@ use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
-use uqm_rust::strings::string_table::{
-    AllocStringTable, CaptureStringTable, FreeStringTable, StringTable,
-};
 
 // races.h / intel.h flags that are macros with casts rather than constants.
 const STANDARD_RATING: u8 = 1 << 4;
@@ -48,25 +45,6 @@ impl Battle {
 
 // The same engine-readable drawable layout used by the other native race tests.
 use shared::FrameSet;
-
-/// Owns a string table so `GetSoundCount` reports a real size.
-struct Sounds(*mut StringTable);
-
-impl Sounds {
-    unsafe fn new(count: i32) -> Self {
-        Self(AllocStringTable(count, 0))
-    }
-
-    unsafe fn first(&self) -> SOUND {
-        CaptureStringTable(self.0).cast()
-    }
-}
-
-impl Drop for Sounds {
-    fn drop(&mut self) {
-        unsafe { FreeStringTable(self.0) }
-    }
-}
 
 #[derive(Clone, Copy)]
 struct SavedState {
@@ -409,7 +387,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 CStr::from_ptr(d.ship_info.melee_icon_rsc),
                 c"ship.pkunk.meleeicons"
             );
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
             // 666 / SPHERE_RADIUS_INCREMENT * 2
@@ -468,7 +446,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 c"ship.pkunk.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null());
-            assert!(d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(d.cyborg_control.ManeuverabilityIndex, 0);
             // CLOSE_RANGE_WEAPON + 1
             assert_eq!(d.cyborg_control.WeaponRange, 201);
@@ -1370,9 +1348,8 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
     battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
-            let sounds = Sounds::new(4);
             let mut ship = Ship::new(&_battle, 0);
-            ship.inner.descriptor_mut().ship_data.ship_sounds = sounds.first();
+            ship.inner.descriptor_mut().install_sound_fixture(4);
 
             ship.inner.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.inner.descriptor_mut().ship_info.energy_level = 5;
@@ -1423,9 +1400,8 @@ fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
     battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
-            let sounds = Sounds::new(4);
             let mut ship = Ship::new(&_battle, 0);
-            ship.inner.descriptor_mut().ship_data.ship_sounds = sounds.first();
+            ship.inner.descriptor_mut().install_sound_fixture(4);
 
             let taunt = |ship: &mut Ship| {
                 ship.inner.descriptor_mut().characteristics.special_wait = 0;

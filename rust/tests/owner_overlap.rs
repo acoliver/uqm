@@ -308,7 +308,7 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
         let fragment = fragments.get_mut(id);
         fragment.race_id = SAMATRA_SHIP as u8;
         fragment.species_id = SPECIES_ID_VUX_ID;
-        fragment.race_strings = std::ptr::dangling_mut();
+        fragment.race_strings = Some(uqm_rust::strings::owned_table::EntryRef::new(1, 0));
         fragment.icons = uqm_rust::graphics::drawable::FrameId::from_bits(1 << 16);
         fragment.index = index;
         fragment.crew_level = crew;

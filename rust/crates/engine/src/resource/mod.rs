@@ -1,19 +1,12 @@
-// Resource Module
-// Handles loading and caching of game resources
+//! The resource index and the typed loaders that read through it.
 
 pub mod cache;
-pub mod direct;
-pub mod dispatch;
-pub mod ffi_bridge;
-pub mod ffi_types;
+mod color;
+mod index;
 pub mod propfile;
-pub mod resource_type;
 pub mod settings;
-pub mod stringbank;
-pub mod type_registry;
+
+pub use index::{descriptor, has_key, init, kind, load_index, path_of, remove, string, uninit};
 
 /// A resource name as game records hold it (C: `RESOURCE`).
 pub type ResourceKey = *const std::ffi::c_char;
-
-pub use propfile::*;
-pub use resource_type::*;

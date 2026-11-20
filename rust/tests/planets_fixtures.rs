@@ -561,7 +561,7 @@ mod rust_special {
                     info,
                     myc::EnergyContext {
                         star_index,
-                        report_loaded: !info.planet_info.discovery_string.is_null(),
+                        report_loaded: crate::planets_common::mycon::REPORT_LOADED.get(),
                     },
                     body,
                     which,

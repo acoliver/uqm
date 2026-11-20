@@ -2,7 +2,7 @@
 use super::super::battle::schema::GAME_STATE;
 use super::{queues::FleetInfo, story::StoryState, SisState, World, WorldData, FUEL_TANK_SCALE};
 use crate::graphics::{drawable::FrameId, geometry::Point};
-use crate::strings::string_table::StringPtr;
+use crate::strings::owned_table::EntryRef;
 
 #[derive(Clone, Copy)]
 pub struct FleetRoster {
@@ -18,7 +18,7 @@ pub struct FleetTemplate {
     pub crew_level: u16,
     pub max_crew: u16,
     pub max_energy: u8,
-    pub race_strings: StringPtr,
+    pub race_strings: Option<EntryRef>,
     pub icons: FrameId,
     pub melee_icon: FrameId,
     pub strength: u16,

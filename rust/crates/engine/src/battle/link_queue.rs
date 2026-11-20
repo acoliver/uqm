@@ -483,11 +483,11 @@ pub struct PickerResources<'a> {
     owner: &'a ShipPickerResources,
 }
 impl PickerResources<'_> {
-    pub fn strings(&self) -> crate::strings::string_table::StringPtr {
+    pub fn strings(&self) -> Option<crate::strings::owned_table::EntryRef> {
         self.owner
             .strings
             .as_ref()
-            .map_or(std::ptr::null_mut(), |table| table.as_raw().cast())
+            .map(crate::strings::owned_table::TextEntry::entry_ref)
     }
     pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
         self.owner.label(index)
@@ -550,7 +550,8 @@ mod picker_owner_tests {
         let fragment = world.npc_built_ships().alloc().unwrap();
         world.npc_built_ships().get_mut(fragment).icons =
             crate::graphics::drawable::FrameId::from_bits(1 << 16);
-        world.npc_built_ships().get_mut(fragment).race_strings = std::ptr::dangling_mut();
+        world.npc_built_ships().get_mut(fragment).race_strings =
+            Some(crate::strings::owned_table::EntryRef::new(1, 0));
         let mut pool = RacePool::with_capacity(0, 1);
         let mut ships = LinkQueue::<Starship>::new(&mut pool);
         let id = ships.build(1).unwrap();

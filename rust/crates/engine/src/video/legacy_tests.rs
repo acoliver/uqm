@@ -41,12 +41,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         crate::graphics::state::init_headless(crate::graphics::state::VideoMode::default());
         assert_eq!(crate::sound::rodio_audio::rust_audio_init(), 1);
         assert_eq!(super::super::control::InitVideoPlayer(0), 1);
-        InstallVideoResType();
-        crate::resource::ffi_bridge::load_resource_index(
-            &directory.dir(),
-            c"3dovideo.rmp".as_ptr(),
-            ptr::null(),
-        );
+        crate::resource::load_index(&directory.dir(), c"3dovideo.rmp", None);
     }
     let descriptor = LoadedVideo::load(c"slides.spins.00").expect("shipped spin descriptor");
     let playback = descriptor.play().expect("shipped spin playback");

@@ -221,7 +221,6 @@ mod tests {
                 plan_data_ptr: std::ptr::null(),
                 scan_seed: [104729, 7, 65537],
                 scan_retrieve_mask: [0; 3],
-                discovery_string: std::ptr::null_mut(),
             },
         }
     }

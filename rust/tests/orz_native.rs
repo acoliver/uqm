@@ -200,7 +200,7 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
                 CStr::from_ptr(d.ship_info.melee_icon_rsc),
                 c"ship.orz.meleeicons"
             );
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
             assert_eq!(d.fleet.strength, 60);
