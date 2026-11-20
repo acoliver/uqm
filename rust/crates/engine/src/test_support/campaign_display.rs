@@ -1,0 +1,175 @@
+//! Display resources for campaign callbacks that also redraw their status label.
+use crate::{
+    graphics::{
+        context_abi::{CreateContextAux, DestroyContext, SetContext},
+        drawable_abi::LoadedDrawable,
+        native_abi::CONTEXT,
+        native_font::LoadedFont,
+        sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
+    },
+    io::uio_bridge as uio,
+    world::Game,
+};
+use std::{ffi::CString, ptr};
+
+/// Entries in the fixture's game-text table. It must reach past the highest
+/// months and status string ids that campaign callbacks read.
+pub const GAME_TEXT_ENTRIES: usize = 470;
+
+pub struct CampaignDisplay {
+    context: CONTEXT,
+    previous: CONTEXT,
+    _screen: Option<LoadedDrawable>,
+}
+
+impl CampaignDisplay {
+    pub fn install(game: &mut Game) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_with_resources(game, || {})
+    }
+
+    pub fn install_with_resources(
+        game: &mut Game,
+        load: impl FnOnce(),
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_prepared(game, load, |_| {})
+    }
+
+    pub fn install_prepared(
+        game: &mut Game,
+        load: impl FnOnce(),
+        draw: impl FnOnce(&mut Game),
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_prepared_with_options(game, load, draw, GraphicsOptions::default())
+    }
+
+    pub fn install_prepared_with_options(
+        game: &mut Game,
+        load: impl FnOnce(),
+        draw: impl FnOnce(&mut Game),
+        options: GraphicsOptions,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tmp");
+        std::fs::create_dir_all(&root)?;
+        let directory = tempfile::tempdir_in(root.canonicalize()?)?;
+        std::fs::create_dir(directory.path().join("font"))?;
+        for (code, width) in [(0x41, 1), (0x31, 1), (0x32, 2), (0x2e, 1), (0x3a, 1)] {
+            image::RgbaImage::from_pixel(width, 1, image::Rgba([255, 255, 255, 255]))
+                .save(directory.path().join(format!("font/{code:04x}.png")))?;
+        }
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
+            .save(directory.path().join("effect.png"))?;
+        std::fs::write(directory.path().join("effect.ani"), "effect.png -1 0 0 0\n")?;
+        let mut comm_frames = String::new();
+        for (index, color) in [[180, 0, 0, 255], [0, 180, 0, 255], [0, 0, 180, 255]]
+            .into_iter()
+            .enumerate()
+        {
+            let name = format!("comm-{index}.png");
+            image::RgbaImage::from_pixel(242, 100, image::Rgba(color))
+                .save(directory.path().join(&name))?;
+            comm_frames.push_str(&format!("{name} -1 0 0 0\n"));
+        }
+        std::fs::write(directory.path().join("comm.ani"), comm_frames)?;
+        std::fs::write(
+            directory.path().join("fixture.rmp"),
+            "fixture.tiny = FONTRES:font\nfont.player = FONTRES:font\nfixture.comm.font = FONTRES:font\nfixture.comm.graphics = GFXRES:comm.ani\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\ncredits.credits = STRTAB:credits.txt\ncredits.background = GFXRES:effect.ani\ngraphics.newgame = GFXRES:effect.ani\ncredits.font.pt13 = FONTRES:font\ncredits.font.pt17 = FONTRES:font\ncredits.font.pt45 = FONTRES:font\ngraphics.flagshipskeleton = GFXRES:effect.ani\ngraphics.outfitmodules = GFXRES:effect.ani\n",
+        )?;
+        std::fs::write(
+            directory.path().join("credits.txt"),
+            "#(credits)\n13 L/10 A\n",
+        )?;
+        let host = CString::new(
+            directory
+                .path()
+                .to_str()
+                .ok_or("fixture path is not UTF-8")?,
+        )?;
+        std::env::set_var("SDL_VIDEODRIVER", "dummy");
+        std::env::set_var("SDL_AUDIODRIVER", "dummy");
+        // SAFETY: the serialized fixture owns SDL and the temporary resource mount.
+        unsafe {
+            assert_eq!(
+                TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
+                0
+            );
+            uio::uio_init();
+            let repository = uio::uio_openRepository(0);
+            let mount = uio::uio_mountDir(
+                repository,
+                c"/".as_ptr(),
+                1,
+                ptr::null_mut(),
+                ptr::null(),
+                host.as_ptr(),
+                ptr::null_mut(),
+                6,
+                ptr::null_mut(),
+            );
+            assert!(!mount.is_null());
+            let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
+            let previous_content = crate::io::handles::contentDir;
+            crate::io::handles::contentDir = content.cast();
+            crate::resource::ffi_bridge::InitResourceSystem();
+            crate::resource::ffi_bridge::LoadResourceIndex(
+                content.cast(),
+                c"fixture.rmp".as_ptr(),
+                ptr::null(),
+            );
+            game.kernel.install_tiny_font(
+                LoadedFont::load(c"fixture.tiny").ok_or("tiny-font fixture did not load")?,
+            );
+            game.kernel.install_micro_font(
+                LoadedFont::load(c"fixture.tiny").ok_or("micro-font fixture did not load")?,
+            );
+            game.kernel.install_battle_font(
+                LoadedFont::load(c"fixture.tiny").ok_or("battle-font fixture did not load")?,
+            );
+            load();
+            #[cfg(feature = "debug-process")]
+            let context = CreateContextAux(c"campaign callback fixture".as_ptr());
+            #[cfg(not(feature = "debug-process"))]
+            let context = CreateContextAux();
+            let previous = SetContext(context);
+            let screen =
+                LoadedDrawable::create(8, 320, 240, 1).ok_or("screen fixture allocation failed")?;
+            game.kernel.status_context = context;
+            game.kernel.off_screen_context = context;
+            game.kernel.screen = screen
+                .lease()
+                .frame(0)
+                .ok_or("fixture screen has no frame")?;
+            game.kernel
+                .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(vec![
+                    b"A\0".to_vec();
+                    GAME_TEXT_ENTRIES
+                ]));
+            draw(game);
+            crate::io::handles::contentDir = previous_content;
+            uio::uio_closeDir(content);
+            uio::uio_closeRepository(repository);
+            uio::uio_unInit();
+            Ok(Self {
+                context,
+                previous,
+                _screen: Some(screen),
+            })
+        }
+    }
+    pub fn finish(&self, game: Game) {
+        // SAFETY: the fixture retains its queued drawing resources until this flush.
+        unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
+        drop(game);
+    }
+}
+
+impl Drop for CampaignDisplay {
+    fn drop(&mut self) {
+        // SAFETY: the serialized fixture restores selection before releasing its context.
+        unsafe {
+            SetContext(self.previous);
+            DestroyContext(self.context);
+            drop(self._screen.take());
+            TFB_UninitGraphics();
+        }
+    }
+}

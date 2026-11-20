@@ -1,0 +1,304 @@
+//! Hyperspace collision and transition callbacks.
+use super::{get, set};
+use crate::battle::context_access::navigation::NavigationOps;
+use crate::battle::element::{
+    APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DEFY_PHYSICS, NONSOLID, PLAYER_SHIP,
+};
+use crate::comm::dispatch::RPG_PLAYER_NUM;
+use crate::engine::battle::ai_constants::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+use crate::engine::battle::{Cx, ElementHook, ElementId};
+use crate::engine::world::activity::activity_flags::{CHECK_LOAD, IN_BATTLE, START_ENCOUNTER};
+use crate::engine::StoryKey;
+use crate::graphics::native_abi::POINT;
+use std::ptr;
+
+use crate::engine::graphics::EMPTY_PRIMITIVE;
+pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
+    let point = cx.element(element).next.location;
+    let (width, height) = cx.screen_dimensions();
+    POINT {
+        x: crate::navigation::hyper_units::universe_x(
+            cx.world.data.flagship.log_x + i32::from(point.x) - (((width - 64) << 5) >> 1),
+            width - 64,
+        ),
+        y: crate::navigation::hyper_units::universe_y(
+            cx.world.data.flagship.log_y + i32::from(point.y) - ((height << 5) >> 1),
+            height,
+        ),
+    }
+}
+pub(super) fn cleanup(cx: &mut Cx<'_>) {
+    let mut next = cx.world.encounters_ref().head();
+    while let Some(encounter) = next {
+        let queue = cx.world.encounters_ref();
+        next = queue.succ(encounter);
+        let element = cx
+            .elements()
+            .id(std::ptr::NonNull::new(queue.get(encounter).h_element));
+        let promote = element.is_some_and(|id| cx.target(id).is_some());
+        let mut queue = cx.world.encounters();
+        if promote {
+            queue.remove(encounter);
+            let head = queue.head();
+            queue.insert_before(encounter, head);
+        }
+        queue.get_mut(encounter).h_element = ptr::null_mut();
+    }
+}
+pub fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
+    cx.element_mut(element).flags |= CHANGING;
+    let current = cx.element(element).current.image.frame;
+    let mut index = cx.frame_number(current.view());
+    if index == 0 {
+        index += 16;
+    } else if index < 16 {
+        index = (index + 1) & 15;
+    } else {
+        index += 1;
+        if index == cx.frame_count(current.view()) {
+            cleanup(cx);
+            cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
+            match cx.element(element).turn {
+                0 => {
+                    save_sis_facing(cx);
+                    cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+                }
+                kind @ (1 | 2) => {
+                    let point = element_universe(cx, element);
+                    cx.leave_hyperspace(kind, point);
+                }
+                _ => unreachable!(),
+            }
+            cx.element_mut(element).velocity.zero();
+            cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
+            return;
+        }
+    }
+    let frame = cx.absolute_frame(current.view(), index);
+    cx.set_frame(element, true, frame);
+}
+pub(crate) fn init_transition(cx: &mut Cx<'_>, source: ElementId, ship: ElementId, kind: u8) {
+    let from = cx.element(source).next.location;
+    let to = cx.element(ship).next.location;
+    let dx = ((i32::from(from.x) - i32::from(to.x)) << 5) as i16;
+    let dy = ((i32::from(from.y) - i32::from(to.y)) << 5) as i16;
+    cx.element_mut(ship).flags |= NONSOLID;
+    cx.element_mut(ship).pre = Some(ElementHook::Native(unhyper));
+    cx.element_mut(ship).post = None;
+    cx.element_mut(ship).turn = kind;
+    let mut turns = (i32::from(cx.frame_count(cx.element(ship).next.image.frame.view())) - 16
+        + ((16 - i32::from(cx.ship_state(cx.owner(ship)).facing)) & 15)) as i16;
+    if turns == 0 {
+        turns = 1;
+    }
+    cx.element_mut(ship)
+        .velocity
+        .set_components(i32::from(dx / turns), i32::from(dy / turns));
+}
+pub fn hyper_preprocess(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    hyper_transition(cx, element);
+}
+
+pub fn hyper_transition(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) -> bool {
+    if cx.element(element).flags & APPEARING != 0 {
+        let last = cx.kernel.last_activity;
+        if last & CHECK_LOAD != 0 {
+            cx.kernel.last_activity = last & !CHECK_LOAD;
+            cx.copy_next_to_current(element);
+            cx.setup_element(element);
+            cx.element_mut(element).flags |= DEFY_PHYSICS;
+            return false;
+        } else {
+            cx.kernel.hyperspace_ship_hooks = (cx.element(element).pre, cx.element(element).post);
+            cx.element_mut(element).pre = Some(ElementHook::Native(hyper_preprocess));
+            cx.element_mut(element).post = None;
+            cx.element_mut(element).flags |= NONSOLID;
+            let current = cx.element(element).current.image.frame;
+            let frame = cx.absolute_frame(current.view(), cx.frame_count(current.view()) - 1);
+            cx.set_frame(element, true, frame);
+        }
+    } else {
+        let current = cx.element(element).current.image.frame;
+        let old = cx.frame_number(current.view());
+        let mut index = old.wrapping_sub(1);
+        if old <= 16 {
+            if index == 15 {
+                index = 0;
+            } else {
+                index &= 15;
+            }
+            if index == cx.ship_state(cx.owner(element)).facing {
+                cx.element_mut(element).pre = cx.kernel.hyperspace_ship_hooks.0;
+                cx.element_mut(element).post = cx.kernel.hyperspace_ship_hooks.1;
+                cx.element_mut(element).flags &= !NONSOLID;
+            }
+        }
+        cx.element_mut(element).flags |= CHANGING;
+        let frame = cx.absolute_frame(current.view(), index);
+        cx.set_frame(element, true, frame);
+        if cx.element(element).flags & NONSOLID == 0 {
+            cx.copy_next_to_current(element);
+            cx.setup_element(element);
+            cx.element_mut(element).flags |= DEFY_PHYSICS;
+        }
+    }
+    true
+}
+pub fn star_collision(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    source: crate::engine::battle::ElementId,
+    _p0: &mut POINT,
+    ship: crate::engine::battle::ElementId,
+    _p1: &mut POINT,
+) {
+    if cx.element(ship).flags & PLAYER_SHIP == 0 || cx.portal_counter() != 0 {
+        return;
+    }
+    let contact = cx.star_contact(source);
+    let parent = cx.owner(ship);
+    let (dx, dy) = cx.element(ship).velocity.get_current_components();
+    if contact.current
+        || cx.element(ship).flags & APPEARING != 0
+        || (dx == 0
+            && dy == 0
+            && cx.ship_state(parent).status & ((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
+                == 0)
+    {
+        cx.select_star(Some(contact));
+        cx.element_mut(source).flags |= DEFY_PHYSICS | COLLISION;
+    } else {
+        let autopilot = cx.autopilot();
+        if cx.world.activity() & IN_BATTLE != 0
+            && (autopilot.x == -1
+                || autopilot.y == -1
+                || (autopilot.x == contact.position.x && autopilot.y == contact.position.y))
+        {
+            cx.select_star(Some(contact));
+            cx.element_mut(source).flags |= COLLISION;
+            cx.init_hyper_transition(source, ship, 1);
+        }
+    }
+}
+pub fn star_death(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    if cx.element(element).flags & DEFY_PHYSICS == 0 && cx.world.activity() & IN_BATTLE != 0 {
+        cx.select_star(None);
+    }
+}
+pub fn portal_death(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    if cx.element(element).flags & DEFY_PHYSICS == 0
+        || get(cx.world, StoryKey::ARILOU_SPACE_COUNTER) == 0
+    {
+        set(
+            cx.world,
+            StoryKey::ARILOU_SPACE_SIDE,
+            if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+                0
+            } else {
+                3
+            },
+        );
+    }
+}
+pub fn portal_collision(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    source: crate::engine::battle::ElementId,
+    _p0: &mut POINT,
+    ship: crate::engine::battle::ElementId,
+    _p1: &mut POINT,
+) {
+    if cx.element(ship).flags & PLAYER_SHIP == 0 {
+        return;
+    }
+    let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE);
+    if side == 0 || side == 3 {
+        if cx.element(ship).flags & DEFY_PHYSICS != 0 {
+            set(cx.world, StoryKey::ARILOU_SPACE_SIDE, side ^ 1);
+        } else {
+            cx.init_hyper_transition(source, ship, 2);
+        }
+    }
+    cx.element_mut(source).flags |= DEFY_PHYSICS | COLLISION;
+}
+pub(super) fn sis_element(cx: &Cx<'_>) -> Option<ElementId> {
+    let ship = cx.first_ship(RPG_PLAYER_NUM as usize)?;
+    cx.optional_ship_element(ship)
+}
+fn save_sis_facing(cx: &mut Cx<'_>) {
+    if let Some(element) = sis_element(cx) {
+        cx.world.data.game.ship_facing = cx.ship_state(cx.owner(element)).facing + 1;
+    }
+}
+/// Retain the flagship facing while the navigation context owns the live queues.
+pub fn save_sis_hyper_state(cx: &mut Cx<'_>) {
+    save_sis_facing(cx);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{battle::Battle, Game};
+
+    #[test]
+    fn portal_death_keeps_the_contacted_side_until_the_entrance_closes() {
+        let mut game = Game::new();
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
+        game.kernel.reset_element_capacity(1);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+        let element = cx.alloc_element().unwrap();
+        for side in 0..4 {
+            cx.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
+            cx.world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 1);
+            cx.element_mut(element).flags = DEFY_PHYSICS;
+            portal_death(&mut cx, element);
+            assert_eq!(cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE), side);
+            cx.world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 0);
+            portal_death(&mut cx, element);
+            assert_eq!(
+                cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE),
+                if side <= 1 { 0 } else { 3 }
+            );
+        }
+        cx.dispose(element);
+    }
+
+    #[test]
+    fn cleanup_promotes_targeted_encounters_and_clears_all_element_links() {
+        let mut game = Game::new();
+        game.kernel.reset_element_capacity(2);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+        let first = cx.alloc_element().unwrap();
+        let second = cx.alloc_element().unwrap();
+        cx.set_target(second, Some(first));
+        let first_raw = cx.elements().raw(first);
+        let second_raw = cx.elements().raw(second);
+        let mut queue = cx.world.encounters();
+        let a = queue.alloc().unwrap();
+        queue.put(a);
+        let b = queue.alloc().unwrap();
+        queue.put(b);
+        queue.get_mut(a).h_element = first_raw;
+        queue.get_mut(b).h_element = second_raw;
+        cleanup(&mut cx);
+        let queue = cx.world.encounters_ref();
+        assert_eq!(queue.head(), Some(b));
+        assert_eq!(queue.succ(b), Some(a));
+        assert!(queue.get(a).h_element.is_null());
+        assert!(queue.get(b).h_element.is_null());
+        cx.dispose(second);
+        cx.dispose(first);
+    }
+}

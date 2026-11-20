@@ -1,7 +1,5 @@
-#[path = "support/campaign_display.rs"]
-mod campaign_display_test;
-#[path = "support/native_process.rs"]
-mod native_process;
+use uqm_engine::test_support::campaign_display as campaign_display_test;
+use uqm_engine::test_support::native_process;
 
 use uqm_rust::{
     comm::{dispatch::race_descriptor, locdata::SessionData, Comm},

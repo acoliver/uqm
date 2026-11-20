@@ -1,0 +1,780 @@
+//! Interplanetary group display, pursuit, collision and flagship movement.
+
+use crate::battle::context_access::navigation::NavigationOps;
+use crate::battle::sounds::engine::unlink;
+use crate::engine::StoryKey;
+pub use live::{do_missions, notify_others};
+
+const MAX_ZOOM: i16 = 128 << 6;
+const MIN_ZOOM: i16 = MAX_ZOOM >> 3;
+
+fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
+    let shift = if zoom == MIN_ZOOM {
+        2
+    } else if zoom < MAX_ZOOM {
+        1
+    } else {
+        0
+    };
+    *dx >>= shift;
+    *dy >>= shift;
+}
+
+pub mod live {
+    use super::*;
+    use crate::battle::element::{
+        APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DISAPPEARING, FINITE_LIFE,
+        IGNORE_VELOCITY, NONSOLID, NORMAL_LIFE,
+    };
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::graphics::{native_abi::POINT, EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::math::battle_types::{FACING_SHIFT, HALF_CIRCLE};
+    use crate::engine::save::START_ENCOUNTER;
+    use crate::engine::species::ship::URQUAN_DRONE_SHIP;
+    use crate::engine::world::queues::IpGroup as IP_GROUP;
+    use crate::engine::world::queues::{MAX_REVOLUTIONS, ORBIT_RADIUS, STATION_RADIUS};
+    use crate::math::arctan as ARCTAN;
+    use crate::math::{cosine, sine};
+    use crate::navigation::{get, set};
+    use crate::planets::solar_coords::SolarCoordinates;
+
+    const IP_SPEED: [i16; 24] = [
+        80, 54, 48, 80, 80, 70, 96, 80, 56, 60, 42, 60, 80, 40, 50, 54, 120, 36, 60, 80, 72, 60,
+        60, 180,
+    ];
+
+    fn radius(cx: &crate::engine::battle::Cx<'_>, location: u8) -> i16 {
+        if location == 0 {
+            cx.solar_geometry().zoom_radius
+        } else {
+            MAX_ZOOM
+        }
+    }
+    fn flagship_location(cx: &crate::engine::battle::Cx<'_>) -> u8 {
+        cx.flagship_location()
+    }
+    fn world(cx: &crate::engine::battle::Cx<'_>, point: POINT) -> POINT {
+        let (screen_width, screen_height) = cx.screen_dimensions();
+        let width = (screen_width - 64) << 5;
+        let height = screen_height << 5;
+        POINT {
+            x: (((point.x as i32) << 2) + (width >> 1) - (width >> 4)) as i16,
+            y: (((point.y as i32) << 2) + (height >> 1) - (height >> 4)) as i16,
+        }
+    }
+    fn display(cx: &crate::engine::battle::Cx<'_>, point: POINT, radius: i16) -> POINT {
+        SolarCoordinates::new(cx.screen_dimensions()).to_display(point, radius)
+    }
+    pub fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
+        let mut next = cx.world.ip_groups_ref().head();
+        while let Some(id) = next {
+            let mut group = *cx.world.ip_groups_ref().get(id);
+            next = cx.world.ip_groups_ref().succ(id);
+            if group.race_id as u16 != race {
+                continue;
+            }
+            if target == 0 {
+                group.task &= !IP_GROUP::IGNORE_FLAGSHIP;
+                group.orbit_pos = group.dest_loc;
+                group.dest_loc = 0;
+            } else if target == u8::MAX {
+                group.task |= IP_GROUP::IGNORE_FLAGSHIP;
+                if group.dest_loc == 0 {
+                    group.dest_loc = group.orbit_pos;
+                    group.orbit_pos = (cx.random() & 15) as u8;
+                }
+                if group.task & IP_GROUP::REFORM_GROUP == 0 {
+                    group.group_counter =
+                        if group.task & !IP_GROUP::IGNORE_FLAGSHIP != IP_GROUP::EXPLORE {
+                            0
+                        } else {
+                            (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT
+                        };
+                }
+            } else {
+                group.task |= IP_GROUP::IGNORE_FLAGSHIP;
+                group.dest_loc = target;
+            }
+            *cx.world.ip_groups().get_mut(id) = group;
+        }
+    }
+
+    fn pursuit_target(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        element: crate::engine::battle::ElementId,
+        location: u8,
+        flagship: u8,
+        mut task: u8,
+    ) -> (u8, u8) {
+        let mut target = cx.ip_group_mut(element).dest_loc;
+        if task & (IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP) == 0 {
+            if target == 0 && task != IP_GROUP::FLEE {
+                target = flagship;
+                if cx.element_mut(element).thrust > 5 {
+                    cx.element_mut(element).thrust = 0;
+                    cx.element_mut(element).velocity.zero();
+                }
+            } else if location == flagship {
+                let mut detect = 1200i64;
+                if location != 0 {
+                    detect *= MAX_ZOOM as i64 / MIN_ZOOM as i64;
+                    if cx.ip_group_mut(element).race_id == URQUAN_DRONE_SHIP {
+                        detect <<= 1;
+                    }
+                }
+                let dx = cx
+                    .navigation_mut()
+                    .game
+                    .ip_location
+                    .x
+                    .wrapping_sub(cx.ip_group_mut(element).loc.x) as i64;
+                let dy = cx
+                    .navigation_mut()
+                    .game
+                    .ip_location
+                    .y
+                    .wrapping_sub(cx.ip_group_mut(element).loc.y) as i64;
+                if dx * dx + dy * dy < detect * detect {
+                    cx.element_mut(element).thrust = 0;
+                    cx.element_mut(element).velocity.zero();
+                    let race = cx.ip_group(element).race_id as u16;
+                    notify_others(cx, race, 0);
+                    task = cx.ip_group_mut(element).task;
+                    target = cx.ip_group_mut(element).dest_loc;
+                    if target == 0 {
+                        target = flagship;
+                    }
+                }
+            }
+        }
+        (task, target)
+    }
+
+    pub fn group_preprocess(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        element: crate::engine::battle::ElementId,
+    ) {
+        begin_group_step(cx, element);
+        let mut location = cx.ip_group_mut(element).sys_loc;
+        let mut stamp = cx.primitive_stamp(element);
+        stamp.origin = cx.ip_group(element).loc;
+        cx.set_primitive_stamp(element, stamp);
+        let zoom = radius(cx, location);
+        let mut destination = display(cx, cx.ip_group(element).loc, zoom);
+        cx.element_mut(element).current.location = world(cx, destination);
+        cx.init_intersect_start(element);
+        let flagship = flagship_location(cx);
+        let mut task = reform_group(cx, element);
+        if task & !(IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP) == IP_GROUP::FLEE
+            && task & IP_GROUP::IGNORE_FLAGSHIP != 0
+        {
+            cx.element_mut(element).flags |= NONSOLID;
+        }
+        let (pursuit_task, mut target) = pursuit_target(cx, element, location, flagship, task);
+        task = pursuit_task;
+        let (current_x, current_y) = cx.element_mut(element).velocity.get_current_components();
+        let (mut vx, mut vy) = (current_x as i16, current_y as i16);
+        task &= !IP_GROUP::IGNORE_FLAGSHIP;
+        if task <= IP_GROUP::ON_STATION {
+            if task == IP_GROUP::FLEE {
+                destination = POINT {
+                    x: cx.ip_group_mut(element).loc.x.wrapping_mul(2),
+                    y: cx.ip_group_mut(element).loc.y.wrapping_mul(2),
+                };
+            } else if ((task != IP_GROUP::ON_STATION || cx.ip_group_mut(element).dest_loc == 0)
+                && location == target)
+                || (task == IP_GROUP::ON_STATION
+                    && cx.ip_group_mut(element).dest_loc != 0
+                    && location == 0)
+            {
+                if cx.ip_group_mut(element).dest_loc == 0 {
+                    destination = cx.navigation().game.ip_location;
+                } else {
+                    let (distance, origin) = if task != IP_GROUP::ON_STATION {
+                        (ORBIT_RADIUS as i32, POINT { x: 0, y: 0 })
+                    } else {
+                        (
+                            STATION_RADIUS as i32,
+                            cx.planet_outer_location(target as u16 - 1),
+                        )
+                    };
+                    let mut angle = (cx.ip_group_mut(element).orbit_pos as u16 + 1) << 2;
+                    destination = POINT {
+                        x: origin.x.wrapping_add(cosine(i32::from(angle), distance)),
+                        y: origin.y.wrapping_add(sine(i32::from(angle), distance)),
+                    };
+                    if cx.ip_group_mut(element).loc.x == destination.x
+                        && cx.ip_group_mut(element).loc.y == destination.y
+                    {
+                        cx.ip_group_mut(element).orbit_pos = (((angle + 2) >> 2) & 15) as u8;
+                        angle += 4;
+                        destination = POINT {
+                            x: origin.x.wrapping_add(cosine(i32::from(angle), distance)),
+                            y: origin.y.wrapping_add(sine(i32::from(angle), distance)),
+                        };
+                        cx.element_mut(element).thrust = u8::MAX;
+                        if cx.ip_group_mut(element).group_counter != 0 {
+                            cx.ip_group_mut(element).group_counter -= 1;
+                        } else if task == IP_GROUP::EXPLORE {
+                            let next = ((cx.random() as u16
+                                % cx.solar_geometry().planet_count as u16)
+                                + 1) as u8;
+                            if next != target {
+                                cx.element_mut(element).thrust = 0;
+                                target = next;
+                                cx.ip_group_mut(element).dest_loc = next;
+                            }
+                        }
+                    }
+                }
+            } else if location == 0 {
+                destination = if cx.ip_group_mut(element).dest_loc == 0 {
+                    cx.solar_geometry().sun_location
+                } else {
+                    cx.planet_outer_location(target as u16 - 1)
+                };
+            } else {
+                if task == IP_GROUP::ON_STATION {
+                    target = 0;
+                }
+                destination = POINT {
+                    x: cx.ip_group_mut(element).loc.x.wrapping_mul(2),
+                    y: cx.ip_group_mut(element).loc.y.wrapping_mul(2),
+                };
+            }
+            let delta_x = destination.x.wrapping_sub(cx.ip_group_mut(element).loc.x);
+            let delta_y = destination.y.wrapping_sub(cx.ip_group_mut(element).loc.y);
+            let angle = ARCTAN(delta_x, delta_y);
+            let wait = cx.element_mut(element).thrust;
+            if wait != 0 && wait != u8::MAX {
+                cx.element_mut(element).thrust -= 1;
+            } else if (vx == 0 && vy == 0) || angle != cx.element(element).velocity.travel_angle {
+                let speed = if wait != 0 && cx.ip_group_mut(element).dest_loc != 0 {
+                    if task == IP_GROUP::ON_STATION {
+                        30
+                    } else {
+                        60
+                    }
+                } else {
+                    cx.element_mut(element).thrust = 5;
+                    IP_SPEED[cx.ip_group_mut(element).race_id as usize]
+                };
+                vx = cosine(i32::from(angle), speed as i32);
+                vy = sine(i32::from(angle), speed as i32);
+                cx.element_mut(element)
+                    .velocity
+                    .set_components(i32::from(vx), i32::from(vy));
+            }
+            let (mut dx, mut dy) = (vx, vy);
+            let mut transition = false;
+            let mut partial = false;
+            let mut escape = false;
+            if location == target {
+                if target == 0 {
+                    if task == IP_GROUP::FLEE {
+                        escape = true;
+                    }
+                } else if target == cx.ip_group_mut(element).dest_loc {
+                    partial = true;
+                }
+            } else if location == 0 {
+                adjust_zoom(zoom, &mut dx, &mut dy);
+                if task == IP_GROUP::ON_STATION && cx.ip_group_mut(element).dest_loc != 0 {
+                    partial = true;
+                } else {
+                    transition = reaches(dx, dy, delta_x, delta_y);
+                }
+            } else {
+                escape = true;
+            }
+            if partial && reaches(dx, dy, delta_x, delta_y) {
+                cx.ip_group_mut(element).loc = destination;
+                vx = 0;
+                vy = 0;
+                cx.element_mut(element).velocity.zero();
+            }
+            if escape {
+                let display = display(cx, cx.ip_group(element).loc, zoom);
+                transition = display.x < 0
+                    || display.x as i32 >= cx.screen_dimensions().0 - 64 - 14
+                    || display.y < 0
+                    || display.y as i32 >= cx.screen_dimensions().1 - 13;
+            }
+            if transition {
+                cx.element_mut(element).flags |= NONSOLID;
+                vx = 0;
+                vy = 0;
+                cx.element_mut(element).velocity.zero();
+                if location != 0 {
+                    cx.ip_group_mut(element).loc = cx.planet_outer_location(location as u16 - 1);
+                    location = 0;
+                    cx.ip_group_mut(element).sys_loc = 0;
+                } else if target == 0 {
+                    cx.element_mut(element).life = 0;
+                    cx.element_mut(element).flags |= DISAPPEARING | NONSOLID;
+                    cx.ip_group_mut(element).in_system = 0;
+                    return;
+                } else {
+                    if target == cx.ip_group_mut(element).dest_loc {
+                        cx.ip_group_mut(element).orbit_pos =
+                            (((angle + HALF_CIRCLE + 2) >> 2) & 15) as u8;
+                        cx.ip_group_mut(element).group_counter =
+                            (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
+                    }
+                    let width = cx.screen_dimensions().0 - 64 - 14;
+                    let height = cx.screen_dimensions().1 - 13;
+                    let entry = POINT {
+                        x: ((width >> 1) - cosine(i32::from(angle), width * 9 / 16) as i32) as i16,
+                        y: ((height >> 1) - sine(i32::from(angle), height * 9 / 16) as i32) as i16,
+                    };
+                    cx.ip_group_mut(element).loc =
+                        SolarCoordinates::new(cx.screen_dimensions()).to_location(entry, MAX_ZOOM);
+                    location = target;
+                    cx.ip_group_mut(element).sys_loc = target;
+                }
+            }
+        }
+        let zoom = radius(cx, location);
+        adjust_zoom(zoom, &mut vx, &mut vy);
+        cx.ip_group_mut(element).loc.x = cx.ip_group_mut(element).loc.x.wrapping_add(vx);
+        cx.ip_group_mut(element).loc.y = cx.ip_group_mut(element).loc.y.wrapping_add(vy);
+        cx.element_mut(element).next.location =
+            world(cx, display(cx, cx.ip_group(element).loc, zoom));
+        if location != flagship
+            || (task & IP_GROUP::REFORM_GROUP != 0
+                && cx.ip_group_mut(element).group_counter & 1 != 0)
+        {
+            cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
+            cx.element_mut(element).flags |= NONSOLID;
+        } else {
+            cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
+            if task & IP_GROUP::REFORM_GROUP != 0 {
+                cx.element_mut(element).flags |= NONSOLID;
+            }
+        }
+        cx.element_mut(element).flags |= CHANGING;
+    }
+
+    fn begin_group_step(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        element: crate::engine::battle::ElementId,
+    ) {
+        cx.element_mut(element).flags &= !(DISAPPEARING | NONSOLID);
+        let life = cx.element(element).life.wrapping_add(1);
+        cx.element_mut(element).life = life;
+    }
+
+    fn reform_group(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        element: crate::engine::battle::ElementId,
+    ) -> u8 {
+        let mut task = cx.ip_group_mut(element).task;
+        if task & IP_GROUP::REFORM_GROUP != 0 {
+            cx.ip_group_mut(element).group_counter =
+                cx.ip_group_mut(element).group_counter.wrapping_sub(1);
+            if cx.ip_group_mut(element).group_counter == 0 {
+                task &= !IP_GROUP::REFORM_GROUP;
+                cx.ip_group_mut(element).task = task;
+                cx.ip_group_mut(element).group_counter =
+                    if task & !IP_GROUP::IGNORE_FLAGSHIP != IP_GROUP::EXPLORE {
+                        0
+                    } else {
+                        (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT
+                    };
+            }
+        }
+        task
+    }
+
+    fn reaches(dx: i16, dy: i16, target_x: i16, target_y: i16) -> bool {
+        (dx.wrapping_mul(dx) as u16 as i64 + dy.wrapping_mul(dy) as u16 as i64)
+            >= target_x as i64 * target_x as i64 + target_y as i64 * target_y as i64
+    }
+
+    fn collide_flagship(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        first: crate::engine::battle::ElementId,
+        second: crate::engine::battle::ElementId,
+    ) {
+        if cx.element(second).flags & COLLISION == 0 {
+            cx.element_mut(first).flags |= COLLISION | NONSOLID;
+        } else {
+            cx.element_mut(second).flags &= !COLLISION;
+            cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+        }
+    }
+    pub fn flagship_collision(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        first: crate::engine::battle::ElementId,
+        _: &mut POINT,
+        second: crate::engine::battle::ElementId,
+        _: &mut POINT,
+    ) {
+        if cx.world.activity() & START_ENCOUNTER == 0 {
+            collide_flagship(cx, first, second);
+        }
+    }
+    pub fn group_collision(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        first: crate::engine::battle::ElementId,
+        _: &mut POINT,
+        second: crate::engine::battle::ElementId,
+        _: &mut POINT,
+    ) {
+        if cx.world.activity() & START_ENCOUNTER != 0 {
+            return;
+        }
+        if cx.parent(second) != crate::engine::battle::Parent::None {
+            let state = cx.element(second);
+            if cx.element(first).flags & COLLISION != 0
+                || (state.current.location.x == state.next.location.x
+                    && state.current.location.y == state.next.location.y)
+            {
+                cx.element_mut(first).flags &= !COLLISION;
+            } else {
+                cx.element_mut(second).flags |= COLLISION;
+                let location = cx.primitive_stamp(first).origin;
+                cx.ip_group_mut(first).loc = location;
+                let current = cx.element(first).current.location;
+                cx.element_mut(first).next.location = current;
+                cx.init_intersect_end(first);
+            }
+        } else {
+            let group_id = cx.ip_group(first).group_id;
+            cx.set_encounter_group(group_id);
+            cx.ip_group_mut(first).task |= IP_GROUP::REFORM_GROUP;
+            cx.ip_group_mut(first).group_counter = 100;
+            let race = cx.ip_group(first).race_id as u16;
+            notify_others(cx, race, u8::MAX);
+            collide_flagship(cx, first, second);
+        }
+    }
+    fn spawn_group(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) {
+        let Some(element) = cx.alloc_element() else {
+            return;
+        };
+        cx.element_mut(element).mass = 1;
+        cx.element_mut(element).hits = 1;
+        cx.element_mut(element).flags = CHANGING | FINITE_LIFE | IGNORE_VELOCITY;
+        cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
+        cx.set_group_image(element, group);
+        let frame = cx.absolute_frame(cx.group_icon(group).view(), 1);
+        cx.set_frame(element, false, frame);
+        cx.element_mut(element).death = Some(ElementHook::Native(group_preprocess));
+        cx.element_mut(element).collide = Some(CollisionHook::Native(group_collision));
+        let record = *cx.group_record(group);
+        cx.element_mut(element).current.location = world(
+            cx,
+            SolarCoordinates::new(cx.screen_dimensions())
+                .to_display(record.loc, radius(cx, record.sys_loc)),
+        );
+        cx.set_ip_group_parent(element, group);
+        cx.setup_element(element);
+        let stars = cx.navigation_stars();
+        let frame = cx.retreat_frame(stars.view());
+        cx.set_intersect_frame(element, frame);
+        cx.put(element);
+    }
+    pub fn flagship_preprocess(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        element: crate::engine::battle::ElementId,
+    ) {
+        let wait = cx.element(element).thrust.wrapping_sub(1);
+        cx.element_mut(element).thrust = wait;
+        if cx.element_mut(element).thrust == 0 {
+            if let Some(next) = cx.elements().succ(element) {
+                if Some(next) != cx.elements().tail() {
+                    unlink(cx, next);
+                    cx.put(next);
+                }
+            }
+            cx.element_mut(element).thrust = 42;
+        }
+        let (vx, vy) = cx.navigation().game.velocity.get_current_components();
+        let (mut vx, mut vy) = (vx as i16, vy as i16);
+        let flagship = flagship_location(cx);
+        let zoom = radius(cx, flagship);
+        adjust_zoom(zoom, &mut vx, &mut vy);
+        cx.element_mut(element).current.location =
+            world(cx, display(cx, cx.navigation().game.ip_location, zoom));
+        cx.init_intersect_start(element);
+        cx.navigation_mut().game.ip_location.x =
+            cx.navigation_mut().game.ip_location.x.wrapping_add(vx);
+        cx.navigation_mut().game.ip_location.y =
+            cx.navigation_mut().game.ip_location.y.wrapping_add(vy);
+        let point = SolarCoordinates::new(cx.screen_dimensions())
+            .to_display(cx.navigation_mut().game.ip_location, zoom);
+        cx.element_mut(element).next.location = world(cx, point);
+        cx.navigation_mut().game.ship_stamp.origin = point;
+        let frame = cx.flagship_stamp_frame();
+        cx.set_frame(element, true, frame);
+        if cx.element_mut(element).turn == flagship {
+            cx.element_mut(element).flags &= !NONSOLID;
+        } else {
+            cx.element_mut(element).flags |= NONSOLID;
+            cx.element_mut(element).turn = flagship;
+        }
+        let escape = get(cx.world, StoryKey::ESCAPE_COUNTER);
+        if escape != 0 && cx.world.activity() & START_ENCOUNTER == 0 {
+            cx.element_mut(element).flags |= NONSOLID;
+            set(cx.world, StoryKey::ESCAPE_COUNTER, escape - 1);
+        }
+        cx.element_mut(element).flags |= CHANGING;
+    }
+    fn spawn_flagship(cx: &mut crate::engine::battle::Cx<'_>) {
+        let Some(element) = cx.alloc_element() else {
+            return;
+        };
+        cx.element_mut(element).hits = 1;
+        cx.element_mut(element).mass = 1;
+        let location = flagship_location(cx);
+        cx.element_mut(element).turn = location;
+        cx.element_mut(element).flags = APPEARING | IGNORE_VELOCITY;
+        if get(cx.world, StoryKey::ESCAPE_COUNTER) != 0 {
+            cx.element_mut(element).flags |= NONSOLID;
+        }
+        cx.element_mut(element).life = NORMAL_LIFE;
+        cx.element_mut(element).thrust = 42;
+        cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
+        cx.set_flagship_image(element);
+        cx.element_mut(element).pre = Some(ElementHook::Native(flagship_preprocess));
+        cx.element_mut(element).collide = Some(CollisionHook::Native(flagship_collision));
+        cx.element_mut(element).current.location =
+            world(cx, cx.navigation().game.ship_stamp.origin);
+        cx.put(element);
+    }
+
+    /// # Safety
+    /// The live solar system and display/group queues must be initialized on the game thread.
+    pub fn do_missions(cx: &mut crate::engine::battle::Cx<'_>) {
+        spawn_flagship(cx);
+        if cx.world.encounter_race >= 0 {
+            notify_others(cx, cx.world.encounter_race as u16, 0);
+            cx.world.encounter_race = -1;
+        }
+        let mut handle = cx.world.ip_groups_ref().head();
+        while let Some(group) = handle {
+            handle = cx.world.ip_groups_ref().succ(group);
+            if cx.group_record(group).in_system != 0 {
+                spawn_group(cx, group);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod pursuit_tests {
+        use super::*;
+        use crate::engine::{
+            battle::{Battle, Cx, ElementId},
+            Game,
+        };
+
+        const SHIP: u8 = 3;
+
+        fn pursue(
+            group: impl FnOnce(&mut IP_GROUP),
+            thrust: u8,
+            location: u8,
+            flagship: u8,
+            task: u8,
+        ) -> ((u8, u8), u8, bool, IP_GROUP) {
+            let mut game = Game::new();
+            game.world.data.game.ip_location = POINT { x: 0, y: 0 };
+            let id = {
+                let mut groups = game.world.ip_groups();
+                let id = groups.alloc().unwrap();
+                let record = groups.get_mut(id);
+                record.race_id = SHIP;
+                record.task = task;
+                group(record);
+                groups.put(id);
+                id
+            };
+            let mut battle = Battle::new();
+            let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+            let element: ElementId = cx.alloc_element().unwrap();
+            cx.set_ip_group_parent(element, id);
+            cx.element_mut(element).thrust = thrust;
+            cx.element_mut(element).velocity.set_vector(40, 2);
+            let result = pursuit_target(&mut cx, element, location, flagship, task);
+            let stopped = cx.element_mut(element).velocity.is_zero();
+            let thrust = cx.element_mut(element).thrust;
+            let record = *cx.ip_group(element);
+            (result, thrust, stopped, record)
+        }
+
+        #[test]
+        fn an_idle_group_without_a_destination_targets_the_flagship_and_stops_thrusting() {
+            let (result, thrust, stopped, _) =
+                pursue(|g| g.dest_loc = 0, 9, 0, 4, IP_GROUP::EXPLORE);
+            assert_eq!(result, (IP_GROUP::EXPLORE, 4));
+            assert_eq!((thrust, stopped), (0, true));
+            let (result, thrust, stopped, _) =
+                pursue(|g| g.dest_loc = 0, 5, 0, 4, IP_GROUP::EXPLORE);
+            assert_eq!(result, (IP_GROUP::EXPLORE, 4));
+            assert_eq!((thrust, stopped), (5, false));
+        }
+
+        #[test]
+        fn groups_that_ignore_the_flagship_keep_their_destination() {
+            for task in [
+                IP_GROUP::EXPLORE | IP_GROUP::IGNORE_FLAGSHIP,
+                IP_GROUP::EXPLORE | IP_GROUP::REFORM_GROUP,
+            ] {
+                let (result, thrust, _, _) = pursue(|g| g.dest_loc = 6, 9, 0, 4, task);
+                assert_eq!(result, (task, 6));
+                assert_eq!(thrust, 9);
+            }
+        }
+
+        #[test]
+        fn a_fleeing_group_without_a_destination_does_not_chase_the_flagship() {
+            let (result, thrust, _, _) = pursue(|g| g.dest_loc = 0, 9, 1, 4, IP_GROUP::FLEE);
+            assert_eq!(result, (IP_GROUP::FLEE, 0));
+            assert_eq!(thrust, 9);
+        }
+
+        #[test]
+        fn a_group_that_is_elsewhere_in_the_system_keeps_its_destination() {
+            let (result, _, _, record) = pursue(|g| g.dest_loc = 6, 9, 2, 4, IP_GROUP::EXPLORE);
+            assert_eq!(result, (IP_GROUP::EXPLORE, 6));
+            assert_eq!(record.dest_loc, 6);
+        }
+
+        #[test]
+        fn a_flagship_inside_detection_range_makes_the_group_stop_and_resume_orbit() {
+            let (result, thrust, stopped, record) = pursue(
+                |g| {
+                    g.dest_loc = 6;
+                    g.orbit_pos = 2;
+                    g.loc = POINT { x: 10, y: 10 };
+                },
+                9,
+                0,
+                0,
+                IP_GROUP::EXPLORE,
+            );
+            assert_eq!((thrust, stopped), (0, true));
+            assert_eq!((record.dest_loc, record.orbit_pos), (0, 6));
+            assert_eq!(result, (IP_GROUP::EXPLORE, 0));
+        }
+
+        #[test]
+        fn a_flagship_beyond_detection_range_is_not_noticed() {
+            let (result, thrust, _, record) = pursue(
+                |g| {
+                    g.dest_loc = 6;
+                    g.loc = POINT { x: 1300, y: 0 };
+                },
+                9,
+                0,
+                0,
+                IP_GROUP::EXPLORE,
+            );
+            assert_eq!(result, (IP_GROUP::EXPLORE, 6));
+            assert_eq!((thrust, record.dest_loc), (9, 6));
+        }
+
+        #[test]
+        fn detection_range_scales_with_zoom_and_doubles_for_drones() {
+            for (race, x, noticed) in [
+                (SHIP, 8_000, true),
+                (SHIP, 12_000, false),
+                (URQUAN_DRONE_SHIP, 12_000, true),
+                (URQUAN_DRONE_SHIP, 20_000, false),
+            ] {
+                let (_, thrust, _, _) = pursue(
+                    |g| {
+                        g.dest_loc = 6;
+                        g.race_id = race;
+                        g.loc = POINT { x, y: 0 };
+                    },
+                    9,
+                    1,
+                    1,
+                    IP_GROUP::EXPLORE,
+                );
+                assert_eq!(thrust, if noticed { 0 } else { 9 }, "{race} at {x}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn real_interplanetary_hooks_compile_in_the_library_test_target() {
+        let _: fn(&mut crate::engine::battle::Cx<'_>, u16, u8) = live::notify_others;
+        let _: fn(&mut crate::engine::battle::Cx<'_>) = live::do_missions;
+        let _: fn(&mut crate::engine::battle::Cx<'_>, crate::engine::battle::ElementId) =
+            live::flagship_preprocess;
+    }
+
+    #[test]
+    fn broadcasts_update_only_the_matching_race_and_preserve_reforming_counters() {
+        use crate::engine::{
+            battle::{Battle, Cx},
+            world::queues::IpGroup,
+            Game,
+        };
+        let mut game = Game::new();
+        let mut ids = Vec::new();
+        for (race, task) in [
+            (4, IpGroup::EXPLORE),
+            (4, IpGroup::EXPLORE | IpGroup::REFORM_GROUP),
+            (5, IpGroup::EXPLORE),
+        ] {
+            let mut groups = game.world.ip_groups();
+            let id = groups.alloc().unwrap();
+            let group = groups.get_mut(id);
+            group.race_id = race;
+            group.task = task;
+            group.dest_loc = 2;
+            group.orbit_pos = 7;
+            group.group_counter = 123;
+            groups.put(id);
+            ids.push(id);
+        }
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 3);
+        live::notify_others(&mut cx, 4, 6);
+        for id in &ids[..2] {
+            let groups = cx.world.ip_groups_ref();
+            assert_eq!(groups.get(*id).dest_loc, 6);
+            assert_ne!(groups.get(*id).task & IpGroup::IGNORE_FLAGSHIP, 0);
+        }
+        live::notify_others(&mut cx, 4, 0);
+        live::notify_others(&mut cx, 4, u8::MAX);
+        let groups = cx.world.ip_groups_ref();
+        for (index, id) in ids[..2].iter().enumerate() {
+            let group = groups.get(*id);
+            assert_eq!((group.dest_loc, group.orbit_pos), (6, 3));
+            assert_ne!(group.task & IpGroup::IGNORE_FLAGSHIP, 0);
+            assert_eq!(group.group_counter, if index == 0 { 3 << 4 } else { 123 });
+        }
+        let other = groups.get(ids[2]);
+        assert_eq!(
+            (other.dest_loc, other.orbit_pos, other.group_counter),
+            (2, 7, 123)
+        );
+        assert_eq!(other.task, IpGroup::EXPLORE);
+    }
+
+    #[test]
+    fn zoom_adjustment_keeps_signed_right_shift_rounding() {
+        for (zoom, expected) in [
+            (MIN_ZOOM, (15, -16)),
+            (MIN_ZOOM * 2, (30, -31)),
+            (MAX_ZOOM, (60, -61)),
+        ] {
+            let (mut dx, mut dy) = (60, -61);
+            adjust_zoom(zoom, &mut dx, &mut dy);
+            assert_eq!((dx, dy), expected);
+        }
+    }
+}

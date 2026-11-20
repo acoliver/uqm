@@ -1,0 +1,572 @@
+//! Live captain-window rendering and crew/energy bookkeeping from status.c.
+
+use crate::battle::context_access::ContextOps;
+use crate::battle::context_access::StatusOps;
+use crate::ships::native::abi::*;
+
+pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
+    kernel.status_offsets = [(height_pixels >> 1) as COORD, 0];
+}
+
+pub(crate) fn has_crew_counter(maximum: COUNT, flags: u16) -> bool {
+    maximum > MAX_CREW_SIZE as COUNT || flags & PLAYER_CAPTAIN as u16 != 0
+}
+
+fn crew_counter_layout(y: COORD, pc_menu: bool) -> (POINT, RECT) {
+    let baseline = POINT {
+        x: if pc_menu { 4 } else { 12 },
+        y: y.wrapping_add(64),
+    };
+    let background = rect(baseline.x, baseline.y.wrapping_sub(5), 24, 5);
+    (baseline, background)
+}
+
+fn crew_text(value: COUNT) -> [u8; 40] {
+    let mut buffer = [0; 40];
+    let mut digits = [0; 5];
+    let mut remaining = value;
+    let mut count = 0;
+    loop {
+        digits[count] = b'0' + (remaining % 10) as u8;
+        count += 1;
+        remaining /= 10;
+        if remaining == 0 {
+            break;
+        }
+    }
+    for index in 0..count {
+        buffer[index] = digits[count - index - 1];
+    }
+    buffer
+}
+
+fn captain_name(name: &[u8]) -> &std::ffi::CStr {
+    std::ffi::CStr::from_bytes_until_nul(name)
+        .unwrap_or_else(|_| panic!("captain name is not terminated within its owned buffer"))
+}
+
+// BUILD_COLOR ignores the palette index; every MAKE_RGB15 color is opaque.
+fn rgb15(r: u8, g: u8, b: u8) -> Color {
+    Color {
+        r: ((u16::from(r) << 3) | u16::from(r >> 2)) as u8,
+        g: ((u16::from(g) << 3) | u16::from(g >> 2)) as u8,
+        b: ((u16::from(b) << 3) | u16::from(b >> 2)) as u8,
+        a: 255,
+    }
+}
+
+fn rect(x: COORD, y: COORD, width: SIZE, height: SIZE) -> RECT {
+    RECT {
+        corner: POINT { x, y },
+        extent: EXTENT { width, height },
+    }
+}
+
+fn turn_frames(delta: STATUS_FLAGS, current: STATUS_FLAGS, pass: COUNT) -> ([i16; 2], usize) {
+    if delta & LEFT as u16 != 0 {
+        if delta & RIGHT as u16 == 0 {
+            (
+                [
+                    if pass == 2 {
+                        if current & LEFT as u16 != 0 {
+                            4
+                        } else {
+                            2
+                        }
+                    } else {
+                        3
+                    },
+                    0,
+                ],
+                1,
+            )
+        } else if current & RIGHT as u16 != 0 {
+            if pass == 1 {
+                ([3, 2], 2)
+            } else {
+                ([1, 0], 2)
+            }
+        } else if pass == 1 {
+            ([1, 2], 2)
+        } else {
+            ([3, 4], 2)
+        }
+    } else if delta & RIGHT as u16 != 0 {
+        (
+            [
+                if pass == 2 {
+                    if current & RIGHT as u16 != 0 {
+                        0
+                    } else {
+                        2
+                    }
+                } else {
+                    1
+                },
+                0,
+            ],
+            1,
+        )
+    } else {
+        ([0, 0], 0)
+    }
+}
+
+pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool)) {
+    let black = rgb15(0, 0, 0);
+    let mut i = (35u16.wrapping_sub(life)) as BYTE;
+    let (color, r) = if i <= 4 {
+        let colors = [
+            (15, 0, 0),
+            (31, 25, 25),
+            (31, 17, 0),
+            (31, 28, 0),
+            (31, 31, 31),
+        ];
+        let (r, g, b) = colors[i as usize];
+        (rgb15(r, g, b), rect(4, y.wrapping_add(69), 55, 30))
+    } else {
+        i = i.wrapping_sub(5);
+        if i <= 14 {
+            let colors = [
+                (30, 31, 18),
+                (31, 31, 10),
+                (31, 31, 0),
+                (31, 28, 0),
+                (31, 24, 0),
+                (31, 21, 0),
+                (31, 17, 0),
+                (31, 14, 0),
+                (31, 10, 0),
+                (31, 7, 0),
+                (31, 3, 0),
+                (27, 0, 0),
+                (23, 0, 0),
+                (19, 0, 0),
+                (15, 0, 0),
+            ];
+            let (red, g, b) = colors[i as usize];
+            let mut r = rect(
+                4 + i as i16,
+                y.wrapping_add(69 + i as i16),
+                55 - ((i as i16) << 1),
+                30 - ((i as i16) << 1),
+            );
+            if r.extent.height == 2 {
+                r.extent.height += 1;
+            }
+            draw(black, r, false);
+            r.corner.x += 1;
+            r.corner.y = r.corner.y.wrapping_add(1);
+            r.extent.width -= 2;
+            r.extent.height -= 2;
+            (rgb15(red, g, b), r)
+        } else {
+            i = i.wrapping_sub(15);
+            if i <= 4 {
+                let (x, gap, color) = match i {
+                    0 => (19, 23, rgb15(19, 0, 0)),
+                    1 => (20, 19, rgb15(7, 0, 0)),
+                    2 => (22, 13, rgb15(27, 0, 0)),
+                    3 => (25, 5, rgb15(31, 0, 0)),
+                    4 => (29, 1, rgb15(31, 0x50, 5)),
+                    _ => unreachable!(),
+                };
+                let mut r = rect(
+                    x,
+                    y.wrapping_add(84),
+                    if i == 4 { 2 } else { i as i16 + 1 },
+                    1,
+                );
+                draw(black, r, true);
+                r.corner.x += gap + r.extent.width;
+                draw(black, r, true);
+                r.corner.x -= gap;
+                r.extent.width = gap;
+                (color, r)
+            } else {
+                i = i.wrapping_sub(5);
+                let color = if i <= 2 {
+                    rgb15([23, 15, 11][i as usize], 0, 0)
+                } else {
+                    black
+                };
+                (color, rect(31, y.wrapping_add(84), 1, 1))
+            }
+        }
+    };
+    draw(color, r, true);
+}
+
+fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, RECT)) {
+    let dark = rgb15(8, 8, 8);
+    let light = rgb15(16, 16, 16);
+    fill(
+        rgb15(10, 10, 10),
+        rect(2, y.wrapping_add(65), 60, height.wrapping_sub(67)),
+    );
+    fill(
+        dark,
+        rect(1, y.wrapping_add(65), 1, height.wrapping_sub(67)),
+    );
+    fill(
+        dark,
+        rect(0, y.wrapping_add(65), 1, height.wrapping_sub(66)),
+    );
+    fill(
+        light,
+        rect(63, y.wrapping_add(65), 1, height.wrapping_sub(65)),
+    );
+    fill(
+        light,
+        rect(62, y.wrapping_add(65), 1, height.wrapping_sub(65)),
+    );
+    fill(
+        light,
+        rect(1, y.wrapping_add(height.wrapping_sub(2)), 62, 1),
+    );
+    fill(
+        light,
+        rect(0, y.wrapping_add(height.wrapping_sub(1)), 63, 1),
+    );
+    let cy = y.wrapping_add(69);
+    fill(dark, rect(59, cy, 1, 30));
+    fill(dark, rect(3, cy.wrapping_add(30), 57, 1));
+    fill(light, rect(3, cy.wrapping_sub(1), 57, 1));
+    fill(light, rect(3, cy, 1, 30));
+}
+
+pub(crate) fn draw_battle_crew_amount(
+    context: &crate::graphics::context_abi::ContextLease,
+    font: &crate::graphics::native_font::FontLease,
+    crew: COUNT,
+    y_offs: COORD,
+    pc_menu: bool,
+) {
+    let buffer = crew_text(crew);
+    let string = std::ffi::CStr::from_bytes_until_nul(&buffer)
+        .unwrap_or_else(|_| unreachable!("crew text is NUL-terminated"));
+    let (baseline, background) = crew_counter_layout(y_offs, pc_menu);
+    context.fill_rectangle(rgb15(0x0a, 0x0a, 0x0a), background);
+    context.draw_text(
+        font,
+        string,
+        baseline,
+        TEXT_ALIGN_ALIGN_LEFT,
+        rgb15(0, 0, 0),
+    );
+}
+
+#[allow(non_snake_case)]
+pub mod engine {
+    use super::*;
+    use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
+
+    pub(crate) fn captains_window(
+        cx: &Cx<'_>,
+        ship: crate::engine::battle::ShipId,
+        y: COORD,
+        delta: STATUS_FLAGS,
+        current: STATUS_FLAGS,
+        pass: COUNT,
+    ) {
+        let captain = cx.captain_controls(ship);
+        let origin = POINT {
+            x: 4,
+            y: y.wrapping_add(69),
+        };
+        let (frames, count) = turn_frames(delta, current, pass);
+        let turn = FrameSelection::retain(captain.turn);
+        for &offset in &frames[..count] {
+            cx.draw_stamp(cx.relative_frame(turn.view(), offset).view(), origin, false);
+        }
+        for (flag, base) in [
+            (THRUST, FrameSelection::retain(captain.thrust)),
+            (WEAPON, FrameSelection::retain(captain.weapon)),
+            (SPECIAL, captain.special.clone()),
+        ] {
+            if delta & flag as u16 != 0 {
+                let offset = if pass == 1 {
+                    1
+                } else if current & flag as u16 != 0 {
+                    2
+                } else {
+                    0
+                };
+                cx.draw_stamp(cx.relative_frame(base.view(), offset).view(), origin, false);
+            }
+        }
+    }
+
+    fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CAPTAIN_STUFF {
+        let mut captain = cx.captain_controls(ship).clone();
+        let background = FrameSelection::retain(captain.background);
+        if !background.is_absent() {
+            let mut frame = cx.absolute_frame(background.view(), 0);
+            captain.background = frame.raw();
+            frame = cx.relative_frame(frame.view(), 1);
+            captain.turn = frame.raw();
+            frame = cx.relative_frame(frame.view(), 5);
+            captain.thrust = frame.raw();
+            frame = cx.relative_frame(frame.view(), 3);
+            captain.weapon = frame.raw();
+            captain.special = cx.relative_frame(frame.view(), 3);
+        }
+        *cx.captain_controls_mut(ship) = captain.clone();
+        captain
+    }
+
+    pub fn draw_captains_window(
+        cx: &mut Cx<'_>,
+        ship: crate::engine::battle::ShipId,
+        context: Option<&crate::graphics::context_abi::ContextLease>,
+        height: SIZE,
+        pc_menu: bool,
+    ) {
+        let captain = prepare_captain(cx, ship);
+        let Some(context) = context else {
+            return;
+        };
+        context.draw_batch(|| {
+            let y = cx.status_offset(ship);
+            captain_border(y, height, |color, r| context.fill_rectangle(color, r));
+            let cy = y.wrapping_add(69);
+            let background = crate::graphics::context_abi::ContextFrame::retain(
+                std::ptr::NonNull::new(captain.background),
+            );
+            context.draw_stamp(&background, POINT { x: 4, y: cy });
+            if cx.ship(ship).captains_name_index == 0
+                && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+            {
+                let font = cx.kernel.tiny_font_lease().unwrap_or_else(|| {
+                    panic!("captain name display requires the loaded tiny font")
+                });
+                context.draw_text(
+                    &font,
+                    captain_name(&cx.world.data.flagship.commander_name),
+                    POINT {
+                        x: 32,
+                        y: cy.wrapping_add(6),
+                    },
+                    TEXT_ALIGN_ALIGN_CENTER,
+                    rgb15(0, 20, 0),
+                );
+            }
+            let info = cx.race_stats(ship).ship_info;
+            if has_crew_counter(info.max_crew, info.ship_flags) {
+                draw_battle_crew_amount(
+                    context,
+                    &cx.kernel.battle_font().unwrap_or_else(|| {
+                        panic!("numeric crew display requires the loaded battle font")
+                    }),
+                    info.crew_level,
+                    y,
+                    pc_menu,
+                );
+            }
+        });
+    }
+
+    pub fn preprocess_status(cx: &mut Cx<'_>, e: ElementId) {
+        let ship = cx.owner(e);
+        if cx.ship(ship).captains_name_index != 0
+            || cx.ship_state(ship).player == RPG_PLAYER_NUM as SIZE
+        {
+            let current = cx.ship_state(ship).status;
+            let delta = (cx.ship_state(ship).old_status ^ current)
+                & (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
+            if delta != 0 {
+                let y = cx.status_offset(ship);
+                cx.draw_captain_controls_pass(ship, y, delta, current, 1);
+            }
+        }
+    }
+
+    pub fn PostProcessStatus(cx: &mut Cx<'_>, e: ElementId) {
+        let ship = cx.owner(e);
+        if cx.ship(ship).captains_name_index != 0
+            || cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+        {
+            let current = cx.ship(ship).cur_status_flags;
+            let y = cx.status_offset(ship);
+            if cx.element(e).hit_points() == 0 {
+                cx.ship_state_mut(ship).status &=
+                    !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
+                if cx.desc(ship).ship_info.crew_level == 0 {
+                    cx.draw_explosion_flash(cx.element(e).life_span(), y);
+                }
+            }
+            let mut delta = (cx.ship(ship).old_status_flags ^ current)
+                & (LEFT | RIGHT | THRUST | WEAPON | SPECIAL | LOW_ON_ENERGY) as u16;
+            if delta != 0 {
+                if delta & LOW_ON_ENERGY as u16 != 0 {
+                    cx.draw_energy_label(
+                        y,
+                        if current & LOW_ON_ENERGY as u16 == 0 {
+                            1
+                        } else {
+                            -1
+                        },
+                    );
+                }
+                delta &= (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
+                if delta != 0 {
+                    cx.draw_captain_controls(ship, y, delta, current);
+                }
+            }
+            cx.ship_state_mut(ship).old_status = current;
+        }
+    }
+}
+
+pub use engine::{draw_captains_window, preprocess_status, PostProcessStatus};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn captain_name_borrows_only_the_bounded_name_before_its_terminator() {
+        let name = [b'Z', 0xc3, 0xb6, b'q', 0, b'X'];
+        assert_eq!(captain_name(&name).to_bytes(), "Zöq".as_bytes());
+        assert_eq!(captain_name(&[0, b'X']).to_bytes(), b"");
+        assert!(std::panic::catch_unwind(|| captain_name(b"unterminated")).is_err());
+    }
+
+    #[test]
+    fn crew_counter_is_needed_only_for_large_crews_or_player_captains() {
+        assert!(!has_crew_counter(42, 0));
+        assert!(has_crew_counter(43, 0));
+        assert!(has_crew_counter(0, PLAYER_CAPTAIN as u16));
+        assert!(!has_crew_counter(0, CREW_IMMUNE as u16));
+    }
+
+    #[test]
+    fn offsets_put_player_zero_at_bottom() {
+        let mut kernel = crate::engine::Kernel::new();
+        init_status_offsets(&mut kernel, 240);
+        assert_eq!(kernel.status_offsets, [120, 0]);
+        init_status_offsets(&mut kernel, 481);
+        assert_eq!(kernel.status_offsets, [240, 0]);
+    }
+
+    #[test]
+    fn crew_counter_layout_preserves_menu_offsets_and_wrapping() {
+        for (pc_menu, x) in [(true, 4), (false, 12)] {
+            for y in [0, 120, i16::MAX] {
+                let (baseline, background) = crew_counter_layout(y, pc_menu);
+                assert_eq!((baseline.x, baseline.y), (x, y.wrapping_add(64)));
+                assert_eq!(
+                    (background.corner.x, background.corner.y),
+                    (x, y.wrapping_add(59)),
+                );
+                assert_eq!((background.extent.width, background.extent.height), (24, 5));
+            }
+        }
+    }
+
+    #[test]
+    fn crew_text_is_unsigned_decimal_and_terminated() {
+        assert_eq!(&crew_text(0)[..2], b"0\0");
+        assert_eq!(&crew_text(65535)[..6], b"65535\0");
+    }
+
+    #[test]
+    fn captain_border_draw_order_and_status_offsets_match_the_layout() {
+        let mut draws = Vec::new();
+        captain_border(120, 120, |color, r| {
+            draws.push((
+                color.r,
+                r.corner.x,
+                r.corner.y,
+                r.extent.width,
+                r.extent.height,
+            ));
+        });
+        assert_eq!(
+            draws,
+            [
+                (82, 2, 185, 60, 53),
+                (66, 1, 185, 1, 53),
+                (66, 0, 185, 1, 54),
+                (132, 63, 185, 1, 55),
+                (132, 62, 185, 1, 55),
+                (132, 1, 238, 62, 1),
+                (132, 0, 239, 63, 1),
+                (66, 59, 189, 1, 30),
+                (66, 3, 219, 57, 1),
+                (132, 3, 188, 57, 1),
+                (132, 3, 189, 1, 30),
+            ]
+        );
+        let mut wrapped = Vec::new();
+        captain_border(i16::MAX, 120, |_, r| wrapped.push(r.corner.y));
+        assert_eq!(wrapped[0], i16::MAX.wrapping_add(65));
+        assert_eq!(wrapped[5], i16::MAX.wrapping_add(118));
+    }
+
+    #[test]
+    fn captain_turn_animation_orders_both_draws() {
+        let both = (LEFT | RIGHT) as u16;
+        assert_eq!(turn_frames(both, RIGHT as u16, 1), ([3, 2], 2));
+        assert_eq!(turn_frames(both, RIGHT as u16, 2), ([1, 0], 2));
+        assert_eq!(turn_frames(both, LEFT as u16, 1), ([1, 2], 2));
+        assert_eq!(turn_frames(both, LEFT as u16, 2), ([3, 4], 2));
+        assert_eq!(turn_frames(LEFT as u16, LEFT as u16, 2), ([4, 0], 1));
+        assert_eq!(turn_frames(RIGHT as u16, 0, 2), ([2, 0], 1));
+    }
+
+    #[test]
+    fn battle_end_status_box_changes_from_dark_red_to_pink_on_successive_flash_phases() {
+        for (life, expected) in [(35, (123, 0, 0)), (34, (255, 206, 206))] {
+            let mut draws = Vec::new();
+            explosion_flash(life, 120, |color, rect, fill| {
+                draws.push((color, rect, fill));
+            });
+            assert_eq!(draws.len(), 1);
+            let (color, rect, fill) = draws[0];
+            assert!(fill);
+            assert_eq!(
+                (color.r, color.g, color.b, color.a),
+                (expected.0, expected.1, expected.2, 255,)
+            );
+            assert_eq!(
+                (
+                    rect.corner.x,
+                    rect.corner.y,
+                    rect.extent.width,
+                    rect.extent.height,
+                ),
+                (4, 189, 55, 30),
+            );
+        }
+    }
+
+    #[test]
+    fn explosion_flash_renders_each_phase_and_the_two_pixel_center() {
+        let capture = |life| {
+            let mut ops = Vec::new();
+            explosion_flash(life, 120, |c, r, fill| ops.push((c, r, fill)));
+            ops
+        };
+        let ops = capture(35);
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0].0.a, 255);
+        assert_eq!(ops[0].1.corner.y, 189);
+        assert_eq!(ops[0].1.extent.width, 55);
+        let ops = capture(16); // shrinking rectangle, i=14
+        assert_eq!(ops.len(), 2);
+        assert!(!ops[0].2);
+        assert_eq!(ops[0].1.extent.height, 3);
+        assert_eq!(ops[1].1.extent.height, 1);
+        let ops = capture(11); // side flashes, i=4
+        assert_eq!(ops.len(), 3);
+        assert_eq!(ops[0].1.extent.width, 2);
+        assert_eq!(ops[2].1.extent.width, 1);
+        assert_eq!(ops[2].0.g, 148); // C BYTE truncation of CC5TO8(0x50)
+        let ops = capture(7);
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0].1.corner.x, 31);
+        assert_eq!(ops[0].0.r, 0);
+    }
+}

@@ -1,8 +1,6 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
-#[path = "support/campaign_display.rs"]
-mod campaign_display;
-#[path = "support/native_process.rs"]
-mod native_process;
+use uqm_engine::test_support::campaign_display;
+use uqm_engine::test_support::native_process;
 #[test]
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {

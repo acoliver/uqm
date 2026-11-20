@@ -1,0 +1,104 @@
+//! The story gating of the Druuge ruins, against a recording report and a
+//! fake game state.
+
+use super::pickup_energy;
+use crate::engine::world::generation::ReportDisposition;
+use crate::engine::StoryKey;
+use crate::planets::generate::home_contact::tests::FakeStory;
+use crate::planets::generate::home_contact::LanderTakeoff;
+use crate::planets::generate::special::{Body, Story};
+use crate::planets::generate::testing::RecordReport;
+
+#[derive(Default)]
+struct FakeReport(Vec<ReportDisposition>);
+
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
+        self.0.push(disposition);
+        true
+    }
+}
+
+#[derive(Default)]
+struct FakeLander(u32);
+
+impl LanderTakeoff for FakeLander {
+    fn lander_takeoff(&mut self) {
+        self.0 += 1;
+    }
+}
+
+const ALSO: [StoryKey; 1] = [StoryKey::ROSY_SPHERE_ON_SHIP];
+
+#[test]
+fn the_first_ruin_gives_the_artifact_and_leaves_the_node() {
+    let mut story = FakeStory::default();
+    let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            Body::Planet(0),
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+        )
+    }));
+    assert_eq!(report.0, [ReportDisposition::Cycle]);
+    assert_eq!(lander.0, 1);
+    assert_eq!(story.flag(StoryKey::ROSY_SPHERE), 1);
+    for flag in ALSO {
+        assert_eq!(story.flag(flag), 1);
+    }
+}
+
+#[test]
+fn later_ruins_only_cycle_the_report() {
+    let mut story = FakeStory::with(&[(StoryKey::ROSY_SPHERE, 1)]);
+    let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            Body::Planet(0),
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+        )
+    }));
+    assert_eq!(report.0, [ReportDisposition::Cycle]);
+    assert_eq!(lander.0, 0);
+    for flag in ALSO {
+        assert_eq!(story.flag(flag), 0);
+    }
+}
+
+#[test]
+fn other_worlds_pick_up_nothing() {
+    for body in [Body::Planet(1), Body::Moon { planet: 0, moon: 0 }] {
+        let mut story = FakeStory::default();
+        let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        }));
+        assert!(report.0.is_empty());
+        assert_eq!(lander.0, 0);
+        assert_eq!(story.flag(StoryKey::ROSY_SPHERE), 0);
+    }
+}

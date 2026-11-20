@@ -1,8 +1,6 @@
 //! Owned modal windows restore their pixels and input policy after cancellation.
-#[path = "support/campaign_display.rs"]
-mod campaign_display;
-#[path = "support/native_process.rs"]
-mod native_process;
+use uqm_engine::test_support::campaign_display;
+use uqm_engine::test_support::native_process;
 
 use std::{
     cell::{Cell, RefCell},

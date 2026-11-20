@@ -5,58 +5,61 @@ use crate::automation::parity::Journal;
 pub(super) use crate::battle::context_access::observe::CustomData as RaceData;
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
-impl RaceData<'_> {
-    pub(super) fn write(
-        &self,
-        fields: &mut Fields,
-        prefix: &str,
-        _journal: &Journal,
-        _hooks: &[(usize, &'static str)],
-    ) {
-        let prefix = format!("{prefix}.custom");
-        value(fields, &prefix, "present", !matches!(self, Self::None));
-        match self {
-            Self::None => (),
-            Self::Androsynth(data) => hook(
-                fields,
-                &prefix,
-                "collision",
-                data.map_or(0, |f| f.address()),
-                SPECIES_ID_ANDROSYNTH_ID,
-                _hooks,
-            ),
-            Self::NativePkunk { phoenix, saved } => {
-                value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
-                for (name, callback) in ["saved_preprocess", "saved_postprocess", "saved_death"]
-                    .into_iter()
-                    .zip(saved)
-                {
-                    hook(
-                        fields,
-                        &prefix,
-                        name,
-                        callback.map_or(0, |f| f.address()),
-                        SPECIES_ID_PKUNK_ID,
-                        _hooks,
-                    );
-                }
+pub(super) fn write_custom(
+    custom: &RaceData<'_>,
+    fields: &mut Fields,
+    prefix: &str,
+    _journal: &Journal,
+    _hooks: &[(usize, &'static str)],
+) {
+    let prefix = format!("{prefix}.custom");
+    value(
+        fields,
+        &prefix,
+        "present",
+        !matches!(custom, RaceData::None),
+    );
+    match custom {
+        RaceData::None => (),
+        RaceData::Androsynth(data) => hook(
+            fields,
+            &prefix,
+            "collision",
+            data.map_or(0, |f| f.address()),
+            SPECIES_ID_ANDROSYNTH_ID,
+            _hooks,
+        ),
+        RaceData::NativePkunk { phoenix, saved } => {
+            value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
+            for (name, callback) in ["saved_preprocess", "saved_postprocess", "saved_death"]
+                .into_iter()
+                .zip(saved)
+            {
+                hook(
+                    fields,
+                    &prefix,
+                    name,
+                    callback.map_or(0, |f| f.address()),
+                    SPECIES_ID_PKUNK_ID,
+                    _hooks,
+                );
             }
-            Self::NativeUmgah(previous) => value(fields, &prefix, "prev_facing", *previous),
-            Self::Mmrnmhrm(data) => {
-                characteristics(fields, &format!("{prefix}.characteristics"), data)
-            }
-            Self::Sis(data) => {
-                value(fields, &prefix, "num_trackers", data.trackers);
-                value(fields, &prefix, "num_blasters", data.blasters);
-                for (index, missile) in data.missiles.iter().enumerate() {
-                    missile_fields(
-                        fields,
-                        &format!("{prefix}.missiles.{index}"),
-                        &missile.unwrap_or_default(),
-                        _journal,
-                        _hooks,
-                    );
-                }
+        }
+        RaceData::NativeUmgah(previous) => value(fields, &prefix, "prev_facing", *previous),
+        RaceData::Mmrnmhrm(data) => {
+            characteristics(fields, &format!("{prefix}.characteristics"), data)
+        }
+        RaceData::Sis(data) => {
+            value(fields, &prefix, "num_trackers", data.trackers);
+            value(fields, &prefix, "num_blasters", data.blasters);
+            for (index, missile) in data.missiles.iter().enumerate() {
+                missile_fields(
+                    fields,
+                    &format!("{prefix}.missiles.{index}"),
+                    &missile.unwrap_or_default(),
+                    _journal,
+                    _hooks,
+                );
             }
         }
     }
@@ -144,13 +147,19 @@ mod tests {
             ship_mass: 9,
         };
         let mut fields = Fields::new();
-        RaceData::Mmrnmhrm(&saved).write(&mut fields, "ship", &journal, &[]);
+        write_custom(
+            &RaceData::Mmrnmhrm(&saved),
+            &mut fields,
+            "ship",
+            &journal,
+            &[],
+        );
         assert_eq!(fields.len(), 12);
         assert_eq!(fields["ship.custom.present"], "true");
         assert_eq!(fields["ship.custom.characteristics.max_thrust"], "71");
         assert_eq!(fields["ship.custom.characteristics.mass"], "9");
         let mut absent = Fields::new();
-        RaceData::None.write(&mut absent, "ship", &journal, &[]);
+        write_custom(&RaceData::None, &mut absent, "ship", &journal, &[]);
         assert_eq!(
             absent,
             Fields::from([("ship.custom.present".into(), "false".into())])

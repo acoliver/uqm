@@ -61,31 +61,6 @@ pub const PLANNED: &[(&str, &[&str])] = &[
         ],
     ),
     (
-        "uqm-content",
-        &[
-            "ships",
-            "planets::generate",
-            "planets::tables",
-            "comm::races",
-        ],
-    ),
-    (
-        "uqm-modes",
-        &[
-            "battle",
-            "supermelee",
-            "pickship",
-            "navigation",
-            "planets",
-            "planet_side",
-            "comm",
-            "starbase",
-            "ui",
-            "front_end",
-            "mainloop::restart_menu",
-        ],
-    ),
-    (
         "uqm-platform",
         &[
             "graphics::sdl",
@@ -212,15 +187,12 @@ fn permitted(from: Layer, to: Layer) -> bool {
         }
 }
 fn planned_owner(module: &str) -> Option<&'static str> {
-    // Content nested inside a mode is not part of the planned modes crate.
-    ["uqm-content", "uqm-platform", "uqm-modes", "uqm-engine"]
-        .into_iter()
-        .find(|name| {
-            PLANNED
-                .iter()
-                .find(|(n, _)| n == name)
-                .is_some_and(|(_, roots)| roots.iter().any(|r| prefix(module, r)))
-        })
+    ["uqm-platform", "uqm-engine"].into_iter().find(|name| {
+        PLANNED
+            .iter()
+            .find(|(n, _)| n == name)
+            .is_some_and(|(_, roots)| roots.iter().any(|r| prefix(module, r)))
+    })
 }
 fn below_planned(crate_name: &str, target: &str) -> bool {
     match crate_name {
@@ -229,11 +201,6 @@ fn below_planned(crate_name: &str, target: &str) -> bool {
                 || PLANNED[0].1.iter().any(|r| prefix(target, r))
                 || layer(target) == Layer::Save
         }
-        "uqm-content" => matches!(layer(target), Layer::Content | Layer::Engine | Layer::Save),
-        "uqm-modes" => matches!(
-            layer(target),
-            Layer::Modes | Layer::Content | Layer::Engine | Layer::Save
-        ),
         "uqm-platform" => matches!(layer(target), Layer::Platform | Layer::Engine | Layer::Save),
         _ => false,
     }
@@ -484,11 +451,9 @@ mod tests {
             .all(|f| f.metric != "planned.uqm-engine"));
     }
     #[test]
-    fn all_four_planned_crates_and_nested_layer_overrides_are_enforced() {
+    fn the_planned_crates_and_nested_layer_overrides_are_enforced() {
         for (module, target, name) in [
             ("graphics::ffi", "automation", "uqm-engine"),
-            ("comm::races::orz", "ui", "uqm-content"),
-            ("front_end", "automation", "uqm-modes"),
             ("graphics::sdl", "mainloop", "uqm-platform"),
         ] {
             assert!(
@@ -510,7 +475,6 @@ mod tests {
             "battle::battle_native",
         ] {
             assert_eq!(layer(module), Layer::Modes, "{module}");
-            assert_eq!(planned_owner(module), Some("uqm-modes"), "{module}");
         }
         assert_eq!(layer("state::ffi"), Layer::Engine);
         assert_eq!(layer("state::state_file"), Layer::Save);
@@ -519,37 +483,17 @@ mod tests {
         assert_eq!(layer("savegame::runtime::autosave"), Layer::App);
         assert_eq!(layer("savegame::types"), Layer::Save);
         assert_eq!(layer("planets::report"), Layer::Modes);
-        assert_eq!(planned_owner("planets::report"), Some("uqm-modes"));
-        assert_eq!(planned_owner("planets::generate::orz"), Some("uqm-content"));
-        assert_eq!(planned_owner("ships::native"), Some("uqm-content"));
-        assert_eq!(planned_owner("mainloop::restart_menu"), Some("uqm-modes"));
         assert_eq!(planned_owner("mainloop::startup"), None);
     }
     #[test]
-    fn planned_closure_counts_content_and_modes_reaching_outside_their_crate() {
+    fn planned_closure_counts_engine_rows_reaching_app_modules() {
         let metrics = |module: &str, target: &str| -> Vec<String> {
             reference(&source(module), &format!("crate::{target}::call"))
                 .into_iter()
                 .map(|f| f.metric)
                 .collect()
         };
-        // Content may not name a mode, even one that stays root-resident today.
-        assert!(metrics("ships::native", "battle::context_access")
-            .contains(&"planned.uqm-content".into()));
-        assert!(metrics("planets::generate::pet", "comm::dispatch")
-            .contains(&"planned.uqm-content".into()));
-        // Modes reach content, engine and root battle, but not app modules.
-        assert!(!metrics("starbase::visit", "ships::native").contains(&"planned.uqm-modes".into()));
-        assert!(!metrics("pickship::ffi", "battle::velocity").contains(&"planned.uqm-modes".into()));
-        assert!(
-            !metrics("navigation::hyperspace", "state::ffi").contains(&"planned.uqm-modes".into())
-        );
-        for app_target in ["savegame::live", "savegame::runtime", "mainloop::dir_prep"] {
-            let found = metrics("planets::scan", app_target);
-            assert!(found.contains(&"planned.uqm-modes".into()), "{app_target}");
-            assert!(found.contains(&"module_edges".into()), "{app_target}");
-        }
-        // The engine rows now include state and the game clock.
+        // The engine rows include state and the game clock.
         assert!(metrics("state::ffi", "automation::record").contains(&"planned.uqm-engine".into()));
         assert!(metrics("time::clock_abi", "comm::dispatch").contains(&"planned.uqm-engine".into()));
     }

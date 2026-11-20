@@ -64,10 +64,11 @@ fn every_assigned_native_battle_and_navigation_callback_has_a_stable_registry_na
     );
     let assigned = callback_assignments()?;
     let declaration = regex::Regex::new(r"\bfn\s+(\w+)\s*\(")?;
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates");
     let mut pending = vec![
-        root.join("ships/races"),
-        root.join("battle"),
-        root.join("navigation"),
+        crates.join("content/src/ships/races"),
+        crates.join("modes/src/battle"),
+        crates.join("modes/src/navigation"),
     ];
     let mut checked = 0;
     while let Some(path) = pending.pop() {

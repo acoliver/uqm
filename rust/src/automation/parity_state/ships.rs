@@ -208,7 +208,7 @@ impl<'a> Race<'a> {
         }
         value(fields, prefix, "race.code.loaded", self.code_loaded);
         self.assets.write(fields, prefix, journal);
-        self.custom.write(fields, prefix, journal, hooks);
+        super::custom::write_custom(self.custom, fields, prefix, journal, hooks);
     }
 }
 
