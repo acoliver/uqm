@@ -1,4 +1,4 @@
-//! SDL start-up.
+//! SDL start-up and the process exit hook.
 
 use sdl2::sys;
 
@@ -29,4 +29,14 @@ pub fn init_video() -> Result<Version, String> {
         minor: version.minor,
         patch: version.patch,
     })
+}
+
+/// Run `handler` when the process exits normally, including through
+/// `std::process::exit`.
+pub fn at_exit(handler: extern "C" fn()) {
+    // SAFETY: the handler is a plain function that lives for the whole process.
+    // atexit fails only when the process's handler table is full, which this
+    // game's single registration cannot cause.
+    let status = unsafe { libc::atexit(handler) };
+    assert_eq!(status, 0, "could not register an exit handler");
 }

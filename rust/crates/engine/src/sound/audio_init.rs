@@ -40,7 +40,7 @@ pub fn init_audio() -> i32 {
         return -1;
     }
 
-    crate::platform::os::process::at_exit(uninit_audio_at_exit);
+    crate::platform::os::sdl::at_exit(uninit_audio_at_exit);
 
     let options = sound_options();
     set_sfx_volume(options.sfx_scale);
