@@ -180,3 +180,21 @@ fn greeting_routes_hostility_and_outtakes() {
     assert_eq!(f.segue, 0);
     assert_eq!(descriptor().alien_talk_desc.num_frames, 2);
 }
+
+#[test]
+fn seeded_conversations_react_to_every_offered_response() {
+    crate::comm::races::encounter::testing::walk(
+        0..400,
+        40,
+        |f: &mut Api, draw| {
+            f.world.date = ((draw % 12) as u16 + 1, (draw / 12 % 28) as u16 + 1, 2155);
+            f.world.ships_added = (draw / 400 % 5) as u16;
+            f.activity = 0;
+        },
+        |f| {
+            Dialogue { api: f }.initialize();
+            Dialogue { api: f }.intro();
+        },
+        |f, handler, response| Dialogue { api: f }.handle(handler, response),
+    );
+}

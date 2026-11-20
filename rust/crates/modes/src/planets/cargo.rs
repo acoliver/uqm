@@ -103,13 +103,28 @@ pub(crate) mod live {
 mod tests {
     use super::*;
 
-    #[test]
-    #[serial_test::serial]
-    fn cargo_uses_supplied_campaign_and_retains_its_display_resources() {
-        use crate::graphics::{
-            context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::LoadedFont,
-        };
-        let mut game = crate::engine::Game::new();
+    use crate::engine::{
+        battle::{input::InputContext, Battle, Cx},
+        input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
+        observe::{Io, Observer, Unobserved},
+        Game,
+    };
+    use crate::graphics::{
+        context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::LoadedFont,
+    };
+    use std::{cell::Cell, rc::Rc};
+
+    struct Fixture {
+        game: Game,
+        display: uqm_engine::test_support::campaign_display::CampaignDisplay,
+        heading: LoadedFont,
+        icons: LoadedDrawable,
+        canvas: LoadedDrawable,
+        context: ContextLease,
+    }
+
+    fn fixture() -> Fixture {
+        let mut game = Game::new();
         let mut heading = None;
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
@@ -126,6 +141,27 @@ mod tests {
         let context = ContextLease::require(game.kernel.status_context);
         let canvas = LoadedDrawable::create(2, 64, 160, 1).unwrap();
         context.set_frame(canvas.lease().context_frame(0));
+        Fixture {
+            game,
+            display,
+            heading,
+            icons,
+            canvas,
+            context,
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn cargo_uses_supplied_campaign_and_retains_its_display_resources() {
+        let Fixture {
+            mut game,
+            display,
+            heading,
+            icons,
+            canvas,
+            context,
+        } = fixture();
         let cargo = super::display::CargoDisplay::new(&game.kernel);
         drop((icons, heading));
         let mut other = crate::engine::Game::new();
@@ -163,6 +199,122 @@ mod tests {
         drop((cargo, context, canvas, other));
         game.kernel.star_con_font = std::ptr::null_mut();
         game.kernel.misc_data_frame = std::ptr::null_mut();
+        display.finish(game);
+    }
+
+    struct Scripted {
+        input: InputSession,
+        script: Vec<Option<u32>>,
+        sleeps: Cell<u32>,
+    }
+
+    impl InputRuntime for Scripted {
+        fn input(&self) -> &InputSession {
+            &self.input
+        }
+        fn observer(&self) -> Box<dyn Observer> {
+            Box::new(Unobserved)
+        }
+        fn yield_poll(&self, _: &mut Cx<'_>) {
+            panic!("unexpected yield")
+        }
+        fn sleep(&self, _: &mut Cx<'_>, ticks: u32) {
+            assert_eq!(ticks, 840 / 30);
+            self.sleeps.set(self.sleeps.get() + 1);
+        }
+        fn sleep_until(&self, _: &mut Cx<'_>, _: u32) {
+            panic!("unexpected deadline")
+        }
+        fn flush(&self) {
+            panic!("unexpected flush")
+        }
+        fn confirm_exit(&self, _: &mut Cx<'_>) -> bool {
+            panic!("unexpected exit confirmation")
+        }
+        fn update(&self, _: &mut Cx<'_>) {
+            panic!("unexpected update")
+        }
+        fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, _: bool, frame: &mut dyn Frame) {
+            for (step, key) in self.script.iter().enumerate() {
+                let mut state = InputState::default();
+                if let Some(key) = key {
+                    state.menu[*key as usize] = 1;
+                }
+                self.input.advance(state, state, (step as u32 + 1) * 1000);
+                if !frame.frame(cx, io) {
+                    assert_eq!(step, self.script.len() - 1, "menu ended early");
+                    return;
+                }
+            }
+            panic!("menu outlived its script");
+        }
+        fn battle_input(&self, _: &InputContext) -> u8 {
+            panic!("unexpected battle input")
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn cargo_menu_navigates_discards_and_leaves_on_cancel() {
+        use crate::input::frames::*;
+        let Fixture {
+            mut game,
+            display,
+            heading,
+            icons,
+            canvas,
+            context,
+        } = fixture();
+        let flagship = &mut game.world.data.flagship;
+        for slots in [
+            &mut flagship.drive_slots[..],
+            &mut flagship.jet_slots[..],
+            &mut flagship.module_slots[..],
+        ] {
+            slots.fill(u8::MAX);
+        }
+        let panel = LoadedDrawable::create(8, 64, 140, 100).unwrap();
+        game.kernel.flag_stat_frame = panel.lease().frame(0).unwrap();
+        game.world.data.flagship.total_element_mass = 3;
+        game.world.data.flagship.element_amounts[0] = 2;
+        game.world.data.flagship.element_amounts[1] = 1;
+        // Each key is released before the next press so that repeats do not pulse.
+        let script: Vec<Option<u32>> = [
+            KEY_MENU_DOWN,
+            KEY_MENU_SELECT,
+            KEY_MENU_SELECT,
+            KEY_MENU_UP,
+            KEY_MENU_LEFT,
+            KEY_MENU_RIGHT,
+            KEY_MENU_SELECT,
+            KEY_MENU_CANCEL,
+        ]
+        .into_iter()
+        .flat_map(|key| [Some(key), None])
+        .take(15)
+        .collect();
+        let steps = script.len() as u32;
+        let runtime = Rc::new(Scripted {
+            input: InputSession::new(InputControls::default(), game.kernel.configuration.clone()),
+            script,
+            sleeps: Cell::new(0),
+        });
+        game.kernel.install_input_runtime(runtime.clone());
+        let mut observer = Unobserved;
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+        super::live::cargo_menu(&mut cx, &mut io);
+        assert_eq!(runtime.sleeps.get(), steps - 1);
+        assert_eq!(game.world.data.flagship.element_amounts[..2], [1, 0]);
+        assert_eq!(game.world.data.flagship.total_element_mass, 1);
+        drop((runtime, icons, heading, context, canvas));
+        game.kernel.star_con_font = std::ptr::null_mut();
+        game.kernel.misc_data_frame = std::ptr::null_mut();
+        game.kernel.flag_stat_frame = std::ptr::null_mut();
+        drop(panel);
         display.finish(game);
     }
 

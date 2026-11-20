@@ -34,7 +34,37 @@ pub(crate) enum Effect<H> {
     Skip,
 }
 
+/// Story values for keys no test has set, drawn once per key from a seeded stream.
+pub(crate) struct Walk {
+    stream: u64,
+    memo: HashMap<StoryKey, u8>,
+}
+impl Walk {
+    const VALUES: [u8; 10] = [0, 0, 1, 1, 2, 3, 4, 64, 128, 192];
+    fn new(seed: u64) -> Self {
+        Self {
+            stream: seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1,
+            memo: HashMap::new(),
+        }
+    }
+    pub fn draw(&mut self) -> u64 {
+        self.stream ^= self.stream << 13;
+        self.stream ^= self.stream >> 7;
+        self.stream ^= self.stream << 17;
+        self.stream >> 11
+    }
+    fn value(&mut self, key: StoryKey) -> u8 {
+        if let Some(value) = self.memo.get(&key) {
+            return *value;
+        }
+        let value = Self::VALUES[self.draw() as usize % Self::VALUES.len()];
+        self.memo.insert(key, value);
+        value
+    }
+}
+
 pub(crate) struct Fake<H, E = ()> {
+    pub walk: Option<std::cell::RefCell<Walk>>,
     pub state: HashMap<StoryKey, u8>,
     pub disabled: HashSet<u16>,
     pub effects: Vec<Effect<H>>,
@@ -47,6 +77,7 @@ pub(crate) struct Fake<H, E = ()> {
 impl<H, E: Default> Default for Fake<H, E> {
     fn default() -> Self {
         Self {
+            walk: None,
             state: HashMap::new(),
             disabled: HashSet::new(),
             effects: Vec::new(),
@@ -89,7 +120,11 @@ impl<H: Copy, E> Fake<H, E> {
 }
 impl<H: Copy, E> DialogueHost<H> for Fake<H, E> {
     fn get(&self, key: StoryKey) -> u8 {
-        *self.state.get(&key).unwrap_or(&0)
+        match (self.state.get(&key), &self.walk) {
+            (Some(value), _) => *value,
+            (None, Some(walk)) => walk.borrow_mut().value(key),
+            (None, None) => 0,
+        }
     }
     fn set(&mut self, key: StoryKey, value: u8) {
         self.put(key, value);
@@ -156,5 +191,42 @@ impl<H: Copy, E> EncounterApi<H> for Fake<H, E> {
     }
     fn advance_ilwrath(&mut self) {
         self.effects.push(Effect::AdvanceIlwrath);
+    }
+}
+
+/// Walks seeded random conversations: every unset story value is drawn once per walk and each
+/// step answers one of the responses the previous step offered. A response that an offered
+/// handler ignores, or a handler that panics, fails the walk with its seed.
+pub(crate) fn walk<H: Copy + std::fmt::Debug, E: Default>(
+    seeds: std::ops::Range<u64>,
+    steps: usize,
+    mut prepare: impl FnMut(&mut Fake<H, E>, u64),
+    mut start: impl FnMut(&mut Fake<H, E>),
+    mut handle: impl FnMut(&mut Fake<H, E>, H, u16),
+) {
+    for seed in seeds {
+        let mut f = Fake::<H, E> {
+            walk: Some(std::cell::RefCell::new(Walk::new(seed))),
+            ..Fake::default()
+        };
+        let mut choices = Walk::new(!seed);
+        let first = choices.draw();
+        prepare(&mut f, first);
+        start(&mut f);
+        for step in 0..steps {
+            let offers = f.offers();
+            if offers.is_empty() {
+                break;
+            }
+            let (phrase, handler) = offers[choices.draw() as usize % offers.len()];
+            let next = choices.draw();
+            f.effects.clear();
+            prepare(&mut f, next);
+            handle(&mut f, handler, phrase);
+            assert!(
+                !f.effects.is_empty(),
+                "seed {seed} step {step}: {handler:?} ignored response {phrase}"
+            );
+        }
     }
 }

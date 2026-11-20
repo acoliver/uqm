@@ -294,3 +294,36 @@ fn bomb_trade_world_outtakes_and_encounter_reset() {
     assert_eq!(d.alien_text_baseline.y, 70);
     assert_eq!(d.alien_text_valign, 1);
 }
+
+#[test]
+fn seeded_conversations_react_to_every_offered_response() {
+    let session = std::cell::RefCell::new(Session::default());
+    crate::comm::races::encounter::testing::walk(
+        0..400,
+        40,
+        |f: &mut Api, draw| {
+            f.activity = 0;
+            f.world.escorts = draw % 2 == 0;
+            f.world.crew_cost = (draw / 2 % 5) as u8;
+        },
+        |f| {
+            Dialogue {
+                api: f,
+                session: &mut session.borrow_mut(),
+            }
+            .initialize();
+            Dialogue {
+                api: f,
+                session: &mut session.borrow_mut(),
+            }
+            .intro();
+        },
+        |f, handler, response| {
+            Dialogue {
+                api: f,
+                session: &mut session.borrow_mut(),
+            }
+            .handle(handler, response)
+        },
+    );
+}

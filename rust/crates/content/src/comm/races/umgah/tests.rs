@@ -160,3 +160,17 @@ fn post_encounter_marks_only_uncontrolled_umgah_and_initialize_respects_outtakes
     }
     assert_eq!(descriptor().num_animations, 16);
 }
+
+#[test]
+fn seeded_conversations_react_to_every_offered_response() {
+    crate::comm::races::encounter::testing::walk(
+        0..400,
+        40,
+        |f: &mut Api, _| f.activity = 0,
+        |f| {
+            Dialogue { api: f }.initialize();
+            Dialogue { api: f }.intro();
+        },
+        |f, handler, response| Dialogue { api: f }.handle(handler, i32::from(response)),
+    );
+}

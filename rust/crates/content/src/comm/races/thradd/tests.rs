@@ -204,3 +204,22 @@ fn allied_greetings_names_and_outtakes() {
     Dialogue { api: &mut f }.post_thradd_enc();
     assert_eq!(descriptor().alien_ambient_array[4].block_mask, 41);
 }
+
+#[test]
+fn seeded_conversations_react_to_every_offered_response() {
+    crate::comm::races::encounter::testing::walk(
+        0..400,
+        40,
+        |f: &mut Api, draw| {
+            f.activity = 0;
+            f.state
+                .entry(StoryKey::THRADD_CULTURE)
+                .or_insert(1 + (draw % 3) as u8);
+        },
+        |f| {
+            Dialogue { api: f }.initialize();
+            Dialogue { api: f }.intro();
+        },
+        |f, handler, response| Dialogue { api: f }.handle(handler, response),
+    );
+}

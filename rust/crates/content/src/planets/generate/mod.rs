@@ -86,3 +86,15 @@ pub fn generator(index: u8) -> &'static dyn SystemGenerator {
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_identity_resolves_to_a_stateless_generator() {
+        for index in 0..=u8::MAX {
+            assert_eq!(std::mem::size_of_val(generator(index)), 0, "{index}");
+        }
+    }
+}

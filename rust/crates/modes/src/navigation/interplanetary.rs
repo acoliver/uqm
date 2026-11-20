@@ -563,6 +563,144 @@ pub mod live {
             }
         }
     }
+
+    #[cfg(test)]
+    mod pursuit_tests {
+        use super::*;
+        use crate::engine::{
+            battle::{Battle, Cx, ElementId},
+            Game,
+        };
+
+        const SHIP: u8 = 3;
+
+        fn pursue(
+            group: impl FnOnce(&mut IP_GROUP),
+            thrust: u8,
+            location: u8,
+            flagship: u8,
+            task: u8,
+        ) -> ((u8, u8), u8, bool, IP_GROUP) {
+            let mut game = Game::new();
+            game.world.data.game.ip_location = POINT { x: 0, y: 0 };
+            let id = {
+                let mut groups = game.world.ip_groups();
+                let id = groups.alloc().unwrap();
+                let record = groups.get_mut(id);
+                record.race_id = SHIP;
+                record.task = task;
+                group(record);
+                groups.put(id);
+                id
+            };
+            let mut battle = Battle::new();
+            let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+            let element: ElementId = cx.alloc_element().unwrap();
+            cx.set_ip_group_parent(element, id);
+            cx.element_mut(element).thrust = thrust;
+            cx.element_mut(element).velocity.set_vector(40, 2);
+            let result = pursuit_target(&mut cx, element, location, flagship, task);
+            let stopped = cx.element_mut(element).velocity.is_zero();
+            let thrust = cx.element_mut(element).thrust;
+            let record = *cx.ip_group(element);
+            (result, thrust, stopped, record)
+        }
+
+        #[test]
+        fn an_idle_group_without_a_destination_targets_the_flagship_and_stops_thrusting() {
+            let (result, thrust, stopped, _) =
+                pursue(|g| g.dest_loc = 0, 9, 0, 4, IP_GROUP::EXPLORE);
+            assert_eq!(result, (IP_GROUP::EXPLORE, 4));
+            assert_eq!((thrust, stopped), (0, true));
+            let (result, thrust, stopped, _) =
+                pursue(|g| g.dest_loc = 0, 5, 0, 4, IP_GROUP::EXPLORE);
+            assert_eq!(result, (IP_GROUP::EXPLORE, 4));
+            assert_eq!((thrust, stopped), (5, false));
+        }
+
+        #[test]
+        fn groups_that_ignore_the_flagship_keep_their_destination() {
+            for task in [
+                IP_GROUP::EXPLORE | IP_GROUP::IGNORE_FLAGSHIP,
+                IP_GROUP::EXPLORE | IP_GROUP::REFORM_GROUP,
+            ] {
+                let (result, thrust, _, _) = pursue(|g| g.dest_loc = 6, 9, 0, 4, task);
+                assert_eq!(result, (task, 6));
+                assert_eq!(thrust, 9);
+            }
+        }
+
+        #[test]
+        fn a_fleeing_group_without_a_destination_does_not_chase_the_flagship() {
+            let (result, thrust, _, _) = pursue(|g| g.dest_loc = 0, 9, 1, 4, IP_GROUP::FLEE);
+            assert_eq!(result, (IP_GROUP::FLEE, 0));
+            assert_eq!(thrust, 9);
+        }
+
+        #[test]
+        fn a_group_that_is_elsewhere_in_the_system_keeps_its_destination() {
+            let (result, _, _, record) = pursue(|g| g.dest_loc = 6, 9, 2, 4, IP_GROUP::EXPLORE);
+            assert_eq!(result, (IP_GROUP::EXPLORE, 6));
+            assert_eq!(record.dest_loc, 6);
+        }
+
+        #[test]
+        fn a_flagship_inside_detection_range_makes_the_group_stop_and_resume_orbit() {
+            let (result, thrust, stopped, record) = pursue(
+                |g| {
+                    g.dest_loc = 6;
+                    g.orbit_pos = 2;
+                    g.loc = POINT { x: 10, y: 10 };
+                },
+                9,
+                0,
+                0,
+                IP_GROUP::EXPLORE,
+            );
+            assert_eq!((thrust, stopped), (0, true));
+            assert_eq!((record.dest_loc, record.orbit_pos), (0, 6));
+            assert_eq!(result, (IP_GROUP::EXPLORE, 0));
+        }
+
+        #[test]
+        fn a_flagship_beyond_detection_range_is_not_noticed() {
+            let (result, thrust, _, record) = pursue(
+                |g| {
+                    g.dest_loc = 6;
+                    g.loc = POINT { x: 1300, y: 0 };
+                },
+                9,
+                0,
+                0,
+                IP_GROUP::EXPLORE,
+            );
+            assert_eq!(result, (IP_GROUP::EXPLORE, 6));
+            assert_eq!((thrust, record.dest_loc), (9, 6));
+        }
+
+        #[test]
+        fn detection_range_scales_with_zoom_and_doubles_for_drones() {
+            for (race, x, noticed) in [
+                (SHIP, 8_000, true),
+                (SHIP, 12_000, false),
+                (URQUAN_DRONE_SHIP, 12_000, true),
+                (URQUAN_DRONE_SHIP, 20_000, false),
+            ] {
+                let (_, thrust, _, _) = pursue(
+                    |g| {
+                        g.dest_loc = 6;
+                        g.race_id = race;
+                        g.loc = POINT { x, y: 0 };
+                    },
+                    9,
+                    1,
+                    1,
+                    IP_GROUP::EXPLORE,
+                );
+                assert_eq!(thrust, if noticed { 0 } else { 9 }, "{race} at {x}");
+            }
+        }
+    }
 }
 
 #[cfg(test)]
