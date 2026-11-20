@@ -1,5 +1,6 @@
 //! Typed link-order views over fixed-capacity owned pools.
 
+use super::super::super::battle::record::ShipRecord;
 use super::super::super::battle::ShipId;
 use crate::collections::pool::{Id, OrderedPool};
 pub const NAME_OFFSET: u32 = 5;
@@ -21,6 +22,22 @@ impl RacePool {
     }
     pub fn reinit(&mut self) {
         self.pool.reinit();
+    }
+    fn ship_key(&self, id: ShipId) -> Id<ShipRecord> {
+        let key = self
+            .pool
+            .id_at(usize::from(id.slot))
+            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
+        assert_eq!(id.owner, self.pool.storage_identity(), "foreign ship owner");
+        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
+        key
+    }
+    pub(in crate::battle) fn ship(&self, id: ShipId) -> &ShipRecord {
+        self.pool.get(self.ship_key(id))
+    }
+    pub(in crate::battle) fn ship_mut(&mut self, id: ShipId) -> &mut ShipRecord {
+        let key = self.ship_key(id);
+        self.pool.get_mut(key)
     }
 }
 

@@ -58,7 +58,7 @@ struct PickerProbe {
     repeat_pulses: (i32, i32),
 }
 
-unsafe fn picker_frame(
+fn picker_frame(
     cx: &mut uqm_rust::engine::battle::Cx<'_>,
     state: &mut PickerProbe,
     input: &uqm_rust::engine::input::InputSession,
@@ -90,7 +90,7 @@ unsafe fn picker_frame(
     }
 }
 
-unsafe fn open_from_restart_while_select_is_held(
+fn open_from_restart_while_select_is_held(
     input: &uqm_rust::engine::input::InputSession,
     occupied: bool,
 ) {
@@ -171,7 +171,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             .join("tmp");
         std::fs::create_dir_all(&root).unwrap();
         let profile = tempfile::tempdir_in(root).unwrap();
-        unsafe {
+        {
             uqm_rust::graphics::state::init_headless(Default::default());
             input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
             uqm_rust::input::sdl_input::attach_controls(input.controls());
@@ -181,7 +181,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                 assert!(vc.add_key_binding(ESCAPE, Target::Menu(CANCEL)));
             });
 
-            let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
+            let mut summaries = [SUMMARY_DESC::default(); 50];
             assert!(!profile.path().join("save").exists());
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));

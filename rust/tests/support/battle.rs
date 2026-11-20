@@ -2,15 +2,23 @@
     dead_code,
     reason = "shared fixture API used by independent race test binaries"
 )]
-use std::{ptr, rc::Rc};
+//! Battle fixtures addressed by element and ship ids.
+//!
+//! `get` copies a record out of the fixture, so reads never hold a borrow.
+//! `get_mut`, `prim_mut` and the `Ship`/`Object` record accessors lend the live
+//! record until the returned guard drops; holding one across an engine call
+//! panics with "fixture context is already lent".
+use std::cell::RefMut;
+use std::rc::Rc;
 use uqm_rust::battle::process_native::init_display_list;
 use uqm_rust::battle::AiOps;
 use uqm_rust::engine::battle::flags::NORMAL_LIFE;
 use uqm_rust::engine::battle::flags::PLAYER_SHIP;
 use uqm_rust::engine::battle::record::ElementRecord;
-use uqm_rust::engine::battle::record::EvaluateRecord;
 use uqm_rust::engine::battle::record::RaceDescriptor;
 use uqm_rust::engine::battle::record::ShipRecord;
+use uqm_rust::engine::battle::Concern;
+use uqm_rust::engine::battle::DisplayPrimitive;
 use uqm_rust::engine::battle::STAMP_PRIMITIVE;
 use uqm_rust::engine::battle::{ElementId, RaceState, ShipId};
 use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
@@ -20,122 +28,72 @@ use uqm_rust::math::random;
 use uqm_rust::math::seed_random;
 use uqm_rust::math::velocity::VelocityDesc;
 
-unsafe fn invoke_intelligence(
-    ship: ShipId,
-    subject: &mut uqm_rust::engine::battle::Subject,
-    raw: &mut [EvaluateRecord],
-    count: u16,
-) {
-    {
-        crate::battle_context::with(|cx| {
-            let mut concerns = raw
-                .iter()
-                .map(|item| uqm_rust::engine::battle::Concern {
-                    object: cx
-                        .elements()
-                        .id(std::ptr::NonNull::new(item.object_ptr.cast())),
-                    facing: item.facing,
-                    which_turn: item.which_turn,
-                    movement: item.move_state,
-                })
-                .collect::<Vec<_>>();
-            cx.invoke_intelligence(ship, subject, &mut concerns, count);
-            for (raw, item) in raw.iter_mut().zip(concerns) {
-                *raw = EvaluateRecord {
-                    object_ptr: item
-                        .object
-                        .map_or(ptr::null_mut(), |id| cx.legacy_element(id)),
-                    facing: item.facing,
-                    which_turn: item.which_turn,
-                    move_state: item.movement,
-                };
-            }
-        });
+/// A copy of a fixture record. It cannot be written, so a write meant for the
+/// live record fails to compile instead of being lost.
+pub struct Snapshot<T>(T);
+impl<T> std::ops::Deref for Snapshot<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
     }
 }
 
-/// # Safety
-/// Both operands belong to the serialized fixture's live element pool.
-pub unsafe fn plot_intercept(
-    a: *mut ElementRecord,
-    b: *mut ElementRecord,
-    turns: u16,
-    margin: u16,
-) -> u16 {
-    {
-        crate::battle_context::with(|cx| {
-            cx.plot_intercept(
-                &cx.weapon_origin(
-                    cx.elements()
-                        .id(std::ptr::NonNull::new(a.cast()))
-                        .unwrap_or_else(|| panic!("fixture operand")),
-                ),
-                &cx.weapon_origin(
-                    cx.elements()
-                        .id(std::ptr::NonNull::new(b.cast()))
-                        .unwrap_or_else(|| panic!("fixture operand")),
-                ),
-                turns,
-                margin,
-            )
-        })
-    }
+/// Copy a live element record.
+#[track_caller]
+pub fn get(id: ElementId) -> Snapshot<ElementRecord> {
+    Snapshot(get_mut(id).clone())
 }
 
-/// # Safety
-/// The caller retains the published, serialized fixture battle.
-pub unsafe fn head() -> *mut std::ffi::c_void {
-    {
-        crate::battle_context::with(|cx| {
-            cx.elements()
-                .head()
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-        })
-    }
+/// Lend a live element record until the guard drops.
+#[track_caller]
+pub fn get_mut(id: ElementId) -> RefMut<'static, ElementRecord> {
+    RefMut::map(crate::battle_context::kernel(), |kernel| {
+        kernel.fixture_elements().fixture_record_mut(id)
+    })
 }
 
-/// # Safety
-/// The caller retains the published, serialized fixture battle.
-pub unsafe fn tail() -> *mut std::ffi::c_void {
-    {
-        crate::battle_context::with(|cx| {
-            cx.elements()
-                .tail()
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-        })
-    }
+/// Copy an element's display primitive.
+#[track_caller]
+pub fn prim(id: ElementId) -> Snapshot<DisplayPrimitive> {
+    Snapshot(prim_mut(id).clone())
 }
 
-/// # Safety
-/// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn succ<T>(pointer: *mut T) -> *mut std::ffi::c_void {
-    {
-        crate::battle_context::with(|cx| {
-            let id = cx
-                .elements()
-                .id(std::ptr::NonNull::new(pointer.cast()))
-                .unwrap_or_else(|| panic!("fixture operand"));
-            cx.elements()
-                .succ(id)
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-        })
-    }
+/// Lend an element's display primitive until the guard drops.
+#[track_caller]
+pub fn prim_mut(id: ElementId) -> RefMut<'static, DisplayPrimitive> {
+    RefMut::map(crate::battle_context::kernel(), |kernel| {
+        let index = kernel.fixture_elements().fixture_record_mut(id).prim_index;
+        kernel.display.get_mut(index)
+    })
 }
 
-/// # Safety
-/// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn pred<T>(pointer: *mut T) -> *mut std::ffi::c_void {
-    {
-        crate::battle_context::with(|cx| {
-            let id = cx
-                .elements()
-                .id(std::ptr::NonNull::new(pointer.cast()))
-                .unwrap_or_else(|| panic!("fixture operand"));
-            cx.elements()
-                .pred(id)
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-        })
-    }
+#[track_caller]
+fn ship_record(id: ShipId) -> RefMut<'static, ShipRecord> {
+    RefMut::map(crate::battle_context::kernel(), |kernel| {
+        kernel.fixture_ship_mut(id)
+    })
+}
+
+pub fn plot_intercept(a: ElementId, b: ElementId, turns: u16, margin: u16) -> u16 {
+    crate::battle_context::with(|cx| {
+        cx.plot_intercept(&cx.weapon_origin(a), &cx.weapon_origin(b), turns, margin)
+    })
+}
+
+pub fn head() -> Option<ElementId> {
+    crate::battle_context::with(|cx| cx.elements().head())
+}
+
+pub fn tail() -> Option<ElementId> {
+    crate::battle_context::with(|cx| cx.elements().tail())
+}
+
+pub fn succ(id: ElementId) -> Option<ElementId> {
+    crate::battle_context::with(|cx| cx.elements().succ(id))
+}
+
+pub fn pred(id: ElementId) -> Option<ElementId> {
+    crate::battle_context::with(|cx| cx.elements().pred(id))
 }
 
 pub struct Battle {
@@ -143,57 +101,54 @@ pub struct Battle {
 }
 impl Battle {
     pub fn new(capacity: u16) -> Self {
-        {
-            let graphics = uqm_rust::engine::test_support::native_probe::graphics_status();
-            uqm_rust::engine::test_support::native_probe::set_graphics_status(graphics & !4);
-            crate::battle_context::with(|cx| {
-                cx.kernel_mut()
-                    .reset_element_capacity(usize::from(capacity));
-            });
-            crate::battle_context::with(|cx| {
-                for side in 0..2 {
-                    cx.kernel_mut().reset_ship_capacity(side, 32);
-                }
-            });
-            crate::battle_context::with(|cx| {
-                let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
-                init_display_list(cx, scaled);
-            });
-            Self { graphics }
-        }
+        let graphics = uqm_rust::engine::test_support::native_probe::graphics_status();
+        uqm_rust::engine::test_support::native_probe::set_graphics_status(graphics & !4);
+        crate::battle_context::with(|cx| {
+            cx.kernel_mut()
+                .reset_element_capacity(usize::from(capacity));
+        });
+        crate::battle_context::with(|cx| {
+            for side in 0..2 {
+                cx.kernel_mut().reset_ship_capacity(side, 32);
+            }
+        });
+        crate::battle_context::with(|cx| {
+            let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
+            init_display_list(cx, scaled);
+        });
+        Self { graphics }
     }
 }
 impl Drop for Battle {
     fn drop(&mut self) {
-        {
-            crate::battle_context::with(|cx| cx.kernel_mut().reset_element_capacity(0));
-            crate::battle_context::with(|cx| {
-                for side in 0..2 {
-                    cx.kernel_mut().reset_ship_capacity(side, 0);
-                }
-            });
-            uqm_rust::engine::test_support::native_probe::set_graphics_status(self.graphics);
-        }
+        crate::battle_context::with(|cx| cx.kernel_mut().reset_element_capacity(0));
+        crate::battle_context::with(|cx| {
+            for side in 0..2 {
+                cx.kernel_mut().reset_ship_capacity(side, 0);
+            }
+        });
+        uqm_rust::engine::test_support::native_probe::set_graphics_status(self.graphics);
     }
 }
 
-struct Record<T>(*mut T);
-impl<T> Record<T> {
-    unsafe fn get(&self) -> &T {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe { &*self.0 }
-    }
-    unsafe fn get_mut(&mut self) -> &mut T {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe { &mut *self.0 }
-    }
+fn alloc_element() -> ElementId {
+    crate::battle_context::with(|cx| cx.alloc_element())
+        .unwrap_or_else(|| panic!("fixture element pool exhausted"))
+}
+
+fn release_element(id: ElementId) {
+    crate::battle_context::with(|cx| {
+        if cx.elements().contains(id) {
+            if cx.elements().linked(id) {
+                uqm_rust::battle::sounds::engine::unlink(cx, id);
+            }
+            cx.dispose(id);
+        }
+    });
 }
 
 pub struct Ship<'a> {
     battle: &'a Battle,
-    ss: Record<ShipRecord>,
-    el: Record<ElementRecord>,
-    pub handle: *mut std::ffi::c_void,
     pub id: ElementId,
     pub ship_id: ShipId,
     frames: Option<[FrameSet; 3]>,
@@ -201,44 +156,34 @@ pub struct Ship<'a> {
 }
 impl<'a> Ship<'a> {
     pub fn bare(battle: &'a Battle, species: u32, player: i16) -> Self {
-        // SAFETY: construction runs inside the serialized, published test battle.
-        unsafe {
-            let desc = Box::new(descriptor(species));
-            let (raw_ship, ship_id) = crate::battle_context::with(|cx| {
-                let mut ships = cx.kernel.ships(player as usize);
-                let link = ships
-                    .alloc()
-                    .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
-                (ships.raw(link).cast::<ShipRecord>(), ships.ship_id(link))
-            });
-            (*raw_ship).descriptor = Some(desc);
-            (*raw_ship).player_nr = player;
-            (*raw_ship).species_id = species;
-            let handle = crate::battle_context::with(|cx| {
-                cx.alloc_element()
-                    .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-            });
-            assert!(!handle.is_null());
-            let el = element(handle);
-            (*el).player_nr = player;
-            (*el).state_flags = PLAYER_SHIP as u16;
-            let id = crate::battle_context::with(|cx| {
-                cx.elements()
-                    .id(std::ptr::NonNull::new(handle))
-                    .unwrap_or_else(|| panic!("allocated element missing from pool"))
-            });
-            (*raw_ship).ship_element = Some(id);
-            (*el).parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
-            Self {
-                battle,
-                ss: Record(raw_ship),
-                el: Record(el),
-                handle,
-                id,
-                ship_id,
-                frames: None,
-                queued: false,
-            }
+        let descriptor = Box::new(descriptor(species));
+        let ship_id = crate::battle_context::with(|cx| {
+            let mut ships = cx.kernel.ships(player as usize);
+            let link = ships
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
+            ships.ship_id(link)
+        });
+        {
+            let mut ship = ship_record(ship_id);
+            ship.descriptor = Some(descriptor);
+            ship.player_nr = player;
+            ship.species_id = species;
+        }
+        let id = alloc_element();
+        {
+            let mut element = get_mut(id);
+            element.player_nr = player;
+            element.state_flags = PLAYER_SHIP as u16;
+            element.parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
+        }
+        ship_record(ship_id).ship_element = Some(id);
+        Self {
+            battle,
+            id,
+            ship_id,
+            frames: None,
+            queued: false,
         }
     }
     pub fn native(
@@ -247,55 +192,52 @@ impl<'a> Ship<'a> {
         player: i16,
     ) -> Self {
         let mut ship = Self::bare(battle, SPECIES_ID_VUX_ID, player);
-        // SAFETY: construction runs in this fixture's serialized, published battle.
-        unsafe {
-            *ship.descriptor_mut() =
-                crate::battle_context::with(|cx| (race.descriptor)(cx.world).into_legacy());
-        }
+        let descriptor =
+            crate::battle_context::with(|cx| (race.descriptor)(cx.world).into_legacy());
+        *ship.descriptor_mut() = descriptor;
         ship
     }
-    pub unsafe fn new(battle: &'a Battle, species: u32, player: i16) -> Self {
-        // SAFETY: the caller retains the serialized battle and its frame resources.
-        unsafe { Self::with_frames(battle, species, player, [16; 3], [4, 4]) }
+    pub fn new(battle: &'a Battle, species: u32, player: i16) -> Self {
+        Self::with_frames(battle, species, player, [16; 3], [4, 4])
     }
-    /// # Safety
-    /// Retain the serialized battle until this ship drops; do not retain projections across callbacks.
-    pub unsafe fn with_frames(
+    pub fn with_frames(
         battle: &'a Battle,
         species: u32,
         player: i16,
         counts: [u16; 3],
         bounds: [i16; 2],
     ) -> Self {
-        // SAFETY: the caller retains the serialized battle through fixture construction.
-        unsafe {
-            let mut ship = Self::bare(battle, species, player);
-            let frames = counts.map(|count| FrameSet::with_bounds(count, bounds));
-            ship.descriptor_mut().ship_data.ship = frames[0].array();
-            ship.descriptor_mut().ship_data.weapon = frames[1].array();
-            ship.descriptor_mut().ship_data.special = frames[2].array();
-            ship.element_mut().collision_func =
-                Some(uqm_rust::engine::battle::CollisionHook::Native(
-                    uqm_rust::engine::battle::motion::collision,
-                ));
-            ship.element_mut().set_life_span(NORMAL_LIFE as u16);
-            let crew = ship.descriptor_mut().ship_info.crew_level;
-            ship.element_mut().set_hit_points(crew);
-            let mass = ship.descriptor_mut().characteristics.ship_mass;
-            ship.element_mut().set_mass_points(mass);
-            ship.element_mut().current.location = Point { x: 4000, y: 4000 };
-            ship.element_mut().current.image.frames = ship.ship_frames();
-            ship.element_mut().current.image.frame = frames[0].selection(0);
-            ship.element_mut().next = ship.element_mut().current.clone();
-            ship.element_mut().intersect_control.intersect_stamp.frame = frames[0].frame(0);
-            // SAFETY: this slot owns its allocated display primitive.
-
-            (*prim(ship.ptr())).kind = STAMP_PRIMITIVE;
-
-            ship.frames = Some(frames);
-            ship.queue();
-            ship
+        let mut ship = Self::bare(battle, species, player);
+        let frames = counts.map(|count| FrameSet::with_bounds(count, bounds));
+        let (crew, mass) = {
+            let mut descriptor = ship.descriptor_mut();
+            descriptor.ship_data.ship = frames[0].array();
+            descriptor.ship_data.weapon = frames[1].array();
+            descriptor.ship_data.special = frames[2].array();
+            (
+                descriptor.ship_info.crew_level,
+                descriptor.characteristics.ship_mass,
+            )
+        };
+        let ship_frames = ship.ship_frames();
+        {
+            let mut element = ship.element_mut();
+            element.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
+                uqm_rust::engine::battle::motion::collision,
+            ));
+            element.set_life_span(NORMAL_LIFE as u16);
+            element.set_hit_points(crew);
+            element.set_mass_points(mass);
+            element.current.location = Point { x: 4000, y: 4000 };
+            element.current.image.frames = ship_frames;
+            element.current.image.frame = frames[0].selection(0);
+            element.next = element.current.clone();
+            element.intersect_control.intersect_stamp.frame = frames[0].frame(0);
         }
+        prim_mut(ship.id).kind = STAMP_PRIMITIVE;
+        ship.frames = Some(frames);
+        ship.queue();
+        ship
     }
     pub fn raw_frame(&self, role: usize, index: usize) -> FrameId {
         self.frames
@@ -315,37 +257,15 @@ impl<'a> Ship<'a> {
                 bounds[0], bounds[1],
             ));
     }
-    pub fn weapon_handles(&mut self, expected: u16) -> Vec<*mut std::ffi::c_void> {
-        {
-            crate::battle_context::with(|cx| {
-                let origin = cx.weapon_origin(self.id);
-                let out = uqm_rust::engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
-                assert_eq!(out.len(), usize::from(expected));
-                out.into_iter()
-                    .map(|id| id.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast()))
-                    .collect()
-            })
-        }
+    /// Spawn this ship's weapons from its own element without adopting them.
+    pub fn weapon_handles(&mut self, expected: u16) -> Vec<Option<ElementId>> {
+        self.initialize_from(self.id, expected)
     }
-    /// # Safety
-    /// The subject and concerns must be live fixture operands retained through the callback.
-    pub unsafe fn think(
-        &mut self,
-        subject: *mut ElementRecord,
-        concerns: &mut [EvaluateRecord; 4],
-        count: u16,
-    ) {
-        // SAFETY: callers supply this fixture's live subject, without retaining a record borrow.
-        unsafe {
-            let id = crate::battle_context::with(|cx| {
-                cx.elements()
-                    .id(std::ptr::NonNull::new(subject.cast()))
-                    .unwrap_or_else(|| panic!("fixture subject is absent"))
-            });
-            let mut value = crate::battle_context::with(|cx| cx.weapon_origin(id));
-            invoke_intelligence(self.ship_id, &mut value, concerns, count);
-            *subject = value.into();
-        }
+    /// Run the ship's AI on `subject` and write the evaluated subject back to it.
+    pub fn think(&mut self, subject: ElementId, concerns: &mut [Concern], count: u16) {
+        let mut value = crate::battle_context::with(|cx| cx.weapon_origin(subject));
+        self.intelligence_subject(&mut value, concerns, count);
+        *get_mut(subject) = value.into();
     }
     pub fn set_hot_spot(&mut self, role: usize, index: usize, hot_spot: [i16; 2]) {
         self.raw_frame(role, index)
@@ -354,27 +274,14 @@ impl<'a> Ship<'a> {
                 y: hot_spot[1],
             });
     }
-    /// # Safety
-    /// The source must be a live element in this fixture's retained battle pool.
-    pub unsafe fn initialize_from(
-        &self,
-        source: *mut ElementRecord,
-        expected: u16,
-    ) -> Vec<*mut std::ffi::c_void> {
-        {
-            crate::battle_context::with(|cx| {
-                let source = cx
-                    .elements()
-                    .id(std::ptr::NonNull::new(source.cast()))
-                    .unwrap_or_else(|| panic!("weapon source"));
-                let origin = cx.weapon_origin(source);
-                let out = cx.spawn_weapons(self.ship_id, origin);
-                assert_eq!(out.len(), usize::from(expected));
-                out.into_iter()
-                    .map(|id| id.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast()))
-                    .collect()
-            })
-        }
+    /// Spawn this ship's weapons from `source` without adopting them.
+    pub fn initialize_from(&self, source: ElementId, expected: u16) -> Vec<Option<ElementId>> {
+        crate::battle_context::with(|cx| {
+            let origin = cx.weapon_origin(source);
+            let out = cx.spawn_weapons(self.ship_id, origin);
+            assert_eq!(out.len(), usize::from(expected));
+            out
+        })
     }
     pub fn frame(
         &self,
@@ -382,85 +289,49 @@ impl<'a> Ship<'a> {
         index: u16,
     ) -> uqm_rust::engine::battle::views::FrameSelection {
         self.assert_live();
-        {
-            crate::battle_context::with(|cx| {
-                cx.absolute_frame(cx.ship_frame(self.ship_id, role), index)
-            })
-        }
+        crate::battle_context::with(|cx| {
+            cx.absolute_frame(cx.ship_frame(self.ship_id, role), index)
+        })
     }
     pub fn frame_set(&self, role: usize) -> uqm_rust::engine::battle::views::Frames {
         self.assert_live();
-        {
-            crate::battle_context::with(|cx| cx.ship_frame_set(self.ship_id, role))
-        }
+        crate::battle_context::with(|cx| cx.ship_frame_set(self.ship_id, role))
     }
     pub fn queue(&mut self) {
         assert!(!self.queued);
-        // SAFETY: this fixture owns the unlinked, allocated slot.
-        unsafe {
-            put(self.handle);
-        }
+        put(self.id);
         self.queued = true;
     }
+    #[track_caller]
     fn assert_live(&self) {
-        {
-            crate::battle_context::with(|cx| {
-                assert!(cx.elements().contains(self.id), "retired fixture record")
-            });
-        }
+        crate::battle_context::with(|cx| {
+            assert!(cx.elements().contains(self.id), "retired fixture record")
+        });
     }
-    /// # Safety
-    /// Do not retain record references across any engine or fixture hook call.
-    pub unsafe fn element_mut(&mut self) -> &mut ElementRecord {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe {
-            self.assert_live();
-            self.el.get_mut()
-        }
+    /// Lend the ship's element record until the guard drops.
+    #[track_caller]
+    pub fn element_mut(&mut self) -> RefMut<'static, ElementRecord> {
+        self.assert_live();
+        get_mut(self.id)
     }
-    /// # Safety
-    /// Do not retain record references across any engine or fixture hook call.
-    pub unsafe fn ship_mut(&mut self) -> &mut ShipRecord {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe {
-            self.assert_live();
-            self.ss.get_mut()
-        }
+    /// Lend the ship's pool record until the guard drops.
+    #[track_caller]
+    pub fn ship_mut(&mut self) -> RefMut<'static, ShipRecord> {
+        self.assert_live();
+        ship_record(self.ship_id)
     }
-    /// # Safety
-    /// Do not retain descriptor references across any engine or fixture hook call.
-    pub unsafe fn descriptor_mut(&mut self) -> &mut RaceDescriptor {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-
-        unsafe {
-            self.assert_live();
-            self.ss
-                .get_mut()
-                .descriptor
+    /// Lend the ship's loaded descriptor until the guard drops.
+    #[track_caller]
+    pub fn descriptor_mut(&mut self) -> RefMut<'static, RaceDescriptor> {
+        self.assert_live();
+        RefMut::map(ship_record(self.ship_id), |ship| {
+            ship.descriptor
                 .as_deref_mut()
                 .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"))
-        }
+        })
     }
     pub fn snapshot(&self) -> uqm_rust::engine::battle::views::ElementState {
-        {
-            crate::battle_context::with(|cx| cx.element(self.id))
-        }
-    }
-    pub fn ptr(&self) -> *mut ElementRecord {
-        self.el.0
-    }
-    pub fn el(&mut self) -> *mut ElementRecord {
-        self.ptr()
-    }
-    fn descriptor(&self) -> &RaceDescriptor {
-        // SAFETY: the serialized fixture retains its owned ship slot.
-        unsafe {
-            self.ss
-                .get()
-                .descriptor
-                .as_deref()
-                .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"))
-        }
+        crate::battle_context::with(|cx| cx.element(self.id))
     }
     pub fn ship_frames(&self) -> uqm_rust::engine::battle::views::Frames {
         self.frame_set(0)
@@ -468,19 +339,15 @@ impl<'a> Ship<'a> {
     pub fn special_frames(&self) -> uqm_rust::engine::battle::views::Frames {
         self.frame_set(2)
     }
-    pub unsafe fn guardian_form(mut self) -> Self {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe {
-            self.element_mut().next.image.frames = self.ship_frames();
-            self
-        }
+    pub fn guardian_form(mut self) -> Self {
+        let frames = self.ship_frames();
+        self.element_mut().next.image.frames = frames;
+        self
     }
-    pub unsafe fn blazer_form(mut self) -> Self {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe {
-            self.element_mut().next.image.frames = self.special_frames();
-            self
-        }
+    pub fn blazer_form(mut self) -> Self {
+        let frames = self.special_frames();
+        self.element_mut().next.image.frames = frames;
+        self
     }
     pub fn preprocess(&mut self) {
         self.process(false);
@@ -489,92 +356,60 @@ impl<'a> Ship<'a> {
         self.process(true);
     }
     fn process(&mut self, post: bool) {
-        {
-            crate::battle_context::with(|cx| {
-                uqm_rust::engine::battle::Cx::invoke_ship_process(cx, self.ship_id, post);
-            });
-        }
+        crate::battle_context::with(|cx| {
+            uqm_rust::engine::battle::Cx::invoke_ship_process(cx, self.ship_id, post);
+        });
     }
+    /// Spawn this ship's weapons and adopt them as its own.
     pub fn weapon(&mut self, expected: u16) -> Vec<Option<ElementId>> {
-        {
-            crate::battle_context::with(|cx| {
-                let origin = cx.weapon_origin(self.id);
-                let out = uqm_rust::engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
-                assert_eq!(out.len(), usize::from(expected));
-                for &id in out.iter().flatten() {
-                    cx.set_parent(id, Some(self.ship_id));
-                    let current = cx.element(id).current;
-                    cx.copy_visual_to_next(id, current.clone());
-                    cx.set_intersect_frame(id, current.image.frame);
-                }
-                out
-            })
-        }
-    }
-    /// # Safety
-    /// Do not retain the legacy pointer across callbacks or disposal.
-    pub unsafe fn weapon_record(&self, id: Option<ElementId>) -> *mut ElementRecord {
-        {
-            crate::battle_context::with(|cx| {
-                cx.legacy_element(id.unwrap_or_else(|| panic!("{}", "allocated weapon")))
-            })
-        }
-    }
-    pub unsafe fn intelligence(
-        &mut self,
-        subject: &mut ElementRecord,
-        concerns: &mut [EvaluateRecord],
-        count: u16,
-    ) {
-        // SAFETY: subject is a live fixture slot and its concerns remain live during dispatch.
-        unsafe {
-            let id = crate::battle_context::with(|cx| {
-                cx.elements()
-                    .id(std::ptr::NonNull::new(
-                        (subject as *mut ElementRecord).cast(),
-                    ))
-                    .unwrap_or_else(|| panic!("fixture subject is absent"))
-            });
-            let mut value = crate::battle_context::with(|cx| cx.weapon_origin(id));
-            invoke_intelligence(self.ship_id, &mut value, concerns, count);
-            *subject = value.into();
-        }
+        crate::battle_context::with(|cx| {
+            let origin = cx.weapon_origin(self.id);
+            let out = uqm_rust::engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
+            assert_eq!(out.len(), usize::from(expected));
+            for &id in out.iter().flatten() {
+                cx.set_parent(id, Some(self.ship_id));
+                let current = cx.element(id).current;
+                cx.copy_visual_to_next(id, current.clone());
+                cx.set_intersect_frame(id, current.image.frame);
+            }
+            out
+        })
     }
     pub fn subject(&self) -> uqm_rust::engine::battle::Subject {
         self.assert_live();
-        {
-            crate::battle_context::with(|cx| cx.weapon_origin(self.id))
-        }
+        crate::battle_context::with(|cx| cx.weapon_origin(self.id))
     }
-    pub unsafe fn intelligence_subject(
+    pub fn intelligence_subject(
         &mut self,
         subject: &mut uqm_rust::engine::battle::Subject,
-        concerns: &mut [EvaluateRecord],
+        concerns: &mut [Concern],
         count: u16,
     ) {
-        // SAFETY: the fixture retains the value's resources and concern operands during dispatch.
-        unsafe {
-            invoke_intelligence(self.ship_id, subject, concerns, count);
-        }
+        crate::battle_context::with(|cx| {
+            cx.invoke_intelligence(self.ship_id, subject, concerns, count);
+        });
     }
     pub fn uninit(&mut self) {
         // The replacement path can consume the descriptor before fixture teardown.
-        // SAFETY: the fixture still owns its live ship slot.
-        let race = unsafe { self.ss.get().descriptor.as_deref().and_then(|d| d.race) };
-        if let Some(race) = race {
-            if let Some(uninit) = race.uninit {
-                {
-                    crate::battle_context::with(|cx| {
-                        let mut stats = cx.race_stats(self.ship_id);
-                        uninit(cx.world, &mut stats);
-                        *cx.race_stats_mut(self.ship_id) = stats;
-                    });
-                }
-            }
+        let race = ship_record(self.ship_id)
+            .descriptor
+            .as_deref()
+            .and_then(|descriptor| descriptor.race);
+        if let Some(uninit) = race.and_then(|race| race.uninit) {
+            crate::battle_context::with(|cx| {
+                let mut stats = cx.race_stats(self.ship_id);
+                uninit(cx.world, &mut stats);
+                *cx.race_stats_mut(self.ship_id) = stats;
+            });
         }
     }
     pub fn saved_collision(&self) -> Option<uqm_rust::engine::battle::CollisionHook> {
-        let RaceState::Androsynth { collision } = self.descriptor().race_state else {
+        let ship = ship_record(self.ship_id);
+        let descriptor = ship
+            .descriptor
+            .as_deref()
+            .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"));
+        let RaceState::Androsynth { collision } = descriptor.race_state else {
             panic!("no saved Androsynth collision")
         };
         collision
@@ -583,52 +418,37 @@ impl<'a> Ship<'a> {
 impl Drop for Ship<'_> {
     fn drop(&mut self) {
         self.uninit();
-        {
-            crate::battle_context::with(|cx| {
-                if cx.elements().contains(self.id) {
-                    if cx.elements().linked(self.id) {
-                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
-                    }
-                    cx.dispose(self.id);
-                }
-            });
-            crate::battle_context::with(|cx| {
-                let mut ships = cx.kernel.ships(self.ship_id.side() as usize);
-                let link = ships.link(self.ship_id);
-                if ships.linked(link) {
-                    ships.remove(link);
-                }
-                ships.free(link);
-            });
-        }
+        release_element(self.id);
+        crate::battle_context::with(|cx| {
+            let mut ships = cx.kernel.ships(self.ship_id.side() as usize);
+            let link = ships.link(self.ship_id);
+            if ships.linked(link) {
+                ships.remove(link);
+            }
+            ships.free(link);
+        });
     }
 }
 pub fn descriptor(species: u32) -> RaceDescriptor {
-    {
-        crate::battle_context::with(|cx| {
-            uqm_rust::ships::races::descriptor(cx.world, species).into_legacy()
-        })
-    }
+    crate::battle_context::with(|cx| {
+        uqm_rust::ships::races::descriptor(cx.world, species).into_legacy()
+    })
 }
 
-pub unsafe fn call_element(name: &str, id: ElementId) {
-    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-
+pub fn call_element(name: &str, id: ElementId) {
     let address = uqm_rust::battle::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
         .unwrap_or_else(|| panic!("{}", "registered element hook"));
-    {
-        crate::battle_context::with(|cx| {
-            let e = &cx.elements()[id];
-            let callback = [e.preprocess_func, e.postprocess_func, e.death_func]
-                .into_iter()
-                .flatten()
-                .find(|h| h.address() == address)
-                .unwrap_or_else(|| panic!("{}", "named hook installed on element"));
-            uqm_rust::battle::process_native::invoke_element::invoke_element(cx, callback, id);
-        });
-    }
+    crate::battle_context::with(|cx| {
+        let e = &cx.elements()[id];
+        let callback = [e.preprocess_func, e.postprocess_func, e.death_func]
+            .into_iter()
+            .flatten()
+            .find(|h| h.address() == address)
+            .unwrap_or_else(|| panic!("{}", "named hook installed on element"));
+        uqm_rust::battle::process_native::invoke_element::invoke_element(cx, callback, id);
+    });
 }
 
 pub fn call_collision(name: &str, a: ElementId, pa: &mut Point, b: ElementId, pb: &mut Point) {
@@ -636,33 +456,20 @@ pub fn call_collision(name: &str, a: ElementId, pa: &mut Point, b: ElementId, pb
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
         .unwrap_or_else(|| panic!("{}", "registered collision hook"));
-    {
-        crate::battle_context::with(|cx| {
-            let hook = cx
-                .element(a)
-                .collide
-                .unwrap_or_else(|| panic!("{}", "installed collision hook"));
-            assert_eq!(
-                hook.address(),
-                address,
-                "named collision installed on element"
-            );
-            uqm_rust::battle::process_native::invoke_collision::invoke_collision(
-                cx, hook, a, pa, b, pb,
-            );
-        })
-    }
-}
-/// # Safety
-/// The pointer must be live pool storage belonging to the current test battle.
-pub unsafe fn id(pointer: *mut ElementRecord) -> ElementId {
-    {
-        crate::battle_context::with(|cx| {
-            cx.elements()
-                .id(std::ptr::NonNull::new(pointer.cast()))
-                .unwrap_or_else(|| panic!("{}", "pool record"))
-        })
-    }
+    crate::battle_context::with(|cx| {
+        let hook = cx
+            .element(a)
+            .collide
+            .unwrap_or_else(|| panic!("{}", "installed collision hook"));
+        assert_eq!(
+            hook.address(),
+            address,
+            "named collision installed on element"
+        );
+        uqm_rust::battle::process_native::invoke_collision::invoke_collision(
+            cx, hook, a, pa, b, pb,
+        );
+    })
 }
 
 #[derive(Clone)]
@@ -698,22 +505,15 @@ impl FrameSet {
         self.0.frame(index)
     }
 }
-pub unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
-    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-    unsafe {
-        crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive((*e).prim_index)))
-    }
+/// The display queue from head to tail.
+pub fn queued() -> Vec<ElementId> {
+    crate::battle_context::with(|cx| queued_in(cx))
 }
-pub unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
-    {
-        crate::battle_context::with(|cx| queued_in(cx))
-    }
-}
-pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<*mut std::ffi::c_void> {
+pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<ElementId> {
     let mut all = Vec::new();
     let mut next = cx.elements().head();
     while let Some(id) = next {
-        all.push(cx.elements().raw(id));
+        all.push(id);
         next = cx.elements().succ(id);
     }
     all
@@ -737,9 +537,7 @@ pub fn toward(speed: i16, face: u16) -> [i32; 9] {
     uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, face);
     velocity(&v)
 }
-pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
-    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-
+pub fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     seed_random(seed);
     for _ in 0..draws {
         random();
@@ -751,58 +549,27 @@ pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T
     result
 }
 
+/// An element allocated for the fixture; it is disposed when the owner drops.
 pub struct Object<'a> {
     battle: &'a Battle,
-    el: Record<ElementRecord>,
     pub id: ElementId,
 }
 impl<'a> Object<'a> {
     pub fn new(battle: &'a Battle) -> Self {
-        {
-            let handle = crate::battle_context::with(|cx| {
-                cx.alloc_element()
-                    .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-            });
-            assert!(!handle.is_null());
-            let id = crate::battle_context::with(|cx| {
-                cx.elements()
-                    .id(std::ptr::NonNull::new(handle))
-                    .unwrap_or_else(|| panic!("allocated element missing from pool"))
-            });
-            Self {
-                battle,
-                el: Record(handle.cast()),
-                id,
-            }
+        Self {
+            battle,
+            id: alloc_element(),
         }
     }
-    /// # Safety
-    /// Do not retain record references across any engine or fixture hook call.
-    pub unsafe fn element_mut(&mut self) -> &mut ElementRecord {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-        unsafe {
-            crate::battle_context::with(|cx| {
-                assert!(cx.elements().contains(self.id), "retired fixture object")
-            });
-            self.el.get_mut()
-        }
-    }
-    pub fn ptr(&mut self) -> *mut ElementRecord {
-        self.el.0
+    /// Lend the object's element record until the guard drops.
+    #[track_caller]
+    pub fn element_mut(&mut self) -> RefMut<'static, ElementRecord> {
+        get_mut(self.id)
     }
 }
 impl Drop for Object<'_> {
     fn drop(&mut self) {
-        {
-            crate::battle_context::with(|cx| {
-                if cx.elements().contains(self.id) {
-                    if cx.elements().linked(self.id) {
-                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
-                    }
-                    cx.dispose(self.id);
-                }
-            });
-        }
+        release_element(self.id);
     }
 }
 
@@ -810,74 +577,25 @@ impl Drop for Object<'_> {
 mod ship_pool;
 pub type PoolShip = ship_pool::PoolShip;
 
-/// An unlinked pool slot for legacy callback operands.
+/// An unlinked element slot owned outside any battle fixture value.
 pub struct PoolElement {
-    pointer: *mut ElementRecord,
-    id: ElementId,
+    pub id: ElementId,
 }
 impl PoolElement {
-    /// # Safety
-    /// The serialized fixture must retain its battle pools until this owner drops.
-    pub unsafe fn new() -> Self {
-        // SAFETY: the caller retains the initialized, serialized element pool.
-        unsafe {
-            let pointer = crate::battle_context::with(|cx| {
-                cx.alloc_element()
-                    .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-            })
-            .cast::<ElementRecord>();
-            assert!(!pointer.is_null(), "fixture element pool exhausted");
-            let id = id(pointer);
-            Self { pointer, id }
+    pub fn new() -> Self {
+        Self {
+            id: alloc_element(),
         }
-    }
-}
-impl std::ops::Deref for PoolElement {
-    type Target = ElementRecord;
-    fn deref(&self) -> &ElementRecord {
-        // SAFETY: this owner retains the allocated operand slot.
-        unsafe { &*self.pointer }
-    }
-}
-impl std::ops::DerefMut for PoolElement {
-    fn deref_mut(&mut self) -> &mut ElementRecord {
-        // SAFETY: this exclusive fixture borrow owns the operand slot.
-        unsafe { &mut *self.pointer }
     }
 }
 impl Drop for PoolElement {
     fn drop(&mut self) {
-        {
-            crate::battle_context::with(|cx| {
-                if cx.elements().contains(self.id) {
-                    if cx.elements().linked(self.id) {
-                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
-                    }
-                    cx.dispose(self.id);
-                }
-            });
-        }
+        release_element(self.id);
     }
 }
 
-/// # Safety
-/// The supplied pointer is a retained fixture record owned by the active battle.
-pub unsafe fn put(handle: *mut std::ffi::c_void) {
-    {
-        crate::battle_context::with(|cx| {
-            let id = cx
-                .elements()
-                .id(std::ptr::NonNull::new(handle))
-                .unwrap_or_else(|| panic!("fixture element"));
-            cx.put(id);
-        });
-    }
-}
-/// Cast a retained fixture handle without dereferencing it.
-pub fn element(
-    handle: *mut std::ffi::c_void,
-) -> *mut uqm_rust::engine::battle::record::ElementRecord {
-    handle.cast()
+pub fn put(id: ElementId) {
+    crate::battle_context::with(|cx| cx.put(id));
 }
 
 pub struct NativeFrameSet(uqm_rust::graphics::drawable::LoadedDrawable);

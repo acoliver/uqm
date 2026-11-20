@@ -324,6 +324,9 @@ impl super::super::super::Kernel {
     pub fn fixture_elements(&mut self) -> &mut ElementTable {
         &mut self.elements
     }
+    pub fn fixture_ship_mut(&mut self, id: ShipId) -> &mut super::record::ShipRecord {
+        self.races[usize::from(id.side)].ship_mut(id)
+    }
 }
 impl ShipId {
     #[cfg(any(test, feature = "test-support"))]

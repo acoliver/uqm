@@ -7,6 +7,7 @@ const CANNON_WEAPON: u32 = 11;
 const GUN_WEAPON: u32 = 9;
 const TRACKING_SYSTEM: u32 = 12;
 
+use std::cell::RefMut;
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
 use uqm_rust::automation::battle_fight::BattleSnapshot;
 use uqm_rust::automation::script::parse_script;
@@ -21,7 +22,6 @@ use uqm_rust::engine::battle::frames::FrameArray;
 use uqm_rust::engine::battle::record::CaptainRecord;
 use uqm_rust::engine::battle::record::CharacteristicRecord;
 use uqm_rust::engine::battle::record::RaceDescriptor;
-use uqm_rust::engine::battle::record::ShipRecord;
 use uqm_rust::engine::battle::views::FrameSelection;
 use uqm_rust::engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
 use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
@@ -39,36 +39,35 @@ use graph::{
     fighters_without_journal, non_ship_parent_fields,
 };
 
-// A test handle projects the descriptor owned by its ship, without retaining a borrow across snapshots.
-struct DescriptorRecord(*mut RaceDescriptor);
-impl std::ops::Deref for DescriptorRecord {
-    type Target = RaceDescriptor;
-    fn deref(&self) -> &RaceDescriptor {
-        // SAFETY: each test retains its owning ship (or detached box) until this handle's last use.
-        unsafe { &*self.0 }
-    }
-}
-impl std::ops::DerefMut for DescriptorRecord {
-    fn deref_mut(&mut self) -> &mut RaceDescriptor {
-        // SAFETY: test edits and synchronous snapshots do not overlap.
-        unsafe { &mut *self.0 }
-    }
-}
-fn install_descriptor(ship: &mut ShipRecord, value: RaceDescriptor) -> DescriptorRecord {
-    release_descriptor(ship);
-    ship.descriptor = Some(Box::new(value));
-    DescriptorRecord(ship.descriptor_ptr())
+/// Lend the descriptor owned by the fixture ship until the guard drops.
+fn descriptor_mut(ship: &mut battle::PoolShip) -> RefMut<'static, RaceDescriptor> {
+    RefMut::map(ship.record(), |ship| {
+        ship.descriptor
+            .as_deref_mut()
+            .unwrap_or_else(|| panic!("installed descriptor"))
+    })
 }
 
-fn release_descriptor(ship: &mut ShipRecord) {
-    if let Some(owned) = ship.descriptor.take() {
-        // Fixture resources are stack records; retire their identities before dropping the box.
+fn install_descriptor(ship: &mut battle::PoolShip, value: RaceDescriptor) {
+    release_descriptor(ship);
+    ship.record().descriptor = Some(Box::new(value));
+}
+
+fn release_descriptor(ship: &mut battle::PoolShip) {
+    let owned = ship.record().descriptor.take();
+    if let Some(owned) = owned {
+        // Fixture resources are local records; retire their identities before dropping the box.
         observation::record(Event::ResourcesFree {
             descriptor: std::ptr::from_ref(&*owned) as usize,
             icons: true,
             battle: true,
         });
     }
+}
+
+/// The pool address the parity observer identifies this ship by.
+fn ship_address(ship: &mut battle::PoolShip) -> usize {
+    std::ptr::from_ref(&*ship.record()) as usize
 }
 
 type Fields = BTreeMap<String, String>;
@@ -122,8 +121,7 @@ fn live_state_is_complete_stable_and_read_only() {
 }
 
 fn exercise_live_callers(directory: &Path) {
-    // SAFETY: this process exclusively owns the published fixture pools.
-    unsafe { clear_queues() };
+    clear_queues();
     fighters_without_journal(directory);
     uqm_rust::platform::install(true);
     std::env::set_var("UQM_PARITY", "1");
@@ -207,18 +205,13 @@ fn changed(before: &Fields, after: &Fields) -> Vec<String> {
 }
 
 fn descriptor_fields(observer: &AutomationObserver, directory: &Path) {
-    // SAFETY: all native records contain only scalar fields, optional callbacks and pointers.
-    let descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
-    // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship = unsafe { battle::PoolShip::new(0) };
-    ship.species_id = SPECIES_ID_EARTHLING_ID;
-    let mut descriptor = install_descriptor(&mut ship, descriptor);
-    // SAFETY: stack records outlive the synchronous snapshots, and the queues are idle.
-    unsafe {
-        install_ship(&mut ship);
-    }
+    let descriptor: RaceDescriptor = RaceDescriptor::EMPTY;
+    let mut ship = battle::PoolShip::new(0);
+    ship.record().species_id = SPECIES_ID_EARTHLING_ID;
+    install_descriptor(&mut ship, descriptor);
+    install_ship(&mut ship);
     let (before, _) = snapshot(observer, directory);
-    update_descriptor(&mut descriptor, &mut ship);
+    update_descriptor(&mut ship);
     let (after, _) = snapshot(observer, directory);
     for (name, value) in [
         ("race.max_crew", 37),
@@ -255,14 +248,14 @@ fn descriptor_fields(observer: &AutomationObserver, directory: &Path) {
     }
     assert_eq!(changed(&before, &after).len(), 35);
     assert_characteristics(&after, "ships.0.0.characteristics");
-    // SAFETY: detach stack records before they are dropped.
-    unsafe {
+    {
         release_descriptor(&mut ship);
         clear_queues();
     }
 }
 
-fn update_descriptor(descriptor: &mut RaceDescriptor, ship: &mut ShipRecord) {
+fn update_descriptor(ship: &mut battle::PoolShip) {
+    let mut descriptor = descriptor_mut(ship);
     descriptor.ship_info.max_crew = 37;
     descriptor.ship_info.ship_cost = 19;
     descriptor.ship_info.crew_level = 23;
@@ -274,6 +267,8 @@ fn update_descriptor(descriptor: &mut RaceDescriptor, ship: &mut ShipRecord) {
     descriptor.cyborg_control.maneuverability_index = 13;
     descriptor.cyborg_control.weapon_range = 53;
     descriptor.characteristics = sample_characteristics();
+    drop(descriptor);
+    let mut ship = ship.record();
     ship.captains_name_index = 7;
     ship.crew_level = 11;
     ship.max_crew = 41;
@@ -330,65 +325,53 @@ fn assert_characteristics(fields: &Fields, prefix: &str) {
     }
 }
 
-/// # Safety
-/// A synchronous snapshot must finish before the ship is moved or freed.
-unsafe fn install_ship(ship: &mut ShipRecord) {
-    // SAFETY: the caller owns the idle queues and keeps ship at this address
-    // until the synchronous snapshot finishes and the queue is detached.
-    {
-        crate::battle_context::with(|cx| {
-            let mut ships = cx.kernel_mut().ships(0);
-            let link = ships
-                .id(ptr::from_mut(ship) as usize)
-                .unwrap_or_else(|| panic!("fixture ship is missing"));
-            ships.put(link);
-        });
-    }
+fn install_ship(ship: &mut battle::PoolShip) {
+    let id = ship.ship_id;
+    crate::battle_context::with(|cx| {
+        let mut ships = cx.kernel_mut().ships(0);
+        let link = ships.link(id);
+        ships.put(link);
+    });
+    let address = ship_address(ship);
+    let record = ship.record();
     observation::record(Event::Spawn {
-        address: ptr::from_mut(ship) as usize,
-        side: ship.player_nr,
-        species: ship.species_id,
+        address,
+        side: record.player_nr,
+        species: record.species_id,
     });
 }
 
 fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
-    // SAFETY: native initializers run on this sole game thread; all test allocations
     // match the races' repr(C) saved-data records and outlive the snapshots.
-    unsafe {
-        let human = uqm_rust::battle::hook_registry::hooks()
-            .into_iter()
-            .find_map(|(address, name)| {
-                (name == "ships::races::human_native::nuke_preprocess").then_some(address)
-            })
-            .unwrap_or_else(|| panic!("registered native Cruiser element hook"));
-        // SAFETY: nuke_preprocess has the Native element signature.
-        let human: uqm_rust::engine::battle::ElementFn = std::mem::transmute(human);
-        let human = Some(uqm_rust::engine::battle::ElementHook::Native(human));
-        let descriptor: RaceDescriptor = std::mem::zeroed();
+    {
+        let human = Some(uqm_rust::engine::battle::ElementHook::Native(
+            uqm_rust::ships::races::human_native::engine::nuke_preprocess,
+        ));
+        let descriptor: RaceDescriptor = RaceDescriptor::EMPTY;
         {
             let pool = battle::Battle::new(8);
             let mut phoenix_object = battle::Object::new(&pool);
-            let phoenix = phoenix_object.ptr();
-            observation::record(Event::Allocate(phoenix as usize));
+            let phoenix = std::ptr::from_ref(&*phoenix_object.element_mut()) as usize;
+            observation::record(Event::Allocate(phoenix));
             let mut owner = battle::Ship::bare(&pool, SPECIES_ID_PKUNK_ID, 0);
             owner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
-                phoenix: Some(battle::id(phoenix)),
+                phoenix: Some(phoenix_object.id),
                 saved_pre: human,
                 saved_post: human,
                 saved_death: human,
             };
-            let ship = ptr::from_mut(owner.ship_mut());
+            let ship = std::ptr::from_ref(&*owner.ship_mut()) as usize;
             crate::battle_context::with(|cx| {
                 let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.put(link);
             });
             observation::record(Event::Spawn {
-                address: ship as usize,
+                address: ship,
                 side: 0,
                 species: SPECIES_ID_PKUNK_ID,
             });
-            battle::put(phoenix.cast());
+            battle::put(phoenix_object.id);
             let (fields, _) = snapshot(observer, directory);
             assert_eq!(
                 fields["ships.0.0.custom.phoenix"],
@@ -404,13 +387,13 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
                 retired["ships.0.0.custom.phoenix"],
                 fields["ships.0.0.custom.phoenix"]
             );
-            let mut reused = battle::Object::new(&pool);
+            let reused = battle::Object::new(&pool);
             assert_eq!(reused.id.slot(), phoenix_object.id.slot());
             assert_ne!(reused.id.generation(), phoenix_object.id.generation());
             assert!(!crate::battle_context::with(|cx| cx
                 .elements()
                 .contains(phoenix_object.id)));
-            battle::put(reused.ptr().cast());
+            battle::put(reused.id);
             let (reallocated, _) = snapshot(observer, directory);
             assert_eq!(
                 reallocated["ships.0.0.custom.phoenix"],
@@ -435,37 +418,31 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
             // The fixture drops its descriptor directly rather than through the loader.
             // Retire its observation before a later descriptor can reuse this allocation.
             observation::record(Event::ResourcesFree {
-                descriptor: ptr::from_mut(owner.descriptor_mut()) as usize,
+                descriptor: std::ptr::from_ref(&*owner.descriptor_mut()) as usize,
                 icons: true,
                 battle: true,
             });
         }
         clear_queues();
         let mut ship = battle::PoolShip::new(0);
-        let mut descriptor = install_descriptor(&mut ship, descriptor);
-        ship.species_id = SPECIES_ID_UMGAH_ID;
+        install_descriptor(&mut ship, descriptor);
+        ship.record().species_id = SPECIES_ID_UMGAH_ID;
         install_ship(&mut ship);
-        ship.species_id = SPECIES_ID_UMGAH_ID;
-        {
-            let descriptor = &mut descriptor;
-            descriptor.race_state = uqm_rust::engine::battle::RaceState::Umgah {
-                previous_facing: Some(27),
-            };
-        }
+        ship.record().species_id = SPECIES_ID_UMGAH_ID;
+        descriptor_mut(&mut ship).race_state = uqm_rust::engine::battle::RaceState::Umgah {
+            previous_facing: Some(27),
+        };
         let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
-        ship.species_id = SPECIES_ID_ANDROSYNTH_ID;
-        ship.descriptor
-            .as_deref_mut()
-            .unwrap_or_else(|| panic!("installed descriptor"))
-            .race_state = uqm_rust::engine::battle::RaceState::Androsynth {
+        ship.record().species_id = SPECIES_ID_ANDROSYNTH_ID;
+        descriptor_mut(&mut ship).race_state = uqm_rust::engine::battle::RaceState::Androsynth {
             collision: Some(uqm_rust::engine::battle::CollisionHook::Native(
                 known_collision(),
             )),
         };
         let (fields, _) = snapshot(observer, directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
-        ship.species_id = SPECIES_ID_MMRNMHRM_ID;
+        ship.record().species_id = SPECIES_ID_MMRNMHRM_ID;
         let mut mmrnmhrm = Box::new(
             crate::battle_context::with(|cx| {
                 uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_MMRNMHRM_ID)
@@ -476,7 +453,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
             alternate: sample_characteristics(),
         };
         release_descriptor(&mut ship);
-        ship.descriptor = Some(mmrnmhrm);
+        ship.record().descriptor = Some(mmrnmhrm);
         let (fields, _) = snapshot(observer, directory);
         assert_characteristics(&fields, "ships.0.0.custom.characteristics");
         sis_fields(observer, directory, &mut ship);
@@ -486,18 +463,10 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
 }
 
 fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
-    let registry = uqm_rust::battle::hook_registry::hooks();
-    let address = registry
-        .iter()
-        .find(|(_, name)| *name == "battle::ship_native::collision")
-        .unwrap_or_else(|| panic!("collision callback is absent from the registry"))
-        .0;
-    // SAFETY: this exact registered callback is collision, whose native function
-    // signature matches the returned ELEMENT/Point collision function pointer.
-    unsafe { std::mem::transmute(address) }
+    uqm_rust::engine::battle::motion::collision
 }
 
-unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut ShipRecord) {
+fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut battle::PoolShip) {
     crate::battle_context::with(|cx| {
         let sis = &mut cx.world.data.flagship;
         sis.module_slots
@@ -511,15 +480,14 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         cx.world.set_activity(SUPER_MELEE);
     });
-    ship.species_id = SPECIES_ID_SIS_SHIP_ID;
-    // SAFETY: the caller runs native initialization on the sole game thread.
+    ship.record().species_id = SPECIES_ID_SIS_SHIP_ID;
     let descriptor = {
         crate::battle_context::with(|cx| {
             uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_SIS_SHIP_ID)
         })
         .into_legacy()
     };
-    let descriptor = install_descriptor(ship, descriptor);
+    install_descriptor(ship, descriptor);
     let (fields, _) = snapshot(observer, directory);
     assert_eq!(fields["ships.0.0.custom.num_trackers"], "1");
     assert_eq!(fields["ships.0.0.custom.num_blasters"], "3");
@@ -551,27 +519,29 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
     assert_eq!(fields["ships.0.0.custom.missiles.1.hit_points"], "6");
     assert_eq!(fields["ships.0.0.custom.missiles.0.blast_offs"], "8");
     assert!(fields["ships.0.0.custom.missiles.0.preprocess"].ends_with("::blaster_preprocess"));
-    {
-        crate::battle_context::with(|cx| {
-            let race = descriptor
-                .race
-                .unwrap_or_else(|| panic!("Native SIS descriptor"));
-            let mut stats = uqm_rust::engine::battle::views::RaceStats {
-                ship_info: uqm_rust::engine::battle::views::Info {
-                    ship_flags: descriptor.ship_info.ship_flags,
-                    ship_cost: descriptor.ship_info.ship_cost,
-                    crew_level: descriptor.ship_info.crew_level,
-                    max_crew: descriptor.ship_info.max_crew,
-                    energy_level: descriptor.ship_info.energy_level,
-                    max_energy: descriptor.ship_info.max_energy,
-                },
-                characteristics: descriptor.characteristics,
-                intelligence: uqm_rust::engine::battle::views::Intelligence::default(),
-                state: descriptor.race_state,
-            };
-            race.uninit.unwrap_or_else(|| panic!("SIS teardown"))(cx.world, &mut stats);
-        });
-    }
+    let (race, mut stats) = {
+        let descriptor = descriptor_mut(ship);
+        let race = descriptor
+            .race
+            .unwrap_or_else(|| panic!("Native SIS descriptor"));
+        let stats = uqm_rust::engine::battle::views::RaceStats {
+            ship_info: uqm_rust::engine::battle::views::Info {
+                ship_flags: descriptor.ship_info.ship_flags,
+                ship_cost: descriptor.ship_info.ship_cost,
+                crew_level: descriptor.ship_info.crew_level,
+                max_crew: descriptor.ship_info.max_crew,
+                energy_level: descriptor.ship_info.energy_level,
+                max_energy: descriptor.ship_info.max_energy,
+            },
+            characteristics: descriptor.characteristics,
+            intelligence: uqm_rust::engine::battle::views::Intelligence::default(),
+            state: descriptor.race_state,
+        };
+        (race, stats)
+    };
+    crate::battle_context::with(|cx| {
+        race.uninit.unwrap_or_else(|| panic!("SIS teardown"))(cx.world, &mut stats);
+    });
     release_descriptor(ship);
 }
 
@@ -601,10 +571,8 @@ fn campaign_fields(observer: &AutomationObserver, directory: &Path) {
 }
 
 fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
-    // SAFETY: native records contain no invalid zero scalar representations.
-    let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
-    // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship = unsafe { battle::PoolShip::new(0) };
+    let mut descriptor: RaceDescriptor = RaceDescriptor::EMPTY;
+    let mut ship = battle::PoolShip::new(0);
     let native = battle::NativeFrameSet::new(16);
     let strings = Some(uqm_rust::strings::owned_table::EntryRef::new(0x5000, 3));
     let mut music = ptr::null_mut();
@@ -618,7 +586,6 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     descriptor.ship_data.ship_rsc = [Some(c"test.ship"); 3];
     descriptor.ship_data.weapon_rsc = [Some(c"test.weapon"); 3];
     descriptor.ship_data.special_rsc = [Some(c"test.special"); 3];
-    // SAFETY: native retains this registered drawable through every snapshot.
     let view = FrameSelection::retain(frame_pointer);
     descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.weapon = FrameArray::retain([view.view(); 3]);
@@ -636,7 +603,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     descriptor.ship_data.ship_sounds = strings;
     descriptor.ship_data.victory_ditty = &mut music;
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
-    ship.species_id = SPECIES_ID_EARTHLING_ID;
+    ship.record().species_id = SPECIES_ID_EARTHLING_ID;
     install_descriptor(&mut ship, descriptor);
     ship.set_picker_resources(
         uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
@@ -644,8 +611,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
             view.clone(),
         ),
     );
-    // SAFETY: the full local resource graph stays live until the snapshot returns.
-    unsafe {
+    {
         install_ship(&mut ship);
     }
     let drawable = frame_pointer
@@ -666,8 +632,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     assert_eq!(fields["ships.0.0.data.sounds.index"], "3");
     assert_eq!(fields["ships.0.0.data.victory.loaded"], "true");
     asset_expectations(&fields);
-    // SAFETY: detach all stack resource owners before returning.
-    unsafe {
+    {
         release_descriptor(&mut ship);
         clear_queues();
     }
@@ -710,27 +675,25 @@ fn asset_expectations(fields: &Fields) {
 }
 
 fn reused_owner_and_group_identities(observer: &AutomationObserver, directory: &Path) {
-    // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship = unsafe { battle::PoolShip::new(0) };
-    ship.species_id = SPECIES_ID_EARTHLING_ID;
-    // SAFETY: the idle queue borrows this stack ship only until clear_queues below.
-    unsafe {
+    let mut ship = battle::PoolShip::new(0);
+    ship.record().species_id = SPECIES_ID_EARTHLING_ID;
+    {
         install_ship(&mut ship);
     }
     let _ = snapshot(observer, directory);
     let callback = known_collision() as usize;
     observation::record(Event::Hook {
-        parent: ptr::from_mut(&mut *ship) as usize,
+        parent: ship_address(&mut ship),
         callback,
     });
-    ship.species_id = SPECIES_ID_UMGAH_ID;
+    ship.record().species_id = SPECIES_ID_UMGAH_ID;
     observation::record(Event::Spawn {
-        address: ptr::from_mut(&mut *ship) as usize,
+        address: ship_address(&mut ship),
         side: 0,
         species: SPECIES_ID_UMGAH_ID,
     });
     observation::record(Event::Hook {
-        parent: ptr::from_mut(&mut *ship) as usize,
+        parent: ship_address(&mut ship),
         callback,
     });
     let (_, line) = snapshot(observer, directory);
@@ -744,8 +707,7 @@ fn reused_owner_and_group_identities(observer: &AutomationObserver, directory: &
         ))
         .unwrap_or_else(|| panic!("new owner hook is absent from checkpoint"));
     assert!(old < new);
-    // SAFETY: the last snapshot finished; detach the ship before it is dropped.
-    unsafe {
+    {
         clear_queues();
     }
 }
@@ -763,25 +725,22 @@ fn observe_test_frames(views: &FrameArray, role: &str) {
 }
 
 fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) {
-    // SAFETY: RACE_DESC contains integers, pointers and optional callbacks.
-    let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
-    // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship = unsafe { battle::PoolShip::new(0) };
+    let mut descriptor: RaceDescriptor = RaceDescriptor::EMPTY;
+    let mut ship = battle::PoolShip::new(0);
     let native = battle::NativeFrameSet::new(3);
     let (first, second) = (native.frame(1), native.frame(2));
     let drawable = first.drawable().map_or(0, |drawable| drawable.bits());
     let view = FrameSelection::retain(first);
     descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     let mut element = graph::ElementRecord::new();
-    ship.species_id = SPECIES_ID_EARTHLING_ID;
-    let descriptor = install_descriptor(&mut ship, descriptor);
-    element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-    // SAFETY: the stack graph stays live through all snapshots and is detached below.
-    unsafe {
+    ship.record().species_id = SPECIES_ID_EARTHLING_ID;
+    install_descriptor(&mut ship, descriptor);
+    element.record().parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
+    {
         attach_elements(std::slice::from_mut(&mut element));
         install_ship(&mut ship);
     }
-    observation::record(Event::Allocate(element.pointer() as usize));
+    observation::record(Event::Allocate(element.address()));
     observation::record(Event::Drawable(drawable));
     for frame in [first, second] {
         observation::record(Event::Frame {
@@ -790,40 +749,39 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
             index: frame.index(),
         });
     }
-    observe_test_frames(&descriptor.ship_data.ship, "test-ship");
+    let ship_frames = descriptor_mut(&mut ship).ship_data.ship.clone();
+    observe_test_frames(&ship_frames, "test-ship");
     observation::assign_set(
-        &mut element.current.image.frames,
+        &mut element.record().current.image.frames,
         uqm_rust::engine::battle::frames::Frames::shared(
             uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
-            descriptor.ship_data.ship.clone(),
+            ship_frames.clone(),
         ),
         None,
     );
     let (before, _) = snapshot(observer, directory);
-    // SAFETY: the fixture retains the same drawable and its array through the next snapshot.
-    unsafe {
-        observation::assign_view(&mut *descriptor.ship_data.ship.as_ptr().add(1), second);
-    }
+    let second_view = FrameSelection::retain(second);
+    ship_frames.replace_view(1, second_view.view());
     let (after, _) = snapshot(observer, directory);
     assert_eq!(before["elements.0.current.farray.0.index"], "1");
     assert_eq!(after["elements.0.current.farray.0.index"], "1");
     assert_eq!(before["elements.0.current.farray.1.index"], "1");
     assert_eq!(after["elements.0.current.farray.1.index"], "2");
     let mut replacement = RaceDescriptor::EMPTY;
-    replacement.ship_data.ship = FrameArray::retain(descriptor.ship_data.ship.views());
-    let ship = &mut ship;
+    replacement.ship_data.ship = FrameArray::retain(ship_frames.views());
     let _outgoing_descriptor = ship
+        .record()
         .descriptor
         .take()
         .unwrap_or_else(|| panic!("outgoing frame owner"));
-    let mut replacement = install_descriptor(ship, replacement);
-    let element = &mut element;
-    observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
+    install_descriptor(&mut ship, replacement);
+    let replacement_frames = descriptor_mut(&mut ship).ship_data.ship.clone();
+    observe_test_frames(&replacement_frames, "replacement-ship");
     observation::assign_set(
-        &mut element.next.image.frames,
+        &mut element.record().next.image.frames,
         uqm_rust::engine::battle::frames::Frames::shared(
             uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
-            replacement.ship_data.ship.clone(),
+            replacement_frames,
         ),
         None,
     );
@@ -836,10 +794,9 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
         outgoing["elements.0.current.farray.role"],
         outgoing["elements.0.next.farray.role"]
     );
-    media_identity(observer, directory, &mut replacement);
-    // SAFETY: all snapshots finished; detach stack nodes before returning.
-    unsafe {
-        release_descriptor(ship);
+    media_identity(observer, directory, &mut ship);
+    {
+        release_descriptor(&mut ship);
         observation::record(Event::ResourcesFree {
             descriptor: std::ptr::from_ref(&*_outgoing_descriptor) as usize,
             icons: true,
@@ -849,19 +806,15 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     }
 }
 
-fn media_identity(
-    observer: &AutomationObserver,
-    directory: &Path,
-    descriptor: &mut RaceDescriptor,
-) {
+fn media_identity(observer: &AutomationObserver, directory: &Path, ship: &mut battle::PoolShip) {
     use uqm_rust::strings::owned_table::EntryRef;
     let mut music_a = ptr::null_mut();
     let mut music_b = ptr::null_mut();
-    descriptor.ship_info.race_strings = Some(EntryRef::new(0xa000, 3));
-    descriptor.ship_data.victory_ditty = &mut music_a;
+    descriptor_mut(ship).ship_info.race_strings = Some(EntryRef::new(0xa000, 3));
+    descriptor_mut(ship).ship_data.victory_ditty = &mut music_a;
     let (before, _) = snapshot(observer, directory);
-    descriptor.ship_info.race_strings = Some(EntryRef::new(0xb000, 3));
-    descriptor.ship_data.victory_ditty = &mut music_b;
+    descriptor_mut(ship).ship_info.race_strings = Some(EntryRef::new(0xb000, 3));
+    descriptor_mut(ship).ship_data.victory_ditty = &mut music_b;
     let (after, _) = snapshot(observer, directory);
     assert_eq!(
         before["ships.0.0.race.strings.index"],
@@ -875,32 +828,29 @@ fn media_identity(
         before["ships.0.0.data.victory.resource_owner"],
         after["ships.0.0.data.victory.resource_owner"]
     );
-    descriptor.ship_info.race_strings = None;
-    descriptor.ship_data.victory_ditty = ptr::null_mut();
+    descriptor_mut(ship).ship_info.race_strings = None;
+    descriptor_mut(ship).ship_data.victory_ditty = ptr::null_mut();
 }
 
 fn retired_space_does_not_borrow_released_frames(observer: &AutomationObserver, directory: &Path) {
-    // SAFETY: clear the prior fixture graph before allocating this owned operand.
-    unsafe {
+    {
         clear_queues();
     }
     let mut element = graph::ElementRecord::new();
     let native = battle::NativeFrameSet::new(24);
-    // SAFETY: the registered fixture retains all 24 frame slots.
     let frame = FrameSelection::retain(native.frame(23));
-    element.current.image.frame = frame.clone();
-    element.next.image.frame = frame;
+    element.record().current.image.frame = frame.clone();
+    element.record().next.image.frame = frame;
     drop(native);
-    element.current.image.frames = uqm_rust::engine::battle::frames::Frames::ABSENT;
-    // SAFETY: the element pool and its selections remain owned after space teardown.
+    element.record().current.image.frames = uqm_rust::engine::battle::frames::Frames::ABSENT;
     // The retired journal graph must not be traversed by the observer.
-    unsafe {
+    {
         attach_elements(std::slice::from_mut(&mut element));
     }
-    observation::record(Event::Allocate(element.pointer() as usize));
+    observation::record(Event::Allocate(element.address()));
     observation::record(Event::Drawable(17));
     observation::record(Event::Frame {
-        address: (element.current.image.frame.raw()).bits(),
+        address: (element.record().current.image.frame.raw()).bits(),
         owner: 17,
         index: 23,
     });
@@ -911,9 +861,11 @@ fn retired_space_does_not_borrow_released_frames(observer: &AutomationObserver, 
     assert_eq!(fields["elements.0.current.frame.index"], "23");
     assert_eq!(fields["elements.0.next.frame.index"], "23");
     assert_eq!(fields["elements.0.current.frame.retired"], "true");
-    assert_eq!(fields["elements.0.flags"], element.state_flags.to_string());
-    // SAFETY: detach the stack element before it is dropped.
-    unsafe {
+    assert_eq!(
+        fields["elements.0.flags"],
+        element.record().state_flags.to_string()
+    );
+    {
         clear_queues();
     }
 }

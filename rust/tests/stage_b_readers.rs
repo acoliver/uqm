@@ -96,8 +96,7 @@ fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
         let mut ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
-        // SAFETY: the fixture owns the published battle and this checked ship.
-        unsafe {
+        {
             ship.descriptor_mut().ship_info.energy_level = 2;
             crate::battle_context::with(|cx| {
                 cx.ship_state_mut(ship.ship_id).energy_counter = 9;
@@ -114,8 +113,7 @@ fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
 fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: the serialized fixture retains the ship, its frames and the published context.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             crate::battle_context::with(|cx| {
                 assert_eq!(cx.elements().head(), Some(ship.id));

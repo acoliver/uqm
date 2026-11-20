@@ -1,16 +1,33 @@
-use std::ops::{Deref, DerefMut};
+use std::cell::RefMut;
 use uqm_rust::engine::battle::{
     link_queue::{LinkId, Starship},
     record::ShipRecord,
+    ShipId,
 };
 
+/// A ship pool slot owned by the fixture and freed when this owner drops.
 pub struct PoolShip {
-    pointer: *mut ShipRecord,
     side: usize,
     link: LinkId<Starship>,
-    pub ship_id: uqm_rust::engine::battle::ShipId,
+    pub ship_id: ShipId,
 }
 impl PoolShip {
+    pub fn new(player: i16) -> Self {
+        let side = player as usize;
+        let (link, ship_id) = crate::battle_context::with(|cx| {
+            let mut ships = cx.kernel.ships(side);
+            let link = ships
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
+            ships.edit(link, |ship| ship.player = player);
+            (link, ships.ship_id(link))
+        });
+        Self {
+            side,
+            link,
+            ship_id,
+        }
+    }
     pub fn set_picker_resources(
         &mut self,
         resources: uqm_rust::engine::battle::link_queue::ShipPickerResources,
@@ -21,55 +38,22 @@ impl PoolShip {
                 .set_picker_resources(self.link, resources);
         });
     }
-    /// # Safety
-    /// The caller exclusively retains the serialized fixture pools throughout this borrow.
-    pub unsafe fn new(player: i16) -> Self {
-        let side = player as usize;
-        // SAFETY: the constructor's contract retains the serialized published fixture.
-        let (pointer, link, ship_id) = {
-            crate::battle_context::with(|cx| {
-                let mut ships = cx.kernel.ships(side);
-                let link = ships
-                    .alloc()
-                    .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
-                ships.edit(link, |ship| ship.player = player);
-                (ships.raw(link).cast(), link, ships.ship_id(link))
-            })
-        };
-        Self {
-            pointer,
-            side,
-            link,
-            ship_id,
-        }
-    }
-}
-impl Deref for PoolShip {
-    type Target = ShipRecord;
-    fn deref(&self) -> &ShipRecord {
-        // SAFETY: the construction contract retains this owned fixture slot.
-        unsafe { &*self.pointer }
-    }
-}
-impl DerefMut for PoolShip {
-    fn deref_mut(&mut self) -> &mut ShipRecord {
-        // SAFETY: this exclusive borrow retains the fixture slot.
-        unsafe { &mut *self.pointer }
+    /// Lend the pool record until the guard drops.
+    #[track_caller]
+    pub fn record(&mut self) -> RefMut<'static, ShipRecord> {
+        super::ship_record(self.ship_id)
     }
 }
 impl Drop for PoolShip {
     fn drop(&mut self) {
-        // SAFETY: the fixture contract retains the published pool until this owner drops.
-        {
-            crate::battle_context::with(|cx| {
-                let mut ships = cx.kernel.ships(self.side);
-                if ships.contains(self.link) {
-                    if ships.linked(self.link) {
-                        ships.remove(self.link);
-                    }
-                    ships.free(self.link);
+        crate::battle_context::with(|cx| {
+            let mut ships = cx.kernel.ships(self.side);
+            if ships.contains(self.link) {
+                if ships.linked(self.link) {
+                    ships.remove(self.link);
                 }
-            });
-        }
+                ships.free(self.link);
+            }
+        });
     }
 }

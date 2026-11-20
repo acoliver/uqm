@@ -60,7 +60,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         }
         index.push_str("test.invalid.code = SHIP:255\n");
         std::fs::write(fixture.path().join("ships.rmp"), &index).unwrap();
-        unsafe {
+        {
             uqm_rust::log_abi::log_init(100);
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
@@ -102,7 +102,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             for (i, key) in keys.iter().enumerate() {
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
-                let first =
+                let mut first =
                     crate::battle_context::with(|cx| RaceDesc::load(cx.world, species, false))
                         .unwrap();
                 let second =
@@ -110,10 +110,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                         .unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
                 let original = first.info().ship_cost;
-                // SAFETY: this fixture exclusively owns the live descriptor; only its scalar cost changes.
-                (*(first.address() as *mut uqm_rust::engine::battle::record::RaceDescriptor))
-                    .ship_info
-                    .ship_cost = 254;
+                first.fixture_info_mut().ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
                 let loaded =
                     crate::battle_context::with(|cx| RaceDesc::load(cx.world, species, false))
@@ -164,9 +161,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             .unwrap();
             probe.set_race(&TEARDOWN_RACE);
             // The shared callback fixture expects this scalar and must run before observation.
-            (*(probe.address() as *mut uqm_rust::engine::battle::record::RaceDescriptor))
-                .ship_info
-                .ship_cost = 16;
+            probe.fixture_info_mut().ship_cost = 16;
             let descriptor = probe.address();
             uqm_rust::collections::observation::drain();
             crate::battle_context::with(|cx| {

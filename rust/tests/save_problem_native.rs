@@ -41,7 +41,6 @@ impl Observer for WaitObserver {
             "release and press waits each poll before admission"
         );
         assert!(campaign.is_some());
-        // SAFETY: the fixture retains this canvas until the popup finishes.
         let pixel = GetFramePixel(self.frame, Point { x: 118, y: 110 });
         assert_ne!(
             (pixel.r, pixel.g, pixel.b),
@@ -121,8 +120,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             .unwrap();
     }
     std::fs::write(directory.path().join("font/0041.png"), png).unwrap();
-    // SAFETY: this process owns SDL, the game, and every native fixture handle.
-    unsafe {
+    {
         let options = GraphicsOptions::default();
         uqm_rust::graphics::present::init_graphics(1, 0, options, 640, 480);
         let context_id = LoadedContext::create(c"save-error fixture").into_id();
@@ -576,21 +574,19 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         let id = {
                             let mut queue = cx.kernel.ships(0);
                             let link = queue.alloc().unwrap();
-                            let record = &mut *queue
-                                .raw(link)
-                                .cast::<uqm_engine::battle::record::ShipRecord>();
-                            let mut descriptor: Box<uqm_engine::battle::record::RaceDescriptor> =
-                                Box::new(std::mem::zeroed());
-                            descriptor.ship_info.icons = icon;
-                            descriptor.ship_info.max_crew = 3;
-                            descriptor.ship_info.max_energy = 4;
-                            descriptor.ship_info.crew_level = 2;
-                            descriptor.ship_info.energy_level = 3;
-                            descriptor.ship_info.ship_cost = 7;
-                            record.descriptor = Some(descriptor);
-                            record.player_nr = 0;
                             queue.ship_id(link)
                         };
+                        let mut descriptor =
+                            Box::new(uqm_engine::battle::record::RaceDescriptor::EMPTY);
+                        descriptor.ship_info.icons = icon;
+                        descriptor.ship_info.max_crew = 3;
+                        descriptor.ship_info.max_energy = 4;
+                        descriptor.ship_info.crew_level = 2;
+                        descriptor.ship_info.energy_level = 3;
+                        descriptor.ship_info.ship_cost = 7;
+                        let record = cx.kernel.fixture_ship_mut(id);
+                        record.descriptor = Some(descriptor);
+                        record.player_nr = 0;
                         SetContext(previous);
                         uqm_rust::ui::shipstat::draw_battle_status(cx, id, None);
                         let selected = native_probe::selected_context();
@@ -673,8 +669,8 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             },
                         },
                     );
-                    let mut ship: uqm_rust::engine::battle::record::ShipInfoRecord =
-                        std::mem::zeroed();
+                    let mut ship =
+                        uqm_rust::engine::battle::record::RaceDescriptor::EMPTY.ship_info;
                     ship.max_crew = 2;
                     ship.max_energy = 2;
                     ship.crew_level = 2;
@@ -760,7 +756,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
-            let mut stats: uqm_rust::engine::battle::record::ShipInfoRecord = std::mem::zeroed();
+            let mut stats = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY.ship_info;
             stats.ship_flags = 1 << 13;
             let update =
                 |stats: &mut uqm_rust::engine::battle::record::ShipInfoRecord, crew, energy| {

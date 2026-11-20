@@ -33,9 +33,8 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
         let owner = Battle::new(8);
         let frames = NativeFrames::new(12);
         let mut element = Object::new(&owner);
-        // SAFETY: this test owns the allocated element and its frame set.
-        unsafe {
-            let record = element.element_mut();
+        {
+            let mut record = element.element_mut();
             record.state_flags = DISAPPEARING as u16;
             record.current.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
                 uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
@@ -47,8 +46,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
             record.death_func = Some(transition_hook());
         }
         call_transition(element.id);
-        // SAFETY: the callback has returned; the fixture still owns this element.
-        unsafe {
+        {
             let record = element.element_mut();
             assert_eq!(record.state_flags & DISAPPEARING as u16, 0);
             assert_eq!(record.life_span(), 1);
@@ -56,26 +54,23 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
             assert_eq!(record.next.image.frame.raw(), frames.frame(10));
         }
         call_transition(element.id);
-        // SAFETY: the callback has returned and no borrow crosses the next call.
-        unsafe {
-            let record = element.element_mut();
+        {
+            let mut record = element.element_mut();
             assert_eq!(record.turn_wait(), 1);
             assert_eq!(record.next.image.frame.raw(), frames.frame(11));
             record.current = record.next.clone();
             record.set_turn_wait(0);
         }
         call_transition(element.id);
-        // SAFETY: the callback has returned; the fixture retains the frame set.
-        unsafe {
-            let record = element.element_mut();
+        {
+            let mut record = element.element_mut();
             assert!(record.death_func.is_none());
             record.set_hit_points(1);
             record.set_turn_wait(0);
             record.current.image.frame = frames.selection(0);
         }
         call_transition(element.id);
-        // SAFETY: the fixture retains its live element and frame set.
-        unsafe {
+        {
             assert_eq!(
                 element.element_mut().next.image.frame.raw(),
                 frames.frame(11)
@@ -149,8 +144,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
     battle_context::run(|_| {
         let _owner = Battle::new(8);
         let frames = NativeFrames::new(16);
-        // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.
-        unsafe {
+        {
             let mut solar = crate::battle_context::with(|cx| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
                     cx.world,
@@ -170,7 +164,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             let old_stamp = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp);
             let old_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
             let old_stars = crate::battle_context::with(|cx| cx.kernel.stars_in_space);
-            let (group_id, group) = crate::battle_context::with(|cx| {
+            let group_id = crate::battle_context::with(|cx| {
                 let mut queue = cx.world.ip_groups();
                 queue.reinit();
                 let id = queue.alloc().unwrap();
@@ -183,8 +177,9 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 group.loc = Point { x: 300, y: 400 };
                 group.melee_icon = frames.frame(0);
                 queue.put(id);
-                (id, queue.raw(id).cast::<IpGroup>())
+                id
             });
+            let group = || crate::battle_context::with(|cx| *cx.world.ip_groups().record(group_id));
             crate::battle_context::with(|cx| cx.world.encounter_race = -1);
             crate::battle_context::with(|cx| cx.kernel.stars_in_space = frames.frame(0));
             crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.frame = frames.frame(0));
@@ -213,9 +208,9 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                     uqm_rust::engine::battle::Parent::IpGroup(group_id)
                 );
             });
-            assert_ne!(((*group).loc.x, (*group).loc.y), (300, 400));
-            assert_eq!((*group).sys_loc, 0);
-            assert_eq!((*group).group_id, 7);
+            assert_ne!((group().loc.x, group().loc.y), (300, 400));
+            assert_eq!(group().sys_loc, 0);
+            assert_eq!(group().group_id, 7);
             crate::battle_context::with(|cx| {
                 // Each admitted solar frame supplies its geometry, as the old shared context did.
                 solar.refresh_frame(cx);
@@ -231,8 +226,8 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 );
             });
             crate::battle_context::with(|cx| interplanetary::notify_others(cx, 0, 2));
-            assert_eq!((*group).dest_loc, 2);
-            assert_ne!((*group).task & IpGroup::IGNORE_FLAGSHIP, 0);
+            assert_eq!(group().dest_loc, 2);
+            assert_ne!(group().task & IpGroup::IGNORE_FLAGSHIP, 0);
             crate::battle_context::with(|cx| cx.world.ip_groups().reinit());
             crate::battle_context::with(|cx| cx.world.data.game.ship_stamp = old_stamp);
             crate::battle_context::with(|cx| cx.world.data.game.ip_location = old_location);

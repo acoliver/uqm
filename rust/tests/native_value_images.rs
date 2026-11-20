@@ -10,8 +10,7 @@ use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
 fn projected_images_record_provenance_without_borrowing_stack_storage() {
     battle_context::run(|_| {
         let pool = battle::Battle::new(8);
-        // SAFETY: the serialized fixture retains all slots, descriptors and frame arrays.
-        unsafe {
+        {
             let source = battle::Ship::new(&pool, SPECIES_ID_EARTHLING_ID, 0);
             let destination = battle::Object::new(&pool);
             observation::enable();

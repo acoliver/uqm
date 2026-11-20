@@ -4,7 +4,6 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use std::mem;
 use uqm_rust::engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, LEFT, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
     POINT_DEFENSE, SPECIAL, THRUST, WEAPON,
@@ -12,7 +11,8 @@ use uqm_rust::engine::battle::ai_constants::{
 use uqm_rust::engine::battle::flags::{
     COLLISION, FINITE_LIFE, NONSOLID, RPG_PLAYER_NUM, SHIP_AT_MAX_SPEED,
 };
-use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::battle::Concern;
+use uqm_rust::engine::battle::ElementId;
 use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
 use uqm_rust::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
 use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
@@ -20,7 +20,7 @@ use uqm_rust::engine::world::IN_HYPERSPACE;
 use uqm_rust::graphics::geometry::Point;
 use uqm_rust::math::battle_types::ONE_SHIFT;
 use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
-unsafe fn modules() {
+fn modules() {
     crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
     crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
     crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
@@ -54,20 +54,27 @@ fn full_loadout() {
         crate::battle_context::with(|cx| cx.world.data.flagship.module_slots[i] = m);
     }
 }
-fn target(origin: *mut ElementRecord, dx: i16, dy: i16) -> PoolElement {
-    // SAFETY: the caller's serialized battle owns `origin` and the pool slot allocated here.
-    unsafe {
-        let mut fixture = PoolElement::new();
-        let e = &raw mut *fixture;
-        (*e).player_nr = 1;
-        (*e).hits = 1;
-        (*e).mass = 1;
-        (*e).next.location = Point {
-            x: (*origin).next.location.x.wrapping_add(dx << ONE_SHIFT),
-            y: (*origin).next.location.y.wrapping_add(dy << ONE_SHIFT),
+fn target(origin: ElementId, dx: i16, dy: i16) -> PoolElement {
+    {
+        let fixture = PoolElement::new();
+        let e = fixture.id;
+        battle::get_mut(e).player_nr = 1;
+        battle::get_mut(e).hits = 1;
+        battle::get_mut(e).mass = 1;
+        battle::get_mut(e).next.location = Point {
+            x: battle::get(origin)
+                .next
+                .location
+                .x
+                .wrapping_add(dx << ONE_SHIFT),
+            y: battle::get(origin)
+                .next
+                .location
+                .y
+                .wrapping_add(dy << ONE_SHIFT),
         };
-        (*prim(e)).kind = STAMP_PRIMITIVE;
-        battle::put(e.cast());
+        battle::prim_mut(e).kind = STAMP_PRIMITIVE;
+        battle::put(e);
         fixture
     }
 }
@@ -75,7 +82,7 @@ fn target(origin: *mut ElementRecord, dx: i16, dy: i16) -> PoolElement {
 fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() {
     battle_context::run(|_| {
         let _battle = Battle::new(32);
-        unsafe {
+        {
             modules();
             full_loadout();
             crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [1; 11]);
@@ -87,13 +94,16 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
                 [16, 32, 16],
                 [4, 4],
             );
-            assert_eq!(
-                (
-                    ship.descriptor_mut().ship_info.max_crew,
-                    ship.descriptor_mut().ship_info.crew_level
-                ),
-                (101, 10)
-            );
+            {
+                let descriptor = ship.descriptor_mut();
+                assert_eq!(
+                    (
+                        descriptor.ship_info.max_crew,
+                        descriptor.ship_info.crew_level
+                    ),
+                    (101, 10)
+                );
+            }
             let c = ship.descriptor_mut().characteristics;
             assert_eq!((c.max_thrust, c.thrust_wait, c.turn_wait), (36, 1, 1));
             assert_eq!(
@@ -107,9 +117,9 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
             );
             let out = ship.weapon_handles(6);
             for (h, damage) in out.iter().zip([2, 4, 4, 6, 6, 2]) {
-                assert_eq!((*battle::element(*h)).mass, damage);
-                assert_eq!((*battle::element(*h)).turn, 17);
-                battle_context::dispose(*h);
+                assert_eq!(battle::get(h.unwrap()).mass, damage);
+                assert_eq!(battle::get(h.unwrap()).turn, 17);
+                battle_context::dispose(h.unwrap());
             }
             ship.descriptor_mut().ship_info.crew_level = 4;
             ship.uninit();
@@ -124,7 +134,7 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
 fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
     battle_context::run(|_| {
         let _battle = Battle::new(16);
-        unsafe {
+        {
             modules();
             crate::battle_context::with(|cx| {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3)
@@ -147,13 +157,10 @@ fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
                 ship.ship_mut().cur_status_flags & (SPECIAL | WEAPON) as u16,
                 0
             );
-            assert_eq!(
-                (
-                    ship.ship_mut().weapon_counter,
-                    ship.ship_mut().special_counter
-                ),
-                (2, 2)
-            );
+            {
+                let record = ship.ship_mut();
+                assert_eq!((record.weapon_counter, record.special_counter), (2, 2));
+            }
             ship.uninit();
             crate::battle_context::with(|cx| {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
@@ -168,7 +175,7 @@ fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
 fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
     battle_context::run(|_| {
         let _battle = Battle::new(16);
-        unsafe {
+        {
             modules();
             crate::battle_context::with(|cx| cx.world.set_activity(IN_HYPERSPACE as u16));
             crate::battle_context::with(|cx| cx.world.data.flagship.fuel_on_board = 0);
@@ -178,13 +185,13 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             assert!(ship.descriptor_mut().callbacks()[3] == 0);
             assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 8);
             assert!(ship.descriptor_mut().ship_info.icons_rsc.is_none());
-            ((*ship.ptr()).velocity).set_components(256, 0);
+            (battle::get_mut(ship.id).velocity).set_components(256, 0);
             ship.ship_mut().cur_status_flags = THRUST as u16;
             crate::battle_context::with(|cx| {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
             });
             ship.preprocess();
-            let (velocity_x, velocity_y) = ((*ship.ptr()).velocity).get_current_components();
+            let (velocity_x, velocity_y) = (battle::get(ship.id).velocity).get_current_components();
             let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (128, 0));
             assert_eq!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
@@ -193,7 +200,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2)
             });
             ship.ship_mut().cur_status_flags = THRUST as u16;
-            (*ship.ptr()).thrust = 0;
+            battle::get_mut(ship.id).thrust = 0;
             ship.preprocess();
             assert_ne!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
             ship.postprocess();
@@ -203,7 +210,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
                     .data
                     .game
                     .velocity)),
-                velocity(&(*ship.ptr()).velocity)
+                velocity(&battle::get(ship.id).velocity)
             );
             ship.uninit();
             crate::battle_context::with(|cx| {
@@ -216,7 +223,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
 fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
     battle_context::run(|_| {
         let _battle = Battle::new(16);
-        unsafe {
+        {
             modules();
             crate::battle_context::with(|cx| cx.world.set_activity(IN_HYPERSPACE as u16));
             crate::battle_context::with(|cx| cx.world.data.flagship.fuel_on_board = 100);
@@ -232,7 +239,7 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
             ship.ship_mut().ship_facing = 4;
             ship.preprocess();
-            let (velocity_x, velocity_y) = ((*ship.ptr()).velocity).get_current_components();
+            let (velocity_x, velocity_y) = (battle::get(ship.id).velocity).get_current_components();
             let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (128, 0));
             assert_ne!(
@@ -257,8 +264,7 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
 fn point_defense_zaps_each_nearby_target_and_pays_energy_once() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the serialized battle owns every element and ship used below.
-        unsafe {
+        {
             modules();
             full_loadout();
             let mut ship = Ship::with_frames(
@@ -272,23 +278,26 @@ fn point_defense_zaps_each_nearby_target_and_pays_energy_once() {
                 ship.descriptor_mut().ship_info.ship_flags & POINT_DEFENSE as u16,
                 0
             );
-            ship.element_mut().next = ship.element_mut().current.clone();
-            let origin = ship.ptr();
+            {
+                let mut element = ship.element_mut();
+                element.next = element.current.clone();
+            }
+            let origin = ship.id;
             let near = target(origin, 30, 40);
             let edge = target(origin, -100, 0);
             let beyond = target(origin, 101, 0);
-            let mut cloaked = target(origin, 10, 0);
-            (*prim(&raw mut *cloaked)).kind = EMPTY_PRIMITIVE;
-            let mut solid_not = target(origin, 0, 10);
-            solid_not.state_flags = NONSOLID as u16;
+            let cloaked = target(origin, 10, 0);
+            battle::prim_mut(cloaked.id).kind = EMPTY_PRIMITIVE;
+            let solid_not = target(origin, 0, 10);
+            battle::get_mut(solid_not.id).state_flags = NONSOLID as u16;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 0;
             ship.postprocess();
-            let defense = battle::element(battle::tail());
+            let defense = battle::tail().unwrap();
             assert_ne!(defense, origin);
             let energy = ship.descriptor_mut().ship_info.energy_level;
             let before = queued().len();
-            call_element("ships::races::sis_native::spawn_point_defense", id(defense));
+            call_element("ships::races::sis_native::spawn_point_defense", defense);
             assert_eq!(queued().len(), before + 2);
             assert_eq!(
                 ship.descriptor_mut().ship_info.energy_level,
@@ -297,9 +306,9 @@ fn point_defense_zaps_each_nearby_target_and_pays_energy_once() {
             let special_wait = ship.descriptor_mut().characteristics.special_wait;
             assert_eq!(ship.ship_mut().special_counter, special_wait);
             for beam in &queued()[before..] {
-                let beam = battle::element(*beam);
-                assert_eq!((*beam).mass, 2);
-                assert_eq!((*beam).parent, (*origin).parent);
+                let beam = *beam;
+                assert_eq!(battle::get(beam).mass, 2);
+                assert_eq!(battle::get(beam).parent, battle::get(origin).parent);
             }
             drop((near, edge, beyond, cloaked, solid_not));
         }
@@ -310,8 +319,7 @@ fn point_defense_zaps_each_nearby_target_and_pays_energy_once() {
 fn point_defense_fires_nothing_when_the_flagship_cannot_pay() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the serialized battle owns every element and ship used below.
-        unsafe {
+        {
             modules();
             full_loadout();
             let mut ship = Ship::with_frames(
@@ -321,16 +329,19 @@ fn point_defense_fires_nothing_when_the_flagship_cannot_pay() {
                 [16, 32, 16],
                 [4, 4],
             );
-            ship.element_mut().next = ship.element_mut().current.clone();
-            let origin = ship.ptr();
+            {
+                let mut element = ship.element_mut();
+                element.next = element.current.clone();
+            }
+            let origin = ship.id;
             let near = target(origin, 30, 40);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 0;
             ship.postprocess();
-            let defense = battle::element(battle::tail());
+            let defense = battle::tail().unwrap();
             ship.descriptor_mut().ship_info.energy_level = 4;
             let before = queued().len();
-            call_element("ships::races::sis_native::spawn_point_defense", id(defense));
+            call_element("ships::races::sis_native::spawn_point_defense", defense);
             assert_eq!(queued().len(), before);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);
             assert_eq!(ship.ship_mut().special_counter, 0);
@@ -343,8 +354,7 @@ fn point_defense_fires_nothing_when_the_flagship_cannot_pay() {
 fn blasters_animate_retarget_and_spend_themselves_on_impact() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the serialized battle owns every element and ship used below.
-        unsafe {
+        {
             modules();
             full_loadout();
             let mut ship = Ship::with_frames(
@@ -357,30 +367,38 @@ fn blasters_animate_retarget_and_spend_themselves_on_impact() {
             let enemy = Ship::with_frames(&battle, SPECIES_ID_SIS_SHIP_ID, 1, [16, 32, 16], [4, 4]);
             let blasters = ship.weapon_handles(6);
             for (handle, mass) in blasters.iter().zip([2u8, 4, 4, 6, 6, 2]) {
-                let element = battle::element(*handle);
-                assert_eq!((*element).mass, mass);
-                (*element).hits = 3;
-                call_element("ships::races::sis_native::blaster_preprocess", id(element));
-                assert_eq!((*element).turn, 16, "countdown to the next retarget");
-                call_element("ships::races::sis_native::blaster_preprocess", id(element));
-                assert_eq!((*element).turn, 17, "retarget restarts the countdown");
+                let element = handle.unwrap();
+                assert_eq!(battle::get(element).mass, mass);
+                battle::get_mut(element).hits = 3;
+                call_element("ships::races::sis_native::blaster_preprocess", element);
+                assert_eq!(
+                    battle::get(element).turn,
+                    16,
+                    "countdown to the next retarget"
+                );
+                call_element("ships::races::sis_native::blaster_preprocess", element);
+                assert_eq!(
+                    battle::get(element).turn,
+                    17,
+                    "retarget restarts the countdown"
+                );
                 let mut at = Point { x: 10, y: 10 };
                 let mut on = Point { x: 10, y: 10 };
                 call_collision(
                     "ships::races::sis_native::blaster_collision",
-                    id(element),
+                    element,
                     &mut at,
                     enemy.id,
                     &mut on,
                 );
                 assert_ne!(
-                    (*element).state_flags & COLLISION as u16,
+                    battle::get(element).state_flags & COLLISION as u16,
                     0,
                     "a blaster is consumed by what it hits"
                 );
-                let blast = battle::element(battle::tail());
+                let blast = battle::tail().unwrap();
                 assert_eq!(
-                    (*blast).life,
+                    battle::get(blast).life,
                     match mass {
                         2 => 2,
                         4 => 6,
@@ -389,28 +407,27 @@ fn blasters_animate_retarget_and_spend_themselves_on_impact() {
                 );
             }
             for handle in blasters {
-                battle_context::dispose(handle);
+                battle_context::dispose(handle.unwrap());
             }
         }
     })
 }
 
-unsafe fn think(
+fn think(
     ship: &mut Ship<'_>,
-    threat: *mut ElementRecord,
-    enemy: *mut ElementRecord,
+    threat: Option<ElementId>,
+    enemy: ElementId,
     which_turn: (u16, u16),
     movement: u32,
-) -> [EvaluateRecord; 4] {
-    // SAFETY: the callers keep `threat`, `enemy` and the ship in the serialized battle.
-    unsafe {
-        let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
-        concerns[ENEMY_WEAPON_INDEX as usize].object_ptr = threat;
+) -> [Concern; 4] {
+    {
+        let mut concerns: [Concern; 4] = [Concern::default(); 4];
+        concerns[ENEMY_WEAPON_INDEX as usize].object = threat;
         concerns[ENEMY_WEAPON_INDEX as usize].which_turn = which_turn.0;
-        concerns[ENEMY_WEAPON_INDEX as usize].move_state = movement;
-        concerns[ENEMY_SHIP_INDEX as usize].object_ptr = enemy;
+        concerns[ENEMY_WEAPON_INDEX as usize].movement = movement;
+        concerns[ENEMY_SHIP_INDEX as usize].object = Some(enemy);
         concerns[ENEMY_SHIP_INDEX as usize].which_turn = which_turn.1;
-        ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
+        ship.think(ship.id, &mut concerns, 0);
         concerns
     }
 }
@@ -419,8 +436,7 @@ unsafe fn think(
 fn ai_with_point_defense_fires_it_only_for_imminent_threats() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the serialized battle owns every element and ship used below.
-        unsafe {
+        {
             modules();
             full_loadout();
             let mut ship = Ship::with_frames(
@@ -431,8 +447,8 @@ fn ai_with_point_defense_fires_it_only_for_imminent_threats() {
                 [4, 4],
             );
             let enemy = Ship::with_frames(&battle, SPECIES_ID_SIS_SHIP_ID, 1, [16, 32, 16], [4, 4]);
-            let mut missile = PoolElement::new();
-            let threat = &raw mut *missile;
+            let missile = PoolElement::new();
+            let threat = missile.id;
             for (counter, soon, enemy_turn, expected) in [
                 (0, 2, 99, true),
                 (0, 3, 4, true),
@@ -441,13 +457,13 @@ fn ai_with_point_defense_fires_it_only_for_imminent_threats() {
             ] {
                 ship.ship_mut().special_counter = counter;
                 ship.ship_mut().ship_input_state = SPECIAL as u8;
-                let concerns = think(&mut ship, threat, enemy.ptr(), (soon, enemy_turn), 0);
+                let concerns = think(&mut ship, Some(threat), enemy.id, (soon, enemy_turn), 0);
                 assert_eq!(
                     ship.ship_mut().ship_input_state & SPECIAL as u8 != 0,
                     expected,
                     "{counter} {soon} {enemy_turn}"
                 );
-                assert!(concerns[ENEMY_WEAPON_INDEX as usize].object_ptr.is_null());
+                assert!(concerns[ENEMY_WEAPON_INDEX as usize].object.is_none());
             }
         }
     })
@@ -457,8 +473,7 @@ fn ai_with_point_defense_fires_it_only_for_imminent_threats() {
 fn ai_without_point_defense_pursues_weapons_that_entice_it() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the serialized battle owns every element and ship used below.
-        unsafe {
+        {
             modules();
             let mut ship = Ship::with_frames(
                 &battle,
@@ -468,43 +483,43 @@ fn ai_without_point_defense_pursues_weapons_that_entice_it() {
                 [4, 4],
             );
             let enemy = Ship::with_frames(&battle, SPECIES_ID_SIS_SHIP_ID, 1, [16, 32, 16], [4, 4]);
-            let mut missile = PoolElement::new();
-            let threat = &raw mut *missile;
-            missile.state_flags = 0;
+            let missile = PoolElement::new();
+            let threat = missile.id;
+            battle::get_mut(missile.id).state_flags = 0;
             let concerns = think(
                 &mut ship,
-                threat,
-                enemy.ptr(),
+                Some(threat),
+                enemy.id,
                 (9, 99),
                 MOVEMENT_STATE_ENTICE,
             );
             assert_eq!(
-                concerns[ENEMY_WEAPON_INDEX as usize].move_state,
+                concerns[ENEMY_WEAPON_INDEX as usize].movement,
                 MOVEMENT_STATE_PURSUE
             );
-            missile.state_flags = FINITE_LIFE as u16;
-            missile.mass = 3;
+            battle::get_mut(missile.id).state_flags = FINITE_LIFE as u16;
+            battle::get_mut(missile.id).mass = 3;
             let concerns = think(
                 &mut ship,
-                threat,
-                enemy.ptr(),
+                Some(threat),
+                enemy.id,
                 (2, 99),
                 MOVEMENT_STATE_ENTICE,
             );
             assert_eq!(
-                concerns[ENEMY_WEAPON_INDEX as usize].move_state,
+                concerns[ENEMY_WEAPON_INDEX as usize].movement,
                 MOVEMENT_STATE_ENTICE
             );
-            missile.mass = 4;
+            battle::get_mut(missile.id).mass = 4;
             let concerns = think(
                 &mut ship,
-                threat,
-                enemy.ptr(),
+                Some(threat),
+                enemy.id,
                 (2, 99),
                 MOVEMENT_STATE_ENTICE,
             );
             assert_eq!(
-                concerns[ENEMY_WEAPON_INDEX as usize].move_state,
+                concerns[ENEMY_WEAPON_INDEX as usize].movement,
                 MOVEMENT_STATE_PURSUE
             );
         }
@@ -515,8 +530,7 @@ fn ai_without_point_defense_pursues_weapons_that_entice_it() {
 fn ai_with_trackers_fires_blasters_that_bear_on_the_enemy() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the serialized battle owns every element and ship used below.
-        unsafe {
+        {
             modules();
             for (slot, module) in [(15, 9), (3, 12)] {
                 crate::battle_context::with(|cx| {
@@ -540,7 +554,7 @@ fn ai_with_trackers_fires_blasters_that_bear_on_the_enemy() {
                 };
                 ship.ship_mut().weapon_counter = 0;
                 ship.ship_mut().ship_input_state = 0;
-                think(&mut ship, std::ptr::null_mut(), enemy.ptr(), (0, 10), 0);
+                think(&mut ship, None, enemy.id, (0, 10), 0);
                 assert_eq!(
                     ship.ship_mut().ship_input_state & WEAPON as u8 != 0,
                     expected,
@@ -550,7 +564,7 @@ fn ai_with_trackers_fires_blasters_that_bear_on_the_enemy() {
             ship.ship_mut().weapon_counter = 3;
             ship.ship_mut().ship_input_state = 0;
             enemy.element_mut().current.location = Point { x: 4000, y: 3000 };
-            think(&mut ship, std::ptr::null_mut(), enemy.ptr(), (0, 10), 0);
+            think(&mut ship, None, enemy.id, (0, 10), 0);
             assert_eq!(ship.ship_mut().ship_input_state & WEAPON as u8, 0);
         }
     })

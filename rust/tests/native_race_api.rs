@@ -149,8 +149,7 @@ fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
 fn projected_autoaim_uses_both_positions_without_mutating_live_target() {
     battle_context::run(|_| {
         let owner = Battle::new(8);
-        // SAFETY: fixtures retain the frame and descriptor resources for these hook calls.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_ARILOU_ID, 0);
             let enemy = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             crate::battle_context::with(|cx| {

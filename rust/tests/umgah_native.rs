@@ -4,7 +4,7 @@
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use battle::{prim, Battle, PoolElement, Ship};
+use battle::{Battle, PoolElement, Ship};
 use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
 use uqm_rust::engine::battle::ai_constants::GRAVITY_MASS_INDEX;
@@ -29,8 +29,8 @@ use uqm_rust::engine::battle::flags::PLAYER_SHIP;
 use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
 use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
 use uqm_rust::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
-use uqm_rust::engine::battle::record::ElementRecord;
-use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::Concern;
+use uqm_rust::engine::battle::ElementId;
 use uqm_rust::engine::battle::STAMP_PRIMITIVE;
 use uqm_rust::engine::species::species_id::SPECIES_ID_UMGAH_ID;
 use uqm_rust::graphics::geometry::Point;
@@ -41,19 +41,18 @@ use uqm_rust::math::velocity::VelocityDesc;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 
-use std::ptr;
 use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
-unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
+fn queued() -> Vec<ElementId> {
     let mut result = Vec::new();
-    let mut h = battle::head();
-    while !h.is_null() {
+    let mut cursor = battle::head();
+    while let Some(h) = cursor {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = battle::succ(h);
+        cursor = battle::succ(h);
     }
     result
 }
@@ -72,22 +71,22 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
     ]
 }
 
-unsafe fn velocity(e: *mut ElementRecord) -> (i16, i16) {
-    let (velocity_x, velocity_y) = ((*e).velocity).get_current_components();
+fn velocity(e: ElementId) -> (i16, i16) {
+    let (velocity_x, velocity_y) = (battle::get(e).velocity).get_current_components();
     let (x, y) = (velocity_x as i16, velocity_y as i16);
     (x, y)
 }
 
-unsafe fn draws(seed: u32, n: usize) -> Vec<u32> {
+fn draws(seed: u32, n: usize) -> Vec<u32> {
     seed_random(seed);
     (0..n).map(|_| random()).collect()
 }
 
-unsafe fn seed_where(accept: impl Fn(&[u32]) -> bool) -> u32 {
+fn seed_where(accept: impl Fn(&[u32]) -> bool) -> u32 {
     (1..100_000).find(|&seed| accept(&draws(seed, 3))).unwrap()
 }
 
-unsafe fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {
+fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {
     let sequence = draws(seed, used + 1);
     seed_random(seed);
     let result = action();
@@ -99,26 +98,26 @@ unsafe fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {
     result
 }
 
-fn concerns() -> [EvaluateRecord; 4] {
-    [EvaluateRecord {
-        object_ptr: ptr::null_mut(),
+fn concerns() -> [Concern; 4] {
+    [Concern {
+        object: None,
         facing: 0,
         which_turn: 0,
-        move_state: MOVEMENT_STATE_NO_MOVEMENT,
+        movement: MOVEMENT_STATE_NO_MOVEMENT,
     }; 4]
 }
 
-unsafe fn enemy_concern(enemy: &Ship<'_>, turn: u16) -> [EvaluateRecord; 4] {
+fn enemy_concern(enemy: &Ship<'_>, turn: u16) -> [Concern; 4] {
     let mut c = concerns();
-    c[0].object_ptr = enemy.ptr();
+    c[0].object = Some(enemy.id);
     c[0].which_turn = turn;
-    c[0].move_state = MOVEMENT_STATE_PURSUE;
+    c[0].movement = MOVEMENT_STATE_PURSUE;
     c
 }
 
-unsafe fn think(ship: &mut Ship<'_>, c: &mut [EvaluateRecord; 4], input: u8, count: u16) -> u8 {
+fn think(ship: &mut Ship<'_>, c: &mut [Concern; 4], input: u8, count: u16) -> u8 {
     ship.ship_mut().ship_input_state = input;
-    ship.intelligence(&mut *ship.ptr(), c, count);
+    ship.think(ship.id, c, count);
     ship.ship_mut().ship_input_state
 }
 
@@ -221,17 +220,14 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
 fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut first =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             first.ship_mut().ship_facing = 5;
-            let h = fire(&mut first);
+            let h = fire(&mut first).unwrap();
             let data = previous_facing(&mut first);
             assert!(data.is_some());
-            hooks::invoke_element_pointer(
-                (*battle::element(h)).preprocess_func.unwrap(),
-                battle::element(h),
-            );
+            hooks::invoke_element(battle::get(h).preprocess_func.unwrap(), h);
             assert_eq!(
                 (first.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 21
@@ -240,10 +236,9 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             first.descriptor_mut().characteristics.special_wait = 77;
             let mut second =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            assert_ne!(
-                first.descriptor_mut() as *mut _,
-                second.descriptor_mut() as *mut _
-            );
+            let first_descriptor = std::ptr::from_ref(&*first.descriptor_mut());
+            let second_descriptor = std::ptr::from_ref(&*second.descriptor_mut());
+            assert_ne!(first_descriptor, second_descriptor);
             assert!(previous_facing(&mut second).is_none());
             assert_eq!(second.descriptor_mut().ship_info.energy_level, 30);
             assert_eq!(second.descriptor_mut().characteristics.special_wait, 2);
@@ -252,7 +247,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 0
             );
             second.ship_mut().ship_facing = 9;
-            let other = fire(&mut second);
+            let other = fire(&mut second).unwrap();
             assert_ne!(previous_facing(&mut first), previous_facing(&mut second));
             assert_eq!(previous_facing(&mut first), data);
             assert_eq!(
@@ -262,10 +257,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             first.uninit();
             assert!(previous_facing(&mut first).is_none());
             assert!(!previous_facing(&mut second).is_none());
-            hooks::invoke_element_pointer(
-                (*battle::element(other)).preprocess_func.unwrap(),
-                battle::element(other),
-            );
+            hooks::invoke_element(battle::get(other).preprocess_func.unwrap(), other);
             assert_eq!(
                 (second.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 25
@@ -294,44 +286,64 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
 fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             ship.ship_mut().ship_facing = 5;
-            (*ship.ptr()).next.location = Point { x: -9, y: 13 };
-            ((*ship.ptr()).velocity).set_components(321, -654);
-            let h = with_rng(8, 0, || fire(&mut ship));
-            assert!(!h.is_null());
-            let cone = battle::element(h);
-            assert_eq!((*cone).state_flags, (FINITE_LIFE | IGNORE_SIMILAR) as u16);
-            assert_eq!((*cone).life, 1);
-            assert_eq!((*cone).hits, 100);
-            assert_eq!((*cone).mass, 1);
-            assert_eq!((*cone).thrust, 0);
-            assert_eq!((*cone).player_nr, 1);
-            assert_eq!(velocity_fields(&(*cone).velocity), [0; 9]);
+            battle::get_mut(ship.id).next.location = Point { x: -9, y: 13 };
+            (battle::get_mut(ship.id).velocity).set_components(321, -654);
+            let h = with_rng(8, 0, || fire(&mut ship)).unwrap();
+            let cone = h;
             assert_eq!(
-                ((*cone).current.location.x, (*cone).current.location.y),
+                battle::get(cone).state_flags,
+                (FINITE_LIFE | IGNORE_SIMILAR) as u16
+            );
+            assert_eq!(battle::get(cone).life, 1);
+            assert_eq!(battle::get(cone).hits, 100);
+            assert_eq!(battle::get(cone).mass, 1);
+            assert_eq!(battle::get(cone).thrust, 0);
+            assert_eq!(battle::get(cone).player_nr, 1);
+            assert_eq!(velocity_fields(&battle::get(cone).velocity), [0; 9]);
+            assert_eq!(
+                (
+                    battle::get(cone).current.location.x,
+                    battle::get(cone).current.location.y
+                ),
                 (-9, 13)
             );
-            assert_eq!(((*cone).next.location.x, (*cone).next.location.y), (-9, 13));
-            assert_eq!((*cone).current.image.frame.raw(), ship.raw_frame(2, 5));
             assert_eq!(
-                (*cone).next.image.frame.raw(),
-                (*cone).current.image.frame.raw()
+                (
+                    battle::get(cone).next.location.x,
+                    battle::get(cone).next.location.y
+                ),
+                (-9, 13)
             );
-            assert_eq!((*cone).next.image.frames, ship.frame_set(2));
-            let i = (*cone).intersect_control;
+            assert_eq!(
+                battle::get(cone).current.image.frame.raw(),
+                ship.raw_frame(2, 5)
+            );
+            assert_eq!(
+                battle::get(cone).next.image.frame.raw(),
+                battle::get(cone).current.image.frame.raw()
+            );
+            assert_eq!(battle::get(cone).next.image.frames, ship.frame_set(2));
+            let i = battle::get(cone).intersect_control;
             assert_eq!(
                 (i.intersect_stamp.origin.x, i.intersect_stamp.origin.y),
                 (-3, 3)
             );
             assert_eq!((i.end_point.x, i.end_point.y), (-3, 3));
             assert_eq!(i.intersect_stamp.frame, ship.raw_frame(2, 5));
-            assert_eq!((*prim(cone)).kind, STAMP_PRIMITIVE);
-            assert!((*cone).preprocess_func.is_some() && (*cone).collision_func.is_some());
-            assert!((*cone).postprocess_func.is_none() && (*cone).death_func.is_none());
-            assert_eq!(queued(), vec![ship.handle]);
+            assert_eq!(battle::prim(cone).kind, STAMP_PRIMITIVE);
+            assert!(
+                battle::get(cone).preprocess_func.is_some()
+                    && battle::get(cone).collision_func.is_some()
+            );
+            assert!(
+                battle::get(cone).postprocess_func.is_none()
+                    && battle::get(cone).death_func.is_none()
+            );
+            assert_eq!(queued(), vec![ship.id]);
             battle_context::dispose(h);
         }
     })
@@ -341,52 +353,49 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
 fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             ship.ship_mut().ship_facing = 5;
             for index in [5, 21, 37, 5] {
-                let h = with_rng(3, 0, || fire(&mut ship));
-                let cone = battle::element(h);
+                let h = with_rng(3, 0, || fire(&mut ship)).unwrap();
+                let cone = h;
                 let data = previous_facing(&mut ship);
                 assert!(data.is_some());
                 assert_eq!(data, Some(5));
-                assert_eq!(((*cone).current.image.frame.raw()).index(), index);
-                let old_frame = (*cone).next.image.frame.raw();
+                assert_eq!((battle::get(cone).current.image.frame.raw()).index(), index);
+                let old_frame = battle::get(cone).next.image.frame.raw();
                 with_rng(3, 0, || {
-                    hooks::invoke_element_pointer((*cone).preprocess_func.unwrap(), cone)
+                    hooks::invoke_element(battle::get(cone).preprocess_func.unwrap(), cone)
                 });
                 assert_eq!(
                     (ship.descriptor_mut().ship_data.special.view(0).raw()).index(),
                     (index + 16) % 48
                 );
-                assert_eq!((*cone).next.image.frame.raw(), old_frame);
+                assert_eq!(battle::get(cone).next.image.frame.raw(), old_frame);
                 assert_eq!(
-                    (*cone).state_flags,
+                    battle::get(cone).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                 );
-                let next = fire(&mut ship);
+                let next = fire(&mut ship).unwrap();
                 assert_eq!(
                     previous_facing(&mut ship),
                     data,
                     "holding facing keeps the saved facing"
                 );
                 assert_eq!(
-                    ((*battle::element(next)).current.image.frame.raw()).index(),
+                    (battle::get(next).current.image.frame.raw()).index(),
                     (index + 16) % 48
                 );
                 battle_context::dispose(next);
                 battle_context::dispose(h);
             }
             ship.ship_mut().ship_facing = 9;
-            let h = fire(&mut ship);
+            let h = fire(&mut ship).unwrap();
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
-            assert_eq!(((*battle::element(h)).current.image.frame.raw()).index(), 9);
+            assert_eq!((battle::get(h).current.image.frame.raw()).index(), 9);
             assert_eq!(
-                (*battle::element(h))
-                    .intersect_control
-                    .intersect_stamp
-                    .frame,
+                battle::get(h).intersect_control.intersect_stamp.frame,
                 ship.raw_frame(2, 9)
             );
             battle_context::dispose(h);
@@ -398,24 +407,24 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
 fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let h = fire(&mut ship);
+            let h = fire(&mut ship).unwrap();
             battle_context::dispose(h);
             assert!(!previous_facing(&mut ship).is_none());
-            ((*ship.ptr()).velocity).set_components(123, -456);
-            let before = velocity_fields(&(*ship.ptr()).velocity);
+            (battle::get_mut(ship.id).velocity).set_components(123, -456);
+            let before = velocity_fields(&battle::get(ship.id).velocity);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 9;
-            (*ship.ptr()).state_flags |= APPEARING as u16;
+            battle::get_mut(ship.id).state_flags |= APPEARING as u16;
             with_rng(4, 0, || ship.preprocess());
             assert!(previous_facing(&mut ship).is_none());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 30);
             assert_eq!(ship.ship_mut().special_counter, 9);
-            assert_eq!(velocity_fields(&(*ship.ptr()).velocity), before);
+            assert_eq!(velocity_fields(&battle::get(ship.id).velocity), before);
             ship.preprocess();
-            let h = fire(&mut ship);
+            let h = fire(&mut ship).unwrap();
             battle_context::dispose(h);
             assert!(!previous_facing(&mut ship).is_none());
             let frame = ship.descriptor_mut().ship_data.special.view(0).raw();
@@ -431,11 +440,11 @@ fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable()
 fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
     battle_context::run(|_| {
         let _battle = Battle::new(1);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             ship.ship_mut().ship_facing = 15;
-            assert!(with_rng(5, 0, || fire(&mut ship)).is_null());
+            assert!(with_rng(5, 0, || fire(&mut ship)).is_none());
             assert!(!previous_facing(&mut ship).is_none());
             assert_eq!(previous_facing(&mut ship).unwrap(), 15);
             assert_eq!(
@@ -444,24 +453,24 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
             );
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 30);
             ship.ship_mut().ship_facing = 4;
-            assert!(fire(&mut ship).is_null());
+            assert!(fire(&mut ship).is_none());
             assert_eq!(previous_facing(&mut ship).unwrap(), 4);
             assert_eq!(
                 (ship.descriptor_mut().ship_data.special.view(0).raw()).index(),
                 4
             );
-            assert_eq!(queued(), vec![ship.handle]);
+            assert_eq!(queued(), vec![ship.id]);
         }
     })
 }
 
-unsafe fn target(finite: bool) -> PoolElement {
-    let mut e = PoolElement::new();
-    e.player_nr = 1;
-    e.state_flags = if finite { FINITE_LIFE as u16 } else { 0 };
-    e.life = 2;
-    e.hits = 3;
-    e.mass = 1;
+fn target(finite: bool) -> PoolElement {
+    let e = PoolElement::new();
+    battle::get_mut(e.id).player_nr = 1;
+    battle::get_mut(e.id).state_flags = if finite { FINITE_LIFE as u16 } else { 0 };
+    battle::get_mut(e.id).life = 2;
+    battle::get_mut(e.id).hits = 3;
+    battle::get_mut(e.id).mass = 1;
     e
 }
 
@@ -469,45 +478,35 @@ unsafe fn target(finite: bool) -> PoolElement {
 fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solidity() {
     battle_context::run(|_| {
         let _battle = Battle::new(4);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let h = fire(&mut ship);
-            let cone = battle::element(h);
-            let mut hit = target(false);
+            let h = fire(&mut ship).unwrap();
+            let cone = h;
+            let hit = target(false);
             let mut a = Point { x: 10, y: 20 };
             let mut b = Point { x: 30, y: 40 };
             let before = queued();
             with_rng(1, 0, || {
-                hooks::invoke_collision_pointer(
-                    (*cone).collision_func.unwrap(),
+                hooks::invoke_collision(
+                    battle::get(cone).collision_func.unwrap(),
                     cone,
                     &mut a,
-                    &mut *hit,
+                    hit.id,
                     &mut b,
-                    hooks::CollisionCall::Hook,
                 )
             });
             assert_eq!(queued(), before, "the generic collision blast was unlinked");
             assert_eq!(
-                (*cone).state_flags,
+                battle::get(cone).state_flags,
                 (FINITE_LIFE | IGNORE_SIMILAR | COLLISION | NONSOLID) as u16
             );
-            assert_eq!((*cone).life, 0);
-            assert_eq!((*cone).hits, 0);
-            assert_eq!(hit.hits, 3);
-            let freed_blast = crate::battle_context::with(|cx| {
-                cx.alloc_element()
-                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
-            });
-            assert!(
-                !freed_blast.is_null(),
-                "blast element returned to the queue free list"
-            );
-            assert!(crate::battle_context::with(|cx| cx
-                .alloc_element()
-                .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id)))
-            .is_null());
+            assert_eq!(battle::get(cone).life, 0);
+            assert_eq!(battle::get(cone).hits, 0);
+            assert_eq!(battle::get(hit.id).hits, 3);
+            let freed_blast = crate::battle_context::with(|cx| cx.alloc_element())
+                .unwrap_or_else(|| panic!("blast element returned to the queue free list"));
+            assert!(crate::battle_context::with(|cx| cx.alloc_element()).is_none());
             battle_context::dispose(freed_blast);
             battle_context::dispose(h);
         }
@@ -518,27 +517,26 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
 fn collision_preserves_disappearing_when_blast_allocation_fails() {
     battle_context::run(|_| {
         let _battle = Battle::new(3);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let h = fire(&mut ship);
-            let cone = battle::element(h);
-            let mut hit = target(false);
+            let h = fire(&mut ship).unwrap();
+            let cone = h;
+            let hit = target(false);
             let mut p = Point { x: 0, y: 0 };
-            hooks::invoke_collision_pointer(
-                (*cone).collision_func.unwrap(),
+            hooks::invoke_collision(
+                battle::get(cone).collision_func.unwrap(),
                 cone,
                 &mut p,
-                &mut *hit,
+                hit.id,
                 &mut Point { x: 0, y: 0 },
-                hooks::CollisionCall::Hook,
             );
             assert_eq!(
-                (*cone).state_flags & (DISAPPEARING | COLLISION | NONSOLID) as u16,
+                battle::get(cone).state_flags & (DISAPPEARING | COLLISION | NONSOLID) as u16,
                 (DISAPPEARING | COLLISION | NONSOLID) as u16
             );
-            assert_eq!((*cone).life, 0);
-            assert_eq!(queued(), vec![ship.handle]);
+            assert_eq!(battle::get(cone).life, 0);
+            assert_eq!(queued(), vec![ship.id]);
             battle_context::dispose(h);
         }
     })
@@ -548,39 +546,37 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
 fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearing() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let h = fire(&mut ship);
-            let cone = battle::element(h);
-            let mut hit = target(true);
-            (*cone).state_flags |= DISAPPEARING as u16;
-            let collide = (*cone).collision_func.unwrap();
+            let h = fire(&mut ship).unwrap();
+            let cone = h;
+            let hit = target(true);
+            battle::get_mut(cone).state_flags |= DISAPPEARING as u16;
+            let collide = battle::get(cone).collision_func.unwrap();
             with_rng(7, 0, || {
-                hooks::invoke_collision_pointer(
+                hooks::invoke_collision(
                     collide,
                     cone,
                     &mut Point { x: 0, y: 0 },
-                    &mut *hit,
+                    hit.id,
                     &mut Point { x: 0, y: 0 },
-                    hooks::CollisionCall::Hook,
                 )
             });
-            assert_eq!(hit.hits, 2);
-            assert_eq!((*cone).hits, 100);
-            assert_eq!((*cone).life, 1);
-            assert_ne!((*cone).state_flags & COLLISION as u16, 0);
-            assert_ne!((*cone).state_flags & DISAPPEARING as u16, 0);
-            hooks::invoke_collision_pointer(
+            assert_eq!(battle::get(hit.id).hits, 2);
+            assert_eq!(battle::get(cone).hits, 100);
+            assert_eq!(battle::get(cone).life, 1);
+            assert_ne!(battle::get(cone).state_flags & COLLISION as u16, 0);
+            assert_ne!(battle::get(cone).state_flags & DISAPPEARING as u16, 0);
+            hooks::invoke_collision(
                 collide,
                 cone,
                 &mut Point { x: 0, y: 0 },
-                &mut *hit,
+                hit.id,
                 &mut Point { x: 0, y: 0 },
-                hooks::CollisionCall::Hook,
             );
-            assert_eq!(hit.hits, 2);
-            assert_eq!(queued(), vec![ship.handle]);
+            assert_eq!(battle::get(hit.id).hits, 2);
+            assert_eq!(queued(), vec![ship.id]);
             battle_context::dispose(h);
         }
     })
@@ -590,7 +586,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
 fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all_velocity_fields() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             for facing in 0..16 {
@@ -602,8 +598,8 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
                     | WEAPON) as u16;
                 ship.ship_mut().special_counter = 17;
                 ship.descriptor_mut().ship_info.energy_level = 30;
-                ((*ship.ptr()).velocity).set_components(123, -456);
-                let mut expected = (*ship.ptr()).velocity;
+                (battle::get_mut(ship.id).velocity).set_components(123, -456);
+                let mut expected = battle::get(ship.id).velocity;
                 let a = facing_to_angle(i32::from(facing)) + 32;
                 (expected)
                     .delta_components(i32::from(cosine(a, 160 * 32)), i32::from(sine(a, 160 * 32)));
@@ -612,7 +608,7 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
                 with_rng(8, 0, || ship.preprocess());
                 assert_eq!(special_hooks::count(&observation::drain(), "umgah"), 1);
                 assert_eq!(
-                    velocity_fields(&(*ship.ptr()).velocity),
+                    velocity_fields(&battle::get(ship.id).velocity),
                     velocity_fields(&expected)
                 );
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 29);
@@ -628,14 +624,14 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
                 );
                 with_rng(8, 0, || ship.postprocess());
                 assert_eq!(ship.ship_mut().special_counter, 0);
-                assert_eq!(velocity_fields(&(*ship.ptr()).velocity), [0; 9]);
+                assert_eq!(velocity_fields(&battle::get(ship.id).velocity), [0; 9]);
             }
             ship.ship_mut().ship_facing = 0;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             observation::drain();
             ship.preprocess();
             assert_eq!(special_hooks::count(&observation::drain(), "umgah"), 1);
-            assert_eq!(velocity(ship.ptr()), (0, 160 * 32));
+            assert_eq!(velocity(ship.id), (0, 160 * 32));
         }
     })
 }
@@ -644,7 +640,7 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
 fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             for (appearing, wait, key, energy, low) in [
@@ -654,33 +650,33 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
                 (false, 0, false, 30, false),
                 (false, 0, true, 0, true),
             ] {
-                (*ship.ptr()).state_flags =
+                battle::get_mut(ship.id).state_flags =
                     (PLAYER_SHIP | if appearing { APPEARING } else { 0 }) as u16;
-                (*ship.ptr()).thrust = wait;
+                battle::get_mut(ship.id).thrust = wait;
                 ship.ship_mut().cur_status_flags = if key { SPECIAL as u16 } else { 0 };
                 ship.ship_mut().special_counter = 0;
                 ship.ship_mut().energy_counter = 19;
                 ship.descriptor_mut().ship_info.energy_level = energy;
-                ((*ship.ptr()).velocity).set_components(333, -555);
-                let before = velocity_fields(&(*ship.ptr()).velocity);
+                (battle::get_mut(ship.id).velocity).set_components(333, -555);
+                let before = velocity_fields(&battle::get(ship.id).velocity);
                 observation::enable();
                 observation::drain();
                 with_rng(4, 0, || ship.preprocess());
                 assert_eq!(special_hooks::count(&observation::drain(), "umgah"), 0);
-                assert_eq!(velocity_fields(&(*ship.ptr()).velocity), before);
+                assert_eq!(velocity_fields(&battle::get(ship.id).velocity), before);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, energy);
                 assert_eq!(ship.ship_mut().special_counter, 0);
                 assert_eq!(ship.ship_mut().energy_counter, 19);
                 assert_eq!(ship.ship_mut().cur_status_flags & (1 << 5) != 0, low);
                 ship.postprocess();
                 assert_eq!(
-                    velocity_fields(&(*ship.ptr()).velocity),
+                    velocity_fields(&battle::get(ship.id).velocity),
                     before,
                     "counter zero coasts unchanged"
                 );
             }
-            (*ship.ptr()).state_flags = PLAYER_SHIP as u16;
-            (*ship.ptr()).thrust = 0;
+            battle::get_mut(ship.id).state_flags = PLAYER_SHIP as u16;
+            battle::get_mut(ship.id).thrust = 0;
             ship.descriptor_mut().ship_info.energy_level = 1;
             ship.preprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 0);
@@ -694,7 +690,7 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
 fn intelligence_filters_enticing_weapons_before_the_shared_pass() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let threat = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
@@ -706,23 +702,23 @@ fn intelligence_filters_enticing_weapons_before_the_shared_pass() {
                 (1, 0, 0, true, MOVEMENT_STATE_PURSUE),
             ] {
                 ship.ship_mut().old_status_flags = old as u16;
-                (*threat.ptr()).state_flags = flags as u16;
+                battle::get_mut(threat.id).state_flags = flags as u16;
                 let mut c = concerns();
                 let w = &mut c[ENEMY_WEAPON_INDEX as usize];
-                w.object_ptr = threat.ptr();
+                w.object = Some(threat.id);
                 w.which_turn = turn;
-                w.move_state = MOVEMENT_STATE_ENTICE;
+                w.movement = MOVEMENT_STATE_ENTICE;
                 with_rng(7, 0, || think(&mut ship, &mut c, SPECIAL as u8, 0));
-                assert_eq!(!c[ENEMY_WEAPON_INDEX as usize].object_ptr.is_null(), keep);
-                assert_eq!(c[ENEMY_WEAPON_INDEX as usize].move_state, movement);
+                assert_eq!(!c[ENEMY_WEAPON_INDEX as usize].object.is_none(), keep);
+                assert_eq!(c[ENEMY_WEAPON_INDEX as usize].movement, movement);
             }
             let mut c = concerns();
-            c[ENEMY_WEAPON_INDEX as usize].object_ptr = threat.ptr();
-            c[ENEMY_WEAPON_INDEX as usize].move_state = MOVEMENT_STATE_AVOID;
+            c[ENEMY_WEAPON_INDEX as usize].object = Some(threat.id);
+            c[ENEMY_WEAPON_INDEX as usize].movement = MOVEMENT_STATE_AVOID;
             with_rng(7, 0, || think(&mut ship, &mut c, 0, 0));
-            assert_eq!(c[ENEMY_WEAPON_INDEX as usize].object_ptr, threat.ptr());
+            assert_eq!(c[ENEMY_WEAPON_INDEX as usize].object, Some(threat.id));
             assert_eq!(
-                c[ENEMY_WEAPON_INDEX as usize].move_state,
+                c[ENEMY_WEAPON_INDEX as usize].movement,
                 MOVEMENT_STATE_AVOID
             );
         }
@@ -733,7 +729,7 @@ fn intelligence_filters_enticing_weapons_before_the_shared_pass() {
 fn short_range_ai_resets_special_wait_and_fires_only_before_turn_16() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
@@ -742,10 +738,10 @@ fn short_range_ai_resets_special_wait_and_fires_only_before_turn_16() {
                     ship.ship_mut().special_counter = if reason == 0 { 1 } else { 0 };
                     let mut c = enemy_concern(&enemy, turn);
                     if reason == 1 {
-                        c[GRAVITY_MASS_INDEX as usize].object_ptr = enemy.ptr();
+                        c[GRAVITY_MASS_INDEX as usize].object = Some(enemy.id);
                     }
                     if reason == 2 {
-                        c[0].object_ptr = ptr::null_mut();
+                        c[0].object = None;
                     }
                     let input = with_rng(4, 0, || {
                         think(
@@ -771,11 +767,11 @@ fn short_range_ai_resets_special_wait_and_fires_only_before_turn_16() {
 fn rearward_zip_uses_one_draw_with_both_random_turn_directions() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*enemy.ptr()).next.location = Point { x: 4000, y: 4400 };
+            battle::get_mut(enemy.id).next.location = Point { x: 4000, y: 4400 };
             for odd in [false, true] {
                 let seed = seed_where(|d| (d[0] & 1 != 0) == odd);
                 let mut c = enemy_concern(&enemy, 8);
@@ -792,19 +788,19 @@ fn rearward_zip_uses_one_draw_with_both_random_turn_directions() {
 fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*enemy.ptr()).current.location = Point { x: 4000, y: 4400 };
-            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
+            battle::get_mut(enemy.id).current.location = Point { x: 4000, y: 4400 };
+            battle::get_mut(enemy.id).next = battle::get(enemy.id).current.clone();
             ship.ship_mut().weapon_counter = 1;
             for first_odd in [false, true] {
                 let seed =
                     seed_where(|d| (d[0] & 1 != 0) == first_odd && (d[1] & 1 != 0) != first_odd);
                 ship.ship_mut().ship_facing = 0;
-                (*ship.ptr()).current.image.frame = ship.frame(0, 0);
-                (*ship.ptr()).next = (*ship.ptr()).current.clone();
+                battle::get_mut(ship.id).current.image.frame = ship.frame(0, 0);
+                battle::get_mut(ship.id).next = battle::get(ship.id).current.clone();
                 let mut c = enemy_concern(&enemy, 8);
                 let input = with_rng(seed, 2, || think(&mut ship, &mut c, 0, 1));
                 assert_eq!(ship.ship_mut().ship_facing, if first_odd { 15 } else { 1 });
@@ -830,11 +826,11 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
 fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*enemy.ptr()).next.location = Point { x: 4000, y: 4400 };
+            battle::get_mut(enemy.id).next.location = Point { x: 4000, y: 4400 };
             for (turn, wait, old, boost, used) in [
                 (8, 0, 0, true, 1),
                 (9, 0, 0, true, 0),
@@ -846,7 +842,7 @@ fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
                 (16, 0, 0, true, 0),
             ] {
                 ship.ship_mut().old_status_flags = old as u16;
-                (*ship.ptr()).turn = wait;
+                battle::get_mut(ship.id).turn = wait;
                 let mut c = enemy_concern(&enemy, turn);
                 let input = with_rng(99, used, || think(&mut ship, &mut c, THRUST as u8, 0));
                 assert_eq!(
@@ -868,12 +864,12 @@ fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
 fn ai_energy_test_is_strict_and_uses_world_to_turn_shift() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*enemy.ptr()).next.location = Point { x: 4000, y: 4400 };
-            (*ship.ptr()).turn = 1;
+            battle::get_mut(enemy.id).next.location = Point { x: 4000, y: 4400 };
+            battle::get_mut(ship.id).turn = 1;
             for (energy, turn, boost) in [
                 (0, 0, false),
                 (1, 1, true),
@@ -901,12 +897,12 @@ fn ai_energy_test_is_strict_and_uses_world_to_turn_shift() {
 fn ai_uses_enemy_maneuverability_and_inclusive_16_through_24_range() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let mut enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*enemy.ptr()).next.location = Point { x: 4000, y: 3600 };
+            battle::get_mut(enemy.id).next.location = Point { x: 4000, y: 3600 };
             for (turn, maneuver, long) in [
                 (6, 25, false),
                 (7, 25, true),
@@ -937,11 +933,11 @@ fn ai_uses_enemy_maneuverability_and_inclusive_16_through_24_range() {
 fn active_zip_continues_on_nonincreasing_turns_then_exits_with_thrust_and_no_steering() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*enemy.ptr()).next.location = Point { x: 4000, y: 3600 };
+            battle::get_mut(enemy.id).next.location = Point { x: 4000, y: 3600 };
             ship.ship_mut().old_status_flags = SPECIAL as u16;
             for (turn, previous, continuing) in [(9, 10, true), (10, 10, true), (11, 10, false)] {
                 ship.descriptor_mut().characteristics.special_wait = previous;
@@ -987,17 +983,17 @@ fn active_zip_continues_on_nonincreasing_turns_then_exits_with_thrust_and_no_ste
 fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*ship.ptr()).turn = 1;
+            battle::get_mut(ship.id).turn = 1;
             for facing in 0..16 {
                 ship.ship_mut().ship_facing = facing;
                 for angle in 0..64 {
                     let dx = cosine(angle, 1000);
                     let dy = sine(angle, 1000);
-                    (*enemy.ptr()).next.location = Point {
+                    battle::get_mut(enemy.id).next.location = Point {
                         x: 4000 + dx,
                         y: 4000 + dy,
                     };
@@ -1015,11 +1011,11 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
                 }
             }
             ship.ship_mut().ship_facing = 0;
-            (*ship.ptr()).next.location = Point {
+            battle::get_mut(ship.id).next.location = Point {
                 x: 4000,
                 y: i16::MAX - 1,
             };
-            (*enemy.ptr()).next.location = Point {
+            battle::get_mut(enemy.id).next.location = Point {
                 x: 4000,
                 y: i16::MIN + 1,
             };
@@ -1032,15 +1028,15 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
     })
 }
 
-unsafe fn fire(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
-    let h = ship.initialize_from(ship.ptr(), 1)[0];
-    if !h.is_null() {
-        assert!((*battle::element(h)).parent == uqm_rust::engine::battle::Parent::None);
-        (*battle::element(h)).parent = (*ship.ptr()).parent;
+fn fire(ship: &mut Ship<'_>) -> Option<ElementId> {
+    let h = ship.initialize_from(ship.id, 1)[0];
+    if let Some(h) = h {
+        assert!(battle::get(h).parent == uqm_rust::engine::battle::Parent::None);
+        battle::get_mut(h).parent = battle::get(ship.id).parent;
     }
     h
 }
-unsafe fn previous_facing(ship: &mut Ship<'_>) -> Option<u16> {
+fn previous_facing(ship: &mut Ship<'_>) -> Option<u16> {
     let uqm_rust::engine::battle::RaceState::Umgah { previous_facing } =
         ship.descriptor_mut().race_state
     else {

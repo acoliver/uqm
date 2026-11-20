@@ -1,23 +1,33 @@
 //! The serialized battle fixture: one owned game and battle record per test body.
 //!
-//! `with` builds a fresh `Cx` over the fixture's owners for each operation, so no
-//! context is published and no borrow outlives the closure that received it.
+//! `with` builds a fresh `Cx` over the fixture's owners for each operation, and
+//! `kernel` lends the fixture kernel to one record access. Both borrow the fixture
+//! dynamically, so a record borrow held across an engine call panics instead of
+//! aliasing the engine's own borrow.
 #![allow(dead_code)]
 
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::sync::Mutex;
-use uqm_rust::engine::{battle::Battle, battle::Cx, Game};
+use uqm_rust::engine::{battle::record::Kernel, battle::Battle, battle::Cx, Game};
 
 static SERIAL: Mutex<()> = Mutex::new(());
 
+type Fixture = RefCell<Option<Box<(Game, Battle)>>>;
+
 thread_local! {
-    static FIXTURE: RefCell<Option<Box<(Game, Battle)>>> = const { RefCell::new(None) };
+    // Leaked once per test thread so record borrows can name a 'static owner;
+    // each test body still installs and drops its own game.
+    static FIXTURE: &'static Fixture = Box::leak(Box::new(RefCell::new(None)));
+}
+
+fn fixture() -> &'static Fixture {
+    FIXTURE.with(|fixture| *fixture)
 }
 
 struct Installed;
 impl Drop for Installed {
     fn drop(&mut self) {
-        FIXTURE.with(|fixture| fixture.borrow_mut().take());
+        fixture().borrow_mut().take();
     }
 }
 
@@ -45,47 +55,47 @@ pub fn run<R>(body: impl FnOnce(&uqm_rust::engine::input::InputSession) -> R) ->
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let game = game();
     let runtime = game.kernel.input_runtime();
-    FIXTURE.with(|fixture| {
-        let previous = fixture.replace(Some(Box::new((game, Battle::new()))));
-        assert!(previous.is_none(), "battle fixtures do not nest");
-    });
+    let previous = fixture().replace(Some(Box::new((game, Battle::new()))));
+    assert!(previous.is_none(), "battle fixtures do not nest");
     let _installed = Installed;
     body(runtime.input())
+}
+
+#[track_caller]
+fn lend() -> RefMut<'static, (Game, Battle)> {
+    let Ok(fixture) = fixture().try_borrow_mut() else {
+        panic!("fixture context is already lent");
+    };
+    RefMut::map(fixture, |fixture| {
+        &mut **fixture
+            .as_mut()
+            .unwrap_or_else(|| panic!("fixture operation outside battle_context::run"))
+    })
 }
 
 /// Lend a context over the running fixture's owners to one operation.
 #[track_caller]
 pub fn with<R>(operation: impl FnOnce(&mut Cx<'_>) -> R) -> R {
-    FIXTURE.with(|fixture| {
-        let mut fixture = fixture
-            .try_borrow_mut()
-            .unwrap_or_else(|_| panic!("fixture context is already lent"));
-        let (game, battle) = &mut **fixture
-            .as_mut()
-            .unwrap_or_else(|| panic!("fixture operation outside battle_context::run"));
-        operation(&mut Cx::new(
-            battle,
-            &mut game.world,
-            &mut game.kernel,
-            uqm_rust::math::random,
-        ))
-    })
+    let mut fixture = lend();
+    let (game, battle) = &mut *fixture;
+    operation(&mut Cx::new(
+        battle,
+        &mut game.world,
+        &mut game.kernel,
+        uqm_rust::math::random,
+    ))
 }
 
-pub unsafe fn dispose(handle: *mut std::ffi::c_void) {
-    with(|cx| {
-        if let Some(id) = cx.elements().id(std::ptr::NonNull::new(handle)) {
-            cx.dispose(id);
-        }
-    });
+/// Lend the fixture kernel until the returned borrow drops.
+#[track_caller]
+pub fn kernel() -> RefMut<'static, Kernel> {
+    RefMut::map(lend(), |(game, _)| &mut game.kernel)
 }
 
-pub unsafe fn unlink(handle: *mut std::ffi::c_void) {
-    with(|cx| {
-        let id = cx
-            .elements()
-            .id(std::ptr::NonNull::new(handle))
-            .unwrap_or_else(|| panic!("fixture element"));
-        uqm_rust::battle::sounds::engine::unlink(cx, id);
-    });
+pub fn dispose(id: uqm_rust::engine::battle::ElementId) {
+    with(|cx| cx.dispose(id));
+}
+
+pub fn unlink(id: uqm_rust::engine::battle::ElementId) {
+    with(|cx| uqm_rust::battle::sounds::engine::unlink(cx, id));
 }

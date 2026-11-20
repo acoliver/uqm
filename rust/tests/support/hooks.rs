@@ -1,53 +1,23 @@
 #![allow(dead_code)]
-use uqm_rust::engine::battle::{CollisionHook, ElementHook};
+use uqm_rust::engine::battle::{CollisionHook, ElementHook, ElementId};
+use uqm_rust::graphics::geometry::Point;
 
-pub enum CollisionCall {
-    Hook,
+pub fn invoke_element(hook: ElementHook, element: ElementId) {
+    crate::battle_context::with(|cx| {
+        uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, element);
+    });
 }
 
-/// # Safety
-/// The fixture retains the pool element and publishes its battle context.
-pub unsafe fn invoke_element_pointer<E>(hook: ElementHook, element: *mut E) {
-    {
-        crate::battle_context::with(|cx| {
-            let id = cx
-                .elements()
-                .id(std::ptr::NonNull::new(element.cast()))
-                .unwrap_or_else(|| panic!("fixture element is allocated"));
-            uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
-        });
-    }
-}
-
-/// # Safety
-/// Both elements and collision points remain live through the synchronous callback.
-pub unsafe fn invoke_collision_pointer<E, P>(
+pub fn invoke_collision(
     hook: CollisionHook,
-    a: *mut E,
-    pa: *mut P,
-    b: *mut E,
-    pb: *mut P,
-    _: CollisionCall,
+    a: ElementId,
+    pa: &mut Point,
+    b: ElementId,
+    pb: &mut Point,
 ) {
-    // SAFETY: the fixture owns the published context, elements and writable points.
-    unsafe {
-        crate::battle_context::with(|cx| {
-            let a = cx
-                .elements()
-                .id(std::ptr::NonNull::new(a.cast()))
-                .unwrap_or_else(|| panic!("first collision element is allocated"));
-            let b = cx
-                .elements()
-                .id(std::ptr::NonNull::new(b.cast()))
-                .unwrap_or_else(|| panic!("second collision element is allocated"));
-            uqm_rust::battle::process_native::invoke_collision::invoke_collision(
-                cx,
-                hook,
-                a,
-                &mut *pa.cast(),
-                b,
-                &mut *pb.cast(),
-            );
-        });
-    }
+    crate::battle_context::with(|cx| {
+        uqm_rust::battle::process_native::invoke_collision::invoke_collision(
+            cx, hook, a, pa, b, pb,
+        );
+    });
 }

@@ -29,7 +29,6 @@ fn battle_song_release_uses_the_already_borrowed_kernel() {
     }
 }
 
-use std::mem;
 use uqm_rust::engine::battle::ai_constants::MAX_ENERGY_SIZE;
 use uqm_rust::engine::battle::flags::RPG_PLAYER_NUM;
 use uqm_rust::engine::species::ship::SAMATRA_SHIP;
@@ -139,6 +138,14 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
     }
 }
 
+const EMPTY_STAR: uqm_rust::engine::world::CStarDesc = uqm_rust::engine::world::CStarDesc {
+    star_pt: uqm_rust::graphics::geometry::Point { x: 0, y: 0 },
+    star_type: 0,
+    index: 0,
+    prefix: 0,
+    postfix: 0,
+};
+
 #[test]
 #[serial_test::serial]
 fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
@@ -150,7 +157,7 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     // SAFETY: zero is valid for catalog descriptors, and the fixture keeps the table live.
-    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { mem::zeroed() });
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new([EMPTY_STAR; CATALOG_LEN]);
     for star in catalog.iter_mut() {
         star.star_pt.y = i16::MAX;
     }
@@ -618,7 +625,7 @@ fn instant_move_selects_a_star_with_the_retained_world() {
     game.world.data.game.ip_planet = 2;
     game.world.data.game.in_orbit = 1;
     // SAFETY: zero is valid for the catalog's scalar records, retained through the call.
-    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { mem::zeroed() });
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new([EMPTY_STAR; CATALOG_LEN]);
     for star in catalog.iter_mut() {
         star.star_pt.y = i16::MAX;
     }

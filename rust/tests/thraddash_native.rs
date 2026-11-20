@@ -6,8 +6,7 @@ mod battle;
 mod battle_context;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
-use std::ptr;
+use battle::{Battle, FrameSet, PoolElement, PoolShip, Ship};
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
@@ -35,8 +34,8 @@ use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
 use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
 use uqm_rust::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
 use uqm_rust::engine::battle::motion::inertial_thrust;
-use uqm_rust::engine::battle::record::ElementRecord;
-use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::Concern;
+use uqm_rust::engine::battle::ElementId;
 use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
 use uqm_rust::engine::battle::STAMP_PRIMITIVE;
 use uqm_rust::engine::species::species_id::SPECIES_ID_THRADDASH_ID;
@@ -48,24 +47,24 @@ use uqm_rust::math::velocity::VelocityDesc;
 use uqm_rust::math::velocity::VELOCITY_SHIFT;
 use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
 
-unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
+fn burn(ship: &mut Ship<'_>) -> ElementId {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
     let head = battle::head();
     ship.preprocess();
-    let trail = battle::head();
-    assert_ne!(trail, head);
-    battle::element(trail)
+    let trail = battle::head().unwrap();
+    assert_ne!(Some(trail), head);
+    trail
 }
-unsafe fn fire(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
+fn fire(ship: &mut Ship<'_>) -> Option<ElementId> {
     ship.weapon_handles(1)[0]
 }
-unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
+fn queued() -> Vec<ElementId> {
     let mut result = Vec::new();
-    let mut h = battle::head();
-    while !h.is_null() {
+    let mut cursor = battle::head();
+    while let Some(h) = cursor {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = battle::succ(h);
+        cursor = battle::succ(h);
     }
     result
 }
@@ -84,13 +83,13 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
     ]
 }
 
-unsafe fn velocity(e: *mut ElementRecord) -> (i16, i16) {
-    let (velocity_x, velocity_y) = ((*e).velocity).get_current_components();
+fn velocity(e: ElementId) -> (i16, i16) {
+    let (velocity_x, velocity_y) = (battle::get(e).velocity).get_current_components();
     let (x, y) = (velocity_x as i16, velocity_y as i16);
     (x, y)
 }
 
-unsafe fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {
+fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {
     seed_random(seed);
     for _ in 0..used {
         random();
@@ -102,18 +101,18 @@ unsafe fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {
     result
 }
 
-fn concerns() -> [EvaluateRecord; 4] {
-    [EvaluateRecord {
-        object_ptr: ptr::null_mut(),
+fn concerns() -> [Concern; 4] {
+    [Concern {
+        object: None,
         facing: 0,
         which_turn: 0,
-        move_state: MOVEMENT_STATE_NO_MOVEMENT,
+        movement: MOVEMENT_STATE_NO_MOVEMENT,
     }; 4]
 }
 
-unsafe fn think(ship: &mut Ship, c: &mut [EvaluateRecord; 4], input: u8, count: u16) -> u8 {
+fn think(ship: &mut Ship, c: &mut [Concern; 4], input: u8, count: u16) -> u8 {
     ship.ship_mut().ship_input_state = input;
-    ship.think(ship.ptr(), c, count);
+    ship.think(ship.id, c, count);
     ship.ship_mut().ship_input_state
 }
 
@@ -225,56 +224,55 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
 fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_velocity() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            ((*ship.ptr()).velocity).set_components(1000, -1000);
-            (*ship.ptr()).next.location = Point {
+            (battle::get_mut(ship.id).velocity).set_components(1000, -1000);
+            battle::get_mut(ship.id).next.location = Point {
                 x: i16::MAX - 5,
                 y: i16::MIN + 5,
             };
             for facing in 0..16 {
                 ship.ship_mut().ship_facing = facing;
-                let h = with_rng(101, 0, || fire(&mut ship));
-                assert!(!h.is_null());
-                let e = battle::element(h);
+                let h = with_rng(101, 0, || fire(&mut ship)).unwrap();
+                let e = h;
                 let angle = facing_to_angle(i32::from(facing));
                 let vx = cosine(angle, 120 << VELOCITY_SHIFT);
                 let vy = sine(angle, 120 << VELOCITY_SHIFT);
                 assert_eq!(velocity(e), (vx, vy));
                 assert_eq!(
-                    (*e).current.location.x,
+                    battle::get(e).current.location.x,
                     (i32::from(i16::MAX) - 5 + i32::from(cosine(angle, 36))
                         - (i32::from(vx) >> VELOCITY_SHIFT)) as i16
                 );
                 assert_eq!(
-                    (*e).current.location.y,
+                    battle::get(e).current.location.y,
                     (i32::from(i16::MIN) + 5 + i32::from(sine(angle, 36))
                         - (i32::from(vy) >> VELOCITY_SHIFT)) as i16
                 );
                 assert_eq!(
-                    (*e).current.image.frame.raw(),
+                    battle::get(e).current.image.frame.raw(),
                     ship.raw_frame(1, facing as usize)
                 );
-                assert_eq!((*e).current.image.frames, ship.frame_set(1));
+                assert_eq!(battle::get(e).current.image.frames, ship.frame_set(1));
                 assert_eq!(
-                    (*e).state_flags,
+                    battle::get(e).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                 );
-                assert_eq!((*e).life, 15);
-                assert_eq!((*e).hits, 2);
-                assert_eq!((*e).mass, 1);
-                assert_eq!((*e).thrust, 3);
-                assert_eq!((*e).player_nr, 1);
+                assert_eq!(battle::get(e).life, 15);
+                assert_eq!(battle::get(e).hits, 2);
+                assert_eq!(battle::get(e).mass, 1);
+                assert_eq!(battle::get(e).thrust, 3);
+                assert_eq!(battle::get(e).player_nr, 1);
                 assert!(
-                    (*e).preprocess_func.is_none()
-                        && (*e).postprocess_func.is_none()
-                        && (*e).death_func.is_none()
+                    battle::get(e).preprocess_func.is_none()
+                        && battle::get(e).postprocess_func.is_none()
+                        && battle::get(e).death_func.is_none()
                 );
-                assert!((*e).collision_func.is_some());
-                assert!((*e).parent == uqm_rust::engine::battle::Parent::None);
-                assert_eq!((*prim(e)).kind, STAMP_PRIMITIVE);
-                assert_eq!(queued(), vec![ship.handle]);
+                assert!(battle::get(e).collision_func.is_some());
+                assert!(battle::get(e).parent == uqm_rust::engine::battle::Parent::None);
+                assert_eq!(battle::prim(e).kind, STAMP_PRIMITIVE);
+                assert_eq!(queued(), vec![ship.id]);
                 battle_context::dispose(h);
             }
         }
@@ -285,24 +283,27 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
 fn failed_horn_and_napalm_allocation_keep_the_c_return_and_energy_semantics() {
     battle_context::run(|_| {
         let _battle = Battle::new(1);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
-            assert!(with_rng(2, 0, || fire(&mut ship)).is_null());
+            assert!(with_rng(2, 0, || fire(&mut ship)).is_none());
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             with_rng(2, 0, || ship.preprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 23);
             assert_eq!(ship.ship_mut().energy_counter, 6);
-            assert_eq!(velocity(ship.ptr()), (0, -12 * 32));
-            assert_eq!((*ship.ptr()).thrust, 1);
-            assert_eq!(queued(), vec![ship.handle]);
-            assert_eq!(
-                (
-                    ship.descriptor_mut().characteristics.max_thrust,
-                    ship.descriptor_mut().characteristics.thrust_increment
-                ),
-                (28, 7)
-            );
+            assert_eq!(velocity(ship.id), (0, -12 * 32));
+            assert_eq!(battle::get(ship.id).thrust, 1);
+            assert_eq!(queued(), vec![ship.id]);
+            {
+                let descriptor = ship.descriptor_mut();
+                assert_eq!(
+                    (
+                        descriptor.characteristics.max_thrust,
+                        descriptor.characteristics.thrust_increment
+                    ),
+                    (28, 7)
+                );
+            }
         }
     })
 }
@@ -311,43 +312,67 @@ fn failed_horn_and_napalm_allocation_keep_the_c_return_and_energy_semantics() {
 fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             ship.ship_mut().ship_facing = 7;
-            (*ship.ptr()).next.location = Point { x: -9, y: 13 };
+            battle::get_mut(ship.id).next.location = Point { x: -9, y: 13 };
             observation::enable();
             observation::drain();
             let first = with_rng(31, 0, || burn(&mut ship));
             assert_eq!(special_hooks::count(&observation::drain(), "thraddash"), 1);
-            assert_eq!(queued(), vec![first.cast(), ship.handle]);
+            assert_eq!(queued(), vec![first, ship.id]);
             let second = with_rng(31, 0, || burn(&mut ship));
             assert_eq!(special_hooks::count(&observation::drain(), "thraddash"), 1);
-            assert_eq!(queued(), vec![second.cast(), first.cast(), ship.handle]);
+            assert_eq!(queued(), vec![second, first, ship.id]);
             for e in [first, second] {
                 assert_eq!(
-                    (*e).parent,
+                    battle::get(e).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
-                assert!((*e).target.is_none());
+                assert!(battle::get(e).target.is_none());
                 assert_eq!(
-                    (*e).state_flags,
+                    battle::get(e).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR | NONSOLID | PRE_PROCESS) as u16
                 );
-                assert_eq!((*e).life, 48);
-                assert_eq!((*e).hits, 1);
-                assert_eq!((*e).mass, 2);
-                assert_eq!((*e).turn, 5);
-                assert_eq!((*e).thrust, 0);
-                assert_eq!((*e).player_nr, 1);
-                assert_eq!((*e).current.image.frame.raw(), ship.raw_frame(2, 9));
-                assert_eq!((*e).next.image.frame.raw(), (*e).current.image.frame.raw());
-                assert_eq!((*e).next.image.frames, (*e).current.image.frames);
-                assert_eq!(((*e).current.location.x, (*e).current.location.y), (-9, 13));
-                assert_eq!(((*e).next.location.x, (*e).next.location.y), (-9, 13));
-                assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
-                assert_eq!((*prim(e)).kind, EMPTY_PRIMITIVE);
-                assert!((*e).preprocess_func.is_some() && (*e).collision_func.is_some());
+                assert_eq!(battle::get(e).life, 48);
+                assert_eq!(battle::get(e).hits, 1);
+                assert_eq!(battle::get(e).mass, 2);
+                assert_eq!(battle::get(e).turn, 5);
+                assert_eq!(battle::get(e).thrust, 0);
+                assert_eq!(battle::get(e).player_nr, 1);
+                assert_eq!(
+                    battle::get(e).current.image.frame.raw(),
+                    ship.raw_frame(2, 9)
+                );
+                assert_eq!(
+                    battle::get(e).next.image.frame.raw(),
+                    battle::get(e).current.image.frame.raw()
+                );
+                assert_eq!(
+                    battle::get(e).next.image.frames,
+                    battle::get(e).current.image.frames
+                );
+                assert_eq!(
+                    (
+                        battle::get(e).current.location.x,
+                        battle::get(e).current.location.y
+                    ),
+                    (-9, 13)
+                );
+                assert_eq!(
+                    (
+                        battle::get(e).next.location.x,
+                        battle::get(e).next.location.y
+                    ),
+                    (-9, 13)
+                );
+                assert_eq!(velocity_fields(&battle::get(e).velocity), [0; 9]);
+                assert_eq!(battle::prim(e).kind, EMPTY_PRIMITIVE);
+                assert!(
+                    battle::get(e).preprocess_func.is_some()
+                        && battle::get(e).collision_func.is_some()
+                );
             }
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 22);
         }
@@ -358,7 +383,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
 fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result() {
     battle_context::run(|_| {
         let _battle = Battle::new(64);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             for (speed, face, old, status, wait) in [
@@ -375,57 +400,61 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
             ] {
                 ship.ship_mut().ship_facing = face;
                 uqm_rust::battle::velocity::set_velocity_vector(
-                    &mut (*ship.ptr()).velocity,
+                    &mut battle::get_mut(ship.id).velocity,
                     speed,
                     0,
                 );
                 ship.ship_mut().old_status_flags = old as u16;
                 ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | status) as u16;
-                (*ship.ptr()).thrust = wait;
+                battle::get_mut(ship.id).thrust = wait;
                 let mut expected_desc = battle::descriptor(SPECIES_ID_THRADDASH_ID);
                 expected_desc.characteristics = ship.descriptor_mut().characteristics;
                 expected_desc.ship_info = ship.descriptor_mut().ship_info;
                 expected_desc.characteristics.max_thrust = 72;
                 expected_desc.characteristics.thrust_increment = 12;
                 let mut expected_ss = PoolShip::new(0);
-                expected_ss.species_id = ship.ship_mut().species_id;
-                expected_ss.ship_element = ship.ship_mut().ship_element;
+                let value = ship.ship_mut().species_id;
+                expected_ss.record().species_id = value;
+                let value = ship.ship_mut().ship_element;
+                expected_ss.record().ship_element = value;
                 crate::battle_context::with(|cx| {
                     let state = cx.ship_state(ship.ship_id);
                     *cx.ship_state_mut(expected_ss.ship_id) = state;
                 });
-                expected_ss.descriptor = Some(Box::new(expected_desc));
+                expected_ss.record().descriptor = Some(Box::new(expected_desc));
                 if old == 0 {
-                    expected_ss.cur_status_flags &=
+                    expected_ss.record().cur_status_flags &=
                         !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
                 }
-                let mut expected = PoolElement::new();
-                let thrust_status = crate::battle_context::with(|cx| {
-                    let id = cx
-                        .elements()
-                        .id(std::ptr::NonNull::new((&raw mut *expected).cast()))
-                        .unwrap();
-                    cx.copy_allocated_element(id, ship.id);
-                    expected.parent = uqm_rust::engine::battle::Parent::Ship(expected_ss.ship_id);
-                    inertial_thrust(cx, id)
-                });
+                let expected = PoolElement::new();
+                crate::battle_context::with(|cx| cx.copy_allocated_element(expected.id, ship.id));
+                battle::get_mut(expected.id).parent =
+                    uqm_rust::engine::battle::Parent::Ship(expected_ss.ship_id);
+                let thrust_status =
+                    crate::battle_context::with(|cx| inertial_thrust(cx, expected.id));
                 with_rng(7, 0, || burn(&mut ship));
                 assert_eq!(
-                    velocity_fields(&(*ship.ptr()).velocity),
-                    velocity_fields(&expected.velocity)
+                    velocity_fields(&battle::get(ship.id).velocity),
+                    velocity_fields(&battle::get(expected.id).velocity)
                 );
                 assert_eq!(
                     ship.ship_mut().cur_status_flags,
                     (SPECIAL | THRUST) as u16 | thrust_status
                 );
-                assert_eq!((*ship.ptr()).thrust, if wait == 0 { 1 } else { wait });
                 assert_eq!(
-                    (
-                        ship.descriptor_mut().characteristics.max_thrust,
-                        ship.descriptor_mut().characteristics.thrust_increment
-                    ),
-                    (28, 7)
+                    battle::get(ship.id).thrust,
+                    if wait == 0 { 1 } else { wait }
                 );
+                {
+                    let descriptor = ship.descriptor_mut();
+                    assert_eq!(
+                        (
+                            descriptor.characteristics.max_thrust,
+                            descriptor.characteristics.thrust_increment
+                        ),
+                        (28, 7)
+                    );
+                }
             }
         }
     })
@@ -435,17 +464,20 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
 fn repeated_boost_reaches_72_and_release_marks_coasting_beyond_normal_speed() {
     battle_context::run(|_| {
         let _battle = Battle::new(16);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             for frame in 1..=7 {
                 with_rng(45, 0, || burn(&mut ship));
-                assert_eq!(velocity(ship.ptr()), (0, -32 * (frame.min(6) * 12)));
+                assert_eq!(velocity(ship.id), (0, -32 * (frame.min(6) * 12)));
                 assert_eq!(
                     ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16 != 0,
                     frame == 7
                 );
-                ship.ship_mut().old_status_flags = ship.ship_mut().cur_status_flags;
+                {
+                    let mut record = ship.ship_mut();
+                    record.old_status_flags = record.cur_status_flags;
+                }
             }
             let before = queued();
             ship.ship_mut().cur_status_flags &= !(SPECIAL as u16);
@@ -457,7 +489,7 @@ fn repeated_boost_reaches_72_and_release_marks_coasting_beyond_normal_speed() {
             );
             assert_eq!(queued(), before);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 17);
-            assert_eq!(velocity(ship.ptr()), (0, -72 * 32));
+            assert_eq!(velocity(ship.id), (0, -72 * 32));
         }
     })
 }
@@ -466,11 +498,11 @@ fn repeated_boost_reaches_72_and_release_marks_coasting_beyond_normal_speed() {
 fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
-            ((*ship.ptr()).velocity).set_components(123, -456);
-            let v = velocity_fields(&(*ship.ptr()).velocity);
+            (battle::get_mut(ship.id).velocity).set_components(123, -456);
+            let v = velocity_fields(&battle::get(ship.id).velocity);
             observation::enable();
             for (current, old, expected) in [
                 (0, SPECIAL, 0),
@@ -501,9 +533,9 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
                 (SPECIAL | SHIP_AT_MAX_SPEED | (1 << 5)) as u16
             );
             assert_eq!(ship.ship_mut().energy_counter, 17);
-            assert_eq!((*ship.ptr()).thrust, 0);
-            assert_eq!(velocity_fields(&(*ship.ptr()).velocity), v);
-            assert_eq!(queued(), vec![ship.handle]);
+            assert_eq!(battle::get(ship.id).thrust, 0);
+            assert_eq!(velocity_fields(&battle::get(ship.id).velocity), v);
+            assert_eq!(queued(), vec![ship.id]);
         }
     })
 }
@@ -512,39 +544,42 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
 fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_next_image() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let e = burn(&mut ship);
             let next_frames = FrameSet::new(10);
-            (*e).next.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
+            battle::get_mut(e).next.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
                 uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
                 next_frames.array(),
             );
-            (*e).next.image.frame = next_frames.selection(7);
-            (*e).current.location = Point { x: -9, y: 13 };
-            (*e).next.location = Point { x: 42, y: -5 };
-            ((*e).velocity).set_components(1001, -4003);
-            (*e).velocity.error.width = 19;
-            let callback = (*e)
+            battle::get_mut(e).next.image.frame = next_frames.selection(7);
+            battle::get_mut(e).current.location = Point { x: -9, y: 13 };
+            battle::get_mut(e).next.location = Point { x: 42, y: -5 };
+            (battle::get_mut(e).velocity).set_components(1001, -4003);
+            battle::get_mut(e).velocity.error.width = 19;
+            let callback = battle::get(e)
                 .preprocess_func
                 .unwrap_or_else(|| panic!("installed napalm callback"));
-            with_rng(66, 0, || hooks::invoke_element_pointer(callback, e));
-            assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
-            assert_eq!((*e).state_flags & NONSOLID as u16, 0);
-            assert_ne!((*e).state_flags & APPEARING as u16, 0);
-            assert_eq!((*e).state_flags & CHANGING as u16, 0);
-            assert_eq!((*prim(e)).kind, STAMP_PRIMITIVE);
-            let i = (*e).intersect_control;
+            with_rng(66, 0, || hooks::invoke_element(callback, e));
+            assert_eq!(velocity_fields(&battle::get(e).velocity), [0; 9]);
+            assert_eq!(battle::get(e).state_flags & NONSOLID as u16, 0);
+            assert_ne!(battle::get(e).state_flags & APPEARING as u16, 0);
+            assert_eq!(battle::get(e).state_flags & CHANGING as u16, 0);
+            assert_eq!(battle::prim(e).kind, STAMP_PRIMITIVE);
+            let i = battle::get(e).intersect_control;
             assert_eq!(
                 (i.intersect_stamp.origin.x, i.intersect_stamp.origin.y),
                 (-3, 3)
             );
             assert_eq!((i.end_point.x, i.end_point.y), (10, -2));
             assert_eq!(i.intersect_stamp.frame, next_frames.frame(7));
-            assert_eq!((*e).turn, 5);
-            assert_eq!((*e).current.image.frame.raw(), ship.raw_frame(2, 9));
-            assert_eq!((*e).next.image.frame.raw(), next_frames.frame(7));
+            assert_eq!(battle::get(e).turn, 5);
+            assert_eq!(
+                battle::get(e).current.image.frame.raw(),
+                ship.raw_frame(2, 9)
+            );
+            assert_eq!(battle::get(e).next.image.frame.raw(), next_frames.frame(7));
         }
     })
 }
@@ -553,22 +588,22 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
 fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let e = burn(&mut ship);
-            let callback = (*e)
+            let callback = battle::get(e)
                 .preprocess_func
                 .unwrap_or_else(|| panic!("installed napalm callback"));
-            hooks::invoke_element_pointer(callback, e);
-            (*e).state_flags &= !(APPEARING as u16);
+            hooks::invoke_element(callback, e);
+            battle::get_mut(e).state_flags &= !(APPEARING as u16);
             for wait in (0..5).rev() {
-                ((*e).velocity).set_components(77, 99);
-                with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
-                assert_eq!((*e).turn, wait);
-                assert_eq!((*e).next.image.frame.raw(), ship.raw_frame(2, 9));
-                assert_eq!((*e).state_flags & CHANGING as u16, 0);
-                assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
+                (battle::get_mut(e).velocity).set_components(77, 99);
+                with_rng(3, 0, || hooks::invoke_element(callback, e));
+                assert_eq!(battle::get(e).turn, wait);
+                assert_eq!(battle::get(e).next.image.frame.raw(), ship.raw_frame(2, 9));
+                assert_eq!(battle::get(e).state_flags & CHANGING as u16, 0);
+                assert_eq!(velocity_fields(&battle::get(e).velocity), [0; 9]);
             }
             for (frame, life, expected) in [
                 (9, 48, 8),
@@ -578,16 +613,16 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 (6, 0, 5),
                 (0, 1, 9),
             ] {
-                (*e).current.image.frame = ship.frame(2, frame);
-                (*e).next.image.frame = ship.frame(2, 2);
-                (*e).life = life;
-                (*e).turn = 0;
-                (*e).state_flags &= !(CHANGING as u16);
-                with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
-                assert_eq!(((*e).next.image.frame.raw()).index(), expected);
-                assert_eq!((*e).turn, 5);
-                assert_ne!((*e).state_flags & CHANGING as u16, 0);
-                assert_eq!((*e).life, life);
+                battle::get_mut(e).current.image.frame = ship.frame(2, frame);
+                battle::get_mut(e).next.image.frame = ship.frame(2, 2);
+                battle::get_mut(e).life = life;
+                battle::get_mut(e).turn = 0;
+                battle::get_mut(e).state_flags &= !(CHANGING as u16);
+                with_rng(3, 0, || hooks::invoke_element(callback, e));
+                assert_eq!((battle::get(e).next.image.frame.raw()).index(), expected);
+                assert_eq!(battle::get(e).turn, 5);
+                assert_ne!(battle::get(e).state_flags & CHANGING as u16, 0);
+                assert_eq!(battle::get(e).life, life);
             }
         }
     })
@@ -597,7 +632,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
 fn intelligence_classifies_stationary_threshold_and_turn_limit_without_rng() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
@@ -612,14 +647,14 @@ fn intelligence_classifies_stationary_threshold_and_turn_limit_without_rng() {
                 (0, -513, 9, MOVEMENT_STATE_PURSUE),
                 (i16::MAX, i16::MIN, 8, MOVEMENT_STATE_ENTICE),
             ] {
-                ((*enemy.ptr()).velocity).set_components(i32::from(x), i32::from(y));
+                (battle::get_mut(enemy.id).velocity).set_components(i32::from(x), i32::from(y));
                 let mut c = concerns();
-                c[0].object_ptr = enemy.ptr();
+                c[0].object = Some(enemy.id);
                 c[0].which_turn = turn;
                 let input = with_rng(4, 0, || {
                     think(&mut ship, &mut c, (SPECIAL | WEAPON) as u8, 0)
                 });
-                assert_eq!(c[0].move_state, movement, "velocity {x},{y}, turn {turn}");
+                assert_eq!(c[0].movement, movement, "velocity {x},{y}, turn {turn}");
                 assert_eq!(
                     input, SPECIAL as u8,
                     "shared pass clears a ready weapon before special-counter exit"
@@ -633,7 +668,7 @@ fn intelligence_classifies_stationary_threshold_and_turn_limit_without_rng() {
 fn pursuit_boost_requires_three_energy_ready_turn_and_no_active_speed_limit() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
@@ -651,9 +686,9 @@ fn pursuit_boost_requires_three_energy_ready_turn_and_no_active_speed_limit() {
             ] {
                 ship.descriptor_mut().ship_info.energy_level = energy;
                 ship.ship_mut().cur_status_flags = current as u16;
-                (*ship.ptr()).turn = wait;
+                battle::get_mut(ship.id).turn = wait;
                 let mut c = concerns();
-                c[0].object_ptr = enemy.ptr();
+                c[0].object = Some(enemy.id);
                 c[0].which_turn = 9;
                 let result = with_rng(5, 0, || {
                     think(&mut ship, &mut c, (input | THRUST | SPECIAL) as u8, 0)
@@ -671,23 +706,23 @@ fn pursuit_boost_requires_three_energy_ready_turn_and_no_active_speed_limit() {
 fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             let weapon =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            (*ship.ptr()).turn = 1;
+            battle::get_mut(ship.id).turn = 1;
             for facing in 0..16 {
                 ship.ship_mut().ship_facing = facing;
                 for angle in 0..64 {
-                    (*weapon.ptr()).velocity.travel_angle = angle;
+                    battle::get_mut(weapon.id).velocity.travel_angle = angle;
                     let mut c = concerns();
-                    c[0].object_ptr = enemy.ptr();
+                    c[0].object = Some(enemy.id);
                     c[0].which_turn = 9;
-                    c[ENEMY_WEAPON_INDEX as usize].object_ptr = weapon.ptr();
-                    c[ENEMY_WEAPON_INDEX as usize].move_state = MOVEMENT_STATE_ENTICE;
+                    c[ENEMY_WEAPON_INDEX as usize].object = Some(weapon.id);
+                    c[ENEMY_WEAPON_INDEX as usize].movement = MOVEMENT_STATE_ENTICE;
                     let input = with_rng(73, 0, || think(&mut ship, &mut c, 0, 0));
                     let expected =
                         ((((i32::from(angle) + 32 + 8 + 2) >> 2) - i32::from(facing)) & 15) > 4;
@@ -698,7 +733,7 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
                     );
                 }
             }
-            (*weapon.ptr()).velocity.travel_angle = 32;
+            battle::get_mut(weapon.id).velocity.travel_angle = 32;
             ship.ship_mut().ship_facing = 0;
             for (energy, wait, input, expected) in [
                 (0, 1, THRUST, THRUST | SPECIAL),
@@ -707,10 +742,10 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
                 (1, 0, LEFT, LEFT),
             ] {
                 ship.descriptor_mut().ship_info.energy_level = energy;
-                (*ship.ptr()).turn = wait;
+                battle::get_mut(ship.id).turn = wait;
                 let mut c = concerns();
-                c[ENEMY_WEAPON_INDEX as usize].object_ptr = weapon.ptr();
-                c[ENEMY_WEAPON_INDEX as usize].move_state = MOVEMENT_STATE_ENTICE;
+                c[ENEMY_WEAPON_INDEX as usize].object = Some(weapon.id);
+                c[ENEMY_WEAPON_INDEX as usize].movement = MOVEMENT_STATE_ENTICE;
                 assert_eq!(think(&mut ship, &mut c, input as u8, 0), expected as u8);
             }
         }
@@ -721,27 +756,27 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
 fn entice_ship_geometry_uses_next_locations_and_size_truncation() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            ((*enemy.ptr()).velocity).set_components(513, 0);
+            (battle::get_mut(enemy.id).velocity).set_components(513, 0);
             for (ship_y, enemy_y, boost) in [
                 (4000, 4400, true),
                 (4000, 3600, false),
                 (i16::MAX - 1, i16::MIN + 1, true),
             ] {
-                (*ship.ptr()).next.location = Point { x: 4000, y: ship_y };
-                (*enemy.ptr()).next.location = Point {
+                battle::get_mut(ship.id).next.location = Point { x: 4000, y: ship_y };
+                battle::get_mut(enemy.id).next.location = Point {
                     x: 4000,
                     y: enemy_y,
                 };
                 let mut c = concerns();
-                c[0].object_ptr = enemy.ptr();
+                c[0].object = Some(enemy.id);
                 c[0].which_turn = 8;
                 let input = with_rng(19, 0, || think(&mut ship, &mut c, THRUST as u8, 0));
-                assert_eq!(c[0].move_state, MOVEMENT_STATE_ENTICE);
+                assert_eq!(c[0].movement, MOVEMENT_STATE_ENTICE);
                 assert_eq!(input & SPECIAL as u8 != 0, boost);
                 assert_eq!(input & THRUST as u8 != 0, !boost);
             }
@@ -753,21 +788,21 @@ fn entice_ship_geometry_uses_next_locations_and_size_truncation() {
 fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            (*enemy.ptr()).current.location = Point { x: 4400, y: 4000 };
-            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
+            battle::get_mut(enemy.id).current.location = Point { x: 4400, y: 4000 };
+            battle::get_mut(enemy.id).next = battle::get(enemy.id).current.clone();
             ship.ship_mut().weapon_counter = 1;
             let mut c = concerns();
-            c[0].object_ptr = enemy.ptr();
+            c[0].object = Some(enemy.id);
             c[0].which_turn = 9;
             let input = with_rng(8, 0, || think(&mut ship, &mut c, 0, 1));
             assert_ne!(input & RIGHT as u8, 0);
             assert_eq!(input & (LEFT | SPECIAL) as u8, 0);
-            assert_eq!(((*ship.ptr()).next.image.frame.raw()).index(), 1);
+            assert_eq!((battle::get(ship.id).next.image.frame.raw()).index(), 1);
         }
     })
 }
@@ -776,43 +811,45 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
 fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
     battle_context::run(|_| {
         let _battle = Battle::new(16);
-        unsafe {
+        {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let mut enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             let trail = burn(&mut ship);
-            hooks::invoke_element_pointer(
-                (*trail)
+            hooks::invoke_element(
+                battle::get(trail)
                     .preprocess_func
                     .unwrap_or_else(|| panic!("installed napalm callback")),
                 trail,
             );
-            (*trail).state_flags &= !(APPEARING as u16);
-            (*trail).state_flags |= PRE_PROCESS as u16;
-            (*trail).life = 20;
+            battle::get_mut(trail).state_flags &= !(APPEARING as u16);
+            battle::get_mut(trail).state_flags |= PRE_PROCESS as u16;
+            battle::get_mut(trail).life = 20;
             // Avoid a spawn overlap, so the unfixed traversal reaches its callback.
-            (*enemy.ptr()).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
-            (*enemy.ptr()).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
-                uqm_rust::engine::battle::motion::collision,
-            ));
-            (*enemy.ptr()).current.location = (*trail).current.location;
-            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
+            battle::get_mut(enemy.id).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
+            battle::get_mut(enemy.id).collision_func =
+                Some(uqm_rust::engine::battle::CollisionHook::Native(
+                    uqm_rust::engine::battle::motion::collision,
+                ));
+            battle::get_mut(enemy.id).current.location = battle::get(trail).current.location;
+            battle::get_mut(enemy.id).next = battle::get(enemy.id).current.clone();
             ship.make_opaque(2);
             enemy.make_opaque(0);
-            (*enemy.ptr()).intersect_control = (*trail).intersect_control;
-            (*enemy.ptr()).intersect_control.intersect_stamp.frame = enemy.raw_frame(0, 0);
-            (*ship.ptr()).life = 0;
-            (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-                uqm_rust::battle::tactrans_native::cleanup_dead_ship,
-            ));
+            battle::get_mut(enemy.id).intersect_control = battle::get(trail).intersect_control;
+            battle::get_mut(enemy.id)
+                .intersect_control
+                .intersect_stamp
+                .frame = enemy.raw_frame(0, 0);
+            battle::get_mut(ship.id).life = 0;
+            battle::get_mut(ship.id).death_func =
+                Some(uqm_rust::engine::battle::ElementHook::Native(
+                    uqm_rust::battle::tactrans_native::cleanup_dead_ship,
+                ));
             set_graphics_status(graphics_status() | 4);
             let result = crate::battle_context::with(|cx| {
-                let next = cx.elements().id(std::ptr::NonNull::new(ship.handle));
-                let element = cx
-                    .elements()
-                    .id(std::ptr::NonNull::new(trail.cast()))
-                    .unwrap_or_else(|| panic!("live trail fixture"));
+                let next = Some(ship.id);
+                let element = trail;
                 uqm_rust::battle::process_native::process_collisions(
                     cx,
                     next,
@@ -822,8 +859,11 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
                 )
             });
             assert_ne!(result & COLLISION as u16, 0);
-            assert!((*trail).collision_func.is_none());
-            assert_ne!((*trail).state_flags & (NONSOLID | DISAPPEARING) as u16, 0);
+            assert!(battle::get(trail).collision_func.is_none());
+            assert_ne!(
+                battle::get(trail).state_flags & (NONSOLID | DISAPPEARING) as u16,
+                0
+            );
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 8);
         }
     })
@@ -846,7 +886,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
         ] {
             for napalm in [false, true] {
                 let _battle = Battle::new(16);
-                unsafe {
+                {
                     let mut ship = Ship::with_frames(
                         &_battle,
                         SPECIES_ID_THRADDASH_ID,
@@ -863,8 +903,8 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     );
                     let weapon = if napalm {
                         let trail = burn(&mut ship);
-                        hooks::invoke_element_pointer(
-                            (*trail)
+                        hooks::invoke_element(
+                            battle::get(trail)
                                 .preprocess_func
                                 .unwrap_or_else(|| panic!("installed napalm callback")),
                             trail,
@@ -872,41 +912,45 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                         ship.make_opaque(2);
                         trail
                     } else {
-                        let horn = battle::element(fire(&mut ship));
-                        (*horn).next = (*horn).current.clone();
+                        let horn = fire(&mut ship).unwrap();
+                        battle::get_mut(horn).next = battle::get(horn).current.clone();
                         ship.make_opaque(1);
                         horn
                     };
-                    (*weapon).state_flags &= !(APPEARING as u16);
-                    (*weapon).state_flags |= PRE_PROCESS as u16;
-                    (*weapon).intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
-                    (*weapon).intersect_control.end_point = Point { x: 1000, y: 1000 };
-                    (*weapon).intersect_control.intersect_stamp.frame =
-                        (*weapon).next.image.frame.raw();
+                    battle::get_mut(weapon).state_flags &= !(APPEARING as u16);
+                    battle::get_mut(weapon).state_flags |= PRE_PROCESS as u16;
+                    battle::get_mut(weapon)
+                        .intersect_control
+                        .intersect_stamp
+                        .origin = Point { x: 1000, y: 1000 };
+                    battle::get_mut(weapon).intersect_control.end_point =
+                        Point { x: 1000, y: 1000 };
+                    battle::get_mut(weapon)
+                        .intersect_control
+                        .intersect_stamp
+                        .frame = battle::get(weapon).next.image.frame.raw();
                     target.make_opaque(0);
-                    let t = target.ptr();
-                    (*t).state_flags = flags as u16 | PRE_PROCESS as u16;
-                    (*t).life = NORMAL_LIFE as u16;
-                    (*t).hits = hp;
-                    (*t).mass = mass;
-                    (*t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
+                    let t = target.id;
+                    battle::get_mut(t).state_flags = flags as u16 | PRE_PROCESS as u16;
+                    battle::get_mut(t).life = NORMAL_LIFE as u16;
+                    battle::get_mut(t).hits = hp;
+                    battle::get_mut(t).mass = mass;
+                    battle::get_mut(t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
                         Some(uqm_rust::engine::battle::CollisionHook::Native(
                             uqm_rust::engine::battle::motion::collision,
                         ))
                     } else {
                         None
                     };
-                    (*t).intersect_control = (*weapon).intersect_control;
-                    (*t).intersect_control.intersect_stamp.frame = target.raw_frame(0, 0);
+                    battle::get_mut(t).intersect_control = battle::get(weapon).intersect_control;
+                    battle::get_mut(t).intersect_control.intersect_stamp.frame =
+                        target.raw_frame(0, 0);
                     let context =
                         uqm_rust::graphics::context::LoadedContext::create(c"collision fixture");
                     let old_context = uqm_rust::graphics::menu::select(Some(context.context()));
                     crate::battle_context::with(|cx| {
-                        let next = cx.elements().id(std::ptr::NonNull::new(target.handle));
-                        let element = cx
-                            .elements()
-                            .id(std::ptr::NonNull::new(weapon.cast()))
-                            .unwrap_or_else(|| panic!("live weapon fixture"));
+                        let next = Some(target.id);
+                        let element = weapon;
                         uqm_rust::battle::process_native::process_collisions(
                             cx,
                             next,
@@ -922,8 +966,12 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     } else {
                         hp
                     };
-                    assert_eq!((*t).hits, expected, "flags={flags:x} napalm={napalm}");
-                    assert!((*weapon).collision_func.is_some());
+                    assert_eq!(
+                        battle::get(t).hits,
+                        expected,
+                        "flags={flags:x} napalm={napalm}"
+                    );
+                    assert!(battle::get(weapon).collision_func.is_some());
                 }
             }
         }

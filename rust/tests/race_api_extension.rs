@@ -2,8 +2,7 @@
 fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: both serialized fixtures retain all frame resources for the attempted selections.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let other = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             let original = ship.frame(2, 0);
@@ -63,8 +62,7 @@ fn teardown_receives_final_crew_and_owned_state() {
 fn abandonment_keeps_allocation_rng_parent_and_target_order() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: fixtures retain all frames and queue records; the shared frame authority is restored.
-        unsafe {
+        {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             let frames = battle::NativeFrameSet::new(4);
@@ -96,8 +94,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
 fn self_destruct_selects_a_surviving_opponent_before_the_dead_owner() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: both live queue fixtures retain their descriptors during winner selection.
-        unsafe {
+        {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             crate::battle_context::with(|cx| {
@@ -118,8 +115,7 @@ fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
         let owner = Battle::new(4);
         let mut a = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         let mut b = Ship::bare(&owner, SPECIES_ID_VUX_ID, 1);
-        // SAFETY: the serialized fixtures own their descriptors for the whole check.
-        unsafe {
+        {
             a.descriptor_mut().install_sound_fixture(5);
             b.descriptor_mut().install_sound_fixture(5);
             crate::battle_context::with(|cx| {
@@ -163,8 +159,7 @@ fn sound_bank_selection_rejects_an_out_of_range_index() {
 fn self_destruct_winner_preserves_simultaneous_death_and_an_existing_winner() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: fixtures own their queue slots and descriptors through winner selection.
-        unsafe {
+        {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             crate::battle_context::with(|cx| {
@@ -192,8 +187,7 @@ fn self_destruct_winner_preserves_simultaneous_death_and_an_existing_winner() {
 fn abandonment_pool_exhaustion_keeps_crew_and_rng_unchanged() {
     battle_context::run(|_| {
         let owner = Battle::new(2);
-        // SAFETY: loaded fixture frames and both ships remain live during the full-pool attempt.
-        unsafe {
+        {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             crate::battle_context::with(|cx| {
@@ -250,8 +244,7 @@ fn navigation_world_projections_write_the_single_authority() {
 fn typed_laser_and_thrust_use_live_ship_geometry_and_lifecycle() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: fixtures retain pool slots and the serialized battle authority.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             crate::battle_context::with(|cx| {
                 let _ = cx.apply_inertial_thrust(ship.id);
@@ -352,8 +345,7 @@ fn absent_callbacks_remain_absent_in_metadata_and_dispatch() {
 fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: fixture frames stay loaded throughout the context operations.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let first = ship.frame(2, 0);
             let set = ship.frame_set(2);
@@ -392,8 +384,7 @@ fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
 fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
-        // SAFETY: the fixtures and destination slot belong to this serialized battle.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             crate::battle_context::with(|cx| {
                 let dest = cx.alloc_element().unwrap();
