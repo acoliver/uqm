@@ -1,29 +1,34 @@
 //! Movie frames must survive the same input, pacing and expose boundaries as slides.
-use std::{path::Path, ptr, time::Duration};
+use std::{cell::RefCell, path::Path, rc::Rc, time::Duration};
 use uqm_rust::engine::test_support::native_probe::register_rect;
-use uqm_rust::graphics::present::{swap_buffers, Redraw};
+use uqm_rust::graphics::present::{swap_buffers, PresentObserver, Redraw};
+use uqm_rust::graphics::presentation_diagnostics::PresentationSample;
+use uqm_rust::graphics::presented_frame::PresentedFrame;
 use uqm_rust::graphics::state::{draw_on_screen, fade_screen};
 use uqm_rust::graphics::{dcq::Screen, geometry::Extent, geometry::Point, geometry::Rect};
 use uqm_rust::mainloop::input_frame::rust_complete_input_frame;
 use uqm_rust::video::{decoder::DukVideoDecoder, legacy::LoadedVideo, DUCK_FPS};
 
-unsafe fn readback() -> Vec<u8> {
-    let window = sdl2_sys::SDL_GetWindowFromID(1);
-    assert!(!window.is_null());
-    let renderer = sdl2_sys::SDL_GetRenderer(window);
-    assert!(!renderer.is_null());
-    let mut rgba = vec![0; 320 * 240 * 4];
-    assert_eq!(
-        sdl2_sys::SDL_RenderReadPixels(
-            renderer,
-            ptr::null(),
-            sdl2_sys::SDL_PixelFormatEnum::SDL_PIXELFORMAT_ABGR8888 as u32,
-            rgba.as_mut_ptr().cast(),
-            320 * 4,
-        ),
-        0
-    );
-    rgba
+/// The last frame the window presented, read back by the display.
+#[derive(Clone, Default)]
+struct Window(Rc<RefCell<Option<Vec<u8>>>>);
+
+impl PresentObserver for Window {
+    fn suppress_present(&mut self) -> bool {
+        false
+    }
+    fn capture(&mut self, count: u64, _: &[PresentationSample]) -> Option<u64> {
+        Some(count)
+    }
+    fn presented(&mut self, frame: Option<PresentedFrame>) {
+        *self.0.borrow_mut() = Some(frame.expect("the display reads every frame back").rgba);
+    }
+}
+
+impl Window {
+    fn shown(&self) -> Vec<u8> {
+        self.0.borrow().clone().expect("a frame was presented")
+    }
 }
 
 #[test]
@@ -54,8 +59,12 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
     // This process owns its SDL instance; no native window or user config is used.
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     uqm_rust::engine::host::install(false);
-    let options = uqm_rust::graphics::present::GraphicsOptions::default();
-    unsafe {
+    let window = Window::default();
+    let options = uqm_rust::graphics::present::GraphicsOptions {
+        observer: Some(Box::new(window.clone())),
+        ..Default::default()
+    };
+    {
         uqm_rust::graphics::present::init_graphics(0, 0, options, 320, 240);
         fade_screen(253, 0);
         draw_on_screen(Screen::Main, |canvas| canvas.words_mut().fill(0));
@@ -76,7 +85,7 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
 
         for _ in 0..3 {
             assert!(playback.process_frame());
-            let movie = readback();
+            let movie = window.shown();
             assert!(movie.as_chunks::<4>().0.iter().any(|p| p[..3] != [0, 0, 0]));
             for _ in 0..3 {
                 let mut observer = uqm_rust::engine::observe::Unobserved;
@@ -85,19 +94,19 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
                 };
                 uqm_rust::engine::Game::new()
                     .with_context(|cx| rust_complete_input_frame(cx, 1, &mut io));
-                assert!(readback() == movie, "input boundary erased the movie");
+                assert!(window.shown() == movie, "input boundary erased the movie");
                 uqm_rust::graphics::state::flush();
-                assert!(readback() == movie, "pacing flush erased the movie");
+                assert!(window.shown() == movie, "pacing flush erased the movie");
                 swap_buffers(Redraw::Expose);
-                assert!(readback() == movie, "expose erased the movie");
+                assert!(window.shown() == movie, "expose erased the movie");
             }
             // Advance to the next scheduled movie frame, not a redraw of the current one.
             std::thread::sleep(Duration::from_secs_f64(1.0 / f64::from(DUCK_FPS)));
         }
-        let movie = readback();
+        let movie = window.shown();
         fade_screen(252, 0);
         swap_buffers(Redraw::Fading);
-        assert!(readback()
+        assert!(window.shown()
             .as_chunks::<4>()
             .0
             .iter()
@@ -105,14 +114,14 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         fade_screen(253, 0);
         swap_buffers(Redraw::Fading);
         assert!(
-            readback() == movie,
+            window.shown() == movie,
             "fade restores the retained movie frame"
         );
 
         drop(playback);
         draw_on_screen(Screen::Main, |canvas| canvas.words_mut().fill(0));
         swap_buffers(Redraw::Fading);
-        assert!(readback()
+        assert!(window.shown()
             .as_chunks::<4>()
             .0
             .iter()
