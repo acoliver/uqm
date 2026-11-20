@@ -922,10 +922,7 @@ fn no_solar_system_summarises_as_plain_interplanetary_flight() {
 
 /// A copy of the real `starmap_array`, so tests can alter entries.
 fn catalog() -> Vec<CStarDesc> {
-    // SAFETY: the table is only written by the game thread, which these tests
-    // do not start.
-    let table = unsafe { (&raw const crate::planets::tables::STARMAP_ARRAY).read() };
-    table.to_vec()
+    crate::planets::tables::STARMAP_ARRAY.to_vec()
 }
 
 fn wire(star: &CStarDesc) -> StarDesc {
