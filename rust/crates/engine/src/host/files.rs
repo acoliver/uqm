@@ -9,7 +9,7 @@ pub struct FileStat {
     pub is_dir: bool,
 }
 
-pub trait File: Read + Write + Seek {
+pub trait File: Read + Write + Seek + Send {
     fn len(&self) -> io::Result<u64>;
     fn is_empty(&self) -> io::Result<bool> {
         self.len().map(|len| len == 0)

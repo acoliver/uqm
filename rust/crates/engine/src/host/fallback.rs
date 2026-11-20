@@ -1,19 +1,19 @@
 //! The platform of a test process that installs none: the real clock and
-//! file system, silent audio, an in-memory network and a display that shows
-//! nothing.
+//! file system, the process audio device (which tests replace with a
+//! recorder), an in-memory network and a display that shows nothing.
 //!
 //! The game binary always installs a platform (`uqm-platform`); this stand-in
 //! exists only in test builds, so engine, content and mode unit tests run
 //! without the OS backends.
 
-use super::clock::{Clock, RealClock, ReplayClock};
+use super::clock::{Clock, RealClock};
 use super::files::{File, FileStat, FileStream, Files};
 use super::system::{System, Worker};
 use super::{AudioPort, Display, Net, Platform, PresentFrame};
 use crate::callback::Dispatch;
 use crate::graphics::presentation_diagnostics::PresentationSample;
 use crate::graphics::presented_frame::PresentedFrame;
-use crate::sound::rodio_audio::ReplayAudioPort;
+use crate::sound::rodio_audio::RODIO;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -21,7 +21,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) struct TestPlatform {
     clock: RealClock,
-    audio: ReplayAudioPort,
     dispatch: Dispatch,
     system: TestSystem,
 }
@@ -30,7 +29,6 @@ impl TestPlatform {
     pub(super) fn new() -> Self {
         Self {
             clock: RealClock,
-            audio: ReplayAudioPort::new(Arc::new(ReplayClock::default())),
             dispatch: Dispatch::new(),
             system: TestSystem(Instant::now()),
         }
@@ -42,7 +40,7 @@ impl Platform for TestPlatform {
         &self.clock
     }
     fn audio(&self) -> &dyn AudioPort {
-        &self.audio
+        &RODIO
     }
     fn dispatch(&self) -> &Dispatch {
         &self.dispatch

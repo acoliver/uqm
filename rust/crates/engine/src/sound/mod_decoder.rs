@@ -70,7 +70,7 @@ impl ModDecoder {
     }
 
     fn load_from_path(&mut self, path: &Path) -> DecodeResult<()> {
-        let data = std::fs::read(path).map_err(|error| DecodeError::IoError(error.to_string()))?;
+        let data = crate::host::platform().disk().read(path).map_err(|error| DecodeError::IoError(error.to_string()))?;
         self.load_from_bytes(&data)
     }
 }

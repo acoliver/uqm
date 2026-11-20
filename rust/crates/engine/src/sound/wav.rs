@@ -219,7 +219,7 @@ impl WavDecoder {
     }
 
     pub fn open(&mut self, path: &std::path::Path) -> DecodeResult<()> {
-        let data = std::fs::read(path)
+        let data = crate::host::platform().disk().read(path)
             .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
 
         self.open_from_bytes(&data, path.to_str().unwrap_or("unknown"))
