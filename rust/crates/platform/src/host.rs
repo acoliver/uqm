@@ -5,13 +5,13 @@ use std::sync::Arc;
 
 use super::rodio_device::RODIO;
 use super::system::{OsDisk, OsSystem};
-use crate::callback::Dispatch;
-use crate::graphics::sdl::{input, SdlDisplay};
-use crate::host::clock::{Clock, RealClock, ReplayClock};
-use crate::host::{
+use crate::sdl::{input, SdlDisplay};
+use uqm_engine::callback::Dispatch;
+use uqm_engine::host::clock::{Clock, RealClock, ReplayClock};
+use uqm_engine::host::{
     AudioOutput, AudioPort, Display, Files, FillAudio, HostEvent, Net, Platform, System,
 };
-use crate::sound::audio_device::ReplayAudioPort;
+use uqm_engine::sound::audio_device::ReplayAudioPort;
 
 fn open_display(
     flags: i32,
@@ -54,7 +54,7 @@ impl Platform for OsPlatform {
         &self.system
     }
     fn net(&self) -> Box<dyn Net> {
-        Box::new(crate::network::NativeNet::default())
+        Box::new(crate::net::NativeNet::default())
     }
     fn disk(&self) -> Arc<dyn Files + Send + Sync> {
         Arc::new(OsDisk)
@@ -103,7 +103,7 @@ impl Platform for ReplayPlatform {
         &self.system
     }
     fn net(&self) -> Box<dyn Net> {
-        Box::new(crate::network::NativeNet::default())
+        Box::new(crate::net::NativeNet::default())
     }
     fn disk(&self) -> Arc<dyn Files + Send + Sync> {
         Arc::new(OsDisk)

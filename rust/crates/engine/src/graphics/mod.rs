@@ -24,7 +24,6 @@ pub mod present;
 pub mod presentation_diagnostics;
 pub mod presented_frame;
 pub mod screen;
-pub mod sdl;
 pub mod software_scalers;
 pub mod state;
 pub mod surface;

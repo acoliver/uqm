@@ -1,10 +1,10 @@
 //! SDL's event queue, text-input toggle and joysticks, in the engine's terms.
 use std::ffi::CStr;
 
-use crate::host::HostEvent;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Mod;
 use sdl2::sys;
+use uqm_engine::host::HostEvent;
 
 /// Drain SDL's event queue.
 pub fn poll() -> Vec<HostEvent> {

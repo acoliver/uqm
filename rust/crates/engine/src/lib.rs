@@ -1,4 +1,5 @@
-//! Shared engine services and their SDL/OS backends.
+//! Shared engine services: the game-facing subsystems and the host ports
+//! that `uqm-platform` implements.
 
 pub mod bridge_log;
 pub mod callback;
@@ -13,7 +14,6 @@ pub mod logging;
 pub mod math;
 pub mod network;
 pub mod observe_port;
-pub mod platform;
 pub mod resource;
 pub mod sound;
 pub mod state;

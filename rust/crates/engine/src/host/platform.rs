@@ -68,12 +68,6 @@ pub fn install_platform(platform: Box<dyn Platform>) {
     assert!(PLATFORM.set(platform).is_ok(), "platform installed twice");
 }
 
-/// Build and install the process platform: replay clock and audio for a
-/// replay, the OS clock and rodio otherwise.
-pub fn install(replay: bool) {
-    install_platform(crate::platform::host::new(replay));
-}
-
 /// The installed platform.
 pub fn platform() -> &'static dyn Platform {
     match PLATFORM.get() {

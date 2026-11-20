@@ -27,7 +27,7 @@ pub enum PresentationSample {
 
 pub type ReadbackHook = std::rc::Rc<dyn Fn(u64, &[PresentationSample]) -> Option<u64>>;
 
-pub(super) fn screen_result<E: std::fmt::Display>(
+pub fn screen_result<E: std::fmt::Display>(
     samples: &mut Vec<PresentationSample>,
     screen: i32,
     alpha: u8,

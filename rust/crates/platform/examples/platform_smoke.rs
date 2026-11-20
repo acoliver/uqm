@@ -4,7 +4,8 @@ use std::{
     io::Read,
     time::{Duration, Instant},
 };
-use uqm_engine::{host::Net, network::NativeNet};
+use uqm_engine::host::Net;
+use uqm_platform::net::NativeNet;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;

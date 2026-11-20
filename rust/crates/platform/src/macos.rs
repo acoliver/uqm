@@ -4,6 +4,7 @@ use std::ffi::c_void;
 use std::io;
 use std::os::fd::{AsRawFd as _, BorrowedFd};
 
+pub mod critical_timer;
 pub mod sandbox;
 
 type CfArrayRef = *const c_void;
@@ -263,7 +264,7 @@ mod tests {
 
     #[test]
     fn a_directory_watch_registers_and_fires_on_a_write() {
-        use crate::threading::critical_timer::{create_queue, timer_change, wait_for_event};
+        use crate::macos::critical_timer::{create_queue, timer_change, wait_for_event};
         let root = tempfile::tempdir().unwrap();
         let directory = std::fs::File::open(root.path()).unwrap();
         let queue = create_queue().unwrap();

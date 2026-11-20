@@ -77,13 +77,13 @@ mod tests {
 
     #[test]
     fn an_ignored_signal_is_inherited_across_exec() {
-        use crate::platform::os::process::before_exec;
+        use crate::os::process::before_exec;
         let mut command = std::process::Command::new("/bin/sleep");
         command.arg("30");
         before_exec(&mut command, || ignore(libc::SIGTERM));
         let mut child = command.spawn().unwrap();
         let pid = libc::pid_t::try_from(child.id()).unwrap();
-        crate::platform::os::process::send_signal(pid, libc::SIGTERM).unwrap();
+        crate::os::process::send_signal(pid, libc::SIGTERM).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
         assert!(
             child.try_wait().unwrap().is_none(),

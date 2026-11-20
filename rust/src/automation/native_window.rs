@@ -383,7 +383,7 @@ impl BoundOutputDirectory {
             0,
         )?;
 
-        let queue = crate::threading::critical_timer::create_queue()?;
+        let queue = crate::platform::macos::critical_timer::create_queue()?;
 
         let registration = libc::kevent {
             ident: directory.as_raw_fd() as libc::uintptr_t,
@@ -422,7 +422,7 @@ impl DirectoryChangeWake {
     pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
         #[cfg(target_os = "macos")]
         {
-            use crate::threading::critical_timer::{timer_change, wait_for_event};
+            use crate::platform::macos::critical_timer::{timer_change, wait_for_event};
             use std::os::fd::AsFd as _;
 
             if timeout.is_zero() {

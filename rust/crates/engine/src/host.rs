@@ -38,8 +38,8 @@ pub use event::HostEvent;
 #[cfg(any(test, feature = "test-support"))]
 pub use platform::install_test;
 pub use platform::{
-    advance_to, async_wait_ms, dispatch, install, install_platform, is_replay, now_ms, now_ticks,
-    platform, process_async, steps, AudioOutput, AudioPort, FillAudio, Platform,
+    advance_to, async_wait_ms, dispatch, install_platform, is_replay, now_ms, now_ticks, platform,
+    process_async, steps, AudioOutput, AudioPort, FillAudio, Platform,
 };
 pub use system::{
     at_exit, elapsed, exit, sleep, sleep_precise, spawn, thread_number, unix_millis, yield_now,

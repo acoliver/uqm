@@ -7,9 +7,9 @@ use std::thread::JoinHandle;
 
 use rodio::{OutputStream, Sink};
 
-use crate::bridge_log::rust_bridge_log_msg;
-use crate::host::AudioPort;
-use crate::sound::audio_device::{AudioCommand, PcmClip};
+use uqm_engine::bridge_log::rust_bridge_log_msg;
+use uqm_engine::host::AudioPort;
+use uqm_engine::sound::audio_device::{AudioCommand, PcmClip};
 
 pub struct RodioDevice {
     sender: Mutex<Option<Sender<AudioCommand>>>,

@@ -1,15 +1,9 @@
 //! The game thread, its cooperative yields and pacing.
 
 pub mod affinity;
-#[cfg(target_os = "macos")]
-pub mod critical_timer;
-#[cfg(unix)]
-pub mod descriptor;
 mod game_thread;
 pub mod pacing;
 pub use game_thread::{init_game_thread, uninit_game_thread, yield_game_thread, yield_task};
-#[cfg(target_os = "macos")]
-pub mod qos;
 
 use std::time::Duration;
 

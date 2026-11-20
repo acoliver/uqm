@@ -7,7 +7,7 @@ fn process_one() -> bool {
 
 #[test]
 fn replay_alarms_follow_game_time_while_host_time_passes() {
-    source::install(true);
+    uqm_rust::platform::install(true);
     let (tx, rx) = std::sync::mpsc::channel();
     for deadline in [30, 10, 20] {
         source::dispatch().add_alarm_absolute_ms(

@@ -5,7 +5,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::host::{File, FileStat, FileStream, Files, System, Worker};
+use uqm_engine::host::{File, FileStat, FileStream, Files, System, Worker};
 
 /// Real time, sleeping and threads through `std`; process exit hooks
 /// through the C runtime.
@@ -14,7 +14,7 @@ pub struct OsSystem {
     /// macOS coalesces plain sleeps into ~16 ms steps on loaded hosts; see
     /// `critical_timer`. One queue lives as long as the process.
     #[cfg(target_os = "macos")]
-    pacing_timer: std::sync::OnceLock<crate::threading::critical_timer::CriticalTimer>,
+    pacing_timer: std::sync::OnceLock<crate::macos::critical_timer::CriticalTimer>,
 }
 
 impl OsSystem {
@@ -50,7 +50,7 @@ impl System for OsSystem {
     }
     #[cfg(target_os = "macos")]
     fn sleep_precise(&self, duration: Duration) {
-        use crate::threading::critical_timer::CriticalTimer;
+        use crate::macos::critical_timer::CriticalTimer;
         self.pacing_timer
             .get_or_init(|| {
                 CriticalTimer::new()

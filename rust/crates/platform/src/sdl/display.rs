@@ -1,14 +1,16 @@
 //! The SDL2 window: present the composed screen canvases through a software
 //! renderer, with the optional 2x and xBRZ filters and scanlines.
-use super::super::canvas::Canvas;
-use super::super::presentation_diagnostics::{screen_result, PresentationSample};
-use super::super::presented_frame::PresentedFrame;
-use super::super::software_scalers::scale_screen;
-use super::super::state::{GFXFLAGS_FULLSCREEN, GFXFLAGS_SCANLINES, SCREEN_HEIGHT, SCREEN_WIDTH};
-use crate::bridge_log::rust_bridge_log_msg;
-use crate::host::{Display, Layer, PresentFrame};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::BlendMode;
+use uqm_engine::bridge_log::rust_bridge_log_msg;
+use uqm_engine::graphics::canvas::Canvas;
+use uqm_engine::graphics::presentation_diagnostics::{screen_result, PresentationSample};
+use uqm_engine::graphics::presented_frame::PresentedFrame;
+use uqm_engine::graphics::software_scalers::scale_screen;
+use uqm_engine::graphics::state::{
+    GFXFLAGS_FULLSCREEN, GFXFLAGS_SCANLINES, SCREEN_HEIGHT, SCREEN_WIDTH,
+};
+use uqm_engine::host::{Display, Layer, PresentFrame};
 
 #[cfg(all(feature = "debug-process", target_os = "macos"))]
 use super::macos;

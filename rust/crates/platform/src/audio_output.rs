@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::host::{AudioOutput, FillAudio};
+use uqm_engine::host::{AudioOutput, FillAudio};
 
 /// A cpal stream kept alive on its own thread (cpal streams are not `Send`).
 struct CpalOutput {

@@ -181,7 +181,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 use uqm_rust::engine::host as source;
                 let process_one = || source::dispatch().process_one_alarm(source::now_ms());
                 let wait = || source::dispatch().time_before_next_alarm_ms(source::now_ms());
-                source::install(true);
+                uqm_rust::platform::install(true);
                 let region = |x| Rect {
                     corner: Point { x, y: 1 },
                     extent: Extent {
