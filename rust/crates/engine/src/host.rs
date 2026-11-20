@@ -27,12 +27,14 @@ pub use files::{File, FileStat, FileStream, Files};
 
 pub mod clock;
 mod display;
+mod event;
 #[cfg(any(test, feature = "test-support"))]
 mod fallback;
 mod platform;
 mod system;
 pub use clock::Clock;
 pub use display::{Display, Layer, PresentFrame};
+pub use event::HostEvent;
 #[cfg(any(test, feature = "test-support"))]
 pub use platform::install_test;
 pub use platform::{

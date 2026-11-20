@@ -224,7 +224,7 @@ pub mod linked {
         }
 
         fn pump_and_flush(&mut self) {
-            crate::graphics::sdl::process_events();
+            crate::graphics::events::process_events();
             crate::graphics::state::flush();
         }
 

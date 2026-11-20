@@ -1,7 +1,7 @@
 //! The SDL2 window: present the composed screen canvases through a software
 //! renderer, with the optional 2x and xBRZ filters and scanlines.
 use super::super::canvas::Canvas;
-use super::super::presentation_diagnostics::{display_event, screen_result, PresentationSample};
+use super::super::presentation_diagnostics::{screen_result, PresentationSample};
 use super::super::presented_frame::PresentedFrame;
 use super::super::software_scalers::scale_screen;
 use super::super::state::{GFXFLAGS_FULLSCREEN, GFXFLAGS_SCANLINES, SCREEN_HEIGHT, SCREEN_WIDTH};
@@ -475,13 +475,6 @@ impl Display for SdlDisplay {
         self.xbrz_logged = false;
         Ok(())
     }
-}
-
-/// Window and display events as diagnostic samples for the next present.
-pub(crate) fn display_sample(event: &sdl2::event::Event) -> Option<PresentationSample> {
-    let mut samples = Vec::new();
-    display_event(&mut samples, event);
-    samples.pop()
 }
 
 /// Write canvas words into the reused upload buffer in native byte order.

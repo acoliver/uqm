@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use super::system::{OsDisk, OsSystem};
 use crate::callback::Dispatch;
-use crate::graphics::sdl::SdlDisplay;
+use crate::graphics::sdl::{input, SdlDisplay};
 use crate::host::clock::{Clock, RealClock, ReplayClock};
-use crate::host::{AudioPort, Display, Files, Net, Platform, System};
+use crate::host::{AudioPort, Display, Files, HostEvent, Net, Platform, System};
 use crate::sound::rodio_audio::{ReplayAudioPort, RODIO};
 
 fn open_display(
@@ -35,8 +35,14 @@ impl Platform for OsPlatform {
     fn dispatch(&self) -> &Dispatch {
         &self.dispatch
     }
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
-        crate::input_port::sdl_input::poll_sdl_events()
+    fn poll_input(&self) -> Vec<HostEvent> {
+        input::poll()
+    }
+    fn set_text_input(&self, on: bool) {
+        input::set_text_input(on);
+    }
+    fn init_joysticks(&self) -> Result<Vec<String>, String> {
+        input::init_joysticks()
     }
     fn system(&self) -> &dyn System {
         &self.system
@@ -76,8 +82,12 @@ impl Platform for ReplayPlatform {
         &self.dispatch
     }
     /// A replay has no window system: its input is the script's.
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
+    fn poll_input(&self) -> Vec<HostEvent> {
         Vec::new()
+    }
+    fn set_text_input(&self, _on: bool) {}
+    fn init_joysticks(&self) -> Result<Vec<String>, String> {
+        input::init_joysticks()
     }
     fn system(&self) -> &dyn System {
         &self.system

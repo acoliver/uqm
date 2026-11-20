@@ -27,7 +27,11 @@ pub trait Platform: Send + Sync {
     /// The game's callback queue and alarms.
     fn dispatch(&self) -> &Dispatch;
     /// Everything the window system has queued since the last poll.
-    fn poll_input(&self) -> Vec<sdl2::event::Event>;
+    fn poll_input(&self) -> Vec<super::HostEvent>;
+    /// Turn the window system's text input (and its on-screen keyboard) on or off.
+    fn set_text_input(&self, on: bool);
+    /// Start the joystick subsystem and name the joysticks found.
+    fn init_joysticks(&self) -> Result<Vec<String>, String>;
     /// Real time, sleeping, threads and process exit.
     fn system(&self) -> &dyn System;
     /// A new network endpoint.

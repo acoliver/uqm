@@ -58,8 +58,12 @@ impl Platform for TestPlatform {
     fn dispatch(&self) -> &Dispatch {
         &self.dispatch
     }
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
+    fn poll_input(&self) -> Vec<super::HostEvent> {
         Vec::new()
+    }
+    fn set_text_input(&self, _on: bool) {}
+    fn init_joysticks(&self) -> Result<Vec<String>, String> {
+        Ok(Vec::new())
     }
     fn system(&self) -> &dyn System {
         &self.system

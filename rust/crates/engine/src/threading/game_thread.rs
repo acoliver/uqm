@@ -38,7 +38,7 @@ pub fn uninit_game_thread() {
 /// yield. It does not flush: the draw queue's own waits yield here.
 pub fn yield_task() {
     if on_game_thread() {
-        crate::graphics::sdl::process_events();
+        crate::graphics::events::process_events();
     }
     task_switch();
 }
