@@ -6,7 +6,7 @@ use crate::{
         sdl::lifecycle_abi::GfxFlags,
         tfb_draw_abi::TFB_DrawScreen_ReinitVideo,
     },
-    io::{handles::configDir, uio_owned::Directory},
+    io::Dir,
     sound::{
         heart_ffi::{set_music_volume, set_speech_volume},
         volume_globals::{
@@ -35,14 +35,14 @@ pub struct AudioSettings {
 pub struct RuntimeSettings {
     pub display: DisplaySettings,
     pub audio: AudioSettings,
-    pub directory: Directory,
+    pub directory: Dir,
 }
 
 impl RuntimeSettings {
     pub fn capture(context: &ContextLease) -> Self {
         let _target = context.target();
         // SAFETY: the retained context checks the serialized graphics owner thread.
-        let (display, audio, volumes, directory) = unsafe {
+        let (display, audio, volumes) = unsafe {
             (
                 [
                     GraphicsDriver,
@@ -52,13 +52,10 @@ impl RuntimeSettings {
                 ],
                 [snddriver, soundflags],
                 [musicVolumeScale, sfxVolumeScale, speechVolumeScale],
-                configDir,
             )
         };
-        let directory = std::ptr::NonNull::new(directory)
+        let directory = crate::io::config_dir()
             .unwrap_or_else(|| panic!("configuration directory not initialized"));
-        // SAFETY: application initialization retains this live directory on the owner thread.
-        let directory = unsafe { Directory::retain(directory) };
         Self {
             directory,
             display: DisplaySettings {

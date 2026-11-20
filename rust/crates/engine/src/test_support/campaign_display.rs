@@ -7,10 +7,9 @@ use crate::{
         native_font::LoadedFont,
         sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
     },
-    io::uio_bridge as uio,
     world::Game,
 };
-use std::{ffi::CString, ptr};
+use std::ptr;
 
 /// Entries in the fixture's game-text table. It must reach past the highest
 /// months and status string ids that campaign callbacks read.
@@ -78,12 +77,6 @@ impl CampaignDisplay {
             directory.path().join("credits.txt"),
             "#(credits)\n13 L/10 A\n",
         )?;
-        let host = CString::new(
-            directory
-                .path()
-                .to_str()
-                .ok_or("fixture path is not UTF-8")?,
-        )?;
         std::env::set_var("SDL_VIDEODRIVER", "dummy");
         std::env::set_var("SDL_AUDIODRIVER", "dummy");
         // SAFETY: the serialized fixture owns SDL and the temporary resource mount.
@@ -92,29 +85,8 @@ impl CampaignDisplay {
                 TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
                 0
             );
-            uio::uio_init();
-            let repository = uio::uio_openRepository(0);
-            let mount = uio::uio_mountDir(
-                repository,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                host.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut(),
-            );
-            assert!(!mount.is_null());
-            let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-            let previous_content = crate::io::handles::contentDir;
-            crate::io::handles::contentDir = content.cast();
-            crate::resource::ffi_bridge::InitResourceSystem();
-            crate::resource::ffi_bridge::LoadResourceIndex(
-                content.cast(),
-                c"fixture.rmp".as_ptr(),
-                ptr::null(),
-            );
+            let content = crate::test_support::native_session::ContentMount::new(directory.path());
+            content.init_resources("fixture.rmp");
             game.kernel.install_tiny_font(
                 LoadedFont::load(c"fixture.tiny").ok_or("tiny-font fixture did not load")?,
             );
@@ -144,10 +116,7 @@ impl CampaignDisplay {
                     GAME_TEXT_ENTRIES
                 ]));
             draw(game);
-            crate::io::handles::contentDir = previous_content;
-            uio::uio_closeDir(content);
-            uio::uio_closeRepository(repository);
-            uio::uio_unInit();
+            drop(content);
             Ok(Self {
                 context,
                 previous,

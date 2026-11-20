@@ -1,7 +1,7 @@
 //! Video components loaded through the supplied virtual filesystem.
 use super::{decoder::DukVideoDecoder, VideoError};
 use crate::host::Files;
-use std::{ffi::CStr, path::Path};
+use std::path::Path;
 
 pub(super) fn read(files: &dyn Files, filename: &str) -> Option<Vec<u8>> {
     let data = files
@@ -11,19 +11,18 @@ pub(super) fn read(files: &dyn Files, filename: &str) -> Option<Vec<u8>> {
     (!data.is_empty()).then_some(data)
 }
 
-pub(super) fn open(files: &dyn Files, filename: &CStr) -> Result<DukVideoDecoder, i32> {
-    let basename = filename.to_str().map_err(|_| -1)?.trim_end_matches(".duk");
-    let duk = read(files, &format!("{basename}.duk")).ok_or(-1)?;
-    let frm = read(files, &format!("{basename}.frm")).ok_or(-1)?;
-    let hdr = read(files, &format!("{basename}.hdr")).ok_or(-1)?;
-    let tbl = read(files, &format!("{basename}.tbl")).ok_or(-1)?;
-    DukVideoDecoder::open_from_data(&hdr, &tbl, &frm, &duk).map_err(|error| match error {
-        VideoError::BadFile(_) => -2,
-        VideoError::Eof => -5,
-        VideoError::OutOfBuffer => -4,
-        VideoError::NotInitialized | VideoError::IoError(_) => -1,
-        VideoError::BadArg(_) => -3,
-    })
+/// Open the four components of the clip named `filename` (an optional `.duk` suffix is ignored).
+pub(super) fn open(files: &dyn Files, filename: &str) -> Result<DukVideoDecoder, VideoError> {
+    let basename = filename.trim_end_matches(".duk");
+    let component = |extension: &str| {
+        read(files, &format!("{basename}.{extension}"))
+            .ok_or_else(|| VideoError::IoError(format!("cannot read {basename}.{extension}")))
+    };
+    let duk = component("duk")?;
+    let frm = component("frm")?;
+    let hdr = component("hdr")?;
+    let tbl = component("tbl")?;
+    DukVideoDecoder::open_from_data(&hdr, &tbl, &frm, &duk)
 }
 
 #[cfg(test)]
@@ -65,7 +64,10 @@ mod tests {
     #[test]
     fn missing_empty_and_non_utf8_paths_preserve_read_and_error_order() {
         let mut fixture = Fixture::default();
-        assert_eq!(open(&fixture, c"missing.duk").err(), Some(-1));
+        assert!(matches!(
+            open(&fixture, "missing.duk"),
+            Err(VideoError::IoError(_))
+        ));
         assert_eq!(
             *fixture.reads.borrow(),
             vec![PathBuf::from("missing.duk"), PathBuf::from("/missing.duk")]
@@ -73,11 +75,16 @@ mod tests {
         fixture.reads.borrow_mut().clear();
         fixture.files.insert("empty.duk".into(), vec![]);
         fixture.files.insert("/empty.duk".into(), vec![1]);
-        assert_eq!(open(&fixture, c"empty.duk").err(), Some(-1));
+        assert!(matches!(
+            open(&fixture, "empty.duk"),
+            Err(VideoError::IoError(_))
+        ));
         assert_eq!(*fixture.reads.borrow(), vec![PathBuf::from("empty.duk")]);
         fixture.reads.borrow_mut().clear();
-        assert_eq!(open(&fixture, c"\xff").err(), Some(-1));
-        assert!(fixture.reads.borrow().is_empty());
+        assert!(matches!(
+            open(&fixture, "\u{fffd}"),
+            Err(VideoError::IoError(_))
+        ));
     }
 
     #[test]
@@ -91,7 +98,7 @@ mod tests {
                 std::fs::read(source.join(filename)).unwrap(),
             );
         }
-        let mut decoder = open(&fixture, c"logo.duk").unwrap();
+        let mut decoder = open(&fixture, "logo.duk").unwrap();
         assert_eq!(decoder.frame_count(), 231);
         assert!(!decoder.decode_frame(0).unwrap().data.is_empty());
         assert_eq!(
@@ -99,6 +106,9 @@ mod tests {
             ["logo.duk", "logo.frm", "logo.hdr", "logo.tbl"].map(PathBuf::from)
         );
         fixture.files.insert("logo.hdr".into(), vec![0]);
-        assert_eq!(open(&fixture, c"logo.duk").err(), Some(-2));
+        assert!(matches!(
+            open(&fixture, "logo.duk"),
+            Err(VideoError::BadFile(_))
+        ));
     }
 }

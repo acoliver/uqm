@@ -4,14 +4,14 @@ use std::{
     ffi::{CStr, CString},
     io,
 };
-use uqm_engine::io::uio_owned::Directory;
+use uqm_engine::io::Dir;
 use uqm_save::mle::Team as TeamRecord;
 
-pub fn read_team(directory: &Directory, name: &CStr) -> io::Result<MeleeTeam> {
+pub fn read_team(directory: &Dir, name: &CStr) -> io::Result<MeleeTeam> {
     TeamRecord::read_from(directory.open(name)?).map(MeleeTeam::from)
 }
 
-pub fn write_team(directory: &Directory, name: &CStr, team: &MeleeTeam) -> io::Result<()> {
+pub fn write_team(directory: &Dir, name: &CStr, team: &MeleeTeam) -> io::Result<()> {
     let mut stream = directory.create(name)?;
     let result = TeamRecord::from(team).write_to(&mut stream);
     let closed = stream.finish();
@@ -19,7 +19,7 @@ pub fn write_team(directory: &Directory, name: &CStr, team: &MeleeTeam) -> io::R
         Ok(()) => Ok(()),
         Err(error) => {
             // The native save UI removes a partial file only after opening succeeded.
-            let _ = directory.remove(name);
+            let _ = directory.remove_named(name);
             Err(error)
         }
     }
@@ -51,7 +51,7 @@ impl TeamBrowser {
         }
     }
 
-    pub fn refresh(&mut self, directory: &Directory) {
+    pub fn refresh(&mut self, directory: &Dir) {
         self.entries = directory.files_with_suffix(c".mle");
     }
 
@@ -66,7 +66,7 @@ impl TeamBrowser {
             .map(|index| (self.builtins.len() + index) as u16)
     }
 
-    pub fn team(&mut self, directory: &Directory, index: u16) -> Option<MeleeTeam> {
+    pub fn team(&mut self, directory: &Dir, index: u16) -> Option<MeleeTeam> {
         if let Some(team) = self.builtins.get(usize::from(index)) {
             return Some(team.clone());
         }
@@ -99,7 +99,7 @@ impl TeamBrowser {
         }
     }
 
-    pub fn fill_view(&mut self, directory: &Directory) -> bool {
+    pub fn fill_view(&mut self, directory: &Dir) -> bool {
         let mut count = 0;
         while count < self.view.len() {
             let Some(team) = self.team(directory, self.top + count as u16) else {

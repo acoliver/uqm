@@ -1,6 +1,7 @@
 //! Loading a string table straight from a file (`LoadStringTableFile`).
 
-use std::ffi::{c_char, c_void};
+use crate::io::Dir;
+use std::ffi::c_char;
 use std::ptr::{addr_of_mut, null, null_mut};
 
 use crate::resource::ffi_bridge::{
@@ -13,13 +14,8 @@ use crate::strings::string_table::StringTable;
 /// or another resource load is in progress.
 ///
 /// # Safety
-/// `dir` must be a UIO directory handle and `file_name` NUL-terminated and
-/// valid until the load returns.
-#[no_mangle]
-pub unsafe extern "C" fn LoadStringTableFile(
-    dir: *mut c_void,
-    file_name: *const c_char,
-) -> *mut StringTable {
+/// `file_name` must be NUL-terminated and valid until the load returns.
+pub unsafe fn LoadStringTableFile(dir: &Dir, file_name: *const c_char) -> *mut StringTable {
     // No lock: loads happen on the main thread, as in the original.
     if !(*addr_of_mut!(_cur_resfile_name)).is_null() {
         return null_mut();

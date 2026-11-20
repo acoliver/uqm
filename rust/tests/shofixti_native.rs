@@ -815,36 +815,16 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
         let directory = tempfile::tempdir_in(fixture_root).unwrap();
         std::fs::create_dir(directory.path().join("font")).unwrap();
         std::fs::write(directory.path().join("font/not-a-glyph.txt"), []).unwrap();
-        let host = std::ffi::CString::new(directory.path().to_str().unwrap()).unwrap();
         let format =
             sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA32).unwrap();
         // SAFETY: this serialized fixture owns its UIO mount and all registered drawing resources.
         unsafe {
-            use uqm_rust::{graphics::drawable_abi::LoadedDrawable, io::uio_bridge as uio};
-            uio::uio_init();
-            let repo = uio::uio_openRepository(0);
-            assert!(!uio::uio_mountDir(
-                repo,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                host.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut()
-            )
-            .is_null());
-            let content = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-            assert!(!content.is_null());
-            let previous = uqm_rust::mainloop::dir_prep::contentDir;
-            uqm_rust::mainloop::dir_prep::contentDir = content.cast();
+            use uqm_rust::graphics::drawable_abi::LoadedDrawable;
+            let content =
+                uqm_engine::test_support::native_session::ContentMount::new(directory.path());
             let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
             assert!(!font.is_null());
-            uqm_rust::mainloop::dir_prep::contentDir = previous;
-            uio::uio_closeDir(content);
-            uio::uio_closeRepository(repo);
-            uio::uio_unInit();
+            drop(content);
             #[cfg(feature = "debug-process")]
             let context =
                 uqm_rust::graphics::context_abi::CreateContextAux(c"melee-death-test".as_ptr());

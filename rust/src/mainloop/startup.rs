@@ -19,7 +19,7 @@ mod live {
 
     use crate::automation::input_ffi::graphics_options;
     use crate::mainloop::{dir_prep, options, options_abi as globals};
-    use crate::{game_init::kernel_abi, sound::volume_globals};
+    use crate::sound::volume_globals;
     use std::{
         ffi::{c_char, CString},
         ptr,
@@ -63,10 +63,9 @@ mod live {
         }
         crate::threading::legacy_abi::InitThreadSystem();
         crate::mainloop::init_wrappers::rust_log_init_threads();
-        if kernel_abi::initIO() != 0 {
-            return 1;
-        }
-        if let Err(error) = dir_prep::prepare_config_dir(parsed.config_dir.as_deref()) {
+        let vfs = crate::io::Vfs::new();
+        crate::io::install(vfs.clone());
+        if let Err(error) = dir_prep::prepare_config_dir(&vfs, parsed.config_dir.as_deref()) {
             log::error!("Config directory: {error:?}");
             return 1;
         }
@@ -107,6 +106,7 @@ mod live {
                 .collect(),
         );
         if let Err(error) = dir_prep::prepare_content_dir(
+            &vfs,
             &input.configuration,
             parsed.content_dir.as_deref(),
             parsed.addon_dir.as_deref(),
@@ -114,17 +114,15 @@ mod live {
             log::error!("Content directory: {error:?}");
             return 1;
         }
-        if let Err(error) = dir_prep::prepare_melee_dir() {
+        if let Err(error) = dir_prep::prepare_melee_dir(&vfs) {
             log::error!("Melee directory: {error:?}");
             return 1;
         }
-        if let Err(error) = dir_prep::prepare_save_dir() {
+        if let Err(error) = dir_prep::prepare_save_dir(&vfs) {
             log::error!("Save directory: {error:?}");
             return 1;
         }
-        if let Err(error) = dir_prep::prepare_shadow_addons(&parsed.addons) {
-            log::warn!("Shadow addons: {error:?}");
-        }
+        dir_prep::prepare_shadow_addons(&vfs, &parsed.addons);
         crate::time::counter_abi::InitTimeSystem();
         crate::threading::task_abi::InitTaskSystem();
         crate::callback::ffi::Alarm_init();

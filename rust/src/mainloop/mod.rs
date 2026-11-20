@@ -65,5 +65,3 @@ pub mod platform_abi;
 
 pub mod input_abi;
 pub mod lifecycle_abi;
-
-pub mod state_abi;

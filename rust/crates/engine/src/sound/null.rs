@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
+use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::formats::{AudioFormat, DecoderFormats};
 
 /// Null decoder that produces silence
@@ -68,38 +68,34 @@ impl Default for NullDecoder {
     }
 }
 
-impl SoundDecoder for NullDecoder {
-    fn name(&self) -> &'static str {
-        "Null"
-    }
-
-    fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
+impl NullDecoder {
+    pub fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
         self.formats = Some(*formats);
         true
     }
 
-    fn term_module(&mut self) {
+    pub fn term_module(&mut self) {
         self.formats = None;
     }
 
-    fn get_error(&mut self) -> i32 {
+    pub fn get_error(&mut self) -> i32 {
         let err = self.last_error;
         self.last_error = 0;
         err
     }
 
-    fn init(&mut self) -> bool {
+    pub fn init(&mut self) -> bool {
         self.initialized = true;
         self.current_pcm = 0;
         true
     }
 
-    fn term(&mut self) {
+    pub fn term(&mut self) {
         self.close();
         self.initialized = false;
     }
 
-    fn open(&mut self, _path: &Path) -> DecodeResult<()> {
+    pub fn open(&mut self, _path: &Path) -> DecodeResult<()> {
         // Null decoder doesn't actually open files
         self.frequency = 11025;
         self.format = AudioFormat::Mono16;
@@ -107,7 +103,7 @@ impl SoundDecoder for NullDecoder {
         Ok(())
     }
 
-    fn open_from_bytes(&mut self, _data: &[u8], _name: &str) -> DecodeResult<()> {
+    pub fn open_from_bytes(&mut self, _data: &[u8], _name: &str) -> DecodeResult<()> {
         // Null decoder doesn't actually open data
         self.frequency = 11025;
         self.format = AudioFormat::Mono16;
@@ -115,8 +111,14 @@ impl SoundDecoder for NullDecoder {
         Ok(())
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         self.current_pcm = 0;
+    }
+}
+
+impl Decoder for NullDecoder {
+    fn name(&self) -> &'static str {
+        "Null"
     }
 
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {

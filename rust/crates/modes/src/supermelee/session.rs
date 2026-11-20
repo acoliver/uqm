@@ -13,8 +13,8 @@ pub enum MenuPhase {
 }
 
 pub(crate) struct MeleeFiles {
-    pub config: uqm_engine::io::uio_owned::Directory,
-    pub teams: uqm_engine::io::uio_owned::Directory,
+    pub config: uqm_engine::io::Dir,
+    pub teams: uqm_engine::io::Dir,
 }
 
 pub struct MeleeSession {
@@ -170,7 +170,7 @@ impl MeleeSession {
         let result = self.write_config(&mut stream, controls);
         let closed = stream.finish();
         if result.and(closed).is_err() {
-            let _ = directory.remove(c"melee.cfg");
+            let _ = directory.remove_named(c"melee.cfg");
             false
         } else {
             true

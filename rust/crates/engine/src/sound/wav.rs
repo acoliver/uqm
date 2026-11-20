@@ -9,7 +9,7 @@
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
-use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
+use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::formats::{AudioFormat, DecoderFormats};
 
 // WAV format constants (little-endian IDs)
@@ -188,48 +188,44 @@ impl Default for WavDecoder {
     }
 }
 
-impl SoundDecoder for WavDecoder {
-    fn name(&self) -> &'static str {
-        "Wave"
-    }
-
-    fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
+impl WavDecoder {
+    pub fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
         self.formats = Some(*formats);
         // WAV is little-endian, so we need swap if output wants big-endian
         self.need_swap = formats.want_big_endian;
         true
     }
 
-    fn term_module(&mut self) {
+    pub fn term_module(&mut self) {
         self.formats = None;
     }
 
-    fn get_error(&mut self) -> i32 {
+    pub fn get_error(&mut self) -> i32 {
         let err = self.last_error;
         self.last_error = 0;
         err
     }
 
-    fn init(&mut self) -> bool {
+    pub fn init(&mut self) -> bool {
         self.initialized = true;
         self.data.clear();
         self.data_pos = 0;
         true
     }
 
-    fn term(&mut self) {
+    pub fn term(&mut self) {
         self.close();
         self.initialized = false;
     }
 
-    fn open(&mut self, path: &std::path::Path) -> DecodeResult<()> {
+    pub fn open(&mut self, path: &std::path::Path) -> DecodeResult<()> {
         let data = std::fs::read(path)
             .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
 
         self.open_from_bytes(&data, path.to_str().unwrap_or("unknown"))
     }
 
-    fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
+    pub fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
         let mut cursor = Cursor::new(data);
 
         // Parse file header
@@ -292,9 +288,15 @@ impl SoundDecoder for WavDecoder {
         Ok(())
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         self.data.clear();
         self.data_pos = 0;
+    }
+}
+
+impl Decoder for WavDecoder {
+    fn name(&self) -> &'static str {
+        "Wave"
     }
 
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {

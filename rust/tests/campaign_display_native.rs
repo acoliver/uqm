@@ -9,7 +9,6 @@ use uqm_rust::{
         native_abi::*,
         sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
     },
-    io::uio_bridge as uio,
 };
 
 #[test]
@@ -26,7 +25,6 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         "fixture.tiny = FONTRES:font\n",
     )
     .unwrap();
-    let host = CString::new(directory.path().to_str().unwrap()).unwrap();
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     // SAFETY: this test process owns SDL, its UIO mount and all native fixture allocations.
@@ -41,29 +39,8 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             ),
             0
         );
-        uio::uio_init();
-        let repo = uio::uio_openRepository(0);
-        assert!(!uio::uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut()
-        )
-        .is_null());
-        let content = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-        let previous_content = uqm_rust::mainloop::dir_prep::contentDir;
-        uqm_rust::mainloop::dir_prep::contentDir = content.cast();
-        uqm_rust::resource::ffi_bridge::InitResourceSystem();
-        uqm_rust::resource::ffi_bridge::LoadResourceIndex(
-            content.cast(),
-            c"fixture.rmp".as_ptr(),
-            ptr::null(),
-        );
+        let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
+        content.init_resources("fixture.rmp");
         let font = uqm_rust::graphics::native_font::LoadedFont::load(c"fixture.tiny").unwrap();
         let glyph = font
             .lease()
@@ -74,10 +51,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
                 u16::MAX,
             )
             .rect;
-        uqm_rust::mainloop::dir_prep::contentDir = previous_content;
-        uio::uio_closeDir(content);
-        uio::uio_closeRepository(repo);
-        uio::uio_unInit();
+        drop(content);
         #[cfg(feature = "debug-process")]
         let context = CreateContextAux(c"campaign title".as_ptr());
         #[cfg(not(feature = "debug-process"))]

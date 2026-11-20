@@ -1,60 +1,16 @@
-//! Saved-fleet integration tests over a real mounted UIO directory.
+//! Saved-fleet integration tests over a real mounted directory.
 #[cfg(test)]
 mod tests {
-    use std::{ffi::CString, io};
-    use uqm_engine::io::uio_owned::Directory;
+    use std::io;
+    use uqm_engine::io::{Dir, Placement, Vfs};
     use uqm_rust::supermelee::setup::browser::*;
     use uqm_rust::supermelee::setup::team::MeleeTeam;
     use uqm_rust::supermelee::types::MeleeShip;
 
-    struct MountedDirectory {
-        directory: Option<Directory>,
-        repository: *mut uqm_engine::io::uio_bridge::uio_Repository,
-        mount: *mut uqm_engine::io::uio_bridge::uio_MountHandle,
-    }
-    impl std::ops::Deref for MountedDirectory {
-        type Target = Directory;
-        fn deref(&self) -> &Directory {
-            self.directory.as_ref().unwrap()
-        }
-    }
-    impl Drop for MountedDirectory {
-        fn drop(&mut self) {
-            self.directory.take();
-            // SAFETY: the fixture closes its retained directory before its mount and repository.
-            unsafe {
-                uqm_engine::io::uio_bridge::uio_unmountDir(self.mount);
-                uqm_engine::io::uio_bridge::uio_closeRepository(self.repository);
-            }
-        }
-    }
-    fn directory(scratch: &tempfile::TempDir) -> MountedDirectory {
-        use uqm_engine::io::uio_bridge::*;
-        let path = CString::new(scratch.path().to_str().unwrap()).unwrap();
-        // SAFETY: the fixture owns each mount, repository and directory until Drop.
-        unsafe {
-            let repository = uio_openRepository(0);
-            let mount = uio_mountDir(
-                repository,
-                c"/".as_ptr(),
-                1,
-                std::ptr::null_mut(),
-                std::ptr::null(),
-                path.as_ptr(),
-                std::ptr::null_mut(),
-                4,
-                std::ptr::null_mut(),
-            );
-            assert!(!mount.is_null());
-            let raw = uio_openDir(repository, c"/".as_ptr(), 0);
-            let directory = Directory::retain(std::ptr::NonNull::new(raw).unwrap());
-            uio_closeDir(raw);
-            MountedDirectory {
-                directory: Some(directory),
-                repository,
-                mount,
-            }
-        }
+    fn directory(scratch: &tempfile::TempDir) -> Dir {
+        let vfs = Vfs::new();
+        vfs.mount_dir("/", scratch.path(), Placement::Top, false);
+        vfs.open_dir(std::path::Path::new("/"))
     }
 
     fn scratch() -> tempfile::TempDir {
@@ -66,7 +22,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn real_uio_team_roundtrip_and_short_reads_release_the_stream() {
+    fn real_team_roundtrip_and_short_reads_release_the_stream() {
         let scratch = scratch();
         let directory = directory(&scratch);
         let mut team = MeleeTeam::new();
@@ -108,7 +64,7 @@ mod tests {
         assert!(browser.fill_view(&directory));
         assert_eq!(browser.view[0], browser.builtins[1]);
         assert_eq!(browser.bottom, 16);
-        directory.remove(c"Fleet.mle").unwrap();
+        directory.remove_named(c"Fleet.mle").unwrap();
         assert!(!browser.fill_view(&directory));
         assert!(browser.entries.is_empty());
         assert_eq!(browser.file_index(c"Fleet.mle"), None);

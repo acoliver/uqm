@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use super::decoder::SoundDecoder;
+use super::decoder::Decoder;
 use super::stream;
 use super::types::*;
 
@@ -41,7 +41,7 @@ pub const MAX_MULTI_TRACKS: usize = 20;
 /// timing information, and a decoder.
 pub struct SoundChunk {
     /// Audio decoder for this chunk.
-    pub decoder: Option<Box<dyn SoundDecoder>>,
+    pub decoder: Option<Box<dyn Decoder>>,
     /// Length of this chunk's audio in milliseconds, fixed when the chunk is
     /// built. The decoder itself is lent to the stream while the chunk plays,
     /// so seeking cannot ask it for the length.
@@ -308,7 +308,7 @@ pub fn splice_track(
     track_text: Option<&str>,
     timestamp: Option<&str>,
     mut callback: Option<Box<dyn Fn(i32) + Send>>,
-    mut decoders: Vec<Box<dyn SoundDecoder>>,
+    mut decoders: Vec<Box<dyn Decoder>>,
 ) -> AudioResult<()> {
     let mut state = TRACK_STATE.lock();
 
@@ -464,10 +464,7 @@ pub fn splice_track(
 }
 
 /// Append decoded number clips to the preceding subtitle's audio.
-pub fn splice_multi_track(
-    decoders: Vec<Box<dyn SoundDecoder>>,
-    text: Option<&str>,
-) -> AudioResult<()> {
+pub fn splice_multi_track(decoders: Vec<Box<dyn Decoder>>, text: Option<&str>) -> AudioResult<()> {
     let Some(text) = text else {
         return Ok(());
     };

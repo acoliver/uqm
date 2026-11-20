@@ -175,10 +175,8 @@ impl LoadedTextTable {
         // SAFETY: the serialized game thread retains the content mount and terminated path;
         // the text loader transfers one Rc<TableAllocation> with its header first.
         unsafe {
-            let table = super::sfileins::LoadStringTableFile(
-                crate::io::handles::contentDir.cast(),
-                path.as_ptr(),
-            );
+            let content = crate::io::content_dir()?;
+            let table = super::sfileins::LoadStringTableFile(&content, path.as_ptr());
             std::ptr::NonNull::new(table).map(|table| Self(Rc::from_raw(table.as_ptr().cast())))
         }
     }

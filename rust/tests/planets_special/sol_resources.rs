@@ -2,8 +2,6 @@
 
 use super::Harness;
 use uqm_rust::engine::graphics::{dcqueue_abi as queue, native_surface::CapturedSurface};
-use uqm_rust::io::uio_bridge;
-use uqm_rust::mainloop::dir_prep::contentDir;
 use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
@@ -15,30 +13,13 @@ pub fn check(h: &mut Harness) {
         .join("../sc2/content")
         .canonicalize()
         .unwrap();
-    let path = std::ffi::CString::new(content.to_str().unwrap()).unwrap();
     unsafe {
         c_api::log_init(100);
         super::shield_additive::check();
-        uio_bridge::uio_init();
-        let repository = uio_bridge::uio_openRepository(0);
-        let mount = uio_bridge::uio_mountDir(
-            repository,
-            c"/".as_ptr(),
-            1,
-            std::ptr::null_mut(),
-            std::ptr::null(),
-            path.as_ptr(),
-            std::ptr::null_mut(),
-            6,
-            std::ptr::null_mut(),
-        );
-        assert!(!mount.is_null());
-        let dir = uio_bridge::uio_openDir(repository, c"/".as_ptr(), 0);
-        assert!(!dir.is_null(), "checked-in content directory must open");
-        let saved_dir = std::ptr::addr_of!(contentDir).read();
-        std::ptr::addr_of_mut!(contentDir).write(dir.cast());
+        let mount = uqm_engine::test_support::native_session::ContentMount::new(&content);
+        let dir = uqm_rust::io::content_dir().expect("checked-in content directory must open");
         assert!(!ffi_bridge::InitResourceSystem().is_null());
-        ffi_bridge::LoadResourceIndex(dir.cast(), c"uqm.rmp".as_ptr(), std::ptr::null());
+        ffi_bridge::LoadResourceIndex(&dir, c"uqm.rmp".as_ptr(), std::ptr::null());
         names(h);
         binary_palettes();
         scenes(h);
@@ -143,10 +124,7 @@ pub fn check(h: &mut Harness) {
             "real Earth generation/rescale/cleanup must release all SDL surface allocations"
         );
         ffi_bridge::UninitResourceSystem();
-        std::ptr::addr_of_mut!(contentDir).write(saved_dir);
-        assert_eq!(uio_bridge::uio_closeDir(dir), 0);
-        uio_bridge::uio_closeRepository(repository);
-        uio_bridge::uio_unInit();
+        drop(mount);
     }
 }
 

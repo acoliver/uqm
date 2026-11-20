@@ -52,8 +52,7 @@ pub fn teardown_subsystems() {
         c_main_extern::UnInitTimeSystem();
 
         // 8. Directory / IO cleanup
-        c_main_extern::uqm_unprepare_all_dirs();
-        c_main_extern::uninitIO();
+        crate::io::uninstall();
 
         // 9. Thread system
         c_main_extern::UnInitThreadSystem();

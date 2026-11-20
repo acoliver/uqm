@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
+use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::mixer::types::MixerError;
 
 /// Phrase notification dispatched by speech playback and seeking.
@@ -173,7 +173,7 @@ pub fn quit_posted() -> bool {
 /// Replaces TFB_SoundSample from C.
 pub struct SoundSample {
     /// Decoder for this sample (None if no source data).
-    pub decoder: Option<Box<dyn SoundDecoder>>,
+    pub decoder: Option<Box<dyn Decoder>>,
     /// Total length in seconds.
     pub length: f32,
     /// Mixer buffer handles.
@@ -435,7 +435,7 @@ pub struct SubtitleRef {
 ///
 /// Uses pre-allocation when decoder length is known, then loops
 /// `decoder.decode()` with a 4KB scratch buffer until EOF.
-pub fn decode_all(decoder: &mut dyn SoundDecoder) -> DecodeResult<Vec<u8>> {
+pub fn decode_all(decoder: &mut dyn Decoder) -> DecodeResult<Vec<u8>> {
     let initial_capacity = if decoder.length() > 0.0 {
         // Pre-allocate with 10% headroom
         let estimated = (decoder.length() * decoder.frequency() as f32 * 2.0) as usize;
@@ -461,7 +461,7 @@ pub fn decode_all(decoder: &mut dyn SoundDecoder) -> DecodeResult<Vec<u8>> {
 }
 
 /// Compute the current playback time of a decoder in seconds.
-pub fn get_decoder_time(decoder: &dyn SoundDecoder) -> f32 {
+pub fn get_decoder_time(decoder: &dyn Decoder) -> f32 {
     decoder.get_frame() as f32 / decoder.frequency().max(1) as f32
 }
 

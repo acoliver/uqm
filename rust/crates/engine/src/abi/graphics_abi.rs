@@ -1,7 +1,5 @@
 // Shared engine records used by the Rust runtime.
 
-pub const uio_FSTYPE_ZIP: u32 = 2;
-pub const uio_MOUNT_RDONLY: u32 = 2;
 pub const FBK_DIRTY: u32 = 1;
 pub const ROM_DRAWABLE: u32 = 0;
 pub const RAM_DRAWABLE: u32 = 1;
@@ -30,41 +28,6 @@ pub struct Color {
     pub b: BYTE,
     pub a: BYTE,
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_DirHandle {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_MountHandle {
-    _unused: [u8; 0],
-}
-pub const match_MatchType_match_MATCH_LITERAL: match_MatchType = 0;
-pub const match_MatchType_match_MATCH_PREFIX: match_MatchType = 1;
-pub const match_MatchType_match_MATCH_SUFFIX: match_MatchType = 2;
-pub const match_MatchType_match_MATCH_SUBSTRING: match_MatchType = 3;
-pub const match_MatchType_match_MATCH_REGEX: match_MatchType = 4;
-pub type match_MatchType = ::std::os::raw::c_uint;
-pub type uio_FileSystemID = ::std::os::raw::c_int;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_Repository {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_Stream {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_AutoMount {
-    pub pattern: *const ::std::os::raw::c_char,
-    pub matchType: match_MatchType,
-    pub fileSystemID: uio_FileSystemID,
-    pub mountFlags: ::std::os::raw::c_int,
-}
 pub type RESOURCE = *const ::std::os::raw::c_char;
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -89,7 +52,7 @@ pub type ResourceStringFun = ::std::option::Option<
     ),
 >;
 pub type ResourceLoadFileFun = ::std::option::Option<
-    unsafe extern "C" fn(fp: *mut uio_Stream, len: DWORD) -> *mut ::std::os::raw::c_void,
+    unsafe extern "C" fn(fp: *mut ::std::os::raw::c_void, len: DWORD) -> *mut ::std::os::raw::c_void,
 >;
 pub use crate::resource::ffi_bridge::res_CloseResFile;
 pub use crate::resource::ffi_bridge::res_DetachResource;
@@ -948,4 +911,3 @@ pub struct _widget_controlentry {
     pub controlname: [[::std::os::raw::c_char; 16usize]; 2usize],
 }
 pub type WIDGET_CONTROLENTRY = _widget_controlentry;
-pub use crate::io::handles::contentDir;

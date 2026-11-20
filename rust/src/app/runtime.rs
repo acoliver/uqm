@@ -64,11 +64,8 @@ fn run_game(
             crate::sound::volume_globals::soundflags,
         );
     };
-    // SAFETY: the application retains both owners; argc zero permits a null argv.
-    if unsafe {
-        crate::game_init::kernel_abi::LoadKernel(cx.kernel, cx.world, 0, std::ptr::null_mut())
-    } == 0
-    {
+    // SAFETY: the application retains both owners on the game thread.
+    if unsafe { crate::game_init::kernel_abi::LoadKernel(cx.kernel, cx.world) } == 0 {
         return Err(MainLoopError::LoadKernelFailed);
     }
     cx.world.set_activity(0);
@@ -103,20 +100,8 @@ struct RestartServices;
 
 impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        use crate::engine::io::{handles, uio_owned::Directory};
-        // SAFETY: application startup retains these two directories for the native melee session.
-        let (config, teams) = unsafe {
-            (
-                Directory::retain(
-                    std::ptr::NonNull::new(handles::configDir)
-                        .unwrap_or_else(|| panic!("config directory")),
-                ),
-                Directory::retain(
-                    std::ptr::NonNull::new(handles::meleeDir)
-                        .unwrap_or_else(|| panic!("melee directory")),
-                ),
-            )
-        };
+        let config = crate::engine::io::config_dir().unwrap_or_else(|| panic!("config directory"));
+        let teams = crate::engine::io::melee_dir().unwrap_or_else(|| panic!("melee directory"));
         crate::supermelee::native::menu::live::melee(cx, io, config, teams);
     }
     fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool) {

@@ -92,8 +92,17 @@ impl LoadedSoundBank {
     pub fn load(resource: &CStr) -> Option<Self> {
         crate::resource::ffi_bridge::detach_resource_of_type(resource, "SNDRES").map(|bank| {
             // SAFETY: the SNDRES loader transfers one Rc<Bank> with its table header first.
-            Self(unsafe { Rc::from_raw(bank.as_ptr().cast()) })
+            unsafe { Self::from_raw(bank.as_ptr()) }
         })
+    }
+
+    /// Take back a bank handed out by [`LoadedSoundBank::into_raw`].
+    ///
+    /// # Safety
+    /// `raw` must come from `into_raw` and not have been taken back before.
+    pub(crate) unsafe fn from_raw(raw: *mut std::ffi::c_void) -> Self {
+        // SAFETY: the caller supplies the one reference `into_raw` released.
+        Self(unsafe { Rc::from_raw(raw.cast::<Bank>()) })
     }
 
     pub fn as_raw(&self) -> *mut StringTableEntry {
@@ -151,7 +160,7 @@ mod tests {
             assert_eq!((*entries.add(1)).parent, raw.cast());
             let sample = (*entries.add(1)).data.cast::<*mut SoundSample>().read();
             assert!(!sample.is_null());
-            super::super::heart_ffi::destroy_sound(raw);
+            drop(LoadedSoundBank::from_raw(raw));
         }
         assert!(weak.upgrade().is_none());
     }

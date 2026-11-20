@@ -27,7 +27,7 @@
 //! [N bytes] ADPCM data (each byte = 2 nibbles = 2 samples)
 //! ```
 
-use super::decoder::{DecodeError, DecodeResult};
+use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::formats::AudioFormat;
 
 /// Duck video general frame rate, used to estimate audio length.
@@ -274,93 +274,6 @@ impl DukAudDecoder {
         self.opened = false;
     }
 
-    /// Decode audio into `out`, returning the number of bytes written.
-    pub fn decode(&mut self, out: &mut [u8]) -> DecodeResult<usize> {
-        if !self.opened {
-            return Err(DecodeError::NotInitialized);
-        }
-        if out.is_empty() {
-            return Err(DecodeError::DecoderError("zero-length buffer".into()));
-        }
-
-        let mut written = 0usize;
-        let mut remaining = out;
-
-        loop {
-            // Drain buffered data first
-            let avail = self.buf_len - self.buf_ofs;
-            if avail > 0 {
-                let to_copy = avail.min(remaining.len()) & !3; // align to 4 bytes
-                if to_copy > 0 {
-                    remaining[..to_copy]
-                        .copy_from_slice(&self.buf[self.buf_ofs..self.buf_ofs + to_copy]);
-                    self.buf_ofs += to_copy;
-                    written += to_copy;
-                    remaining = &mut remaining[to_copy..];
-                }
-            }
-
-            // Reset buffer if fully consumed
-            if self.buf_len > 0 && self.buf_ofs >= self.buf_len {
-                self.buf_len = 0;
-                self.buf_ofs = 0;
-            }
-
-            // If output buffer is full or no more frames, we're done
-            if remaining.is_empty() || self.iframe >= self.cframes {
-                break;
-            }
-
-            // Decode next frame into our internal buffer
-            self.decode_next_frame()?;
-        }
-
-        if written == 0 && self.iframe >= self.cframes {
-            return Err(DecodeError::EndOfFile);
-        }
-
-        Ok(written)
-    }
-
-    /// Seek to a PCM sample position.
-    pub fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32> {
-        if self.pcm_frame == 0 {
-            return Ok(0);
-        }
-        let iframe = pcm_pos / self.pcm_frame;
-        if iframe < self.cframes {
-            self.iframe = iframe;
-            self.buf_len = 0;
-            self.buf_ofs = 0;
-            self.predictors = [0; 2];
-        }
-        Ok(self.iframe * self.pcm_frame)
-    }
-
-    /// Get the current frame index.
-    pub fn get_frame(&self) -> u32 {
-        if self.buf_ofs == self.buf_len {
-            self.iframe
-        } else {
-            self.iframe.saturating_sub(1)
-        }
-    }
-
-    /// Sample frequency (always 22050).
-    pub fn frequency(&self) -> u32 {
-        DUKAUD_FREQUENCY
-    }
-
-    /// Audio format (always stereo 16-bit).
-    pub fn format(&self) -> AudioFormat {
-        AudioFormat::Stereo16
-    }
-
-    /// Total length in seconds.
-    pub fn length(&self) -> f32 {
-        self.total_length
-    }
-
     /// Get and clear last error.
     pub fn get_error(&mut self) -> i32 {
         let e = self.last_error;
@@ -451,6 +364,107 @@ impl DukAudDecoder {
         self.iframe += 1;
 
         Ok(())
+    }
+}
+
+impl Decoder for DukAudDecoder {
+    fn name(&self) -> &'static str {
+        "DukAud"
+    }
+
+    /// Decode audio into `out`, returning the number of bytes written.
+    fn decode(&mut self, out: &mut [u8]) -> DecodeResult<usize> {
+        if !self.opened {
+            return Err(DecodeError::NotInitialized);
+        }
+        if out.is_empty() {
+            return Err(DecodeError::DecoderError("zero-length buffer".into()));
+        }
+
+        let mut written = 0usize;
+        let mut remaining = out;
+
+        loop {
+            // Drain buffered data first
+            let avail = self.buf_len - self.buf_ofs;
+            if avail > 0 {
+                let to_copy = avail.min(remaining.len()) & !3; // align to 4 bytes
+                if to_copy > 0 {
+                    remaining[..to_copy]
+                        .copy_from_slice(&self.buf[self.buf_ofs..self.buf_ofs + to_copy]);
+                    self.buf_ofs += to_copy;
+                    written += to_copy;
+                    remaining = &mut remaining[to_copy..];
+                }
+            }
+
+            // Reset buffer if fully consumed
+            if self.buf_len > 0 && self.buf_ofs >= self.buf_len {
+                self.buf_len = 0;
+                self.buf_ofs = 0;
+            }
+
+            // If output buffer is full or no more frames, we're done
+            if remaining.is_empty() || self.iframe >= self.cframes {
+                break;
+            }
+
+            // Decode next frame into our internal buffer
+            self.decode_next_frame()?;
+        }
+
+        if written == 0 && self.iframe >= self.cframes {
+            return Err(DecodeError::EndOfFile);
+        }
+
+        Ok(written)
+    }
+
+    /// Seek to a PCM sample position.
+    fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32> {
+        if self.pcm_frame == 0 {
+            return Ok(0);
+        }
+        let iframe = pcm_pos / self.pcm_frame;
+        if iframe < self.cframes {
+            self.iframe = iframe;
+            self.buf_len = 0;
+            self.buf_ofs = 0;
+            self.predictors = [0; 2];
+        }
+        Ok(self.iframe * self.pcm_frame)
+    }
+
+    /// Get the current frame index.
+    fn get_frame(&self) -> u32 {
+        if self.buf_ofs == self.buf_len {
+            self.iframe
+        } else {
+            self.iframe.saturating_sub(1)
+        }
+    }
+
+    /// Sample frequency (always 22050).
+    fn frequency(&self) -> u32 {
+        DUKAUD_FREQUENCY
+    }
+
+    /// Audio format (always stereo 16-bit).
+    fn format(&self) -> AudioFormat {
+        AudioFormat::Stereo16
+    }
+
+    /// Total length in seconds.
+    fn length(&self) -> f32 {
+        self.total_length
+    }
+
+    fn is_null(&self) -> bool {
+        false
+    }
+
+    fn needs_swap(&self) -> bool {
+        false
     }
 }
 

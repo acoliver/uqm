@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use lewton::inside_ogg::OggStreamReader;
 
-use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
+use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::formats::{AudioFormat, DecoderFormats};
 
 /// Calculate the duration of an Ogg Vorbis file by finding the last granule position
@@ -180,27 +180,23 @@ impl Default for OggDecoder {
     }
 }
 
-impl SoundDecoder for OggDecoder {
-    fn name(&self) -> &'static str {
-        "Ogg Vorbis"
-    }
-
-    fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
+impl OggDecoder {
+    pub fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
         self.formats = Some(*formats);
         true
     }
 
-    fn term_module(&mut self) {
+    pub fn term_module(&mut self) {
         self.formats = None;
     }
 
-    fn get_error(&mut self) -> i32 {
+    pub fn get_error(&mut self) -> i32 {
         let err = self.last_error;
         self.last_error = 0;
         err
     }
 
-    fn init(&mut self) -> bool {
+    pub fn init(&mut self) -> bool {
         self.initialized = true;
         self.current_pcm = 0;
         self.sample_buffer.clear();
@@ -208,12 +204,12 @@ impl SoundDecoder for OggDecoder {
         true
     }
 
-    fn term(&mut self) {
+    pub fn term(&mut self) {
         self.close();
         self.initialized = false;
     }
 
-    fn open(&mut self, path: &Path) -> DecodeResult<()> {
+    pub fn open(&mut self, path: &Path) -> DecodeResult<()> {
         let ogg_reader = Self::open_file_reader(path)?;
 
         self.frequency = ogg_reader.ident_hdr.audio_sample_rate;
@@ -241,7 +237,7 @@ impl SoundDecoder for OggDecoder {
         Ok(())
     }
 
-    fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
+    pub fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
         // Store original data for seeking/rewind
         let data_vec = data.to_vec();
 
@@ -286,7 +282,7 @@ impl SoundDecoder for OggDecoder {
         Ok(())
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         self.file_path = None;
         self.reader_file = None;
         self.reader_bytes = None;
@@ -294,6 +290,12 @@ impl SoundDecoder for OggDecoder {
         self.sample_buffer.clear();
         self.buffer_pos = 0;
         self.current_pcm = 0;
+    }
+}
+
+impl Decoder for OggDecoder {
+    fn name(&self) -> &'static str {
+        "Ogg Vorbis"
     }
 
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {

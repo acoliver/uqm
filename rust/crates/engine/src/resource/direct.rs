@@ -1,39 +1,24 @@
-//! Directory-entry string tables, preserving UIO enumeration order.
+//! Directory-entry string tables, preserving virtual file system enumeration order.
 
 use std::ffi::{c_char, c_int, CStr};
 use std::ptr;
 
-use crate::host::Files;
-use crate::io::uio_bridge::uio_DirHandle;
-use crate::io::uio_owned::directory;
+use crate::io::{Dir, Match};
 use crate::memory::rust_hmalloc;
 use crate::strings::string_table::{AllocStringTable, StringTable};
 use std::path::Path;
 
 /// # Safety
-/// `base` must be a live UIO directory, and `path` and `pattern` must be
-/// NUL-terminated. The path must name a directory, as required by the C API.
-#[no_mangle]
-pub unsafe extern "C" fn LoadDirEntryTable(
-    base: *mut uio_DirHandle,
+/// `path` and `pattern` must be NUL-terminated. The path must name a directory.
+pub unsafe fn LoadDirEntryTable(
+    base: &Dir,
     path: *const c_char,
     pattern: *const c_char,
-    match_type: c_int,
+    kind: Match,
 ) -> *mut StringTable {
-    let files = directory(base).unwrap_or_else(|error| panic!("directory table base: {error}"));
     let path = CStr::from_ptr(path).to_string_lossy();
-    let path = Path::new(path.as_ref());
     let pattern = CStr::from_ptr(pattern).to_string_lossy();
-    let names: Vec<_> = files
-        .list(path)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|name| {
-            !name.starts_with('.')
-                && crate::io::uio_bridge::matches_pattern(name, &pattern, match_type)
-                && files.stat(&path.join(name)).is_ok_and(|stat| stat.is_file)
-        })
-        .collect();
+    let names = base.files_matching(Path::new(path.as_ref()), &pattern, kind);
     if names.is_empty() {
         return ptr::null_mut();
     }
@@ -52,59 +37,35 @@ pub unsafe extern "C" fn LoadDirEntryTable(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::uio_bridge::{
-        uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir, uio_openRepository,
-    };
+    use crate::io::fixture::TempMount;
     use crate::strings::string_table::FreeStringTable;
-    use std::ffi::CString;
 
     #[test]
-    #[serial_test::serial]
-    fn directory_table_is_empty_for_a_missing_unmounted_directory() {
-        let root = concat!(env!("UQM_RUST_ROOT"), "/../tmp");
-        std::fs::create_dir_all(root).unwrap();
-        let temp = tempfile::tempdir_in(root).unwrap();
-        let path = CString::new(temp.path().to_str().unwrap()).unwrap();
-        // SAFETY: the repository and path outlive the directory and its enumeration.
-        unsafe {
-            let repo = uio_openRepository(0);
-            let directory = uio_openDir(repo, path.as_ptr(), 0);
-            assert!(LoadDirEntryTable(directory, c"missing".as_ptr(), c"".as_ptr(), 0).is_null());
-            uio_closeDir(directory);
-            uio_closeRepository(repo);
-        }
+    fn directory_table_is_empty_for_a_missing_directory() {
+        let mount = TempMount::new();
+        // SAFETY: both strings are terminated literals.
+        let table = unsafe {
+            LoadDirEntryTable(
+                &mount.dir(),
+                c"missing".as_ptr(),
+                c"".as_ptr(),
+                Match::Literal,
+            )
+        };
+        assert!(table.is_null());
     }
 
     #[test]
-    #[serial_test::serial]
     fn directory_table_excludes_hidden_names_and_nonfiles() {
-        std::fs::create_dir_all(concat!(env!("UQM_RUST_ROOT"), "/../tmp")).unwrap();
-        let temp = tempfile::Builder::new()
-            .prefix("direct-")
-            .tempdir_in(concat!(env!("UQM_RUST_ROOT"), "/../tmp"))
-            .unwrap();
-        std::fs::write(temp.path().join("one.sav"), b"1").unwrap();
-        std::fs::write(temp.path().join("two.sav"), b"2").unwrap();
-        std::fs::write(temp.path().join(".hidden.sav"), b"3").unwrap();
-        std::fs::write(temp.path().join("other.txt"), b"4").unwrap();
-        std::fs::create_dir(temp.path().join("dir.sav")).unwrap();
-        let host = CString::new(temp.path().to_str().unwrap()).unwrap();
+        let mount = TempMount::new();
+        for name in ["one.sav", "two.sav", ".hidden.sav", "other.txt"] {
+            mount.write(name, b"data");
+        }
+        std::fs::create_dir(mount.path_of("dir.sav")).unwrap();
+        let root = mount.dir();
+        // SAFETY: the strings are terminated literals and the table is freed once.
         unsafe {
-            let repo = uio_openRepository(0);
-            assert!(!uio_mountDir(
-                repo,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                host.as_ptr(),
-                ptr::null_mut(),
-                4,
-                ptr::null_mut()
-            )
-            .is_null());
-            let root = uio_openDir(repo, c"/".as_ptr(), 0);
-            let table = LoadDirEntryTable(root, c"".as_ptr(), c".sav".as_ptr(), 3);
+            let table = LoadDirEntryTable(&root, c"".as_ptr(), c".sav".as_ptr(), Match::Substring);
             assert!(!table.is_null());
             assert_eq!((*table).size, 2);
             let mut names = Vec::new();
@@ -117,9 +78,10 @@ mod tests {
             names.sort();
             assert_eq!(names, [b"one.sav".to_vec(), b"two.sav".to_vec()]);
             FreeStringTable(table);
-            assert!(LoadDirEntryTable(root, c"".as_ptr(), c"absent".as_ptr(), 0).is_null());
-            uio_closeDir(root);
-            uio_closeRepository(repo);
+            assert!(
+                LoadDirEntryTable(&root, c"".as_ptr(), c"absent".as_ptr(), Match::Literal)
+                    .is_null()
+            );
         }
     }
 }

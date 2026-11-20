@@ -5,8 +5,6 @@ pub use crate::callback::ffi::{
     Alarm_uninit as uqm_alarm_uninit, Callback_uninit as uqm_callback_uninit,
 };
 #[cfg(not(test))]
-pub use crate::game_init::kernel_abi::uninitIO;
-#[cfg(not(test))]
 pub use crate::graphics::cmap_abi::UninitColorMaps;
 #[cfg(not(test))]
 pub use crate::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics;
@@ -14,8 +12,6 @@ pub use crate::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics;
 pub use crate::graphics::sdl::lifecycle_abi::TFB_UninitGraphics;
 #[cfg(not(test))]
 pub use crate::input::sdl_input::TFB_UninitInput;
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::unprepareAllDirs as uqm_unprepare_all_dirs;
 #[cfg(not(test))]
 #[cfg(not(test))]
 pub use crate::sound::audio_init::unInitAudio;
@@ -49,8 +45,6 @@ mod isolated {
         pub fn initialize(argc: i32, argv: *mut *mut std::ffi::c_char) -> i32;
         pub fn uqm_callback_uninit();
         pub fn uqm_alarm_uninit();
-        pub fn uqm_unprepare_all_dirs();
-        pub fn uninitIO();
         pub fn UnInitThreadSystem();
     }
 }
