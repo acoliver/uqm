@@ -103,7 +103,7 @@ fn added_production_files(
     let output = crate::quality::tool::output(Command::new("git").current_dir(root).args([
         "diff",
         "--name-only",
-        "--no-renames",
+        "-M100%",
         "--diff-filter=A",
         "-z",
         base,
@@ -405,6 +405,42 @@ mod tests {
             .unwrap()
             .is_empty());
         assert!(added_production_files(root.path(), Some("missing-ref"), &identities).is_err());
+    }
+    #[test]
+    fn pure_renames_are_not_added_but_edited_renames_and_new_files_are() {
+        let root = crate::quality::tool::fixture_directory();
+        let git = |args: &[&str]| {
+            tool::status(
+                Command::new("git")
+                    .current_dir(root.path())
+                    .args(["-c", "user.name=Test", "-c", "user.email=t@example.invalid"])
+                    .args(args),
+            )
+            .unwrap()
+        };
+        git(&["init", "-q"]);
+        fs::create_dir_all(root.path().join("rust/src")).unwrap();
+        let body: String = (0..20).map(|n| format!("pub fn f{n}() {{}}\n")).collect();
+        fs::write(root.path().join("rust/src/moved.rs"), &body).unwrap();
+        fs::write(root.path().join("rust/src/edited.rs"), &body).unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-qm", "base"]);
+        git(&["mv", "rust/src/moved.rs", "rust/src/moved_to.rs"]);
+        git(&["mv", "rust/src/edited.rs", "rust/src/edited_to.rs"]);
+        fs::write(
+            root.path().join("rust/src/edited_to.rs"),
+            format!("{body}pub fn extra() {{}}\n"),
+        )
+        .unwrap();
+        fs::write(root.path().join("rust/src/fresh.rs"), "pub fn fresh() {}\n").unwrap();
+        git(&["add", "."]);
+        let identities = ["moved_to.rs", "edited_to.rs", "fresh.rs"]
+            .map(|name| (format!("src/{name}"), name.to_owned()))
+            .into();
+        assert_eq!(
+            added_production_files(root.path(), Some("HEAD"), &identities).unwrap(),
+            ["src/edited_to.rs".into(), "src/fresh.rs".into()].into()
+        );
     }
     #[cfg(unix)]
     #[test]
