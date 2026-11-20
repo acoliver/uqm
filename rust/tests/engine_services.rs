@@ -102,7 +102,10 @@ fn replay_audio_exports_follow_sample_completion_and_transport() {
     use uqm_rust::sound::audio_device::{self as audio, PcmClip};
     use uqm_rust::{engine::host as source, time::counter_abi::ONE_SECOND};
 
-    let clip = |looping| PcmClip::from_bytes(&[0u8; 2000], 1000, 1, 16, looping).unwrap();
+    let clip = |looping| {
+        PcmClip::from_bytes(&[0u8; 2000], 1000, 1, 16, looping)
+            .unwrap_or_else(|| panic!("silent clip"))
+    };
     assert!(audio::start());
     let handle = audio::play(clip(false));
     assert_ne!(handle, 0);

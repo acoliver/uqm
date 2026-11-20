@@ -184,7 +184,7 @@ impl Generators for SuppliedGenerators {
             }
             Some(radius) => {
                 let parent = PlanetDesc {
-                    radius: radius,
+                    radius,
                     ..Default::default()
                 };
                 self.state.sys.planets[0] = parent;

@@ -18,9 +18,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::thread::yield_now();
     }
     let mut byte = [0];
-    assert_eq!(
-        network.recv(connection, &mut byte).unwrap_err().kind(),
-        std::io::ErrorKind::WouldBlock
+    assert!(
+        matches!(network.recv(connection, &mut byte), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+        "a receive before the peer writes would block"
     );
     assert_eq!(network.send(connection, b"UQM")?, 3);
     let (mut peer, _) = listener.accept()?;

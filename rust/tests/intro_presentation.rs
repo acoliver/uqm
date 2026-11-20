@@ -21,13 +21,20 @@ impl PresentObserver for Window {
         Some(count)
     }
     fn presented(&mut self, frame: Option<PresentedFrame>) {
-        *self.0.borrow_mut() = Some(frame.expect("the display reads every frame back").rgba);
+        *self.0.borrow_mut() = Some(
+            frame
+                .unwrap_or_else(|| panic!("the display reads every frame back"))
+                .rgba,
+        );
     }
 }
 
 impl Window {
     fn shown(&self) -> Vec<u8> {
-        self.0.borrow().clone().expect("a frame was presented")
+        self.0
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| panic!("a frame was presented"))
     }
 }
 

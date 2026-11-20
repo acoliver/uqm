@@ -152,7 +152,8 @@ fn names(h: &mut Harness) {
             )
         }));
         let name = crate::battle_context::with(|cx| cx.world.data.flagship.planet_name);
-        let name = std::ffi::CStr::from_bytes_until_nul(&name).unwrap();
+        let name = std::ffi::CStr::from_bytes_until_nul(&name)
+            .unwrap_or_else(|error| panic!("planet name: {error}"));
         assert_eq!(name.to_str().unwrap(), expected);
         assert_eq!(
             crate::battle_context::with(|cx| {
