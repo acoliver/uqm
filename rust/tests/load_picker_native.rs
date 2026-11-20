@@ -176,6 +176,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
             Init_DrawCommandQueue();
             input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
+            uqm_rust::input::sdl_input::attach_controls(input.controls());
             input.vcontrol(|vc| {
                 vc.init();
                 assert!(vc.add_key_binding(RETURN, Target::Menu(SELECT)));
@@ -254,7 +255,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                     uqm_rust::io::uninstall();
                 }
             }
-            input.vcontrol(|vc| vc.uninit());
+            uqm_rust::input::sdl_input::uninit_input();
             Uninit_DrawCommandQueue();
         }
     });

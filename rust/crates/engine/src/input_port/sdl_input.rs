@@ -287,6 +287,12 @@ fn install_controls(controls: &InputControls) {
     state.controls = Some(controls.clone());
 }
 
+/// Send the SDL events and control resets to `controls` without loading the
+/// configured bindings, for hosts that bind controls themselves.
+pub fn attach_controls(controls: &InputControls) {
+    INPUT.lock().controls = Some(controls.clone());
+}
+
 fn init_joysticks() -> Result<(), InputInitError> {
     // SAFETY: SDL's joystick calls are made on the thread that owns SDL, after
     // the video subsystem start-up; the names SDL returns are terminated strings.
