@@ -445,7 +445,7 @@ pub enum CommunicationResult {
     /// Alien finished; response loop continues — keep iterating.
     ResponseContinue,
     /// Player selected a response — carries callback and response_ref.
-    Selected(ResponseFunc, u32),
+    Selected(ResponseFunc, u16),
     /// Conversation is complete — caller should tear down.
     Done,
 }
@@ -659,7 +659,7 @@ pub fn alien_talk_segue(input: &InputSession, cx: &mut Cx<'_>, comm: &mut Comm, 
 /// @plan PLAN-20260325-COMMPT3.P11
 /// @requirement REQ-RL-004
 /// @pseudocode 003-do-communication-rewrite lines 36-40
-pub fn select_response(activity: u16, comm: &mut Comm) -> Option<(ResponseFunc, u32)> {
+pub fn select_response(activity: u16, comm: &mut Comm) -> Option<(ResponseFunc, u16)> {
     let (func, response_ref) = {
         let resp = comm.responses().get_selected()?;
         let func = resp.response_func?;
@@ -1315,7 +1315,7 @@ enum IntroTransition {
     CrossfadeScreen,
     /// `FadeScreen (FadeAllToColor, fadeTime)` after a fade to black.
     FadeInScreen {
-        fade_time: u32,
+        fade_time: i16,
     },
 }
 
@@ -1323,13 +1323,16 @@ enum IntroTransition {
 ///
 /// # Panics
 /// On a value outside the enum, as the C `assert (0 && "Unknown comm intro
-/// transition")` does.
+/// transition")` does, and on a fade time that does not fit a `SIZE`.
 fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
     match mode {
         0 => IntroTransition::CrossfadeSpace,
         1 => IntroTransition::CrossfadeWindow,
         2 => IntroTransition::CrossfadeScreen,
-        3 => IntroTransition::FadeInScreen { fade_time },
+        3 => IntroTransition::FadeInScreen {
+            fade_time: i16::try_from(fade_time)
+                .unwrap_or_else(|_| panic!("comm fade time does not fit a SIZE: {fade_time}")),
+        },
         _ => panic!("Unknown comm intro transition: {mode}"),
     }
 }
@@ -1394,10 +1397,7 @@ fn comm_intro_transition(_comm: &mut Comm) {
             }
             IntroTransition::FadeInScreen { fade_time } => {
                 drop(intro_batch);
-                context.fade_screen(
-                    FADE_ALL_TO_COLOR,
-                    i16::try_from(fade_time).expect("comm fade time fits a SIZE"),
-                );
+                context.fade_screen(FADE_ALL_TO_COLOR, fade_time);
             }
         }
 
@@ -1639,7 +1639,7 @@ mod tests {
         s.track_mut().splice_track(1, Some("Hi"), 0.0, 2.0);
         s.track_mut().start();
 
-        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
+        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
         s.add_response(1, "Option A", Some(noop));
         s.add_response(2, "Option B", Some(noop));
         s.responses_mut().start_display();
@@ -1665,9 +1665,9 @@ mod tests {
     fn test_select_response_returns_callback() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static CALLED_WITH: AtomicU32 = AtomicU32::new(0);
-        fn marker(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        use std::sync::atomic::{AtomicU16, Ordering};
+        static CALLED_WITH: AtomicU16 = AtomicU16::new(0);
+        fn marker(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, r: u16) {
             CALLED_WITH.store(r, Ordering::SeqCst);
         }
 
@@ -1883,7 +1883,7 @@ mod tests {
     fn test_do_comm_response_continue_p10() {
         let input = InputSession::default();
         let world = crate::engine::World::new();
-        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
+        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
 
         let mut s = Comm::new();
         s.init().unwrap();
@@ -1913,7 +1913,7 @@ mod tests {
         let world = crate::engine::World::new();
         use std::sync::atomic::{AtomicBool, Ordering};
         static CALLED: AtomicBool = AtomicBool::new(false);
-        fn marker(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u32) {
+        fn marker(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {
             CALLED.store(true, Ordering::SeqCst);
         }
 
@@ -1947,7 +1947,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns None).
     #[test]
     fn test_select_response_returns_tuple_p10() {
-        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
+        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
 
         let mut s = Comm::new();
         s.init().unwrap();

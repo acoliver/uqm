@@ -48,8 +48,8 @@ impl ElementObservation {
             succ: 0,
             parent,
             target,
-            primitive: record.PrimIndex,
-            intersect: record.IntersectControl,
+            primitive: record.prim_index,
+            intersect: record.intersect_control,
         }
     }
 }
@@ -84,7 +84,7 @@ pub fn ship_record(
         address: ships.raw(id) as usize,
         pred: ships.pred(id).map_or(0, |id| ships.raw(id) as usize),
         succ: ships.succ(id).map_or(0, |id| ships.raw(id) as usize),
-        element: s.hShip.map_or(0, |id| elements.journal_address(id)),
+        element: s.ship_element.map_or(0, |id| elements.journal_address(id)),
     }
 }
 
@@ -95,11 +95,11 @@ pub struct ShipResourceObservation<'a> {
 }
 pub struct DescriptorRecordObservation<'a> {
     pub address: usize,
-    pub info: &'a SHIP_INFO,
-    pub data: &'a DATA_STUFF,
-    pub fleet: &'a FLEET_STUFF,
-    pub characteristics: &'a CHARACTERISTIC_STUFF,
-    pub intel: &'a INTEL_STUFF,
+    pub info: &'a ShipInfoRecord,
+    pub data: &'a DataRecord,
+    pub fleet: &'a FleetRecord,
+    pub characteristics: &'a CharacteristicRecord,
+    pub intel: &'a IntelRecord,
     pub callbacks: [usize; 5],
     pub code_loaded: bool,
     pub state: &'a super::super::RaceState,

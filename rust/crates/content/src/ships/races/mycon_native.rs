@@ -1,7 +1,20 @@
 //! Mycon Podship callbacks and descriptor ported from `sc2/src/uqm/ships/mycon/mycon.c`.
 
 pub mod engine {
-    use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, MOVEMENT_STATE_AVOID,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        CHANGING, CREW_OBJECT, FINITE_LIFE, PLAYER_SHIP, SHIP_BEYOND_MAX_SPEED,
+        SHIP_IN_GRAVITY_WELL,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use crate::ships::native::{angle_to_facing, normalize_facing};
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 40;
@@ -38,8 +51,8 @@ pub mod engine {
         d.resources.icons = Some(c"ship.mycon.icons");
         d.resources.melee_icon = Some(c"ship.mycon.meleeicons");
         d.fleet_strength = (1070 / SPHERE_RADIUS_INCREMENT * 2) as u16;
-        d.fleet_location = POINT { x: 6392, y: 2200 };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.fleet_location = Point { x: 6392, y: 2200 };
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -139,9 +152,9 @@ pub mod engine {
     pub fn plasma_collision(
         cx: &mut Cx<'_>,
         e0: ElementId,
-        p0: &mut POINT,
+        p0: &mut Point,
         e1: ElementId,
-        p1: &mut POINT,
+        p1: &mut Point,
     ) {
         let old_mass = cx.element(e0).mass as i16;
         let h = if cx.parent(e0) != cx.parent(e1) || cx.element(e1).flags & PLAYER_SHIP as u16 != 0
@@ -223,9 +236,9 @@ pub mod engine {
                 .object
                 .unwrap_or_else(|| panic!("AI concern"));
             let dx = (i32::from(cx.element(target).current.location.x)
-                - i32::from(concerns.subject.current.location.x)) as SIZE;
+                - i32::from(concerns.subject.current.location.x)) as i16;
             let dy = (i32::from(cx.element(target).current.location.y)
-                - i32::from(concerns.subject.current.location.y)) as SIZE;
+                - i32::from(concerns.subject.current.location.y)) as i16;
             let direction =
                 normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
             if normalize_facing(
@@ -288,7 +301,7 @@ pub mod engine {
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0
             && cx.element(e).hits != cx.race_stats(ss).ship_info.max_crew
-            && cx.delta_energy(e, -(SPECIAL_ENERGY_COST as SIZE))
+            && cx.delta_energy(e, -(SPECIAL_ENERGY_COST as i16))
         {
             cx.process_ship_sound(ss, 1, e);
             let mut add = REGENERATION_AMOUNT;
@@ -297,7 +310,7 @@ pub mod engine {
             if add > headroom {
                 add = headroom;
             }
-            cx.delta_crew(e, add as SIZE);
+            cx.delta_crew(e, add as i16);
             cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
     }

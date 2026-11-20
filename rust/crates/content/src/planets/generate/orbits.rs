@@ -105,45 +105,45 @@ pub fn fill_orbits(
     request: OrbitRequest,
     descs: &mut [PlanetDesc],
 ) -> Option<u8> {
-    let sun = SUN_MIN_DISTANCES[usize::from(request.star_size)];
-    let mut num_planets = request.num_planets;
-    let mut generated_count = None;
-
-    if num_planets == !0 {
-        // The C original spins until the result is non-zero instead of
-        // drawing 1 + Random % 9; that draw count is part of the universe.
-        loop {
-            num_planets = ((rng.next_random() as u16) % (MAX_GENERATED_PLANETS + 1)) as u8;
-            if num_planets != 0 {
-                break;
-            }
-        }
-        generated_count = Some(num_planets);
-    }
-
-    let max_planet = if request.generating_moons {
-        FIRST_LARGE_ROCKY_WORLD
+    if request.num_planets == !0 {
+        Some(fill_drawn_orbits(rng, request, descs))
     } else {
-        NUMBER_OF_PLANET_TYPES as u8
-    };
-    let planet_count = num_planets;
-    let mut angles = vec![0; usize::from(planet_count)];
+        place_orbits(rng, &request, request.num_planets, descs);
+        None
+    }
+}
 
-    for index in 0..usize::from(planet_count) {
-        loop {
-            let mut rand_val = rng.next_random();
-            if request.types_defined {
-                rand_val = 0;
-            } else {
-                descs[index].data_index = (((rand_val as u16) >> 8) as u8) % max_planet;
-            }
-
-            let chance = distribution(request.star_color)
-                .map_or(0, |table| table[usize::from(descs[index].data_index)]);
-            if (rand_val as u8) < chance {
-                break;
-            }
+/// `FillOrbits` for a system whose world count comes from the RNG: draw the
+/// count, lay out `descs` and return the count.
+pub fn fill_drawn_orbits(
+    rng: &mut RandomContext,
+    request: OrbitRequest,
+    descs: &mut [PlanetDesc],
+) -> u8 {
+    // The C original spins until the result is non-zero instead of
+    // drawing 1 + Random % 9; that draw count is part of the universe.
+    let num_planets = loop {
+        let drawn = ((rng.next_random() as u16) % (MAX_GENERATED_PLANETS + 1)) as u8;
+        if drawn != 0 {
+            break drawn;
         }
+    };
+    place_orbits(rng, &request, num_planets, descs);
+    num_planets
+}
+
+fn place_orbits(
+    rng: &mut RandomContext,
+    request: &OrbitRequest,
+    num_planets: u8,
+    descs: &mut [PlanetDesc],
+) {
+    let sun = SUN_MIN_DISTANCES[usize::from(request.star_size)];
+    let count = usize::from(num_planets);
+    let mut angles = vec![0; count];
+
+    for index in 0..count {
+        draw_world_type(rng, request, &mut descs[index]);
 
         let min_radius = if descs[index].data_index < FIRST_GAS_GIANT {
             sun.0
@@ -158,38 +158,13 @@ pub fn fill_orbits(
         if repacked {
             pack_orbits(&mut descs[..=index], &angles[..index], sun);
         }
-        loop {
-            let rand_val = rng.next_random() as u16;
-            if repacked {
-                break;
-            }
-            if request.generating_moons {
-                let radius = (MIN_MOON_RADIUS + (rand_val % MAX_MOONS) * MOON_DELTA) as i16;
-                descs[index].radius = radius;
-                if descs[..index].iter().any(|prior| prior.radius == radius) {
-                    continue;
-                }
-                descs[index].num_planets = 0;
-            } else {
-                let radius = ((rand_val % (MAX_PLANET_RADIUS - min_radius)) + min_radius) as i16;
-                descs[index].radius = radius;
-                let crowded = descs[..index].iter().any(|prior| {
-                    let delta = (prior.radius >> 6) / 5 - (radius >> 6) / 5;
-                    delta.abs() <= 1
-                });
-                if crowded {
-                    continue;
-                }
-            }
-            break;
-        }
+        draw_radius(rng, request, descs, index, min_radius, repacked);
 
         let angle = (rng.next_random() as u16) & 63;
         angles[index] = angle;
         position_orbit(&mut descs[index], angle);
     }
 
-    let count = usize::from(planet_count);
     for i in 0..count {
         for j in ((i + 1)..count).rev() {
             if descs[i].radius > descs[j].radius {
@@ -197,8 +172,66 @@ pub fn fill_orbits(
             }
         }
     }
+}
 
-    generated_count
+/// Draw until the world type passes the star colour's distribution table.
+fn draw_world_type(rng: &mut RandomContext, request: &OrbitRequest, desc: &mut PlanetDesc) {
+    let max_planet = if request.generating_moons {
+        FIRST_LARGE_ROCKY_WORLD
+    } else {
+        NUMBER_OF_PLANET_TYPES as u8
+    };
+    loop {
+        let mut rand_val = rng.next_random();
+        if request.types_defined {
+            rand_val = 0;
+        } else {
+            desc.data_index = (((rand_val as u16) >> 8) as u8) % max_planet;
+        }
+
+        let chance =
+            distribution(request.star_color).map_or(0, |table| table[usize::from(desc.data_index)]);
+        if (rand_val as u8) < chance {
+            break;
+        }
+    }
+}
+
+/// Draw `descs[index]`'s radius until it clears every earlier orbit; a repack
+/// already placed it, so that case takes one draw.
+fn draw_radius(
+    rng: &mut RandomContext,
+    request: &OrbitRequest,
+    descs: &mut [PlanetDesc],
+    index: usize,
+    min_radius: u16,
+    repacked: bool,
+) {
+    loop {
+        let rand_val = rng.next_random() as u16;
+        if repacked {
+            break;
+        }
+        if request.generating_moons {
+            let radius = (MIN_MOON_RADIUS + (rand_val % MAX_MOONS) * MOON_DELTA) as i16;
+            descs[index].radius = radius;
+            if descs[..index].iter().any(|prior| prior.radius == radius) {
+                continue;
+            }
+            descs[index].num_planets = 0;
+        } else {
+            let radius = ((rand_val % (MAX_PLANET_RADIUS - min_radius)) + min_radius) as i16;
+            descs[index].radius = radius;
+            let crowded = descs[..index].iter().any(|prior| {
+                let delta = (prior.radius >> 6) / 5 - (radius >> 6) / 5;
+                delta.abs() <= 1
+            });
+            if crowded {
+                continue;
+            }
+        }
+        break;
+    }
 }
 
 #[cfg(test)]

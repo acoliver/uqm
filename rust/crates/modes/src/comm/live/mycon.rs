@@ -14,37 +14,19 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     comm.race_scratch.mycon = Some(session);
 }
 
-fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| {
-        s.handle(
-            Handler::CombatIsInevitable,
-            i32::try_from(r).expect("invalid response"),
-        )
+        s.handle(Handler::CombatIsInevitable, i32::from(r))
     });
 }
-fn sun_device(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SunDevice,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn sun_device(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SunDevice, i32::from(r)));
 }
-fn trick_mycon(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::TrickMycon,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn trick_mycon(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::TrickMycon, i32::from(r)));
 }
-fn normal_mycon(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NormalMycon,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn normal_mycon(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NormalMycon, i32::from(r)));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

@@ -1,194 +1,177 @@
 //! Shared battle record layouts during the storage transition.
 use crate::graphics::{drawable::FrameId, geometry::Point, intersection::IntersectControl};
-pub use crate::math::velocity::VelocityDesc as VELOCITY_DESC;
+pub use crate::math::velocity::VelocityDesc;
 use crate::resource::ResourceKey;
 use crate::strings::owned_table::EntryRef;
 #[cfg(test)]
 use crate::World as WorldOwner;
-pub use abi::{
-    captain_stuff, state, state__bindgen_ty_1, tfb_soundsample, ElementRecord, ShipRecord,
-    TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, EVALUATE_DESC, FLEET_STUFF,
-    INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, SHIP_INFO, STATE,
-};
-use std::os::raw::c_uint as SPECIES_ID;
 
-#[allow(non_camel_case_types, non_snake_case)]
-mod abi {
-    use super::*;
-
-    #[repr(C)]
-    #[derive(Debug, Clone)]
-    pub struct state {
-        pub location: Point,
-        pub image: state__bindgen_ty_1,
-    }
-    #[repr(C)]
-    #[derive(Debug, Clone)]
-    pub struct state__bindgen_ty_1 {
-        pub frame: crate::battle::frames::FrameSelection,
-        pub frames: crate::battle::frames::Frames,
-    }
-    pub type STATE = state;
-    #[repr(C)]
-    #[derive(Debug, Clone)]
-    pub struct ElementRecord {
-        pub preprocess_func: Option<crate::battle::hooks::ElementHook>,
-        pub postprocess_func: Option<crate::battle::hooks::ElementHook>,
-        pub collision_func: Option<crate::battle::CollisionHook>,
-        pub death_func: Option<crate::battle::ElementHook>,
-        pub playerNr: i16,
-        pub state_flags: u16,
-        pub life: u16,
-        pub hits: u16,
-        pub mass: u8,
-        pub turn: u8,
-        pub thrust: u8,
-        pub colorCycleIndex: u8,
-        pub velocity: VELOCITY_DESC,
-        pub IntersectControl: IntersectControl,
-        pub PrimIndex: u16,
-        pub current: STATE,
-        pub next: STATE,
-        pub parent: crate::battle::Parent,
-        pub target: Option<crate::battle::ElementId>,
-        pub intersect_frame: crate::battle::frames::FrameSelection,
-    }
-
-    #[repr(C)]
-    #[derive(Debug, Default)]
-    pub struct ShipRecord {
-        pub SpeciesID: SPECIES_ID,
-        pub captains_name_index: u8,
-        pub descriptor: Option<Box<RaceDescriptor>>,
-        pub crew_level: u16,
-        pub max_crew: u16,
-        pub ship_cost: u8,
-        pub index: u16,
-        pub(in crate::battle) picker_resources:
-            Option<crate::battle::link_queue::ShipPickerResources>,
-        pub weapon_counter: u8,
-        pub special_counter: u8,
-        pub energy_counter: u8,
-        pub ship_input_state: u8,
-        pub cur_status_flags: u16,
-        pub old_status_flags: u16,
-        pub hShip: Option<crate::battle::ElementId>,
-        pub ship_facing: u16,
-        pub playerNr: i16,
-        pub control: u8,
-    }
-
-    impl ShipRecord {
-        pub fn descriptor_ptr(&mut self) -> *mut RaceDescriptor {
-            let descriptor = self.descriptor.as_deref_mut();
-            descriptor.map_or(ptr::null_mut(), ptr::from_mut)
-        }
-    }
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct tfb_soundsample {
-        _unused: [u8; 0],
-    }
-
-    pub type TFB_SoundSample = tfb_soundsample;
-
-    pub type MUSIC_REF = *mut *mut TFB_SoundSample;
-
-    #[repr(C)]
-    #[derive(Debug, Clone)]
-    pub struct captain_stuff {
-        pub captain_rsc: ResourceKey,
-        pub background: FrameId,
-        pub turn: FrameId,
-        pub thrust: FrameId,
-        pub weapon: FrameId,
-        pub special: crate::battle::frames::FrameSelection,
-    }
-
-    pub type CAPTAIN_STUFF = captain_stuff;
-
-    pub type MOVEMENT_STATE = ::std::os::raw::c_uint;
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct EVALUATE_DESC {
-        pub ObjectPtr: *mut ElementRecord,
-        pub facing: u16,
-        pub which_turn: u16,
-        pub MoveState: MOVEMENT_STATE,
-    }
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct INTEL_STUFF {
-        pub ManeuverabilityIndex: u16,
-        pub WeaponRange: u16,
-    }
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct CHARACTERISTIC_STUFF {
-        pub max_thrust: u16,
-        pub thrust_increment: u16,
-        pub energy_regeneration: u8,
-        pub weapon_energy_cost: u8,
-        pub special_energy_cost: u8,
-        pub energy_wait: u8,
-        pub turn_wait: u8,
-        pub thrust_wait: u8,
-        pub weapon_wait: u8,
-        pub special_wait: u8,
-        pub ship_mass: u8,
-    }
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct SHIP_INFO {
-        pub ship_flags: u16,
-        pub ship_cost: u8,
-        pub crew_level: u16,
-        pub max_crew: u16,
-        pub energy_level: u8,
-        pub max_energy: u8,
-        pub race_strings_rsc: ResourceKey,
-        pub icons_rsc: ResourceKey,
-        pub melee_icon_rsc: ResourceKey,
-        pub race_strings: Option<EntryRef>,
-        pub icons: FrameId,
-        pub melee_icon: FrameId,
-    }
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct FLEET_STUFF {
-        pub strength: u16,
-        pub known_loc: Point,
-    }
-
-    #[repr(C)]
-    #[derive(Debug)]
-    pub struct DATA_STUFF {
-        pub ship_rsc: [ResourceKey; 3usize],
-        pub weapon_rsc: [ResourceKey; 3usize],
-        pub special_rsc: [ResourceKey; 3usize],
-        pub captain_control: CAPTAIN_STUFF,
-        pub victory_ditty_rsc: ResourceKey,
-        pub ship_sounds_rsc: ResourceKey,
-        pub ship: crate::battle::frames::FrameArray,
-        pub weapon: crate::battle::frames::FrameArray,
-        pub special: crate::battle::frames::FrameArray,
-        pub victory_ditty: MUSIC_REF,
-        pub ship_sounds: Option<EntryRef>,
-    }
-
-    pub const MAX_DISPLAY_PRIMS: u32 = 330;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct ElementVisual {
+    pub location: Point,
+    pub image: ElementImage,
 }
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct ElementImage {
+    pub frame: crate::battle::frames::FrameSelection,
+    pub frames: crate::battle::frames::Frames,
+}
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct ElementRecord {
+    pub preprocess_func: Option<crate::battle::hooks::ElementHook>,
+    pub postprocess_func: Option<crate::battle::hooks::ElementHook>,
+    pub collision_func: Option<crate::battle::CollisionHook>,
+    pub death_func: Option<crate::battle::ElementHook>,
+    pub player_nr: i16,
+    pub state_flags: u16,
+    pub life: u16,
+    pub hits: u16,
+    pub mass: u8,
+    pub turn: u8,
+    pub thrust: u8,
+    pub color_cycle_index: u8,
+    pub velocity: VelocityDesc,
+    pub intersect_control: IntersectControl,
+    pub prim_index: u16,
+    pub current: ElementVisual,
+    pub next: ElementVisual,
+    pub parent: crate::battle::Parent,
+    pub target: Option<crate::battle::ElementId>,
+    pub intersect_frame: crate::battle::frames::FrameSelection,
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct ShipRecord {
+    pub species_id: u32,
+    pub captains_name_index: u8,
+    pub descriptor: Option<Box<RaceDescriptor>>,
+    pub crew_level: u16,
+    pub max_crew: u16,
+    pub ship_cost: u8,
+    pub index: u16,
+    pub(in crate::battle) picker_resources: Option<crate::battle::link_queue::ShipPickerResources>,
+    pub weapon_counter: u8,
+    pub special_counter: u8,
+    pub energy_counter: u8,
+    pub ship_input_state: u8,
+    pub cur_status_flags: u16,
+    pub old_status_flags: u16,
+    pub ship_element: Option<crate::battle::ElementId>,
+    pub ship_facing: u16,
+    pub player_nr: i16,
+    pub control: u8,
+}
+
+impl ShipRecord {
+    pub fn descriptor_ptr(&mut self) -> *mut RaceDescriptor {
+        let descriptor = self.descriptor.as_deref_mut();
+        descriptor.map_or(ptr::null_mut(), ptr::from_mut)
+    }
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SoundSampleRecord {
+    _unused: [u8; 0],
+}
+
+pub type MusicSampleRef = *mut *mut SoundSampleRecord;
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct CaptainRecord {
+    pub captain_rsc: ResourceKey,
+    pub background: FrameId,
+    pub turn: FrameId,
+    pub thrust: FrameId,
+    pub weapon: FrameId,
+    pub special: crate::battle::frames::FrameSelection,
+}
+
+pub type MovementState = ::std::os::raw::c_uint;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct EvaluateRecord {
+    pub object_ptr: *mut ElementRecord,
+    pub facing: u16,
+    pub which_turn: u16,
+    pub move_state: MovementState,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct IntelRecord {
+    pub maneuverability_index: u16,
+    pub weapon_range: u16,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct CharacteristicRecord {
+    pub max_thrust: u16,
+    pub thrust_increment: u16,
+    pub energy_regeneration: u8,
+    pub weapon_energy_cost: u8,
+    pub special_energy_cost: u8,
+    pub energy_wait: u8,
+    pub turn_wait: u8,
+    pub thrust_wait: u8,
+    pub weapon_wait: u8,
+    pub special_wait: u8,
+    pub ship_mass: u8,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ShipInfoRecord {
+    pub ship_flags: u16,
+    pub ship_cost: u8,
+    pub crew_level: u16,
+    pub max_crew: u16,
+    pub energy_level: u8,
+    pub max_energy: u8,
+    pub race_strings_rsc: ResourceKey,
+    pub icons_rsc: ResourceKey,
+    pub melee_icon_rsc: ResourceKey,
+    pub race_strings: Option<EntryRef>,
+    pub icons: FrameId,
+    pub melee_icon: FrameId,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FleetRecord {
+    pub strength: u16,
+    pub known_loc: Point,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DataRecord {
+    pub ship_rsc: [ResourceKey; 3usize],
+    pub weapon_rsc: [ResourceKey; 3usize],
+    pub special_rsc: [ResourceKey; 3usize],
+    pub captain_control: CaptainRecord,
+    pub victory_ditty_rsc: ResourceKey,
+    pub ship_sounds_rsc: ResourceKey,
+    pub ship: crate::battle::frames::FrameArray,
+    pub weapon: crate::battle::frames::FrameArray,
+    pub special: crate::battle::frames::FrameArray,
+    pub victory_ditty: MusicSampleRef,
+    pub ship_sounds: Option<EntryRef>,
+}
+
+pub const MAX_DISPLAY_PRIMS: u32 = 330;
 
 impl Default for ElementRecord {
     fn default() -> Self {
-        let visual = STATE {
+        let visual = ElementVisual {
             location: Point { x: 0, y: 0 },
-            image: state__bindgen_ty_1 {
+            image: ElementImage {
                 frame: FrameSelection::ABSENT,
                 frames: crate::battle::frames::Frames::ABSENT,
             },
@@ -198,16 +181,16 @@ impl Default for ElementRecord {
             postprocess_func: None,
             collision_func: None,
             death_func: None,
-            playerNr: 0,
+            player_nr: 0,
             state_flags: 0,
             life: 0,
             hits: 0,
             mass: 0,
             turn: 0,
             thrust: 0,
-            colorCycleIndex: 0,
-            velocity: VELOCITY_DESC::new(),
-            IntersectControl: IntersectControl {
+            color_cycle_index: 0,
+            velocity: VelocityDesc::new(),
+            intersect_control: IntersectControl {
                 IntersectStamp: crate::graphics::intersection::Stamp {
                     origin: Point { x: 0, y: 0 },
                     frame: FrameId::NULL,
@@ -215,7 +198,7 @@ impl Default for ElementRecord {
                 EndPoint: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
-            PrimIndex: 0,
+            prim_index: 0,
             current: visual.clone(),
             next: visual,
             parent: Parent::None,
@@ -261,14 +244,14 @@ impl ElementRecord {
 impl ElementState {
     pub(super) fn decode(e: &ElementRecord) -> Self {
         Self {
-            player: e.playerNr,
+            player: e.player_nr,
             flags: e.state_flags,
             life: e.life_span(),
             hits: e.hit_points(),
             mass: e.mass_points(),
             turn: e.turn_wait(),
             thrust: e.thrust_wait(),
-            color_cycle: e.colorCycleIndex,
+            color_cycle: e.color_cycle_index,
             velocity: e.velocity,
             current: Visual {
                 location: e.current.location,
@@ -291,14 +274,14 @@ impl ElementState {
         }
     }
     pub(super) fn apply(e: &mut ElementRecord, value: Self) {
-        e.playerNr = value.player;
+        e.player_nr = value.player;
         e.state_flags = value.flags;
         e.set_life_span(value.life);
         e.set_hit_points(value.hits);
         e.set_mass_points(value.mass);
         e.set_turn_wait(value.turn);
         e.set_thrust_wait(value.thrust);
-        e.colorCycleIndex = value.color_cycle;
+        e.color_cycle_index = value.color_cycle;
         e.velocity = value.velocity;
         e.current.location = value.current.location;
         e.next.location = value.next.location;
@@ -318,7 +301,7 @@ impl ShipState {
         Self {
             facing: s.ship_facing,
             control: s.control,
-            player: s.playerNr,
+            player: s.player_nr,
             input: s.ship_input_state,
             status: s.cur_status_flags,
             old_status: s.old_status_flags,
@@ -331,7 +314,7 @@ impl ShipState {
     fn apply(s: &mut ShipRecord, v: Self) {
         s.ship_facing = v.facing;
         s.control = v.control;
-        s.playerNr = v.player;
+        s.player_nr = v.player;
         s.ship_input_state = v.input;
         s.cur_status_flags = v.status;
         s.old_status_flags = v.old_status;
@@ -356,8 +339,8 @@ impl RaceStats {
             },
             characteristics: d.characteristics,
             intelligence: Intelligence {
-                maneuverability: d.cyborg_control.ManeuverabilityIndex,
-                weapon_range: d.cyborg_control.WeaponRange,
+                maneuverability: d.cyborg_control.maneuverability_index,
+                weapon_range: d.cyborg_control.weapon_range,
             },
             state: d.race_state,
         }
@@ -370,8 +353,8 @@ impl RaceStats {
         d.ship_info.energy_level = v.ship_info.energy_level;
         d.ship_info.max_energy = v.ship_info.max_energy;
         d.characteristics = v.characteristics;
-        d.cyborg_control.ManeuverabilityIndex = v.intelligence.maneuverability;
-        d.cyborg_control.WeaponRange = v.intelligence.weapon_range;
+        d.cyborg_control.maneuverability_index = v.intelligence.maneuverability;
+        d.cyborg_control.weapon_range = v.intelligence.weapon_range;
         d.race_state = v.state;
     }
 }
@@ -415,7 +398,7 @@ impl Cx<'_> {
             .as_deref_mut()
             .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
-    pub fn captain_controls(&self, id: ShipId) -> &CAPTAIN_STUFF {
+    pub fn captain_controls(&self, id: ShipId) -> &CaptainRecord {
         &self.desc(id).ship_data.captain_control
     }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
@@ -423,7 +406,7 @@ impl Cx<'_> {
         self.kernel.elements.raw(id).cast()
     }
     pub(super) fn primitive(&mut self, id: ElementId) -> &mut crate::battle::DisplayPrimitive {
-        let index = usize::from(self.kernel.elements[id].PrimIndex);
+        let index = usize::from(self.kernel.elements[id].prim_index);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
         self.kernel.display.get_mut(index as u16)
@@ -477,7 +460,7 @@ impl RaceDesc {
     pub(super) fn into_storage(self) -> Box<RaceDescriptor> {
         self.raw
     }
-    pub fn info(&self) -> &SHIP_INFO {
+    pub fn info(&self) -> &ShipInfoRecord {
         &self.raw.ship_info
     }
     pub fn race(&self) -> Option<&'static crate::battle::Race> {
@@ -489,7 +472,7 @@ impl RaceDesc {
     pub fn callbacks(&self) -> [usize; 5] {
         self.raw.callbacks()
     }
-    pub fn fleet(&self) -> &FLEET_STUFF {
+    pub fn fleet(&self) -> &FleetRecord {
         &self.raw.fleet
     }
     pub fn address(&self) -> usize {
@@ -538,16 +521,16 @@ impl ElementState {
             postprocess_func: self.post,
             collision_func: self.collide,
             death_func: self.death,
-            playerNr: self.player,
+            player_nr: self.player,
             state_flags: self.flags,
             life: self.life,
             hits: self.hits,
             mass: self.mass,
             turn: self.turn,
             thrust: self.thrust,
-            colorCycleIndex: self.color_cycle,
+            color_cycle_index: self.color_cycle,
             velocity: self.velocity,
-            IntersectControl: IntersectControl {
+            intersect_control: IntersectControl {
                 IntersectStamp: crate::graphics::intersection::Stamp {
                     origin: Point { x: 0, y: 0 },
                     frame: FrameId::NULL,
@@ -555,17 +538,17 @@ impl ElementState {
                 EndPoint: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
-            PrimIndex: 0,
-            current: STATE {
+            prim_index: 0,
+            current: ElementVisual {
                 location: self.current.location,
-                image: state__bindgen_ty_1 {
+                image: ElementImage {
                     frame: self.current.image.frame,
                     frames: self.current.image.frames,
                 },
             },
-            next: STATE {
+            next: ElementVisual {
                 location: self.next.location,
-                image: state__bindgen_ty_1 {
+                image: ElementImage {
                     frame: self.next.image.frame,
                     frames: self.next.image.frames,
                 },
@@ -583,9 +566,9 @@ impl Subject {
             state: ElementState::decode(record),
             target: record.target,
             parent: record.parent,
-            intersect: record.IntersectControl,
-            primitive: record.PrimIndex,
-            intersect_frame: FrameSelection::retain(record.IntersectControl.IntersectStamp.frame),
+            intersect: record.intersect_control,
+            primitive: record.prim_index,
+            intersect_frame: FrameSelection::retain(record.intersect_control.IntersectStamp.frame),
         }
     }
 }
@@ -595,9 +578,9 @@ impl From<Subject> for ElementRecord {
         let mut record = subject.state.encode();
         record.target = subject.target;
         record.parent = subject.parent;
-        record.IntersectControl = subject.intersect;
+        record.intersect_control = subject.intersect;
         record.intersect_frame = subject.intersect_frame;
-        record.PrimIndex = subject.primitive;
+        record.prim_index = subject.primitive;
         record
     }
 }
@@ -655,9 +638,9 @@ mod projection_tests {
     fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
         let mut raw = ElementRecord {
             state_flags: 513,
-            playerNr: 1,
-            colorCycleIndex: 9,
-            PrimIndex: 17,
+            player_nr: 1,
+            color_cycle_index: 9,
+            prim_index: 17,
             ..ElementRecord::default()
         };
         raw.set_life_span(21);
@@ -667,7 +650,7 @@ mod projection_tests {
         raw.set_thrust_wait(13);
         raw.current.location = Point { x: 11, y: 12 };
         raw.next.location = Point { x: 21, y: 22 };
-        raw.IntersectControl.last_time_val = 31;
+        raw.intersect_control.last_time_val = 31;
         let mut subject = Subject::decode(&raw);
         assert_eq!(subject.life_span(), 21);
         assert_eq!(subject.hit_points(), 7);
@@ -684,12 +667,12 @@ mod projection_tests {
         subject.parent = Parent::IpGroup(group);
         let encoded = ElementRecord::from(subject);
         assert_eq!(Subject::decode(&encoded).parent, Parent::IpGroup(group));
-        assert_eq!(encoded.PrimIndex, 17);
-        assert_eq!(encoded.IntersectControl.last_time_val, 31);
+        assert_eq!(encoded.prim_index, 17);
+        assert_eq!(encoded.intersect_control.last_time_val, 31);
         assert_eq!(encoded.current.location.x, 11);
         assert_eq!(encoded.next.location.y, 22);
         assert_eq!(encoded.state_flags, 513);
-        assert_eq!(encoded.colorCycleIndex, 9);
+        assert_eq!(encoded.color_cycle_index, 9);
         assert_eq!(encoded.life_span(), 44);
         assert_eq!(encoded.hit_points(), 8);
         assert_eq!(encoded.mass_points(), 6);
@@ -732,7 +715,7 @@ mod projection_tests {
         stats.intelligence.weapon_range = 231;
         RaceStats::apply(&mut descriptor, stats);
         assert_eq!(descriptor.ship_info.energy_level, 10);
-        assert_eq!(descriptor.cyborg_control.WeaponRange, 231);
+        assert_eq!(descriptor.cyborg_control.weapon_range, 231);
         assert_eq!(descriptor.ship_data.ship_rsc[0], c"retained".as_ptr());
         let value = RaceDesc::from_storage(Box::new(descriptor));
         // SAFETY: this value retains only test-local static resource tokens.
@@ -772,12 +755,12 @@ pub struct RaceDescriptor {
     pub loaded_victory: Option<crate::sound::resource_types::LoadedMusic>,
     pub loaded_sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     pub resources: super::template::RaceResources,
-    pub ship_info: SHIP_INFO,
-    pub fleet: FLEET_STUFF,
+    pub ship_info: ShipInfoRecord,
+    pub fleet: FleetRecord,
     pub __bindgen_padding_0: [u16; 5usize],
-    pub characteristics: CHARACTERISTIC_STUFF,
-    pub ship_data: DATA_STUFF,
-    pub cyborg_control: INTEL_STUFF,
+    pub characteristics: CharacteristicRecord,
+    pub ship_data: DataRecord,
+    pub cyborg_control: IntelRecord,
     pub race: Option<&'static crate::battle::race::Race>,
     pub race_state: crate::battle::race::RaceState,
     pub race_callbacks: crate::battle::race::Callbacks,

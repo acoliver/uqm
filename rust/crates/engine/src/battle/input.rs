@@ -119,6 +119,7 @@ impl InputContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::battle::net::NetState;
 
     #[test]
     fn installed_inputs_use_each_players_control_and_clear_independently() {
@@ -224,13 +225,13 @@ mod tests {
         fn reset(&self, _: u32, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
-        fn negotiate(&self, _: bool, _: u32, _: &mut dyn ProtocolDriver) -> bool {
+        fn negotiate(&self, _: bool, _: NetState, _: &mut dyn ProtocolDriver) -> bool {
             unreachable!()
         }
-        fn set_state(&self, _: u32) {
+        fn set_state(&self, _: NetState) {
             unreachable!()
         }
-        fn wait_reset(&self, _: u32, _: &mut dyn ProtocolDriver) {
+        fn wait_reset(&self, _: NetState, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
         fn init_end_frames(&self) {

@@ -3,6 +3,15 @@
 pub const DONT_CHASE: u32 = 4096;
 pub const FIRES_FORE: u32 = 128;
 pub const FIRES_LEFT: u32 = 1024;
+pub const FIRES_RIGHT: u32 = 256;
+pub const FIRES_AFT: u32 = 512;
+pub const POINT_DEFENSE: u32 = 16;
+pub const SHIELD_DEFENSE: u32 = 2048;
+pub const PLAYER_CAPTAIN: u32 = 8192;
+pub const PLAY_VICTORY_DITTY: u32 = 512;
+pub const SLOW_SHIP: u32 = 25;
+pub const MAX_CREW_SIZE: u32 = 42;
+pub const MAX_ENERGY_SIZE: u32 = 42;
 pub const IGNORE_SIMILAR: u32 = 256;
 pub const IMMEDIATE_WEAPON: u32 = 32;
 pub const MAX_SHIP_MASS: u32 = 10;

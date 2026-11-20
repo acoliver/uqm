@@ -6,34 +6,34 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Exit, r as i32));
 }
-fn password(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn password(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Password, r as i32));
 }
-fn council(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn council(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Council, r as i32));
 }
-fn angry(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn angry(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Angry, r as i32));
 }
-fn alliance(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn alliance(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Alliance, r as i32));
 }
-fn learn(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn learn(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Learn, r as i32));
 }
-fn quest(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn quest(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Quest, r as i32));
 }
-fn party(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn party(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Party, r as i32));
 }
-fn allies(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn allies(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Allies, r as i32));
 }
-fn info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Info, r as i32));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {

@@ -1,8 +1,9 @@
 //! Live computer-input routing, preserving intel.c's battle and selection rules.
 
 use crate::battle::context_access::ai_legacy::AiOps;
+use crate::engine::battle::flags::{IN_LAST_BATTLE, RPG_PLAYER_NUM};
 use crate::engine::battle::{Cx, ShipId};
-use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SUPER_MELEE};
+use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
 
 #[derive(Debug, PartialEq)]
 enum Route {

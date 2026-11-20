@@ -31,7 +31,7 @@ use uqm_engine::{
     input::frames::{
         KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_SPECIAL,
     },
-    time::counter_abi::{GetTimeCounter, ONE_SECOND},
+    time::counter_abi::{get_time_counter, ONE_SECOND},
 };
 
 pub(super) const BLACK_COLOR: Color = crate::ui::rgb15(0, 0, 0);
@@ -62,7 +62,7 @@ fn admit(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut PresentationState) -> Opt
         return None;
     }
     let mut delay = ONE_SECOND / 84;
-    if GetTimeCounter() >= state.time_out {
+    if get_time_counter() >= state.time_out {
         if state.movie_frame >= 0 {
             state.movie_frame();
             state.movie_frame += 1;

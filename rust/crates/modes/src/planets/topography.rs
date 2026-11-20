@@ -64,7 +64,9 @@ impl LineDda {
 /// addition would push out of the signed-byte range, as C does.
 fn adjust_run(depth: &mut [i8], cursor: &mut isize, count: u16, delta: i32) {
     for _ in 0..count {
-        let index = usize::try_from(*cursor).expect("topography cursor left the map");
+        let Ok(index) = usize::try_from(*cursor) else {
+            panic!("topography cursor left the map: {cursor}");
+        };
         let cell = &mut depth[index];
         if let Ok(adjusted) = i8::try_from(i32::from(*cell) + delta) {
             *cell = adjusted;

@@ -1,8 +1,10 @@
 //! Game kernel start-up: the display, the resources and the status display.
 
 use crate::engine::battle::access::lifecycle;
-use crate::mainloop::options_abi::{loadAddon, loadIndices, prepareAddons};
-use crate::ships::native::abi::*;
+use crate::mainloop::options_abi::{load_addon, load_indices, prepare_addons};
+const MAX_DISPLAY_ELEMENTS: u32 = 150;
+const MAX_SHIPS_PER_SIDE: u32 = 14;
+const OPT_3DO: u32 = 1;
 use crate::{battle::status_native::init_status_offsets, graphics::font::LoadedFont};
 
 /// Load the display, the resource indices and addons the preferences ask for,
@@ -14,24 +16,24 @@ pub fn load_kernel(kernel: &mut crate::engine::Kernel, world: &mut crate::engine
     let Some(content) = crate::io::content_dir() else {
         return 0;
     };
-    if loadIndices(&content) == 0 {
+    if load_indices(&content) == 0 {
         return 0;
     }
     let preferences = kernel.configuration.preferences();
     if preferences.music_3do != 0 {
-        loadAddon(&content, "3domusic");
+        load_addon(&content, "3domusic");
     }
     kernel.using_speech = preferences.speech;
-    if preferences.speech != 0 && !loadAddon(&content, "3dovoice") {
+    if preferences.speech != 0 && !load_addon(&content, "3dovoice") {
         kernel.using_speech = 0;
     }
     if preferences.music_remix != 0 {
-        loadAddon(&content, "remix");
+        load_addon(&content, "remix");
     }
     if preferences.intro == OPT_3DO as i32 {
-        loadAddon(&content, "3dovideo");
+        load_addon(&content, "3dovideo");
     }
-    prepareAddons(&content, &kernel.configuration.addons());
+    prepare_addons(&content, &kernel.configuration.addons());
     if !kernel.load_main_colormap() {
         return 0;
     }

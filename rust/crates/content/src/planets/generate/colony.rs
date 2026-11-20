@@ -47,8 +47,7 @@ pub fn generate_planets(
         generating_moons: false,
         types_defined: false,
     };
-    let drawn = orbits::fill_orbits(rng, request, planets)
-        .expect("FillOrbits draws the planet count when asked for ~0");
+    let drawn = orbits::fill_drawn_orbits(rng, request, planets);
     special::reposition(&mut planets[0], 115);
     planets[0].data_index = WATER_WORLD | PLANET_SHIELDED;
     drawn

@@ -5,7 +5,9 @@
 
 use super::*;
 use crate::battle::ai::HUMAN_CONTROL;
-use crate::engine::battle::{record::CHARACTERISTIC_STUFF, views::Info};
+use crate::engine::battle::ai_constants::MAX_SHIP_MASS;
+use crate::engine::battle::flags::NEUTRAL_PLAYER_NUM;
+use crate::engine::battle::{record::CharacteristicRecord, views::Info};
 
 /// Frames a held SPECIAL may take to activate before the fixture fails.
 pub(super) const HOLD_FRAMES: u16 = 8;
@@ -118,7 +120,7 @@ fn info_mut(world: &mut World, ship: ElementId) -> Result<&mut Info, String> {
         .ok_or_else(|| DESCRIPTOR.into())
 }
 
-fn characteristics(world: &World, ship: ElementId) -> Result<&CHARACTERISTIC_STUFF, String> {
+fn characteristics(world: &World, ship: ElementId) -> Result<&CharacteristicRecord, String> {
     world
         .ship(ship)
         .characteristics

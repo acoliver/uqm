@@ -53,9 +53,15 @@ pub mod live {
 
     const FADE_ALL_TO_COLOR: u32 = 253;
 
+    use crate::engine::battle::net::NetState;
+
     use crate::engine::battle::ShipId;
-    use crate::engine::time::counter_abi::GetTimeCounter;
-    use crate::ships::native::abi::*;
+    use crate::engine::input_port::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
+    use crate::engine::time::counter_abi::get_time_counter;
+    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
+    use crate::graphics::geometry::Color;
+    use crate::sound::heart_ffi::wait_for_sound_end;
+    use crate::supermelee::native::MELEE_PICK_MASK_PMAP_ANIM;
     use std::ffi::CString;
     fn by_index(
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -155,7 +161,7 @@ pub mod live {
                 input.pulsed_battle_input(player),
             ),
             InputSource::Computer => {
-                if GetTimeCounter()
+                if get_time_counter()
                     < state.player[usize::from(player)]
                         .entered_at
                         .wrapping_add(840 >> 1)
@@ -222,7 +228,7 @@ pub mod live {
             .as_ref()
             .unwrap_or_else(|| panic!("missing net"))
             .all_connected()
-            || cx.world.activity() & CHECK_ABORT as u16 != 0;
+            || cx.world.activity() & CHECK_ABORT != 0;
         let mut done = true;
         if !abort {
             for (player, context) in inputs.iter().enumerate() {
@@ -265,8 +271,7 @@ pub mod live {
                     p.ship = None;
                 }
             }
-            cx.world
-                .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
+            cx.world.set_activity(cx.world.activity() & !CHECK_ABORT);
             0
         } else {
             u32::from(!done)
@@ -307,10 +312,10 @@ pub mod live {
             std::array::from_fn(|player| self.drawable.lease().context_frame(player))
         }
     }
-    fn context(raw: CONTEXT) -> ContextLease {
+    fn context(raw: Option<crate::graphics::context::ContextId>) -> ContextLease {
         ContextLease::retain(raw.unwrap_or_else(|| panic!("picker context")))
     }
-    fn font(raw: FONT) -> crate::graphics::font::FontLease {
+    fn font(raw: Option<crate::graphics::font::FontId>) -> crate::graphics::font::FontLease {
         crate::graphics::font::FontLease::retain(raw.unwrap_or_else(|| panic!("picker font")))
     }
     fn retained_frame(raw: FrameId, index: usize) -> crate::graphics::drawable::ContextFrame {
@@ -504,8 +509,8 @@ pub mod live {
         }
         {
             let net = cx.b.network();
-            cx.negotiate_battle(net.as_ref(), NetState_NetState_inSetup);
-            let timeout = GetTimeCounter().wrapping_add(840 * 4);
+            cx.negotiate_battle(net.as_ref(), NetState::InSetup);
+            let timeout = get_time_counter().wrapping_add(840 * 4);
             let mut pressed = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0
                 || input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0;
             loop {
@@ -523,11 +528,11 @@ pub mod live {
                 }
                 uqm_engine::host::process_async();
                 cx.kernel.input_runtime().sleep(cx, 840 / 40);
-                if cx.world.activity() & CHECK_ABORT as u16 != 0
+                if cx.world.activity() & CHECK_ABORT != 0
                     || button
                     || (cx.kernel.player_control[0] & cx.kernel.player_control[1] & PSYTRON_CONTROL
                         != 0
-                        && GetTimeCounter() >= timeout)
+                        && get_time_counter() >= timeout)
                 {
                     break;
                 }
@@ -539,11 +544,11 @@ pub mod live {
         state: &mut FleetSelection,
         counters: [u8; 2],
         mask: u16,
-        screen_context: CONTEXT,
+        screen_context: Option<crate::graphics::context::ContextId>,
         controls: [u8; 2],
         order: [u16; 2],
     ) {
-        let now = GetTimeCounter();
+        let now = get_time_counter();
         for player in order.map(usize::from) {
             let p = &mut state.player[player];
             p.selecting = mask & (1 << player) != 0;
@@ -609,9 +614,9 @@ pub mod live {
                     order,
                 );
             }
-            let mut ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_selectShip);
+            let mut ok = cx.negotiate_battle(net.as_ref(), NetState::SelectShip);
             {
-                input.set_default_menu_repeat(GetTimeCounter());
+                input.set_default_menu_repeat(get_time_counter());
             };
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();
@@ -624,7 +629,7 @@ pub mod live {
             });
             let mut ships = [None; 2];
             {
-                WaitForSoundEnd(0);
+                wait_for_sound_end(0);
                 for (player, p) in state.player.iter_mut().enumerate() {
                     if !p.selecting {
                         continue;
@@ -638,13 +643,12 @@ pub mod live {
                 }
             };
             if ok {
-                ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle);
+                ok = cx.negotiate_battle(net.as_ref(), NetState::InterBattle);
             } else {
-                net.set_state(NetState_NetState_interBattle);
+                net.set_state(NetState::InterBattle);
             }
             if !ok {
-                cx.world
-                    .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+                cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
             }
             net.end_selection();
             ok.then_some(ships)

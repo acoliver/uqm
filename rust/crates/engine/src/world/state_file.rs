@@ -286,8 +286,20 @@ impl StateFileManager {
         if file_index >= NUM_STATE_FILES {
             return Err(StateFileError::InvalidFile);
         }
-        self.files[file_index].replace_contents(bytes);
+        self.replace(file_index, bytes);
         Ok(())
+    }
+
+    /// Replace the contents of a state file whose index is one of the
+    /// `*_FILE` constants. Panics on any other index.
+    pub fn replace(&mut self, file_index: usize, bytes: &[u8]) {
+        self.files[file_index].replace_contents(bytes);
+    }
+
+    /// Contents of a state file whose index is one of the `*_FILE` constants.
+    /// Panics on any other index.
+    pub fn contents(&self, file_index: usize) -> &[u8] {
+        self.files[file_index].contents()
     }
 
     /// Get direct access to a state file

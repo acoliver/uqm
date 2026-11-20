@@ -127,7 +127,7 @@ fn status() -> Vec<(usize, &'static str)> {
             "battle::status_native::PreProcessStatus",
         ),
         (
-            crate::battle::status_native::engine::PostProcessStatus as *const () as usize,
+            crate::battle::status_native::engine::post_process_status as *const () as usize,
             "battle::status_native::PostProcessStatus",
         ),
     ]

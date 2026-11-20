@@ -179,7 +179,7 @@ impl From<&crate::engine::battle::record::ElementRecord> for Element {
         fn point(p: crate::graphics::geometry::Point) -> Point {
             Point::new(p.x, p.y)
         }
-        fn visual(s: &crate::engine::battle::record::STATE) -> ElementVisualState {
+        fn visual(s: &crate::engine::battle::record::ElementVisual) -> ElementVisualState {
             ElementVisualState {
                 location: point(s.location),
                 frame: s.image.frame.clone(),
@@ -191,24 +191,24 @@ impl From<&crate::engine::battle::record::ElementRecord> for Element {
             postprocess_func: record.postprocess_func,
             collision_func: record.collision_func,
             death_func: record.death_func,
-            player_nr: record.playerNr,
+            player_nr: record.player_nr,
             state_flags: ElementFlags::from_bits_retain(record.state_flags),
             life_span: record.life,
             crew_or_hp: record.hits,
             mass_points: record.mass,
             turn_wait: record.turn,
             thrust_or_blast: record.thrust,
-            color_cycle_index: record.colorCycleIndex,
+            color_cycle_index: record.color_cycle_index,
             velocity: record.velocity,
             intersect_control: IntersectControl {
-                last_time_val: record.IntersectControl.last_time_val,
-                end_point: point(record.IntersectControl.EndPoint),
+                last_time_val: record.intersect_control.last_time_val,
+                end_point: point(record.intersect_control.EndPoint),
                 intersect_stamp: Stamp {
-                    origin: point(record.IntersectControl.IntersectStamp.origin),
-                    frame: record.IntersectControl.IntersectStamp.frame,
+                    origin: point(record.intersect_control.IntersectStamp.origin),
+                    frame: record.intersect_control.IntersectStamp.frame,
                 },
             },
-            prim_index: record.PrimIndex,
+            prim_index: record.prim_index,
             current: visual(&record.current),
             next: visual(&record.next),
             parent: record.parent,
@@ -969,10 +969,10 @@ mod tests {
 
     #[test]
     fn live_intersection_fields_are_read_at_their_native_offsets() {
-        let mut native = crate::ships::native::abi::ElementRecord::default();
-        native.IntersectControl.last_time_val = 17;
-        native.IntersectControl.EndPoint = crate::graphics::geometry::Point { x: 31, y: -47 };
-        native.IntersectControl.IntersectStamp.origin =
+        let mut native = crate::engine::battle::record::ElementRecord::default();
+        native.intersect_control.last_time_val = 17;
+        native.intersect_control.EndPoint = crate::graphics::geometry::Point { x: 31, y: -47 };
+        native.intersect_control.IntersectStamp.origin =
             crate::graphics::geometry::Point { x: -3, y: 91 };
         let model = Element::from(&native);
         assert_eq!(model.intersect_control.last_time_val, 17);
@@ -985,12 +985,12 @@ mod tests {
 
     #[test]
     fn snapshot_preserves_native_state_without_layout_aliasing() {
-        let native = crate::ships::native::abi::ElementRecord {
-            playerNr: 1,
+        let native = crate::engine::battle::record::ElementRecord {
+            player_nr: 1,
             state_flags: 0x1234,
             life: 12,
             hits: 9,
-            PrimIndex: 17,
+            prim_index: 17,
             ..Default::default()
         };
         let model = Element::from(&native);

@@ -1,5 +1,6 @@
 //! Local and remote team-change protocol.
 use super::*;
+use crate::starbase::ids::NETMELEE_STRING_BASE;
 use crate::supermelee::types::MeleeShip as SetupShip;
 
 pub(super) fn view_name(

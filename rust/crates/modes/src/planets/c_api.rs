@@ -65,13 +65,8 @@ fn clone_npc_ship(
 }
 
 /// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), INFINITE_FLEET)`.
-pub fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, ship: u16) {
-    clone_npc_ship(
-        world,
-        u8::try_from(ship).expect("ship index fits a byte"),
-        INFINITE_FLEET,
-        None,
-    );
+pub fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, ship: u8) {
+    clone_npc_ship(world, ship, INFINITE_FLEET, None);
 }
 
 /// `CountLinks (&GLOBAL (npc_built_ship_q))`.
@@ -108,11 +103,10 @@ pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16))
         *encounters.get_mut(id) = crate::engine::world::queues::EncounterRecord::default();
         encounters.insert_before(id, encounters.head());
         let fleets = world.avail_races_ref();
-        let template = *fleets.get(
-            fleets
-                .at(usize::from(ship::URQUAN_SHIP))
-                .expect("Ur-Quan fleet"),
-        );
+        let Some(urquan) = fleets.at(usize::from(ship::URQUAN_SHIP)) else {
+            return false;
+        };
+        let template = *fleets.get(urquan);
         let mut encounters = world.encounters();
         let encounter = encounters.get_mut(id);
         encounter.origin = template.loc;

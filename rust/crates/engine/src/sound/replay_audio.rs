@@ -49,7 +49,7 @@ impl ReplayAudio {
         self.next_handle = self
             .next_handle
             .checked_add(1)
-            .expect("audio handles exhausted");
+            .unwrap_or_else(|| panic!("audio handles exhausted"));
         self.sounds.insert(
             self.next_handle,
             Playback {
@@ -79,7 +79,8 @@ impl ReplayAudio {
             AudioCommand::PlayWav(data, _, looping, reply)
             | AudioCommand::PlayOgg(data, _, looping, reply) => {
                 let handle = self.decoded(data, looping, now);
-                reply.send(handle).expect("audio play receiver dropped");
+                // A requester that stopped waiting has no use for the handle.
+                let _ = reply.send(handle);
             }
             AudioCommand::PlayRaw(data, rate, channels, bits, _, looping, reply) => {
                 let handle = if !matches!(bits, 8 | 16) || rate == 0 || channels == 0 {
@@ -92,16 +93,14 @@ impl ReplayAudio {
                         now,
                     )
                 };
-                reply.send(handle).expect("audio play receiver dropped");
+                let _ = reply.send(handle);
             }
             AudioCommand::IsPlaying(handle, reply) => {
-                reply
-                    .send(
-                        self.sounds
-                            .get(&handle)
-                            .is_some_and(|sound| sound.playing(now)),
-                    )
-                    .expect("audio query receiver dropped");
+                let playing = self
+                    .sounds
+                    .get(&handle)
+                    .is_some_and(|sound| sound.playing(now));
+                let _ = reply.send(playing);
             }
             AudioCommand::Pause(handle) => {
                 if let Some(sound) = self.sounds.get_mut(&handle) {

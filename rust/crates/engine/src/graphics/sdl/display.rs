@@ -179,16 +179,13 @@ impl SdlDisplay {
                 }
                 (std::mem::take(&mut self.scratch), scaled * 4, factor)
             }
-            None => (
-                words.iter().flat_map(|word| word.to_ne_bytes()).collect(),
-                canvas.pitch(),
-                1,
-            ),
+            None => {
+                native_bytes(words, &mut self.scratch);
+                (std::mem::take(&mut self.scratch), canvas.pitch(), 1)
+            }
         };
         self.upload(screen, alpha, &bytes, pitch, scale, rect);
-        if scale != 1 {
-            self.scratch = bytes;
-        }
+        self.scratch = bytes;
     }
 
     fn upload(
@@ -487,6 +484,17 @@ pub(crate) fn display_sample(event: &sdl2::event::Event) -> Option<PresentationS
     samples.pop()
 }
 
+/// Write canvas words into the reused upload buffer in native byte order.
+///
+/// Runs on every present, so it must not allocate or go through flattening
+/// iterators: unoptimised builds spent most of each replay frame there.
+fn native_bytes(words: &[u32], out: &mut Vec<u8>) {
+    out.resize(words.len() * 4, 0);
+    for (bytes, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(words) {
+        *bytes = word.to_ne_bytes();
+    }
+}
+
 fn log_scaler_flags(flags: i32) {
     for (bit, name) in [
         (3, "SCALE_BILINEAR"),
@@ -515,5 +523,18 @@ mod tests {
         assert_eq!(scale_factor(1 << 7), Some(2));
         assert_eq!(scale_factor(XBRZ3), Some(3));
         assert_eq!(scale_factor(XBRZ4 | (1 << 5)), Some(4));
+    }
+
+    #[test]
+    fn native_bytes_reuses_the_buffer_in_native_byte_order() {
+        let mut out = vec![0xaa; 64];
+        native_bytes(&[0x1122_3344, 0xff00_ee01], &mut out);
+        let expected: Vec<u8> = [0x1122_3344u32, 0xff00_ee01]
+            .iter()
+            .flat_map(|word| word.to_ne_bytes())
+            .collect();
+        assert_eq!(out, expected);
+        native_bytes(&[0x0102_0304; 3], &mut out);
+        assert_eq!(out, [0x0102_0304u32.to_ne_bytes(); 3].as_flattened());
     }
 }

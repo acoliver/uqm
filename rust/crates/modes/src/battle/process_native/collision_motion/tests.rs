@@ -1,10 +1,11 @@
 use super::*;
+use crate::graphics::geometry::Point;
 
 struct Body {
-    state_flags: ELEMENT_FLAGS,
-    velocity: VELOCITY_DESC,
-    current: POINT,
-    next: POINT,
+    state_flags: u16,
+    velocity: VelocityDesc,
+    current: Point,
+    next: Point,
 }
 
 impl Body {
@@ -19,22 +20,22 @@ impl Body {
 fn body() -> Body {
     Body {
         state_flags: 0,
-        velocity: VELOCITY_DESC::new(),
-        current: POINT { x: 0, y: 0 },
-        next: POINT { x: 0, y: 0 },
+        velocity: VelocityDesc::new(),
+        current: Point { x: 0, y: 0 },
+        next: Point { x: 0, y: 0 },
     }
 }
 
-fn sample(random: &mut impl FnMut() -> u32, case: usize) -> (Body, BYTE, (BYTE, BYTE)) {
+fn sample(random: &mut impl FnMut() -> u32, case: usize) -> (Body, u8, (u8, u8)) {
     let mut e = body();
-    e.current = POINT {
+    e.current = Point {
         x: random() as i16,
         y: random() as i16,
     };
     e.next = if case.is_multiple_of(3) {
         e.current
     } else {
-        POINT {
+        Point {
             x: random() as i16,
             y: random() as i16,
         }
@@ -92,7 +93,7 @@ fn collision_vectors_match_original_fixed_width_response() {
                     &mut waits,
                 );
             }
-            let mut expected_velocity = VELOCITY_DESC::new();
+            let mut expected_velocity = VelocityDesc::new();
             expected_velocity.set_components(velocities[i].0, velocities[i].1);
             assert_eq!(e.velocity, expected_velocity, "case {case}, body {i}");
             if case.is_multiple_of(3) {
@@ -106,19 +107,19 @@ fn collision_vectors_match_original_fixed_width_response() {
 fn response_narrows_getter_and_sum_before_speed_floor() {
     let mut e = body();
     e.velocity.vector.width = 1024;
-    respond(&mut e.motion(), 1, 2, QUADRANT as SIZE, 0, &mut (0, 0));
+    respond(&mut e.motion(), 1, 2, QUADRANT as i16, 0, &mut (0, 0));
     assert_eq!(e.velocity.get_current_components(), (127, 0));
     e.velocity.set_components(32760, 0);
-    respond(&mut e.motion(), 1, 2, QUADRANT as SIZE, 40, &mut (0, 0));
+    respond(&mut e.motion(), 1, 2, QUADRANT as i16, 40, &mut (0, 0));
     assert_eq!(e.velocity.get_current_components(), (-32756, 0));
 }
 
 #[test]
 fn gravity_mass_boundary_matches_original_plus_one_comparison() {
-    let limit = (MAX_SHIP_MASS * 10) as BYTE;
+    let limit = (MAX_SHIP_MASS * 10) as u8;
     assert!(movable(limit - 1));
     assert!(!movable(limit));
-    assert!(!movable(BYTE::MAX));
+    assert!(!movable(u8::MAX));
 }
 
 #[test]
@@ -132,12 +133,9 @@ fn repeated_stationary_collision_rotates_impact_and_zeros_velocity() {
     b.state_flags = DEFY_PHYSICS as u16;
     let locations = [(a.current, a.next), (b.current, b.next)];
     let (_, angles) = impulse(&mut a.motion(), &mut b.motion(), locations, [1, 1]);
-    assert_eq!(
-        angles,
-        travel.map(|v| (v + (HALF_CIRCLE - OCTANT) as u16) as SIZE)
-    );
-    assert_eq!(a.velocity, VELOCITY_DESC::new());
-    assert_eq!(b.velocity, VELOCITY_DESC::new());
+    assert_eq!(angles, travel.map(|v| (v + (HALF_CIRCLE - OCTANT)) as i16));
+    assert_eq!(a.velocity, VelocityDesc::new());
+    assert_eq!(b.velocity, VelocityDesc::new());
     assert_eq!(a.state_flags, (DEFY_PHYSICS | COLLISION) as u16);
     assert_eq!(b.state_flags, (DEFY_PHYSICS | COLLISION) as u16);
 }
@@ -152,9 +150,9 @@ fn collision_waits_add_without_clamping_and_skip_defying_or_non_ship_bodies() {
         (0, (0, 0), (0, 0)),
     ] {
         let mut e = body();
-        e.state_flags = flags as ELEMENT_FLAGS;
+        e.state_flags = flags as u16;
         let mut waits = initial;
-        respond(&mut e.motion(), 1, 2, QUADRANT as SIZE, 0, &mut waits);
+        respond(&mut e.motion(), 1, 2, QUADRANT as i16, 0, &mut waits);
         assert_eq!(waits, expected);
     }
 }

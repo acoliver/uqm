@@ -5,7 +5,25 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_rust::engine::battle::ai_constants::LEFT;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_rust::engine::battle::ai_constants::POINT_DEFENSE;
+use uqm_rust::engine::battle::ai_constants::RIGHT;
+use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::CHANGING;
+use uqm_rust::engine::battle::flags::CREW_OBJECT;
+use uqm_rust::engine::battle::flags::DISAPPEARING;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::ONE_SHIFT;
 
 #[test]
 fn descriptor_and_fusion_match_c() {
@@ -24,7 +42,7 @@ fn descriptor_and_fusion_match_c() {
                 ),
                 (42, 42)
             );
-            assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 1600);
+            assert_eq!(ship.descriptor_mut().cyborg_control.weapon_range, 1600);
             assert_eq!(
                 (
                     ship.descriptor_mut().fleet.known_loc.x,
@@ -83,9 +101,9 @@ fn fighters_launch_left_then_right_and_return_crew() {
                     hooks::invoke_collision_pointer(
                         (*e).collision_func.unwrap(),
                         e,
-                        &mut POINT { x: 0, y: 0 },
+                        &mut Point { x: 0, y: 0 },
                         ship.ptr(),
-                        &mut POINT { x: 0, y: 0 },
+                        &mut Point { x: 0, y: 0 },
                         hooks::CollisionCall::Hook,
                     )
                 });
@@ -142,7 +160,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             assert_eq!((*fighter).thrust, 7);
             (*fighter).life = 392;
             (*fighter).target = Some(battle::id((enemy.handle).cast()));
-            (*fighter).current.location = POINT { x: 4000, y: 4100 };
+            (*fighter).current.location = Point { x: 4000, y: 4100 };
             (*fighter).thrust = 1;
             with_rng(17, 0, || {
                 hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter)
@@ -180,8 +198,8 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             let mut planet_fixture = Object::new(&_battle);
             let planet = planet_fixture.ptr();
             (*planet).mass = 101;
-            let mut pa = POINT { x: 0, y: 0 };
-            let mut pb = POINT { x: 0, y: -10 };
+            let mut pa = Point { x: 0, y: 0 };
+            let mut pb = Point { x: 0, y: -10 };
             with_rng(18, 0, || {
                 hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
@@ -209,7 +227,7 @@ fn ai_fighter_budget_point_defense_and_crew_boundaries() {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
             let mut enemy = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 1);
             ship.ship_mut().weapon_counter = 1;
-            enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex = 100;
+            enemy.descriptor_mut().cyborg_control.maneuverability_index = 100;
             for crew in [10, 11] {
                 for fighters in [5, 6] {
                     for defense in [false, true] {
@@ -217,8 +235,8 @@ fn ai_fighter_budget_point_defense_and_crew_boundaries() {
                         ship.descriptor_mut().characteristics.special_wait = fighters;
                         enemy.descriptor_mut().ship_info.ship_flags =
                             if defense { POINT_DEFENSE as u16 } else { 0 };
-                        let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                        concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.ptr();
+                        let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                        concerns[ENEMY_SHIP_INDEX as usize].object_ptr = enemy.ptr();
                         concerns[ENEMY_SHIP_INDEX as usize].which_turn = 20;
                         with_rng(12, 0, || {
                             ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
@@ -229,7 +247,7 @@ fn ai_fighter_budget_point_defense_and_crew_boundaries() {
                         );
                         assert_eq!(ship.descriptor_mut().characteristics.special_wait, 0);
                         assert_eq!(
-                            concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                            concerns[ENEMY_SHIP_INDEX as usize].move_state,
                             MOVEMENT_STATE_PURSUE
                         );
                     }

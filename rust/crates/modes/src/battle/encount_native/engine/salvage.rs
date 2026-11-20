@@ -1,10 +1,14 @@
 //! Retained salvage panel resources and the ordered post-battle reward display.
 use super::*;
+use crate::engine::time::counter_abi::ONE_SECOND;
+use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+use crate::engine::world::queues::ShipFragment as SHIP_FRAGMENT;
 use crate::engine::{battle::Cx, observe::Io};
 use crate::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
     geometry::Rect, geometry::TextAlign,
 };
+use crate::starbase::ids::STATUS_STRING_BASE;
 
 fn draw_salvage_line(
     kernel: &crate::engine::Kernel,
@@ -30,7 +34,11 @@ fn draw_salvage_line(
     context.draw_text(&font, string, baseline, align, color);
 }
 
-fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &Rect) {
+fn draw_salvage_captions(
+    kernel: &crate::engine::Kernel,
+    name: &[std::ffi::c_char; 80],
+    rect: &Rect,
+) {
     let baseline = Point {
         x: rect.corner.x.wrapping_add(100),
         y: rect.corner.y.wrapping_add(68),
@@ -55,7 +63,7 @@ fn draw_fade_text(
     input: &crate::engine::input::InputSession,
     str1: &std::ffi::CStr,
     str2: &std::ffi::CStr,
-    fade_in: BOOLEAN,
+    fade_in: u32,
     rect: &Rect,
 ) {
     let context = crate::graphics::context::ContextLease::retain(
@@ -86,7 +94,7 @@ fn draw_fade_text(
     };
     let runtime = cx.kernel.input_runtime();
     runtime.flush();
-    let mut time = GetTimeCounter();
+    let mut time = get_time_counter();
     if fade_in != 0 {
         let mut i = 0usize;
         while i < TEXT_FADE.len() {
@@ -97,7 +105,7 @@ fn draw_fade_text(
             let v = TEXT_FADE[i];
             render(rgb15(v, v, v));
             runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
-            time = GetTimeCounter();
+            time = get_time_counter();
             i += 1;
         }
     } else {
@@ -110,7 +118,7 @@ fn draw_fade_text(
             let v = TEXT_FADE[i as usize];
             render(rgb15(v, v, v));
             runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
-            time = GetTimeCounter();
+            time = get_time_counter();
             i -= 1;
         }
         render(rgb15(10, 10, 10));
@@ -125,7 +133,7 @@ pub(super) struct Salvage {
     stamp_frame: ContextFrame,
     str1: std::ffi::CString,
     str2: std::ffi::CString,
-    buf: [UNICODE; 80],
+    buf: [std::ffi::c_char; 80],
     recycle: u16,
     pub(super) victory: i16,
     sleepy: bool,
@@ -212,7 +220,7 @@ impl Salvage {
         let (name, _) = resources.label(0);
         crate::ships::native::copy_display_name(&mut self.buf, name.to_bytes());
         for byte in &mut self.buf {
-            *byte = (*byte as u8).to_ascii_uppercase() as UNICODE;
+            *byte = (*byte as u8).to_ascii_uppercase() as std::ffi::c_char;
         }
         draw_salvage_captions(kernel, &self.buf, &self.salvage_rect);
 
@@ -262,11 +270,11 @@ impl Salvage {
     fn animate(&mut self, cx: &mut Cx<'_>, input: &crate::engine::input::InputSession) {
         let runtime = cx.kernel.input_runtime();
         if self.sleepy {
-            let mut time = GetTimeCounter();
+            let mut time = get_time_counter();
             for (r, g, b) in SHIP_FADE {
                 runtime.update(cx);
-                self.sleepy = !input.current().any_button_pressed()
-                    && cx.world.activity() & CHECK_ABORT as u16 == 0;
+                self.sleepy =
+                    !input.current().any_button_pressed() && cx.world.activity() & CHECK_ABORT == 0;
                 if !self.sleepy {
                     break;
                 }
@@ -276,7 +284,7 @@ impl Salvage {
                     rgb15(r, g, b),
                 );
                 runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 15));
-                time = GetTimeCounter();
+                time = get_time_counter();
             }
         }
         self.context
@@ -346,6 +354,8 @@ mod tests {
         observe::{Observer, Unobserved},
         Game,
     };
+    use crate::starbase::ids::NUM_MODULES;
+    use crate::starbase::ids::{MONTHS_STRING_BASE, NAVIGATION_STRING_BASE};
     use std::{cell::Cell, rc::Rc};
 
     #[derive(Default)]
@@ -421,7 +431,7 @@ mod tests {
         game.world.data.flagship.drive_slots.fill(NUM_MODULES as u8);
         game.world.data.flagship.jet_slots.fill(NUM_MODULES as u8);
         game.kernel
-            .set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
+            .set_status_message_mode(crate::comm::dispatch::smm::RES_UNITS);
         let frames =
             LoadedDrawable::create(8, 64, 140, 100).unwrap_or_else(|| panic!("salvage frames"));
         let frame = frames

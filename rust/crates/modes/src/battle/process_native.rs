@@ -2,8 +2,28 @@
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
 use crate::battle::galaxy::move_galaxy;
+use crate::engine::battle::ai_constants::IGNORE_SIMILAR;
+use crate::engine::battle::flags::{
+    APPEARING, CHANGING, COLLISION, DEFY_PHYSICS, DISAPPEARING, FINITE_LIFE, IGNORE_VELOCITY,
+    IN_LAST_BATTLE, MAX_TIME_VALUE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP, POST_PROCESS, PRE_PROCESS,
+    SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, STAMPFILL_PRIMITIVE,
+};
+use crate::engine::battle::LINE_PRIMITIVE;
+use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD};
+use crate::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
+use crate::engine::world::IN_HYPERSPACE;
+use crate::graphics::geometry::Line;
+use crate::graphics::geometry::Point;
+use crate::math::battle_types::{
+    MAX_REDUCTION, MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ONE_SHIFT, REDUCTION_SHIFT, ZOOM_SHIFT,
+};
 use crate::math::wrap_delta;
-use crate::ships::native::abi::*;
+use crate::starbase::ids::STATUS_WIDTH;
+const GSCALE_IDENTITY: u32 = 256;
+const VIEW_STATE_VIEW_CHANGE: u32 = 2;
+const VIEW_STATE_VIEW_SCROLL: u32 = 1;
+const VIEW_STATE_VIEW_STABLE: u32 = 0;
 
 mod collision_motion;
 pub mod dispatch;
@@ -30,7 +50,7 @@ enum ViewState {
 use queue_view::draw_frame;
 
 fn display_align(value: i32) -> i16 {
-    (value as COORD) & !((1 << ONE_SHIFT) - 1)
+    (value as i16) & !((1 << ONE_SHIFT) - 1)
 }
 
 fn wrap_value(value: i32, extent: i32) -> i16 {
@@ -40,10 +60,10 @@ fn wrap_value(value: i32, extent: i32) -> i16 {
         value - extent
     } else {
         value
-    } as COUNT) as COORD
+    } as u16) as i16
 }
 
-fn calc_zoom_stuff(zoom: SIZE) -> (COUNT, COUNT) {
+fn calc_zoom_stuff(zoom: i16) -> (u16, u16) {
     let index = if i32::from(zoom) < 2 << ZOOM_SHIFT {
         0
     } else if i32::from(zoom) < 4 << ZOOM_SHIFT {
@@ -53,35 +73,35 @@ fn calc_zoom_stuff(zoom: SIZE) -> (COUNT, COUNT) {
     };
     (
         index,
-        ((1 << (u32::from(index) + ZOOM_SHIFT + 8)) / i32::from(zoom)) as COUNT,
+        ((1 << (u32::from(index) + ZOOM_SHIFT + 8)) / i32::from(zoom)) as u16,
     )
 }
 
 fn calc_reduction(
-    mut dx: SIZE,
-    mut dy: SIZE,
-    zoom: SIZE,
+    mut dx: i16,
+    mut dy: i16,
+    zoom: i16,
     step: bool,
     activity: u8,
     width: i32,
     height: i32,
-) -> COUNT {
+) -> u16 {
     if activity > IN_ENCOUNTER as u8 {
         return if step { 0 } else { 1 << ZOOM_SHIFT };
     }
     if step {
         let (sdx, sdy) = (dx, dy);
-        let mut reduction = MAX_VIS_REDUCTION as COUNT;
+        let mut reduction = MAX_VIS_REDUCTION as u16;
         // Each compound assignment narrows to SIZE before the comparison.
         while {
-            dx = (i32::from(dx) << REDUCTION_SHIFT) as SIZE;
+            dx = (i32::from(dx) << REDUCTION_SHIFT) as i16;
             i32::from(dx) <= width >> (MAX_REDUCTION - MAX_VIS_REDUCTION)
         } && {
-            dy = (i32::from(dy) << REDUCTION_SHIFT) as SIZE;
+            dy = (i32::from(dy) << REDUCTION_SHIFT) as i16;
             i32::from(dy) <= height >> (MAX_REDUCTION - MAX_VIS_REDUCTION)
         } && reduction > 0
         {
-            reduction = reduction.wrapping_sub(REDUCTION_SHIFT as COUNT);
+            reduction = reduction.wrapping_sub(REDUCTION_SHIFT as u16);
         }
         if i32::from(reduction) < i32::from(zoom) && i32::from(zoom) <= MAX_VIS_REDUCTION as i32 {
             let shift = MAX_VIS_REDUCTION - u32::from(reduction);
@@ -90,19 +110,19 @@ fn calc_reduction(
                 || ((i32::from(sdy) + (20 << ONE_SHIFT)) << shift)
                     > height >> (MAX_REDUCTION - MAX_VIS_REDUCTION)
             {
-                reduction = reduction.wrapping_add(REDUCTION_SHIFT as COUNT);
+                reduction = reduction.wrapping_add(REDUCTION_SHIFT as u16);
             }
         }
         if reduction == 0 && activity == IN_LAST_BATTLE as u8 {
-            reduction = reduction.wrapping_add(REDUCTION_SHIFT as COUNT);
+            reduction = reduction.wrapping_add(REDUCTION_SHIFT as u16);
         }
         reduction
     } else {
-        dx = (i32::from(dx) * MAX_ZOOM_OUT as i32 / (width >> 2)) as SIZE;
-        dx = dx.clamp(1 << ZOOM_SHIFT, MAX_ZOOM_OUT as SIZE);
-        dy = (i32::from(dy) * MAX_ZOOM_OUT as i32 / (height >> 2)) as SIZE;
-        dy = dy.clamp(1 << ZOOM_SHIFT, MAX_ZOOM_OUT as SIZE);
-        let mut reduction = dx.max(dy) as COUNT;
+        dx = (i32::from(dx) * MAX_ZOOM_OUT as i32 / (width >> 2)) as i16;
+        dx = dx.clamp(1 << ZOOM_SHIFT, MAX_ZOOM_OUT as i16);
+        dy = (i32::from(dy) * MAX_ZOOM_OUT as i32 / (height >> 2)) as i16;
+        dy = dy.clamp(1 << ZOOM_SHIFT, MAX_ZOOM_OUT as i16);
+        let mut reduction = dx.max(dy) as u16;
         if reduction < 2 << ZOOM_SHIFT && activity == IN_LAST_BATTLE as u8 {
             reduction = 2 << ZOOM_SHIFT;
         }
@@ -110,13 +130,13 @@ fn calc_reduction(
     }
 }
 
-fn view_scroll(origin: POINT, ships_alive: COUNT, width: i32, height: i32) -> (SIZE, SIZE) {
+fn view_scroll(origin: Point, ships_alive: u16, width: i32, height: i32) -> (i16, i16) {
     let mut dx = wrap_delta(
-        i32::from((width >> 1) as COORD).wrapping_sub(i32::from(origin.x)) as SIZE,
+        i32::from((width >> 1) as i16).wrapping_sub(i32::from(origin.x)) as i16,
         width,
     );
     let mut dy = wrap_delta(
-        i32::from((height >> 1) as COORD).wrapping_sub(i32::from(origin.y)) as SIZE,
+        i32::from((height >> 1) as i16).wrapping_sub(i32::from(origin.y)) as i16,
         height,
     );
     if ships_alive == 1 {
@@ -129,18 +149,18 @@ fn view_scroll(origin: POINT, ships_alive: COUNT, width: i32, height: i32) -> (S
 }
 
 fn view_origin(
-    zoom: SIZE,
-    mut reduction: SIZE,
-    ships_alive: COUNT,
+    zoom: i16,
+    mut reduction: i16,
+    ships_alive: u16,
     step: bool,
     width: i32,
     height: i32,
-) -> (POINT, SIZE) {
+) -> (Point, i16) {
     let (x, y) = if step {
         (
-            i32::from((width >> 1) as COORD)
+            i32::from((width >> 1) as i16)
                 - (width >> (MAX_REDUCTION as i32 + 1 - i32::from(reduction))),
-            i32::from((height >> 1) as COORD)
+            i32::from((height >> 1) as i16)
                 - (height >> (MAX_REDUCTION as i32 + 1 - i32::from(reduction))),
         )
     } else {
@@ -150,7 +170,7 @@ fn view_origin(
             && i32::from(zoom) <= MAX_ZOOM_OUT as i32
             && i32::from(zoom) - i32::from(reduction) > jump
         {
-            reduction = (i32::from(zoom) - jump) as SIZE;
+            reduction = (i32::from(zoom) - jump) as i16;
         }
         (
             i32::from(display_align(
@@ -162,41 +182,35 @@ fn view_origin(
         )
     };
     (
-        POINT {
-            x: x as COORD,
-            y: y as COORD,
+        Point {
+            x: x as i16,
+            y: y as i16,
         },
         reduction,
     )
 }
 
-fn collision_eligible(
-    af: ELEMENT_FLAGS,
-    bf: ELEMENT_FLAGS,
-    same_parent: bool,
-    a_mass: u8,
-    b_mass: u8,
-) -> bool {
+fn collision_eligible(af: u16, bf: u16, same_parent: bool, a_mass: u8, b_mass: u8) -> bool {
     af & SKIP_COLLISION == 0
         && (bf & af) & COLLISION_BIT == 0
         && ((bf & af) & IGNORE_SIMILAR as u16 == 0 || !same_parent)
         && (b_mass != 0 || a_mass != 0)
 }
 
-fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> COORD {
+fn calc_display_coord(c: i16, origin: i16, reduction: i16, step: bool) -> i16 {
     let delta = i32::from(c) - i32::from(origin);
     (if step {
         delta >> reduction
     } else {
         (delta << ZOOM_SHIFT) / i32::from(reduction)
-    }) as COORD
+    }) as i16
 }
 
 use helpers::*;
 mod helpers {
     use super::*;
     pub(super) fn width(pixels: i32) -> i32 {
-        (pixels - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)
+        (pixels - STATUS_WIDTH) << (ONE_SHIFT + MAX_REDUCTION)
     }
     pub(super) fn height(pixels: i32) -> i32 {
         pixels << (ONE_SHIFT + MAX_REDUCTION)
@@ -213,7 +227,7 @@ pub mod engine {
     use crate::engine::battle::{Cx, ElementId};
 
     fn damage(cx: &mut Cx<'_>, id: ElementId) {
-        let amount = cx.element(id).hits as SIZE;
+        let amount = cx.element(id).hits as i16;
         cx.damage(id, amount);
     }
 
@@ -222,38 +236,38 @@ pub mod engine {
             if cx.elements()[e].parent != crate::engine::battle::Parent::None {
                 cx.untarget(e);
             }
-            cx.element_mut(e).flags |= DISAPPEARING as ELEMENT_FLAGS;
+            cx.element_mut(e).flags |= DISAPPEARING as u16;
             if let Some(death) = cx.elements()[e].death_func {
                 invoke_element(cx, death, e);
             }
         }
         let mut flags = cx.elements()[e].state_flags;
-        if flags & DISAPPEARING as ELEMENT_FLAGS == 0 {
-            if flags & APPEARING as ELEMENT_FLAGS != 0 {
+        if flags & DISAPPEARING as u16 == 0 {
+            if flags & APPEARING as u16 != 0 {
                 cx.copy_current_to_next(e);
                 if colliding(cx.element(e).flags) {
                     cx.init_intersect_start(e);
                     cx.init_intersect_end(e);
                     cx.refresh_intersect_frame(e);
                 }
-                if flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
-                    flags &= !(APPEARING as ELEMENT_FLAGS);
+                if flags & PLAYER_SHIP as u16 != 0 {
+                    flags &= !(APPEARING as u16);
                 }
             }
             if let Some(pre) = cx.elements()[e].preprocess_func {
-                if flags & APPEARING as ELEMENT_FLAGS == 0 {
+                if flags & APPEARING as u16 == 0 {
                     invoke_element(cx, pre, e);
                     flags = cx.elements()[e].state_flags;
-                    if flags & CHANGING as ELEMENT_FLAGS != 0 && colliding(cx.element(e).flags) {
+                    if flags & CHANGING as u16 != 0 && colliding(cx.element(e).flags) {
                         cx.refresh_intersect_frame(e);
                     }
                 }
             }
-            if flags & IGNORE_VELOCITY as ELEMENT_FLAGS == 0 {
+            if flags & IGNORE_VELOCITY as u16 == 0 {
                 let (velocity_x, velocity_y) = (cx.element_mut(e).velocity).get_next_components(1);
                 let (dx, dy) = (velocity_x as i16, velocity_y as i16);
                 if dx != 0 || dy != 0 {
-                    flags |= CHANGING as ELEMENT_FLAGS;
+                    flags |= CHANGING as u16;
                     cx.element_mut(e).next.location.x =
                         cx.elements()[e].next.location.x.wrapping_add(dx);
                     cx.element_mut(e).next.location.y =
@@ -263,12 +277,12 @@ pub mod engine {
             if colliding(cx.element(e).flags) {
                 cx.init_intersect_end(e);
             }
-            if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
+            if flags & FINITE_LIFE as u16 != 0 {
                 cx.element_mut(e).life = cx.elements()[e].life.wrapping_sub(1);
             }
         }
         cx.element_mut(e).flags =
-            (flags & !((POST_PROCESS | COLLISION) as ELEMENT_FLAGS)) | PRE_PROCESS as ELEMENT_FLAGS;
+            (flags & !((POST_PROCESS | COLLISION) as u16)) | PRE_PROCESS as u16;
     }
     fn collide_native(cx: &mut Cx<'_>, a: ElementId, b: ElementId) {
         let mut left = cx.element(a);
@@ -294,15 +308,15 @@ pub mod engine {
         cx.element_mut(a).velocity = left.velocity;
         cx.element_mut(b).flags = right.flags;
         cx.element_mut(b).velocity = right.velocity;
-        let total = SIZE::from(masses[0]) + SIZE::from(masses[1]);
+        let total = i16::from(masses[0]) + i16::from(masses[1]);
         for (e, mass, angle) in [(a, masses[0], angles[0]), (b, masses[1], angles[1])] {
             if !collision_motion::movable(mass) {
                 continue;
             }
-            if cx.element(e).flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
+            if cx.element(e).flags & PLAYER_SHIP as u16 != 0 {
                 let ship = cx.owner(e);
                 cx.ship_state_mut(ship).status &=
-                    !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as STATUS_FLAGS);
+                    !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
             }
             let mut state = cx.element(e);
             let mut waits = (state.turn, state.thrust);
@@ -337,8 +351,8 @@ pub mod engine {
             cx.set_frame(id, true, cx.equivalent_frame(next.view(), current.view()));
         } else if next != current {
             cx.copy_current_image_to_next(id);
-            if cx.element(id).life > NORMAL_LIFE as COUNT {
-                cx.element_mut(id).life = NORMAL_LIFE as COUNT;
+            if cx.element(id).life > NORMAL_LIFE as u16 {
+                cx.element_mut(id).life = NORMAL_LIFE as u16;
             }
         }
     }
@@ -347,9 +361,9 @@ pub mod engine {
         cx: &mut Cx<'_>,
         mut next_test: Option<ElementId>,
         el: ElementId,
-        min_time: TIME_VALUE,
-        process_flags: ELEMENT_FLAGS,
-    ) -> ELEMENT_FLAGS {
+        min_time: u16,
+        process_flags: u16,
+    ) -> u16 {
         while let Some(test) = next_test {
             if cx.elements()[test].state_flags & process_flags == 0 {
                 preprocess(cx, test);
@@ -357,8 +371,8 @@ pub mod engine {
             // A death callback can retire every element owned by its ship,
             // including the active projectile, and clear their callbacks.
             if !colliding(cx.element(el).flags) {
-                cx.element_mut(el).flags |= COLLISION as ELEMENT_FLAGS;
-                return COLLISION as ELEMENT_FLAGS;
+                cx.element_mut(el).flags |= COLLISION as u16;
+                return COLLISION as u16;
             }
             next_test = cx.elements().succ(test);
             if test == el {
@@ -373,12 +387,11 @@ pub mod engine {
             ) {
                 let mut state_flags = cx.elements()[el].state_flags;
                 let mut test_state_flags = cx.elements()[test].state_flags;
-                let finite_life = FINITE_LIFE as ELEMENT_FLAGS;
+                let finite_life = FINITE_LIFE as u16;
                 let mut time_value;
                 if (state_flags | test_state_flags) & finite_life != 0
-                    && (((state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                        && cx.elements()[el].life > 1)
-                        || ((test_state_flags & APPEARING as ELEMENT_FLAGS != 0)
+                    && (((state_flags & APPEARING as u16 != 0) && cx.elements()[el].life > 1)
+                        || ((test_state_flags & APPEARING as u16 != 0)
                             && cx.elements()[test].life > 1))
                 {
                     time_value = 0;
@@ -388,11 +401,11 @@ pub mod engine {
                         if time_value != 1 || (state_flags | test_state_flags) & finite_life != 0 {
                             break;
                         }
-                        if state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
+                        if state_flags & COLLISION_BIT != 0 {
                             cx.init_intersect_end(test);
                             cx.set_intersect_origin(
                                 test,
-                                cx.elements()[test].IntersectControl.EndPoint,
+                                cx.elements()[test].intersect_control.EndPoint,
                             );
                             time_value = cx.intersect_elements(el, test, 1);
                             cx.init_intersect_start(test);
@@ -403,32 +416,30 @@ pub mod engine {
                             let tcur = cx.elements()[test].current.image.frame.clone();
                             let tnext = cx.elements()[test].next.image.frame.clone();
                             if next == cur && tnext == tcur {
-                                if test_state_flags & APPEARING as ELEMENT_FLAGS != 0 {
+                                if test_state_flags & APPEARING as u16 != 0 {
                                     damage(cx, test);
                                     if cx.elements()[test].parent
                                         != crate::engine::battle::Parent::None
                                     {
                                         cx.untarget(test);
                                     }
-                                    cx.element_mut(test).flags |=
-                                        (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
+                                    cx.element_mut(test).flags |= (COLLISION | DISAPPEARING) as u16;
                                     if let Some(death) = cx.elements()[test].death_func {
                                         invoke_element(cx, death, test);
                                     }
                                 }
-                                if state_flags & APPEARING as ELEMENT_FLAGS != 0 {
+                                if state_flags & APPEARING as u16 != 0 {
                                     damage(cx, el);
                                     if cx.elements()[el].parent
                                         != crate::engine::battle::Parent::None
                                     {
                                         cx.untarget(el);
                                     }
-                                    cx.element_mut(el).flags |=
-                                        (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
+                                    cx.element_mut(el).flags |= (COLLISION | DISAPPEARING) as u16;
                                     if let Some(death) = cx.elements()[el].death_func {
                                         invoke_element(cx, death, el);
                                     }
-                                    return COLLISION_BIT as ELEMENT_FLAGS;
+                                    return COLLISION_BIT;
                                 }
                                 time_value = 0;
                             } else {
@@ -437,7 +448,7 @@ pub mod engine {
                                 cx.init_intersect_start(el);
                                 cx.init_intersect_end(el);
                                 cx.refresh_intersect_frame(el);
-                                if state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
+                                if state_flags & PLAYER_SHIP as u16 != 0 {
                                     let owner = cx.owner(el);
                                     cx.ship_state_mut(owner).facing =
                                         cx.frame_number(cx.elements()[el].next.image.frame.view());
@@ -445,7 +456,7 @@ pub mod engine {
                                 cx.init_intersect_start(test);
                                 cx.init_intersect_end(test);
                                 cx.refresh_intersect_frame(test);
-                                if test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
+                                if test_state_flags & PLAYER_SHIP as u16 != 0 {
                                     let owner = cx.owner(test);
                                     cx.ship_state_mut(owner).facing = cx
                                         .frame_number(cx.elements()[test].next.image.frame.view());
@@ -460,12 +471,12 @@ pub mod engine {
                     }
                 }
                 if time_value > 0 {
-                    let mut save = cx.elements()[el].IntersectControl.EndPoint;
-                    let mut test_save = cx.elements()[test].IntersectControl.EndPoint;
+                    let mut save = cx.elements()[el].intersect_control.EndPoint;
+                    let mut test_save = cx.elements()[test].intersect_control.EndPoint;
                     cx.init_intersect_end(el);
                     cx.init_intersect_end(test);
                     let collided = time_value == 1
-                        || ((state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
+                        || ((state_flags & COLLISION_BIT != 0
                             || process_collisions(
                                 cx,
                                 next_test,
@@ -473,12 +484,10 @@ pub mod engine {
                                 time_value - 1,
                                 process_flags,
                             ) == 0)
-                            && (test_state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
+                            && (test_state_flags & COLLISION_BIT != 0
                                 || process_collisions(
                                     cx,
-                                    if cx.elements()[test].state_flags & APPEARING as ELEMENT_FLAGS
-                                        == 0
-                                    {
+                                    if cx.elements()[test].state_flags & APPEARING as u16 == 0 {
                                         cx.elements().succ(el)
                                     } else {
                                         cx.elements().head()
@@ -496,18 +505,18 @@ pub mod engine {
                             &mut save,
                             test,
                             &mut test_save,
-                            test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0,
+                            test_state_flags & PLAYER_SHIP as u16 != 0,
                         );
-                        if cx.elements()[test].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
-                            && test_state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0
+                        if cx.elements()[test].state_flags & COLLISION_BIT != 0
+                            && test_state_flags & COLLISION_BIT == 0
                         {
                             cx.set_intersect_origin(test, test_save);
                             cx.element_mut(test).next.location.x = test_save.x << ONE_SHIFT;
                             cx.element_mut(test).next.location.y = test_save.y << ONE_SHIFT;
                             cx.init_intersect_end(test);
                         }
-                        if cx.elements()[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
-                            if state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0 {
+                        if cx.elements()[el].state_flags & COLLISION_BIT != 0 {
+                            if state_flags & COLLISION_BIT == 0 {
                                 cx.set_intersect_origin(el, save);
                                 cx.element_mut(el).next.location.x = save.x << ONE_SHIFT;
                                 cx.element_mut(el).next.location.y = save.y << ONE_SHIFT;
@@ -520,29 +529,29 @@ pub mod engine {
                                         cx,
                                         cx.elements().head(),
                                         el,
-                                        MAX_TIME_VALUE as TIME_VALUE,
+                                        MAX_TIME_VALUE as u16,
                                         process_flags,
                                     );
                                     process_collisions(
                                         cx,
                                         cx.elements().head(),
                                         test,
-                                        MAX_TIME_VALUE as TIME_VALUE,
+                                        MAX_TIME_VALUE as u16,
                                         process_flags,
                                     );
                                 }
                             }
-                            return COLLISION_BIT as ELEMENT_FLAGS;
+                            return COLLISION_BIT;
                         }
                         if !colliding(cx.element(el).flags) {
-                            cx.element_mut(el).flags |= COLLISION_BIT as ELEMENT_FLAGS;
-                            return COLLISION_BIT as ELEMENT_FLAGS;
+                            cx.element_mut(el).flags |= COLLISION_BIT;
+                            return COLLISION_BIT;
                         }
                     }
                 }
             }
         }
-        cx.elements()[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS
+        cx.elements()[el].state_flags & COLLISION_BIT
     }
 
     fn view_dimensions(cx: &Cx<'_>) -> (i32, i32) {
@@ -550,8 +559,8 @@ pub mod engine {
         (width(w), height(h))
     }
 
-    fn preprocess_queue(cx: &mut Cx<'_>, scale: i32) -> (queue_view::CameraBounds, SIZE) {
-        let active_sides = COUNT::from(cx.b.counters[0] != 0) + COUNT::from(cx.b.counters[1] != 0);
+    fn preprocess_queue(cx: &mut Cx<'_>, scale: i32) -> (queue_view::CameraBounds, i16) {
+        let active_sides = u16::from(cx.b.counters[0] != 0) + u16::from(cx.b.counters[1] != 0);
         let mut bounds = queue_view::CameraBounds::new(scale == SCALE_STEP, view_dimensions(cx));
         let mut handle = cx.elements().head();
         while let Some(e) = handle {
@@ -560,18 +569,18 @@ pub mod engine {
             }
             let next = cx.elements().succ(e);
             if colliding(cx.element(e).flags) && cx.elements()[e].state_flags & COLLISION_BIT == 0 {
-                process_collisions(cx, next, e, MAX_TIME_VALUE as TIME_VALUE, PRE_PROCESS_BIT);
+                process_collisions(cx, next, e, MAX_TIME_VALUE as u16, PRE_PROCESS_BIT);
             }
-            if cx.elements()[e].state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
+            if cx.elements()[e].state_flags & PLAYER_SHIP as u16 != 0 {
                 bounds.include(
                     cx.elements()[e].next.location,
-                    cx.elements()[e].playerNr,
+                    cx.elements()[e].player_nr,
                     active_sides,
                     &queue_view::ViewConfig {
                         limit: cx.b.max_zoom_out,
                         zoom: cx.b.zoom_out,
                         step: scale == SCALE_STEP,
-                        activity: cx.world.activity() as BYTE,
+                        activity: cx.world.activity() as u8,
                         dimensions: view_dimensions(cx),
                     },
                 );
@@ -592,15 +601,15 @@ pub mod engine {
             cx.init_intersect_end(e);
         }
         cx.element_mut(e).flags = (cx.elements()[e].state_flags
-            & !((PRE_PROCESS | CHANGING | APPEARING) as ELEMENT_FLAGS))
+            & !((PRE_PROCESS | CHANGING | APPEARING) as u16))
             | POST_PROCESS_BIT;
     }
 
     fn calc_view_engine(
         cx: &mut Cx<'_>,
-        next_reduction: SIZE,
-        scroll: (SIZE, SIZE),
-        ships_alive: COUNT,
+        next_reduction: i16,
+        scroll: (i16, i16),
+        ships_alive: u16,
         scale: i32,
     ) -> ViewState {
         let (dx, dy) = scroll;
@@ -625,18 +634,18 @@ pub mod engine {
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            move_galaxy(cx, state as VIEW_STATE, dx, dy, scale);
+            move_galaxy(cx, state as u32, dx, dy, scale);
         }
         state
     }
 
     pub fn init_display_list(cx: &mut Cx<'_>, step_zoom: bool) {
         if step_zoom {
-            cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
-            cx.b.max_zoom_out = MAX_VIS_REDUCTION as SIZE;
+            cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as i16;
+            cx.b.max_zoom_out = MAX_VIS_REDUCTION as i16;
         } else {
-            cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
-            cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
+            cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as i16;
+            cx.b.max_zoom_out = MAX_ZOOM_OUT as i16;
         }
         cx.reset_elements();
         cx.reset_display();
@@ -650,14 +659,14 @@ pub mod engine {
     fn postprocess_queue(
         cx: &mut Cx<'_>,
         view_state: ViewState,
-        mut scroll_x: SIZE,
-        mut scroll_y: SIZE,
+        mut scroll_x: i16,
+        mut scroll_y: i16,
         scale_mode: i32,
     ) {
         let reduction = if scale_mode == SCALE_STEP {
-            (i32::from(cx.b.zoom_out) + ONE_SHIFT as i32) as SIZE
+            (i32::from(cx.b.zoom_out) + ONE_SHIFT as i32) as i16
         } else {
-            (i32::from(cx.b.zoom_out) << ONE_SHIFT) as SIZE
+            (i32::from(cx.b.zoom_out) << ONE_SHIFT) as i16
         };
         let mut handle = cx.elements().head();
         while let Some(e) = handle {
@@ -665,7 +674,7 @@ pub mod engine {
             let (delta_x, delta_y, next_handle);
             if flags & PRE_PROCESS_BIT != 0 {
                 if flags & COLLISION_BIT == 0 {
-                    cx.element_mut(e).flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
+                    cx.element_mut(e).flags &= !(DEFY_PHYSICS as u16);
                 } else {
                     cx.element_mut(e).flags &= !COLLISION_BIT;
                 }
@@ -688,7 +697,7 @@ pub mod engine {
                             cx,
                             cx.elements().head(),
                             post,
-                            MAX_TIME_VALUE as TIME_VALUE,
+                            MAX_TIME_VALUE as u16,
                             PRE_PROCESS_BIT | POST_PROCESS_BIT,
                         );
                     }
@@ -700,11 +709,11 @@ pub mod engine {
                 delta_y = 0;
                 flags = cx.elements()[e].state_flags;
             }
-            if flags & DISAPPEARING as ELEMENT_FLAGS != 0 {
+            if flags & DISAPPEARING as u16 != 0 {
                 next_handle = cx.elements().succ(e);
                 retire(cx, e);
             } else {
-                let index = cx.elements()[e].PrimIndex;
+                let index = cx.elements()[e].prim_index;
                 let kind = cx.display_primitive(index).kind;
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
                     let projection = queue_view::Projection {
@@ -717,26 +726,24 @@ pub mod engine {
                         step: scale_mode == SCALE_STEP,
                     };
                     let next;
-                    if kind == gfx_object_LINE_PRIM as GRAPHICS_PRIM {
+                    if kind == LINE_PRIMITIVE {
                         let (location, first, second) = projection.line(
                             cx.elements()[e].current.location,
                             cx.elements()[e].next.location,
                             (delta_x, delta_y),
                         );
                         next = location;
-                        let line = LINE { first, second };
+                        let line = Line { first, second };
                         cx.display_primitive(index).set_line(line);
                     } else {
                         next =
                             projection.scroll(cx.elements()[e].next.location, (delta_x, delta_y));
                         cx.display_primitive(index)
                             .set_point(projection.display(next));
-                        if kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM
-                            || kind == gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
-                        {
+                        if kind == STAMP_PRIMITIVE || kind == STAMPFILL_PRIMITIVE {
                             if view_state == ViewState::Change || flags & CHANGE_BITS != 0 {
                                 let (index, scale) = if scale_mode == SCALE_STEP {
-                                    (cx.b.zoom_out as COUNT, GSCALE_IDENTITY as COUNT)
+                                    (cx.b.zoom_out as u16, GSCALE_IDENTITY as u16)
                                 } else {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
@@ -747,7 +754,7 @@ pub mod engine {
                                 cx.set_frame(e, true, frame);
                                 if scale_mode == SCALE_TRILINEAR
                                     && index < 2
-                                    && scale != GSCALE_IDENTITY as COUNT
+                                    && scale != GSCALE_IDENTITY as u16
                                 {
                                     let frame = cx.elements()[e].next.image.frame.clone();
                                     let mmframe = cx.equivalent_frame(
@@ -769,8 +776,8 @@ pub mod engine {
                     cx.element_mut(e).next.location = next;
                 }
                 postprocess(cx, e);
-                if kind < gfx_object_NUM_PRIMS as GRAPHICS_PRIM {
-                    cx.append_display(cx.elements()[e].PrimIndex);
+                if kind < EMPTY_PRIMITIVE {
+                    cx.append_display(cx.elements()[e].prim_index);
                 }
                 next_handle = cx.elements().succ(e);
             }
@@ -797,9 +804,7 @@ pub mod engine {
         let space = ContextLease::require(cx.kernel.space_context);
         space.select();
         let activity = cx.world.activity();
-        if activity as u8 == SUPER_MELEE as u8
-            || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0
-        {
+        if activity as u8 == SUPER_MELEE as u8 || activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
             if draw_frame(&mut cx.b.nth_frame) {
                 if clear {
                     space.clear();
@@ -952,13 +957,13 @@ mod tests {
 
     #[test]
     fn camera_scroll_clamps_only_one_surviving_ship() {
-        let origin = POINT { x: 0, y: 0 };
+        let origin = Point { x: 0, y: 0 };
         assert_eq!(view_scroll(origin, 1, 8192, 7680), (108, 100));
         assert_eq!(view_scroll(origin, 2, 8192, 7680), (4096, 3840));
-        let origin = POINT { x: 8191, y: 7679 };
+        let origin = Point { x: 8191, y: 7679 };
         assert_eq!(view_scroll(origin, 1, 8192, 7680), (-108, -100));
         assert_eq!(
-            view_scroll(POINT { x: 4096, y: 3840 }, 0, 8192, 7680),
+            view_scroll(Point { x: 4096, y: 3840 }, 0, 8192, 7680),
             (0, 0)
         );
     }
@@ -980,8 +985,8 @@ mod tests {
 
     #[test]
     fn collision_eligibility_matches_the_asymmetric_macro() {
-        let collision = COLLISION as ELEMENT_FLAGS;
-        let similar = IGNORE_SIMILAR as ELEMENT_FLAGS;
+        let collision = COLLISION as u16;
+        let similar = IGNORE_SIMILAR as u16;
         assert!(collision_eligible(0, NONSOLID as u16, false, 1, 0));
         assert!(!collision_eligible(NONSOLID as u16, 0, false, 1, 0));
         assert!(!collision_eligible(DISAPPEARING as u16, 0, false, 1, 0));
@@ -1019,16 +1024,14 @@ mod tests {
         let mut display = DisplayPool::new();
         for index in 0..330 {
             assert_eq!(display.alloc(), Some(index));
-            display.get_mut(index).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            display.get_mut(index).kind = STAMP_PRIMITIVE;
         }
         display.free(0);
         display.free(1);
         assert_eq!(display.alloc(), Some(1));
         assert_eq!(display.alloc(), Some(0));
         assert!(display.alloc().is_none());
-        assert!(
-            (0..330).all(|index| display.get(index).kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM)
-        );
+        assert!((0..330).all(|index| display.get(index).kind == STAMP_PRIMITIVE));
     }
 
     #[test]

@@ -36,10 +36,7 @@ impl HomeContactSite for Site<'_, '_, '_> {
         built_ship_count(self.game.borrow().world)
     }
     fn clone_fleet_into_built_queue(&mut self) {
-        clone_infinite_ship_into_built_queue(
-            self.game.borrow_mut().world,
-            u16::from(self.contact().0),
-        )
+        clone_infinite_ship_into_built_queue(self.game.borrow_mut().world, self.contact().0)
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()
@@ -240,7 +237,7 @@ impl sam::SamatraSite for Site<'_, '_, '_> {
         } else {
             ship::URQUAN_SHIP
         };
-        c_api::clone_infinite_ship_into_built_queue(self.game.borrow_mut().world, u16::from(race))
+        c_api::clone_infinite_ship_into_built_queue(self.game.borrow_mut().world, race)
     }
     fn clone_remnant(&mut self, black: bool) {
         FleetGroups::clone_ship_into_built_queue(
@@ -305,10 +302,7 @@ impl yehat::YehatSite for Site<'_, '_, '_> {
         built_ship_count(self.game.borrow().world)
     }
     fn clone_yehat_fleet_into_built_queue(&mut self) {
-        clone_infinite_ship_into_built_queue(
-            self.game.borrow_mut().world,
-            u16::from(ship::YEHAT_SHIP),
-        );
+        clone_infinite_ship_into_built_queue(self.game.borrow_mut().world, ship::YEHAT_SHIP);
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()
@@ -355,10 +349,7 @@ impl ChmmrSite for Site<'_, '_, '_> {
         built_ship_count(self.game.borrow().world)
     }
     fn clone_ilwrath_fleet_into_built_queue(&mut self) {
-        clone_infinite_ship_into_built_queue(
-            self.game.borrow_mut().world,
-            u16::from(ship::ILWRATH_SHIP),
-        )
+        clone_infinite_ship_into_built_queue(self.game.borrow_mut().world, ship::ILWRATH_SHIP)
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()

@@ -1,7 +1,7 @@
 //! Save the hyperspace flagship's facing from its owned ship and element pools.
 
 use super::super::battle::link_queue::{LinkQueue, RacePool, Starship};
-use super::super::battle::schema::GAME_STATE;
+use super::super::battle::schema::GameRecord;
 use super::super::battle::{ElementTable, Parent};
 use super::super::{Kernel, World};
 use std::fmt;
@@ -67,7 +67,7 @@ pub fn read_flagship_facing(
 /// Store facing plus one for solar reentry, leaving all other fields unchanged.
 /// Validation completes before the single write, including overflow refusal.
 pub fn save_hyper_facing(
-    game: &mut GAME_STATE,
+    game: &mut GameRecord,
     player_ships: &RacePool,
     display_list: &ElementTable,
 ) -> Result<HyperFlagship, HyperSaveError> {

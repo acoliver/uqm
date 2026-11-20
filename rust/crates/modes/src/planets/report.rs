@@ -53,7 +53,7 @@ pub(crate) mod live {
         wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SavedContext,
     };
     use std::ffi::{CStr, CString};
-    use uqm_engine::time::counter_abi::GetTimeCounter;
+    use uqm_engine::time::counter_abi::get_time_counter;
 
     const GREEN: Color = Color {
         r: 0,
@@ -217,7 +217,7 @@ pub(crate) mod live {
                 if i32::from(col) <= columns {
                     remaining = remaining.wrapping_sub(word_chars);
                     remaining = remaining.saturating_sub(1);
-                    printer.draw_word(cx, io, &mut t, word_chars, GetTimeCounter());
+                    printer.draw_word(cx, io, &mut t, word_chars, get_time_counter());
                     col += 1;
                     next = t.string;
                     last_c = take_character(&mut next);

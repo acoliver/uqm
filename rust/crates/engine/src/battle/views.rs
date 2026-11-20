@@ -1,6 +1,6 @@
 //! Pointer-free Native values. Legacy record decoding stays in accessors.
-use crate::battle::record::CHARACTERISTIC_STUFF;
-use crate::battle::record::VELOCITY_DESC as VelocityDesc;
+use crate::battle::record::CharacteristicRecord;
+use crate::battle::record::VelocityDesc;
 use crate::battle::{CollisionHook, ElementHook};
 use crate::graphics::geometry::Point;
 
@@ -127,7 +127,7 @@ pub struct Intelligence {
 #[derive(Clone, Copy, Debug)]
 pub struct RaceStats {
     pub ship_info: Info,
-    pub characteristics: CHARACTERISTIC_STUFF,
+    pub characteristics: CharacteristicRecord,
     pub intelligence: Intelligence,
     pub state: crate::battle::RaceState,
 }

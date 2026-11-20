@@ -1,6 +1,9 @@
 //! Keep the outgoing descriptor alive until every projectile and blast retires.
 
 use super::*;
+use crate::engine::battle::ai_constants::{
+    ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, MOVEMENT_STATE_ENTICE,
+};
 
 pub(super) fn advance(
     run: &mut Battle,

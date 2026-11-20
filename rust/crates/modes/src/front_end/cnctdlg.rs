@@ -12,7 +12,7 @@ use crate::input::frames::{
 use crate::supermelee::netplay::NetplaySession;
 use crate::ui::getchar::{edit_text, TextEntryCallbacks, TextEntryView};
 use std::ffi::{CStr, CString};
-use uqm_engine::time::counter_abi::GetTimeCounter;
+use uqm_engine::time::counter_abi::get_time_counter;
 
 const MCD_WIDTH: i16 = 260;
 const MCD_HEIGHT: i16 = 110;
@@ -420,7 +420,7 @@ impl<'a> ConnectDialogState<'a> {
             values: &mut self.values,
             graphics: &self.graphics,
             index,
-            next_time: GetTimeCounter().wrapping_add(MENU_FRAME_RATE),
+            next_time: get_time_counter().wrapping_add(MENU_FRAME_RATE),
         };
         let accepted = edit_text(
             cx,
@@ -468,7 +468,7 @@ impl TextEntryCallbacks for EditCallbacks<'_> {
     ) -> bool {
         self.graphics.draw(self.values);
         cx.kernel.input_runtime().sleep_until(cx, self.next_time);
-        self.next_time = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
+        self.next_time = get_time_counter().wrapping_add(MENU_FRAME_RATE);
         true
     }
 }
@@ -482,8 +482,8 @@ fn do_melee_connect_dialog(
     input.set_paused(false);
     if !state.initialized {
         state.initialized = true;
-        input.configure_repeat(840 / 12, 840 / 2, 840 / 12, false, GetTimeCounter());
-        state.next_time = GetTimeCounter();
+        input.configure_repeat(840 / 12, 840 / 2, 840 / 12, false, get_time_counter());
+        state.next_time = get_time_counter();
         state.graphics.draw(&state.values);
     }
     if let Some(event) = Event::from_input(input) {
@@ -505,7 +505,7 @@ fn do_melee_connect_dialog(
     cx.kernel
         .input_runtime()
         .sleep_until(cx, state.next_time.wrapping_add(MENU_FRAME_RATE));
-    state.next_time = GetTimeCounter();
+    state.next_time = get_time_counter();
     cx.world.activity() & 0x4000 == 0 && !state.done
 }
 

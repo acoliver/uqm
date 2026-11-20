@@ -59,12 +59,12 @@ impl Cx<'_> {
         self.world.flagship_config()
     }
 
-    pub fn flagship_velocity(&self) -> crate::battle::record::VELOCITY_DESC {
+    pub fn flagship_velocity(&self) -> crate::battle::record::VelocityDesc {
         // SAFETY: this is a value copy of game-thread-owned navigation state.
         self.world.data.game.velocity
     }
 
-    pub fn set_flagship_velocity(&mut self, velocity: crate::battle::record::VELOCITY_DESC) {
+    pub fn set_flagship_velocity(&mut self, velocity: crate::battle::record::VelocityDesc) {
         // SAFETY: this context owns the navigation velocity authority.
         self.world.data.game.velocity = velocity;
     }

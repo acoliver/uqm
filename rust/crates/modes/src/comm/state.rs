@@ -330,7 +330,7 @@ impl Comm {
     /// Add a response option
     pub fn add_response(
         &mut self,
-        response_ref: u32,
+        response_ref: u16,
         text: &str,
         func: Option<super::response::ResponseFunc>,
     ) -> bool {

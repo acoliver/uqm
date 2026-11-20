@@ -1,7 +1,8 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
 
+use crate::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_LAST_MELEE_ID};
+use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD};
 use crate::engine::StoryKey;
-use crate::ships::native::abi::*;
 
 fn on_battle_frame(
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -19,7 +20,7 @@ fn on_battle_frame(
             counter - u8::from(counter > 0)
         },
     );
-    let coordinates = if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+    let coordinates = if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let catalog = cx.world.retain_catalog();
         crate::navigation::hyper_radar::seed_universe(cx, &catalog)
     } else {
@@ -39,7 +40,7 @@ fn on_battle_frame(
         cx.kernel,
         cx.world,
         cx.screen_dimensions().0,
-        uqm_engine::time::counter_abi::GetTimeCounter,
+        uqm_engine::time::counter_abi::get_time_counter,
     );
 }
 
@@ -51,8 +52,8 @@ fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout: u32) 
     crate::threading::yield_task();
     crate::game_init::kernel_abi::init_game_kernel(cx.kernel, cx.world.activity());
     let input = cx.kernel.input_runtime();
-    while crate::time::counter_abi::GetTimeCounter() <= timeout
-        && cx.world.activity() & CHECK_ABORT as u16 == 0
+    while crate::time::counter_abi::get_time_counter() <= timeout
+        && cx.world.activity() & CHECK_ABORT == 0
     {
         input.update(cx);
         if crate::engine::host::is_replay() {

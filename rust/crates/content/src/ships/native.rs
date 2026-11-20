@@ -13,27 +13,6 @@ pub fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) {
     }
 }
 
-#[allow(
-    non_camel_case_types,
-    non_snake_case,
-    non_upper_case_globals,
-    dead_code,
-    clippy::all
-)]
-pub mod abi {
-    pub use crate::ships::DescriptorLoader;
-
-    include!("ship_abi.rs");
-
-    pub use crate::engine::battle::ai_constants::{
-        AWESOME_RATING, BATTLE_LEFT, BATTLE_RIGHT, BATTLE_SPECIAL, BATTLE_THRUST, BATTLE_WEAPON,
-        GOOD_RATING, STANDARD_RATING,
-    };
-    pub use crate::math::seed_random as TFB_SeedRandom;
-
-    pub use crate::engine::battle::tracking::track_ship;
-}
-
 pub use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
 
 pub use crate::math::{cosine, sine};
@@ -48,7 +27,7 @@ mod tests {
     fn native_trigonometry_uses_the_immutable_table_with_size_truncation() {
         for angle in -128..128 {
             for magnitude in [i32::MIN, -65537, -1, 0, 1, 32767, 65537, i32::MAX] {
-                let value = crate::math::sinetab[(angle & 63) as usize];
+                let value = crate::math::SINE_TABLE[(angle & 63) as usize];
                 let expected = ((i64::from(value) * i64::from(magnitude)) >> 14) as i16;
                 assert_eq!(sine(angle, magnitude), expected);
                 assert_eq!(cosine(angle - 16, magnitude), expected);

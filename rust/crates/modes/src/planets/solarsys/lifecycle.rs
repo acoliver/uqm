@@ -45,7 +45,7 @@ const KEY_MENU_CANCEL: usize = 10;
 const FADE_ALL_TO_COLOR: u32 = 253;
 
 use super::planet_info::{get_planet_info, put_planet_info};
-use crate::engine::time::counter_abi::GetTimeCounter;
+use crate::engine::time::counter_abi::get_time_counter;
 use crate::front_end::gameopt::runtime::game_options;
 use crate::navigation::interplanetary::do_missions;
 use crate::planets::cargo::live::cargo_menu;
@@ -728,7 +728,8 @@ fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) -> u3
         ip_frame(cx, io, solar);
         let deadline = cx.kernel.solar_presentation.frame_deadline;
         runtime.sleep_until(cx, deadline);
-        cx.kernel.solar_presentation.frame_deadline = GetTimeCounter().wrapping_add(IP_FRAME_RATE);
+        cx.kernel.solar_presentation.frame_deadline =
+            get_time_counter().wrapping_add(IP_FRAME_RATE);
     }
     (cx.world.activity() & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD) == 0
         && cx.world.data.flagship.crew_enlisted != u16::MAX) as u32

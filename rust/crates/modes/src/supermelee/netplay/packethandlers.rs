@@ -1,10 +1,10 @@
 //! Typed protocol transitions. UI effects are delivered before decoding the next packet.
 use super::{
-    abi::*,
     netconnection::{Effect, Event, NetConnection},
     packet::Packet,
     session::SessionCore,
 };
+use crate::engine::battle::net::NetState;
 
 pub(super) fn handle(
     session: &SessionCore,
@@ -20,34 +20,28 @@ fn bad_message() -> i32 {
     -1
 }
 fn battle_active(state: NetState) -> bool {
-    (NetState_NetState_inBattle..=NetState_NetState_endingBattle2).contains(&state)
+    (NetState::InBattle..=NetState::EndingBattle2).contains(&state)
 }
 fn allowed(conn: &NetConnection, packet: &Packet) -> bool {
     match packet {
-        Packet::Init { .. } => conn.state == NetState_NetState_init && !conn.flags.ready.remote,
-        Packet::Ping(_) | Packet::Ack(_) => conn.state > NetState_NetState_init,
+        Packet::Init { .. } => conn.state == NetState::Init && !conn.flags.ready.remote,
+        Packet::Ping(_) | Packet::Ack(_) => conn.state > NetState::Init,
         Packet::Ready => super::ready::meaningful(conn.state) && !conn.flags.ready.remote,
-        Packet::Fleet { .. } | Packet::TeamName { .. } => conn.state == NetState_NetState_inSetup,
-        Packet::Handshake0 => {
-            conn.state == NetState_NetState_inSetup && !conn.flags.handshake.remote
-        }
+        Packet::Fleet { .. } | Packet::TeamName { .. } => conn.state == NetState::InSetup,
+        Packet::Handshake0 => conn.state == NetState::InSetup && !conn.flags.handshake.remote,
         Packet::Handshake1 => {
-            conn.state == NetState_NetState_inSetup
+            conn.state == NetState::InSetup
                 && (conn.flags.handshake.local || conn.flags.handshake.canceling)
         }
-        Packet::HandshakeCancel => {
-            conn.state == NetState_NetState_inSetup && conn.flags.handshake.remote
-        }
+        Packet::HandshakeCancel => conn.state == NetState::InSetup && conn.flags.handshake.remote,
         Packet::HandshakeCancelAck => {
-            conn.state == NetState_NetState_inSetup && conn.flags.handshake.canceling
+            conn.state == NetState::InSetup && conn.flags.handshake.canceling
         }
-        Packet::SeedRandom(_) => {
-            conn.state == NetState_NetState_preBattle && !conn.flags.discriminant
-        }
-        Packet::InputDelay(_) => conn.state == NetState_NetState_preBattle,
-        Packet::SelectShip(_) => conn.state == NetState_NetState_selectShip,
+        Packet::SeedRandom(_) => conn.state == NetState::PreBattle && !conn.flags.discriminant,
+        Packet::InputDelay(_) => conn.state == NetState::PreBattle,
+        Packet::SelectShip(_) => conn.state == NetState::SelectShip,
         Packet::BattleInput(_) | Packet::Checksum { .. } => battle_active(conn.state),
-        Packet::FrameCount(_) => conn.state == NetState_NetState_endingBattle,
+        Packet::FrameCount(_) => conn.state == NetState::EndingBattle,
         Packet::Abort(_) => true,
         Packet::Reset(_) => !conn.flags.reset.remote,
     }
@@ -71,7 +65,7 @@ fn handle_packet(
     }
     if !allowed(conn, packet) {
         log::error!(
-            "Packet of type {} received from wrong state {}",
+            "Packet of type {} received from wrong state {:?}",
             packet.kind(),
             conn.state
         );
@@ -152,24 +146,9 @@ fn handle_init(
     version: &[u8; 3],
     effects: &mut Vec<Event>,
 ) -> i32 {
-    if *protocol
-        != [
-            NETPLAY_PROTOCOL_VERSION_MAJOR as u8,
-            NETPLAY_PROTOCOL_VERSION_MINOR as u8,
-        ]
-        || *version
-            < [
-                NETPLAY_MIN_UQM_VERSION_MAJOR as u8,
-                NETPLAY_MIN_UQM_VERSION_MINOR as u8,
-                NETPLAY_MIN_UQM_VERSION_PATCH as u8,
-            ]
-    {
-        conn.queue(Packet::Abort(
-            NetplayAbortReason_AbortReason_versionMismatch as u16,
-        ));
-        effects.push(conn.event(Effect::Abort(
-            NetplayAbortReason_AbortReason_versionMismatch,
-        )));
+    if *protocol != super::PROTOCOL_VERSION || *version < super::MIN_UQM_VERSION {
+        conn.queue(Packet::Abort(super::ABORT_VERSION_MISMATCH as u16));
+        effects.push(conn.event(Effect::Abort(super::ABORT_VERSION_MISMATCH)));
         super::set_errno(crate::engine::platform::os::errno::ENOSYS);
         return -1;
     }
@@ -216,7 +195,7 @@ fn handle_handshake(conn: &mut NetConnection, packet: &Packet) {
                 if !remote {
                     conn.queue(Packet::Handshake1);
                 }
-                conn.state = NetState_NetState_preBattle;
+                conn.state = NetState::PreBattle;
             }
         }
         Packet::HandshakeCancel => {

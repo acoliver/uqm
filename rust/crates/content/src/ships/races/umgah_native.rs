@@ -1,9 +1,21 @@
 //! Umgah callbacks and descriptor translated from `umgah.c`.
 
 pub mod engine {
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, GRAVITY_MASS_INDEX, IGNORE_SIMILAR,
+        IMMEDIATE_WEAPON, LEFT, MOVEMENT_STATE_AVOID, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
+        RIGHT, SLOW_SHIP, SPECIAL, THRUST, WEAPON,
     };
+    use crate::engine::battle::flags::{
+        APPEARING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::CollisionHook;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT};
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_angle, sine};
 
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -37,8 +49,8 @@ pub mod engine {
         d.resources.icons = Some(c"ship.umgah.icons");
         d.resources.melee_icon = Some(c"ship.umgah.meleeicons");
         d.fleet_strength = 833 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet_location = POINT { x: 1798, y: 6000 };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.fleet_location = Point { x: 1798, y: 6000 };
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: MAX_ENERGY,
@@ -84,9 +96,9 @@ pub mod engine {
     pub fn cone_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         if let Some(h) = cx.weapon_collision(a, pa, b, pb) {
             cx.unlink_element(h);
@@ -152,8 +164,8 @@ pub mod engine {
             let facing = facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32;
             let speed = JUMP_DIST << VELOCITY_SHIFT;
             cx.element_mut(e).velocity.delta_components(
-                i32::from((cosine(facing, speed)) as SIZE),
-                i32::from((sine(facing, speed)) as SIZE),
+                i32::from((cosine(facing, speed)) as i16),
+                i32::from((sine(facing, speed)) as i16),
             );
             cx.ship_state_mut(ss).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
             cx.ship_state_mut(ss).special_counter = 2;

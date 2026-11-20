@@ -1,6 +1,12 @@
 //! Super Melee menu rendering and selection feedback.
 use super::*;
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign};
+use crate::engine::battle::net::NetState;
+use crate::graphics::{
+    geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
+};
+use crate::starbase::ids::{
+    NETMELEE_STRING_BASE, SAFE_X, SAFE_Y, SHIP_INFO_HEIGHT, STATUS_WIDTH, TINY_TEXT_HEIGHT,
+};
 
 pub(super) fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -109,8 +115,8 @@ pub(super) fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, rect: &Rect) {
     let mut r = *rect;
-    r.corner.x += SAFE_X as i16;
-    r.corner.y += SAFE_Y as i16;
+    r.corner.x += SAFE_X;
+    r.corner.y += SAFE_Y;
     if r.corner.y & 1 != 0 {
         r.corner.y -= 1;
         r.extent.height += 1;
@@ -122,8 +128,8 @@ pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession
     context.with_clip(r, || {
         context.with_origin(
             Point {
-                x: -r.corner.x + SAFE_X as i16,
-                y: -r.corner.y + SAFE_Y as i16,
+                x: -r.corner.x + SAFE_X,
+                y: -r.corner.y + SAFE_Y,
             },
             || {
                 context.draw_batch(|| {
@@ -196,7 +202,8 @@ pub(super) fn worth(
         .menu_font
         .as_ref()
         .unwrap_or_else(|| panic!("menu font not admitted"));
-    let value = CString::new(state.melee_setup.fleet_value[side as usize].to_string()).unwrap();
+    let value = CString::new(state.melee_setup.fleet_value[side as usize].to_string())
+        .unwrap_or_else(|_| panic!("a decimal number has no NUL byte"));
     context.draw_text(
         font,
         &value,
@@ -414,15 +421,15 @@ pub(super) fn status_player(
     let index = match connection(state, player as usize) {
         None => 0,
         Some(conn) => match conn.state {
-            0 => 0,
-            1 => {
+            NetState::Unconnected => 0,
+            NetState::Connecting => {
                 if conn.server {
                     1
                 } else {
                     2
                 }
             }
-            2 | 3 => 3,
+            NetState::Init | NetState::InSetup => 3,
             _ => -1,
         },
     };
@@ -484,7 +491,7 @@ pub(super) fn highlight(
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub fn flash_selection(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
-    let now = GetTimeCounter();
+    let now = get_time_counter();
     if let Some(selected) = state.selection_flash(now) {
         let context = state
             .menu_context
@@ -514,12 +521,12 @@ pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeS
     context.clear();
     context.set_clip(crate::graphics::geometry::Rect {
         corner: crate::graphics::geometry::Point {
-            x: SAFE_X as i16,
-            y: SAFE_Y as i16,
+            x: SAFE_X,
+            y: SAFE_Y,
         },
         extent: crate::graphics::geometry::Extent {
-            width: extent.width - 2 * SAFE_X as i16,
-            height: extent.height - 2 * SAFE_Y as i16,
+            width: extent.width - 2 * SAFE_X,
+            height: extent.height - 2 * SAFE_Y,
         },
     });
     redraw(cx, state);
@@ -535,7 +542,7 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
     let font = cx.kernel.battle_font();
     context.with_selected(|| {
         let mut rect = context.clip_rect();
-        rect.corner.x += (SAFE_X as i16 * 2 - 32) + 29;
+        rect.corner.x += (SAFE_X * 2 - 32) + 29;
         rect.corner.y += 76;
         rect.extent.height = SHIP_INFO_HEIGHT as i16;
         context.with_clip(rect, || {

@@ -4,7 +4,19 @@
 //! including C integer promotion and truncation, so battles replay identically.
 
 pub mod engine {
-    use crate::ships::native::abi::*;
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
+        MOVEMENT_STATE_AVOID, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{
+        CIRCLE_SHIFT, FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT,
+    };
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -72,8 +84,8 @@ pub mod engine {
         desc.resources.melee_icon = Some(c"ship.supox.meleeicons");
         // Initial SoI radius: 333 / SPHERE_RADIUS_INCREMENT * 2
         desc.fleet_strength = (333 / SPHERE_RADIUS_INCREMENT * 2) as u16;
-        desc.fleet_location = POINT { x: 7468, y: 9246 };
-        desc.characteristics = CHARACTERISTIC_STUFF {
+        desc.fleet_location = Point { x: 7468, y: 9246 };
+        desc.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -125,9 +137,9 @@ pub mod engine {
                 .object
                 .unwrap_or_else(|| panic!("AI concern"));
             let delta_x = (i32::from(cx.element(target).next.location.x)
-                - i32::from(concerns.subject.next.location.x)) as SIZE;
+                - i32::from(concerns.subject.next.location.x)) as i16;
             let delta_y = (i32::from(cx.element(target).next.location.y)
-                - i32::from(concerns.subject.next.location.y)) as SIZE;
+                - i32::from(concerns.subject.next.location.y)) as i16;
             let direction_angle = crate::math::arctan(delta_x, delta_y);
 
             let ship_angle = facing_to_angle(i32::from(cx.ship_state(ss).facing));

@@ -234,15 +234,15 @@ pub unsafe fn rust_restore_game_state_from_bytes(
     world: &mut crate::World,
     bytes: *const u8,
     size: usize,
-) {
+) -> Result<(), GameStateOwnerError> {
     if bytes.is_null() || size < NUM_GAME_STATE_BYTES {
-        return;
+        return Ok(());
     }
 
     let mut arr = [0u8; NUM_GAME_STATE_BYTES];
     std::ptr::copy_nonoverlapping(bytes, arr.as_mut_ptr(), NUM_GAME_STATE_BYTES);
 
-    replace_game_state(world, &arr).expect("game-state singleton poisoned");
+    replace_game_state(world, &arr)
 }
 
 pub use crate::world::story::GameStateOwnerError;
@@ -1078,7 +1078,8 @@ mod tests {
                 assert_eq!(rust_get_game_state_bits(&game.world, 0, 7), 0);
 
                 {
-                    rust_restore_game_state_from_bytes(&mut game.world, buffer.as_ptr(), size);
+                    rust_restore_game_state_from_bytes(&mut game.world, buffer.as_ptr(), size)
+                        .unwrap();
                 }
 
                 assert_eq!(rust_get_game_state_bits(&game.world, 0, 7), 0xAB);

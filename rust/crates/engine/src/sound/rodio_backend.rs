@@ -723,7 +723,7 @@ pub unsafe extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
 
     // Store sender
     {
-        let mut guard = AUDIO_SENDER.lock().unwrap();
+        let mut guard = crate::sync::lock(&AUDIO_SENDER);
         *guard = Some(tx);
     }
 
@@ -734,7 +734,7 @@ pub unsafe extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
 
     // Store thread handle
     {
-        let mut guard = AUDIO_THREAD.lock().unwrap();
+        let mut guard = crate::sync::lock(&AUDIO_THREAD);
         *guard = Some(handle);
     }
 
@@ -755,12 +755,12 @@ pub unsafe extern "C" fn rust_audio_backend_uninit() {
     send_cmd(AudioCmd::Shutdown);
 
     {
-        let mut guard = AUDIO_SENDER.lock().unwrap();
+        let mut guard = crate::sync::lock(&AUDIO_SENDER);
         *guard = None;
     }
 
     {
-        let mut guard = AUDIO_THREAD.lock().unwrap();
+        let mut guard = crate::sync::lock(&AUDIO_THREAD);
         if let Some(handle) = guard.take() {
             let _ = handle.join();
         }
@@ -1756,11 +1756,11 @@ mod ffi_export_tests {
         fn start() -> Self {
             let exclusive = BACKEND_LOCK.lock().unwrap_or_else(|e| e.into_inner());
             assert!(
-                AUDIO_SENDER.lock().unwrap().is_none(),
+                crate::sync::lock(&AUDIO_SENDER).is_none(),
                 "no other test may leave a backend running"
             );
             let (tx, rx) = mpsc::channel();
-            *AUDIO_SENDER.lock().unwrap() = Some(tx);
+            *crate::sync::lock(&AUDIO_SENDER) = Some(tx);
             let played = Arc::new(Mutex::new(Vec::new()));
             let recorder = Arc::clone(&played);
             let thread = thread::spawn(move || {
@@ -1777,7 +1777,7 @@ mod ffi_export_tests {
                     }
                 }
             });
-            *AUDIO_THREAD.lock().unwrap() = Some(thread);
+            *crate::sync::lock(&AUDIO_THREAD) = Some(thread);
             Self {
                 played,
                 _exclusive: exclusive,
@@ -1821,7 +1821,7 @@ mod ffi_export_tests {
     #[test]
     fn exports_return_inert_answers_when_no_backend_is_running() {
         let _exclusive = BACKEND_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        assert!(AUDIO_SENDER.lock().unwrap().is_none());
+        assert!(crate::sync::lock(&AUDIO_SENDER).is_none());
 
         let mut id: AudioObject = 55;
         unsafe { rust_audio_gen_sources(1, &mut id) };
@@ -1997,8 +1997,8 @@ mod ffi_export_tests {
 
         unsafe { rust_audio_backend_uninit() };
 
-        assert!(AUDIO_SENDER.lock().unwrap().is_none());
-        assert!(AUDIO_THREAD.lock().unwrap().is_none());
+        assert!(crate::sync::lock(&AUDIO_SENDER).is_none());
+        assert!(crate::sync::lock(&AUDIO_THREAD).is_none());
         assert!(!send_cmd(AudioCmd::Shutdown));
         drop(backend);
     }

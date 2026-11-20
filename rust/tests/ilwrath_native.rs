@@ -9,13 +9,27 @@ use battle::{prim as prim_of, Battle, FrameSet, Ship};
 mod special_hooks;
 use std::{ffi::CStr, ptr};
 use uqm_rust::collections::observation;
+use uqm_rust::engine::battle::ai_constants::{
+    ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, FIRST_EMPTY_INDEX, IGNORE_SIMILAR, LEFT,
+    MOVEMENT_STATE_AVOID, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST, WEAPON,
+};
+use uqm_rust::engine::battle::flags::{
+    APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NONSOLID, STAMPFILL_PRIMITIVE,
+};
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_rust::engine::species::species_id::SPECIES_ID_ILWRATH_ID;
+use uqm_rust::engine::world::activity::activity_flags::CHECK_PAUSE;
+use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_rust::engine::world::IN_HYPERSPACE;
+use uqm_rust::graphics::geometry::Color;
+use uqm_rust::graphics::geometry::Point;
 use uqm_rust::graphics::menu::frame_index as index_of;
-use uqm_rust::ships::native::abi::*;
 
-unsafe fn spawn_ship(fleet: &mut Ship<'_>, x: COORD, y: COORD) -> *mut ElementRecord {
+unsafe fn spawn_ship(fleet: &mut Ship<'_>, x: i16, y: i16) -> *mut ElementRecord {
     let ship = fleet.ptr();
-    (*ship).current.location = POINT { x, y };
-    (*ship).next.location = POINT { x, y };
+    (*ship).current.location = Point { x, y };
+    (*ship).next.location = Point { x, y };
     ship
 }
 /// `COLLISION` from `element.h`, which the generated ABI does not export.
@@ -37,9 +51,9 @@ unsafe fn color_of(ship: *mut ElementRecord) -> Rgba {
     (color.r, color.g, color.b, color.a)
 }
 
-unsafe fn paint(ship: *mut ElementRecord, kind: gfx_object, (r, g, b, a): Rgba) {
+unsafe fn paint(ship: *mut ElementRecord, kind: u8, (r, g, b, a): Rgba) {
     let prim = prim_of(ship);
-    (*prim).kind = kind as u8;
+    (*prim).kind = kind;
     (*prim).color = Color { r, g, b, a };
 }
 
@@ -131,8 +145,8 @@ fn avenger_descriptor_matches_the_c_template() {
             assert_eq!(CStr::from_ptr(data.ship_sounds_rsc), c"ship.ilwrath.sounds");
 
             // CLOSE_RANGE_WEAPON: DISPLAY_TO_WORLD (50).
-            assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
-            assert_eq!(desc.cyborg_control.WeaponRange, 200);
+            assert_eq!(desc.cyborg_control.maneuverability_index, 0);
+            assert_eq!(desc.cyborg_control.weapon_range, 200);
             assert!(desc.callbacks()[4] != 0);
             assert!(desc.callbacks()[1] != 0);
             assert!(desc.callbacks()[3] != 0);
@@ -251,8 +265,8 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
             // takes no damage, which keeps the collision self-contained.
             (*target).state_flags = 0;
             (*target).life = 5;
-            let mut flame_point = POINT { x: 100, y: 125 };
-            let mut target_point = POINT { x: 102, y: 125 };
+            let mut flame_point = Point { x: 100, y: 125 };
+            let mut target_point = Point { x: 102, y: 125 };
 
             hooks::invoke_collision_pointer(
                 (*flame).collision_func.unwrap(),
@@ -283,7 +297,7 @@ fn special_key_starts_the_cloak_and_spends_energy() {
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
             observation::enable();
             observation::drain();
@@ -291,7 +305,7 @@ fn special_key_starts_the_cloak_and_spends_energy() {
             preprocess(&mut fleet, ship);
 
             assert_eq!(special_hooks::count(&observation::drain(), "ilwrath"), 1);
-            assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
+            assert_eq!(prim_kind(ship), STAMPFILL_PRIMITIVE);
             assert_eq!(color_of(ship), WHITE);
             assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 13);
             assert_eq!(fleet.ship_mut().special_counter, 13);
@@ -310,7 +324,7 @@ fn cloak_needs_energy_and_a_ready_counter() {
         crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship = avenger(&mut fleet);
-        paint(ship, gfx_object_STAMP_PRIM, WHITE);
+        paint(ship, STAMP_PRIMITIVE, WHITE);
         fleet.ship_mut().cur_status_flags = SPECIAL as u16;
 
         fleet.descriptor_mut().ship_info.energy_level = 2;
@@ -318,20 +332,20 @@ fn cloak_needs_energy_and_a_ready_counter() {
         observation::drain();
         preprocess(&mut fleet, ship);
         assert_eq!(special_hooks::count(&observation::drain(), "ilwrath"), 0);
-        assert_eq!(prim_kind(ship), gfx_object_STAMP_PRIM as u8);
+        assert_eq!(prim_kind(ship), STAMP_PRIMITIVE);
         assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 2);
         assert_eq!(fleet.ship_mut().special_counter, 0);
 
         fleet.descriptor_mut().ship_info.energy_level = 16;
         fleet.ship_mut().special_counter = 3;
         preprocess(&mut fleet, ship);
-        assert_eq!(prim_kind(ship), gfx_object_STAMP_PRIM as u8);
+        assert_eq!(prim_kind(ship), STAMP_PRIMITIVE);
         assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 16);
 
         fleet.ship_mut().special_counter = 0;
         fleet.ship_mut().cur_status_flags = 0;
         preprocess(&mut fleet, ship);
-        assert_eq!(prim_kind(ship), gfx_object_STAMP_PRIM as u8);
+        assert_eq!(prim_kind(ship), STAMP_PRIMITIVE);
         assert_eq!((*ship).state_flags & CHANGING as u16, 0);
     })
 }
@@ -348,10 +362,10 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             let hunter = spawn_ship(&mut other, 3000, 1000);
             (*hunter).target = Some(battle::id(ship.cast()));
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
             preprocess(&mut fleet, ship);
-            assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
+            assert_eq!(prim_kind(ship), STAMPFILL_PRIMITIVE);
 
             // The special counter is still running, so the key only walks the
             // color down: white, then four blues, then black.
@@ -367,7 +381,7 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
             }
             // Reaching black untargets the ship.
             assert!((*hunter).target.is_none());
-            assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
+            assert_eq!(prim_kind(ship), STAMPFILL_PRIMITIVE);
 
             // Fully cloaked: nothing more happens until the counter runs out.
             (*ship).state_flags &= !(CHANGING as u16);
@@ -387,7 +401,7 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
-            paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+            paint(ship, STAMPFILL_PRIMITIVE, BLACK);
             fleet.ship_mut().special_counter = 0;
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
 
@@ -399,7 +413,7 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
             // Decloaking clears the local SPECIAL before the cloak check, so nothing activates.
             assert_eq!(special_hooks::count(&observation::drain(), "ilwrath"), 0);
             assert_eq!(color_of(ship), BLUE_DARK);
-            assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
+            assert_eq!(prim_kind(ship), STAMPFILL_PRIMITIVE);
             assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 16);
             assert_eq!(fleet.ship_mut().special_counter, 0);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
@@ -411,14 +425,14 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
                 (*ship).state_flags &= !(CHANGING as u16);
                 preprocess(&mut fleet, ship);
                 assert_eq!(color_of(ship), expected);
-                assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
+                assert_eq!(prim_kind(ship), STAMPFILL_PRIMITIVE);
                 assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             }
 
             // The last step turns the fill primitive back into a normal stamp.
             (*ship).state_flags &= !(CHANGING as u16);
             preprocess(&mut fleet, ship);
-            assert_eq!(prim_kind(ship), gfx_object_STAMP_PRIM as u8);
+            assert_eq!(prim_kind(ship), STAMP_PRIMITIVE);
             assert_eq!(color_of(ship), WHITE);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 16);
@@ -426,7 +440,7 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
             // A visible ship with no key held is left alone.
             (*ship).state_flags &= !(CHANGING as u16);
             preprocess(&mut fleet, ship);
-            assert_eq!(prim_kind(ship), gfx_object_STAMP_PRIM as u8);
+            assert_eq!(prim_kind(ship), STAMP_PRIMITIVE);
             assert_eq!((*ship).state_flags & CHANGING as u16, 0);
         }
     })
@@ -446,7 +460,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             // Straight along +x: ARCTAN gives angle 16, facing 4.
             spawn_ship(&mut other, 2000, 1000);
-            paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+            paint(ship, STAMPFILL_PRIMITIVE, BLACK);
             fleet.ship_mut().special_counter = 9;
             fleet.ship_mut().cur_status_flags = WEAPON as u16;
 
@@ -481,7 +495,7 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
             ((*ship).velocity).delta_components(0, 8000);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             spawn_ship(&mut other, 2000, 1000);
-            paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+            paint(ship, STAMPFILL_PRIMITIVE, BLACK);
             fleet.ship_mut().cur_status_flags = WEAPON as u16;
 
             preprocess(&mut fleet, ship);
@@ -504,7 +518,7 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
         let ship_frames = FrameSet::with_bounds(16, [0, 0]);
         let ship = avenger(&mut fleet);
         (*ship).next.image.frame = ship_frames.selection(0);
-        paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+        paint(ship, STAMPFILL_PRIMITIVE, BLACK);
         fleet.ship_mut().ship_facing = 6;
         fleet.ship_mut().cur_status_flags = WEAPON as u16;
 
@@ -526,7 +540,7 @@ fn firing_needs_energy_to_break_the_cloak() {
         crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship = avenger(&mut fleet);
-        paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+        paint(ship, STAMPFILL_PRIMITIVE, BLACK);
         fleet.ship_mut().special_counter = 5;
         fleet.ship_mut().cur_status_flags = WEAPON as u16;
         fleet.descriptor_mut().ship_info.energy_level = 0;
@@ -539,12 +553,12 @@ fn firing_needs_energy_to_break_the_cloak() {
     })
 }
 
-fn enemy_in_range(which_turn: COUNT) -> EVALUATE_DESC {
-    EVALUATE_DESC {
-        ObjectPtr: ptr::null_mut(),
+fn enemy_in_range(which_turn: u16) -> EvaluateRecord {
+    EvaluateRecord {
+        object_ptr: ptr::null_mut(),
         facing: 0,
         which_turn,
-        MoveState: MOVEMENT_STATE_AVOID,
+        move_state: MOVEMENT_STATE_AVOID,
     }
 }
 
@@ -553,7 +567,7 @@ fn enemy_in_range(which_turn: COUNT) -> EVALUATE_DESC {
 unsafe fn think(
     fleet: &mut Ship<'_>,
     ship: *mut ElementRecord,
-    concerns: &mut [EVALUATE_DESC; 4],
+    concerns: &mut [EvaluateRecord; 4],
     input: u8,
 ) -> u8 {
     fleet.ship_mut().ship_input_state = input;
@@ -561,9 +575,9 @@ unsafe fn think(
     fleet.ship_mut().ship_input_state
 }
 
-fn concerns_with(enemy: *mut ElementRecord, which_turn: COUNT) -> [EVALUATE_DESC; 4] {
+fn concerns_with(enemy: *mut ElementRecord, which_turn: u16) -> [EvaluateRecord; 4] {
     let mut concerns = [enemy_in_range(0); 4];
-    concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy;
+    concerns[ENEMY_SHIP_INDEX as usize].object_ptr = enemy;
     concerns[ENEMY_SHIP_INDEX as usize].which_turn = which_turn;
     concerns
 }
@@ -581,23 +595,23 @@ fn intelligence_pursues_and_ignores_incoming_fire_when_flaming() {
             let enemy = spawn_ship(&mut other, 1500, 1000);
 
             let mut concerns = concerns_with(enemy, 10);
-            concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = enemy;
+            concerns[ENEMY_WEAPON_INDEX as usize].object_ptr = enemy;
             think(&mut fleet, ship, &mut concerns, 0);
             assert_eq!(
-                concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                concerns[ENEMY_SHIP_INDEX as usize].move_state,
                 MOVEMENT_STATE_PURSUE
             );
-            assert!(concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr.is_null());
+            assert!(concerns[ENEMY_WEAPON_INDEX as usize].object_ptr.is_null());
 
             // Beyond ten turns the weapon concern survives for the dodge logic.
             let mut concerns = concerns_with(enemy, 11);
-            concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = enemy;
+            concerns[ENEMY_WEAPON_INDEX as usize].object_ptr = enemy;
             think(&mut fleet, ship, &mut concerns, 0);
             assert_eq!(
-                concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                concerns[ENEMY_SHIP_INDEX as usize].move_state,
                 MOVEMENT_STATE_PURSUE
             );
-            assert_eq!(concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr, enemy);
+            assert_eq!(concerns[ENEMY_WEAPON_INDEX as usize].object_ptr, enemy);
         }
     })
 }
@@ -616,14 +630,14 @@ fn intelligence_fires_flames_in_range_and_unwinds_the_cloak_input() {
             let keys = (LEFT | RIGHT | SPECIAL) as u8;
 
             // Visible: SPECIAL is dropped, WEAPON added, steering untouched.
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             let mut concerns = concerns_with(enemy, 6);
             let input = think(&mut fleet, ship, &mut concerns, keys);
             assert_eq!(input, (LEFT | RIGHT | WEAPON) as u8);
 
             // Cloaked: the source reads `&= ~LEFT | RIGHT`, which only masks off
             // LEFT, so RIGHT survives and THRUST is added.
-            paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+            paint(ship, STAMPFILL_PRIMITIVE, BLACK);
             let mut concerns = concerns_with(enemy, 6);
             let input = think(&mut fleet, ship, &mut concerns, keys);
             assert_eq!(input, (RIGHT | THRUST | WEAPON) as u8);
@@ -631,7 +645,7 @@ fn intelligence_fires_flames_in_range_and_unwinds_the_cloak_input() {
             assert_eq!(input, (THRUST | WEAPON) as u8);
 
             // Primitives past NUM_PRIMS also count as cloaked.
-            paint(ship, gfx_object_NUM_PRIMS, WHITE);
+            paint(ship, EMPTY_PRIMITIVE, WHITE);
             let mut concerns = concerns_with(enemy, 6);
             let input = think(&mut fleet, ship, &mut concerns, LEFT as u8);
             assert_eq!(input, (THRUST | WEAPON) as u8);
@@ -648,7 +662,7 @@ fn intelligence_flame_window_depends_on_enemy_and_incoming_fire_timing() {
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             fleet.ship_mut().special_counter = 5;
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             let enemy = spawn_ship(&mut other, 1500, 1000);
@@ -682,7 +696,7 @@ fn intelligence_cloaks_when_idle_and_ready() {
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             let mut concerns = concerns_with(ptr::null_mut(), 0);
 
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
@@ -695,10 +709,10 @@ fn intelligence_cloaks_when_idle_and_ready() {
             );
             fleet.ship_mut().weapon_counter = 0;
             // Already cloaked: the stale SPECIAL is dropped and not re-requested.
-            paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
+            paint(ship, STAMPFILL_PRIMITIVE, BLACK);
             assert_eq!(think(&mut fleet, ship, &mut concerns, SPECIAL as u8), 0);
             // A running special counter leaves the input alone.
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             fleet.ship_mut().special_counter = 4;
             assert_eq!(
                 think(&mut fleet, ship, &mut concerns, SPECIAL as u8),
@@ -717,12 +731,12 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             let mut concerns = concerns_with(ptr::null_mut(), 0);
             let probe = uqm_rust::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER;
 
             // LOBYTE (CurrentActivity): CHECK_PAUSE sits in the high byte.
-            let encounter = (IN_ENCOUNTER | CHECK_PAUSE) as u16;
+            let encounter = IN_ENCOUNTER | CHECK_PAUSE;
             crate::battle_context::with(|cx| cx.world.set_activity(encounter));
             crate::battle_context::with(|cx| cx.world.set_story_state(probe, 1));
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), 0);
@@ -733,7 +747,7 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
             // Outside an encounter the probe flag is irrelevant.
             crate::battle_context::with(|cx| cx.world.set_story_state(probe, 1));
             crate::battle_context::with(|cx| {
-                cx.world.set_activity((IN_HYPERSPACE | CHECK_PAUSE) as u16)
+                cx.world.set_activity(IN_HYPERSPACE as u16 | CHECK_PAUSE)
             });
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
             crate::battle_context::with(|cx| cx.world.set_story_state(probe, 0));
@@ -750,7 +764,7 @@ fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
-            paint(ship, gfx_object_STAMP_PRIM, WHITE);
+            paint(ship, STAMP_PRIMITIVE, WHITE);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             let enemy = spawn_ship(&mut other, 1500, 1000);
             (*enemy).mass = 1;
@@ -760,9 +774,9 @@ fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
             fleet.ship_mut().ship_input_state = 0;
             (*ship).turn = 0;
             (*ship).thrust = 0;
-            fleet.think(ship, &mut concerns, FIRST_EMPTY_INDEX as COUNT);
+            fleet.think(ship, &mut concerns, FIRST_EMPTY_INDEX as u16);
             assert_eq!(
-                concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                concerns[ENEMY_SHIP_INDEX as usize].move_state,
                 MOVEMENT_STATE_PURSUE
             );
             assert_ne!(fleet.ship_mut().ship_input_state & WEAPON as u8, 0);

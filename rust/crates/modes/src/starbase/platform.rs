@@ -187,6 +187,8 @@ pub enum StarbaseError {
     FuelLayout(#[from] FuelLayoutError),
     #[error("resource `{0}` did not load")]
     ResourceLoad(String),
+    #[error("{0} is not loaded")]
+    NotLoaded(&'static str),
     #[error(
         "gauge update disagrees with the transaction: expected fuel {expected_fuel} and {expected_res_units} RU, found fuel {actual_fuel} and {actual_res_units} RU"
     )]

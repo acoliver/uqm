@@ -2,7 +2,7 @@
 
 use super::shipyard_catalog as catalog;
 use crate::engine::{world::queues::FleetInfo, Game, World};
-use crate::ships::native::abi::{BYTE, GOOD_GUY};
+const GOOD_GUY: u32 = 1;
 
 fn with_roster(states: &[u16], check: impl FnOnce(&World)) {
     let mut game = Game::new();
@@ -30,7 +30,7 @@ fn empty_roster_has_no_available_escort() {
     with_roster(&[], |world| {
         assert_eq!(catalog::get_available_race_count(world), 0);
         assert!(catalog::get_available_race_from_index(world, 0).is_none());
-        assert!(catalog::get_available_race_from_index(world, BYTE::MAX).is_none());
+        assert!(catalog::get_available_race_from_index(world, u8::MAX).is_none());
     });
 }
 
@@ -42,7 +42,7 @@ fn selection_filters_allies_but_returns_the_original_roster_offset() {
         assert_eq!(catalog::get_available_race_count(world), 2);
         for (selection, offset) in [1, 4].into_iter().enumerate() {
             let Some((index, fleet)) =
-                catalog::get_available_race_from_index(world, selection as BYTE)
+                catalog::get_available_race_from_index(world, selection as u8)
             else {
                 panic!("the allied roster entry must be selectable");
             };
@@ -52,7 +52,7 @@ fn selection_filters_allies_but_returns_the_original_roster_offset() {
             assert_eq!(fleet.allied_state, allied);
         }
         assert!(catalog::get_available_race_from_index(world, 2).is_none());
-        assert!(catalog::get_available_race_from_index(world, BYTE::MAX).is_none());
+        assert!(catalog::get_available_race_from_index(world, u8::MAX).is_none());
     });
 }
 

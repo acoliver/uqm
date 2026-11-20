@@ -2,11 +2,18 @@
 pub(super) mod rules;
 pub mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::input_port::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_SELECT, KEY_MENU_UP,
+    };
+    use crate::engine::time::counter_abi::get_time_counter;
+    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+    use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
     use crate::engine::Kernel as KernelOwner;
     use crate::graphics::{context::ContextLease, drawable::LoadedDrawable};
-    use crate::ships::native::abi::*;
     use crate::sound::heart_ffi::fade_music as FadeMusic;
+    use crate::sound::heart_ffi::wait_for_sound_end;
+    use crate::starbase::ids::MELEE_STRING_BASE;
+    use crate::supermelee::native::{MELEE_MUSIC, MELEE_SCREEN_PMAP_ANIM};
     use crate::supermelee::session::MeleeSession;
 
     pub(crate) mod admission;
@@ -135,9 +142,7 @@ pub mod live {
                     crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
                 }
             }
-            9 => cx
-                .world
-                .set_activity(cx.world.activity() | CHECK_ABORT as u16),
+            9 => cx.world.set_activity(cx.world.activity() | CHECK_ABORT),
             0 | 8 => {
                 let side = u16::from(state.melee_option == 0);
                 let confirmed = crate::front_end::cnctdlg::melee_connect_dialog(
@@ -148,7 +153,7 @@ pub mod live {
                     usize::from(side),
                 );
                 redraw(cx, state);
-                state.last_input_time = GetTimeCounter();
+                state.last_input_time = get_time_counter();
                 if confirmed {
                     state.initialized = 0;
                     state.phase = crate::supermelee::session::MenuPhase::Connecting;
@@ -165,9 +170,9 @@ pub mod live {
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
     ) -> u32 {
-        let time = GetTimeCounter();
+        let time = get_time_counter();
         input.set_paused(false);
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT != 0 {
             return 0;
         }
         input.set_menu_sounds(15, 16);
@@ -186,12 +191,12 @@ pub mod live {
                 init_screen(cx, state);
                 screen_context(cx.kernel).fade_screen(FADE_ALL_TO_COLOR, 840 / 2);
             };
-            state.last_input_time = GetTimeCounter();
+            state.last_input_time = get_time_counter();
             return 1;
         }
         poll_menu(state, cx, io, 0);
         if key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_LEFT) {
-            state.last_input_time = GetTimeCounter();
+            state.last_input_time = get_time_counter();
             highlight(cx, state, state.melee_option, false);
             state.melee_option = 10;
             state.initialized = 0;
@@ -208,15 +213,15 @@ pub mod live {
             let mut next = state.melee_option;
             let mut force = false;
             if key(input, KEY_MENU_UP) {
-                state.last_input_time = GetTimeCounter();
+                state.last_input_time = get_time_counter();
                 next = super::rules::next_option(next, true, false);
             } else if key(input, KEY_MENU_DOWN) {
-                state.last_input_time = GetTimeCounter();
+                state.last_input_time = get_time_counter();
                 next = super::rules::next_option(next, false, true);
             }
             let controls = cx.kernel.player_control;
             if controls[0] & controls[1] & PSYTRON_CONTROL != 0
-                && GetTimeCounter().wrapping_sub(state.last_input_time) > 840 * 10
+                && get_time_counter().wrapping_sub(state.last_input_time) > 840 * 10
             {
                 force = true;
                 next = 4;
@@ -226,7 +231,7 @@ pub mod live {
             }
             if key(input, KEY_MENU_SELECT) || force {
                 select_option(input, state, cx, io);
-                if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+                if cx.world.activity() & CHECK_ABORT != 0 {
                     return 0;
                 }
             }
@@ -282,7 +287,7 @@ pub mod live {
         state.files = Some(crate::supermelee::session::MeleeFiles { config, teams });
         let offscreen = admit_menu_rendering(&mut state, cx.kernel);
         state.phase = crate::supermelee::session::MenuPhase::Menu;
-        let fallback = GetTimeCounter();
+        let fallback = get_time_counter();
         // Seed admission is part of the recorded input sequence.
         io.observer.input_admitted(
             &crate::engine::observe::InputView::Seed {
@@ -296,7 +301,7 @@ pub mod live {
         for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
             team.rename(cx.kernel.game_text(MELEE_STRING_BASE as usize + 4 + index));
         }
-        cx.world.set_activity(SUPER_MELEE as u16);
+        cx.world.set_activity(SUPER_MELEE);
         cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
         state.fleet_picker =
             Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
@@ -321,7 +326,7 @@ pub mod live {
         }
         {
             crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
-            WaitForSoundEnd(u16::MAX);
+            wait_for_sound_end(u16::MAX);
         };
         state.save_config(cx.kernel.player_control);
         let session = state.netplay.clone();

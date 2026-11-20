@@ -219,7 +219,7 @@ fn navigation_world_projections_write_the_single_authority() {
             crate::battle_context::with(|cx| {
                 cx.set_activity(42);
                 assert_eq!(cx.world.activity(), 42);
-                cx.set_autopilot(POINT { x: 17, y: 19 });
+                cx.set_autopilot(Point { x: 17, y: 19 });
                 assert_eq!((cx.autopilot().x, cx.autopilot().y), (17, 19));
                 cx.set_flagship_crew(23);
                 let config = cx.flagship_config();
@@ -261,8 +261,8 @@ fn typed_laser_and_thrust_use_live_ship_geometry_and_lifecycle() {
                 assert_eq!(cx.target(ship.id), None);
                 let id = cx
                     .spawn_laser(Laser {
-                        origin: POINT { x: 123, y: 234 },
-                        end: POINT { x: 40, y: 0 },
+                        origin: Point { x: 123, y: 234 },
+                        end: Point { x: 40, y: 0 },
                         flags: IGNORE_SIMILAR as u16,
                         sender: 0,
                         pixoffs: 0,
@@ -277,7 +277,7 @@ fn typed_laser_and_thrust_use_live_ship_geometry_and_lifecycle() {
                     .unwrap();
                 assert_eq!(cx.element(id).life, 1);
                 assert_eq!(cx.element(id).current.location.x, 123);
-                assert_eq!(cx.primitive_style(id).kind, gfx_object_LINE_PRIM as u8);
+                assert_eq!(cx.primitive_style(id).kind, LINE_PRIMITIVE);
                 assert_eq!(cx.primitive_style(id).color.g, 20);
                 cx.dispose(id);
             });
@@ -291,8 +291,17 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Ship};
+use uqm_rust::engine::battle::ai_constants::{IGNORE_SIMILAR, PLAY_VICTORY_DITTY, WEAPON};
+use uqm_rust::engine::battle::flags::CREW_OBJECT;
+use uqm_rust::engine::battle::record::ElementRecord;
+use uqm_rust::engine::battle::LINE_PRIMITIVE;
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
 use uqm_rust::engine::battle::{race::*, views::*, *};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::input_port::frames::KEY_MENU_CANCEL;
+use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
+use uqm_rust::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
+use uqm_rust::graphics::geometry::Color;
+use uqm_rust::graphics::geometry::Point;
 
 fn empty_descriptor(_world: &mut World) -> RaceDesc {
     RaceTemplate::default().descriptor(&EMPTY_RACE)
@@ -388,7 +397,7 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             crate::battle_context::with(|cx| {
                 let dest = cx.alloc_element().unwrap();
-                let index = cx.elements()[dest].PrimIndex;
+                let index = cx.elements()[dest].prim_index;
                 cx.set_target(ship.id, Some(ship.id));
                 cx.primitive_style_mut(ship.id).color = Color {
                     r: 1,
@@ -399,15 +408,15 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
                 uqm_rust::collections::observation::enable();
                 uqm_rust::collections::observation::drain();
                 cx.copy_allocated_element(dest, ship.id);
-                assert_eq!(cx.elements()[dest].PrimIndex, index);
-                assert_ne!(index, cx.elements()[ship.id].PrimIndex);
+                assert_eq!(cx.elements()[dest].prim_index, index);
+                assert_ne!(index, cx.elements()[ship.id].prim_index);
                 assert_eq!(cx.owner(dest), ship.ship_id);
                 assert_eq!(cx.target(dest), Some(ship.id));
                 assert_eq!(
                     cx.element(dest).current.image.frame.raw(),
                     cx.element(ship.id).current.image.frame.raw()
                 );
-                assert_eq!(cx.primitive_style(dest).kind, gfx_object_STAMP_PRIM as u8);
+                assert_eq!(cx.primitive_style(dest).kind, STAMP_PRIMITIVE);
                 assert_eq!(cx.primitive_style(dest).color.g, 2);
                 let events = uqm_rust::collections::observation::drain();
                 assert!(
@@ -527,7 +536,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
         let crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
         crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
         crate::battle_context::with(|cx| {
-            cx.world.set_activity(IN_ENCOUNTER as u16);
+            cx.world.set_activity(IN_ENCOUNTER);
             cx.world.set_flagship_crew(17);
             let keys = [
                 (StoryKey::SHOFIXTI_RECRUITED, 0),
@@ -555,7 +564,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                 .captain_rsc
                 .is_null());
             cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
-            cx.set_activity(SUPER_MELEE as u16);
+            cx.set_activity(SUPER_MELEE);
             assert!((RACE.descriptor)(cx.world)
                 .into_legacy()
                 .ship_data
@@ -594,7 +603,7 @@ fn hyperspace_cancel_observation_preserves_weapon_cancel_and_counter_conditions(
                             input.advance(
                                 sampled,
                                 sampled,
-                                uqm_rust::time::counter_abi::GetTimeCounter(),
+                                uqm_rust::time::counter_abi::get_time_counter(),
                             );
                         }
                         crate::battle_context::with(|cx| {
@@ -617,7 +626,7 @@ fn hyperspace_cancel_observation_preserves_weapon_cancel_and_counter_conditions(
             input.advance(
                 released,
                 released,
-                uqm_rust::time::counter_abi::GetTimeCounter(),
+                uqm_rust::time::counter_abi::get_time_counter(),
             );
         }
     });

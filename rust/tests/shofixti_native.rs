@@ -1,4 +1,32 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::ai_constants::WEAPON;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::CHANGING;
+use uqm_rust::engine::battle::flags::COLLISION;
+use uqm_rust::engine::battle::flags::DISAPPEARING;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_rust::engine::battle::record::ElementRecord;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
+use uqm_rust::engine::input_port::frames::KEY_WEAPON;
+use uqm_rust::engine::species::species_id::SPECIES_ID_NO_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
+use uqm_rust::engine::world::activity::activity_flags::CHECK_ABORT;
+use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_rust::engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_rust::engine::world::story::native_bits::END_SHOFIXTI_RECRUITED;
+use uqm_rust::engine::world::story::native_bits::SHOFIXTI_RECRUITED;
+use uqm_rust::graphics::geometry::Color;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::VELOCITY_SHIFT;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 use uqm_rust::supermelee::native::battle_picker::live::FleetSelection;
 #[path = "support/battle_context.rs"]
@@ -9,16 +37,16 @@ mod shared;
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::battle::tactrans_native::reset_winner;
 use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
+use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
 
 struct Battle {
     inner: shared::Battle,
     globals: uqm_rust::engine::WorldData,
-    graphics_flags: BYTE,
-    counters: [BYTE; 2],
+    graphics_flags: u8,
+    counters: [u8; 2],
 }
 impl Battle {
-    unsafe fn new(capacity: COUNT) -> Self {
+    unsafe fn new(capacity: u16) -> Self {
         let globals = crate::battle_context::with(|cx| cx.world.data);
         let graphics_flags = graphics_status();
         let counters = crate::battle_context::with(|cx| cx.b.counters);
@@ -52,7 +80,7 @@ unsafe fn set_recruited(value: bool) {
             cx.world,
             SHOFIXTI_RECRUITED as i32,
             END_SHOFIXTI_RECRUITED as i32,
-            value as BYTE,
+            value as u8,
         )
     });
 }
@@ -68,7 +96,7 @@ struct Ship<'a> {
     captain: FrameSet,
 }
 impl<'a> Ship<'a> {
-    unsafe fn new(battle: &'a Battle, player: SIZE) -> Self {
+    unsafe fn new(battle: &'a Battle, player: i16) -> Self {
         let mut inner = shared::Ship::new(&battle.inner, SPECIES_ID_SHOFIXTI_ID, player);
         let handle = inner.handle;
         let ship_frames = FrameSet::new(16);
@@ -85,9 +113,9 @@ impl<'a> Ship<'a> {
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
-        el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
-        el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
-        el.IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
+        el.intersect_control.IntersectStamp.frame = ship_frames.frame(0);
+        el.intersect_control.EndPoint = Point { x: 1000, y: 1000 };
+        el.intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
             handle,
@@ -98,20 +126,20 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> u16 {
         crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
             for (slot, weapon) in out.iter_mut().zip(&weapons) {
                 *slot = weapon.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast());
             }
-            weapons.len() as COUNT
+            weapons.len() as u16
         })
     }
     fn ptr(&self) -> *mut ElementRecord {
         self.handle.cast()
     }
-    unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
+    unsafe fn ai(&mut self, concerns: &mut [EvaluateRecord; 5]) {
         let mut subject = self.inner.subject();
         self.inner
             .intelligence_subject(&mut subject, &mut concerns[..4], 0);
@@ -140,45 +168,41 @@ unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut Elem
 
 unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     // SAFETY: the caller passes a live fixture element.
-    let index = unsafe { (*e).PrimIndex };
+    let index = unsafe { (*e).prim_index };
     crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 fn rgba(c: Color) -> (u8, u8, u8, u8) {
     (c.r, c.g, c.b, c.a)
 }
-unsafe fn with_rng<T>(seed: DWORD, draws: usize, action: impl FnOnce() -> T) -> T {
-    TFB_SeedRandom(seed);
+unsafe fn with_rng<T>(seed: u32, draws: usize, action: impl FnOnce() -> T) -> T {
+    seed_random(seed);
     for _ in 0..draws {
-        TFB_Random();
+        random();
     }
-    let expected = TFB_Random();
-    TFB_SeedRandom(seed);
+    let expected = random();
+    seed_random(seed);
     let result = action();
-    assert_eq!(
-        TFB_Random(),
-        expected,
-        "seed {seed}: expected {draws} draws"
-    );
+    assert_eq!(random(), expected, "seed {seed}: expected {draws} draws");
     result
 }
 unsafe fn object<'a>(
     battle: &'a Battle,
     flags: u16,
-    mass: BYTE,
-    hp: COUNT,
+    mass: u8,
+    hp: u16,
     dx: i32,
     dy: i32,
 ) -> shared::Object<'a> {
     let mut object = shared::Object::new(&battle.inner);
     let e = object.ptr();
     (*e).state_flags = flags;
-    (*e).playerNr = -1;
+    (*e).player_nr = -1;
     (*e).life = 50;
     (*e).hits = hp;
     (*e).mass = mass;
-    (*e).next.location = POINT {
-        x: (4000 + dx) as COORD,
-        y: (4000 + dy) as COORD,
+    (*e).next.location = Point {
+        x: (4000 + dx) as i16,
+        y: (4000 + dy) as i16,
     };
     shared::put(e.cast());
     object
@@ -309,8 +333,8 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
-                    d.cyborg_control.ManeuverabilityIndex,
-                    d.cyborg_control.WeaponRange
+                    d.cyborg_control.maneuverability_index,
+                    d.cyborg_control.weapon_range
                 ),
                 (0, 960)
             );
@@ -333,7 +357,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
         let mut ship = Ship::new(&_battle, 1);
         for facing in [0, 4, 7, 15, u16::MAX] {
             ship.inner.ship_mut().ship_facing = facing;
-            (*ship.ptr()).next.location = POINT {
+            (*ship.ptr()).next.location = Point {
                 x: i16::MAX - 5,
                 y: i16::MIN + 5,
             };
@@ -351,7 +375,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 ((*dart).life, (*dart).hits, (*dart).mass, (*dart).thrust),
                 (10, 1, 1, 1)
             );
-            assert_eq!((*dart).playerNr, 1);
+            assert_eq!((*dart).player_nr, 1);
             assert_eq!(((*dart).current.image.frame.raw()).index(), facing % 16);
             assert_eq!(
                 (*dart).current.image.frame.raw(),
@@ -365,15 +389,14 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                     && (*dart).collision_func.is_some()
             );
             assert!((*dart).parent == uqm_rust::engine::battle::Parent::None);
-            let angle = facing_to_angle(facing as i32) as COUNT;
+            let angle = facing_to_angle(facing as i32) as u16;
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
             let (velocity_x, velocity_y) = ((*dart).velocity).get_current_components();
             let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (vx, vy));
-            let origin_x =
-                ((i32::from(i16::MAX) - 5) + i32::from(cosine(angle as i32, 60))) as COORD;
-            let origin_y = ((i32::from(i16::MIN) + 5) + i32::from(sine(angle as i32, 60))) as COORD;
+            let origin_x = ((i32::from(i16::MAX) - 5) + i32::from(cosine(angle as i32, 60))) as i16;
+            let origin_y = ((i32::from(i16::MIN) + 5) + i32::from(sine(angle as i32, 60))) as i16;
             assert_eq!(
                 (*dart).current.location.x,
                 origin_x.wrapping_sub(vx >> VELOCITY_SHIFT)
@@ -398,7 +421,7 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(&_battle, 0);
         let enemy = Ship::new(&_battle, 1);
-        let mut concerns: [EVALUATE_DESC; 5] = mem::zeroed();
+        let mut concerns: [EvaluateRecord; 5] = mem::zeroed();
         for (remaining, enemy_turn, immediate, crew, special_available, start, counter, expected) in [
             (6, 5, false, 6, true, false, 0, true),
             (6, 5, false, 6, true, true, 0, false),
@@ -424,11 +447,11 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
                 WEAPON as u8 | if start { SPECIAL as u8 } else { 0 };
             ship.inner.ship_mut().special_counter = counter;
             (*ship.ptr()).hits = crew;
-            (*enemy.ptr()).current.location = POINT { x: 6000, y: 6000 };
+            (*enemy.ptr()).current.location = Point { x: 6000, y: 6000 };
             (*enemy.ptr()).mass = 0;
-            concerns[0].ObjectPtr = enemy.ptr();
+            concerns[0].object_ptr = enemy.ptr();
             concerns[0].which_turn = enemy_turn;
-            concerns[2].ObjectPtr = if immediate {
+            concerns[2].object_ptr = if immediate {
                 enemy.ptr()
             } else {
                 ptr::null_mut()
@@ -464,11 +487,11 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
             0,
             "opaque overlapping frames must intercept"
         );
-        let mut concerns: [EVALUATE_DESC; 5] = mem::zeroed();
-        concerns[2].ObjectPtr = threat.ptr();
+        let mut concerns: [EvaluateRecord; 5] = mem::zeroed();
+        concerns[2].object_ptr = threat.ptr();
         for seed in 1..32 {
-            TFB_SeedRandom(seed);
-            let parity = TFB_Random() & 1 != 0;
+            seed_random(seed);
+            let parity = random() & 1 != 0;
             (*threat.ptr()).mass = 6;
             ship.inner.ship_mut().ship_input_state = 0;
             with_rng(seed, 1, || ship.ai(&mut concerns));
@@ -697,21 +720,21 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         ] {
             (*ship.ptr()).life = life;
             with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
-            assert_eq!((*prim(ship.ptr())).kind, gfx_object_STAMPFILL_PRIM as u8);
+            assert_eq!((*prim(ship.ptr())).kind, STAMPFILL_PRIMITIVE);
             assert_eq!(rgba((*prim(ship.ptr())).color), color);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
         }
         (*ship.ptr()).life = 33;
         with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
         assert!((*ship.ptr()).preprocess_func.is_none());
-        assert_eq!((*prim(ship.ptr())).kind, gfx_object_NUM_PRIMS as u8);
+        assert_eq!((*prim(ship.ptr())).kind, EMPTY_PRIMITIVE);
         let explosion = shared::element(shared::tail());
         assert_ne!(explosion, ship.ptr());
         assert_eq!(
             (*explosion).state_flags,
             (APPEARING | FINITE_LIFE | NONSOLID) as u16
         );
-        assert_eq!((*explosion).playerNr, -1);
+        assert_eq!((*explosion).player_nr, -1);
         assert_eq!((*explosion).life, 10);
         assert_eq!((*explosion).hits, 0);
         assert_eq!((*explosion).mass, 0);
@@ -728,7 +751,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             ),
             (4000, 4000)
         );
-        assert_eq!((*prim(explosion)).kind, gfx_object_STAMPFILL_PRIM as u8);
+        assert_eq!((*prim(explosion)).kind, STAMPFILL_PRIMITIVE);
         assert_eq!(rgba((*prim(explosion)).color), (255, 255, 255, 255));
         assert!((*explosion).postprocess_func.is_none() && (*explosion).death_func.is_none());
         let animate = (*explosion).preprocess_func.unwrap();
@@ -773,7 +796,7 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         (*ship.ptr()).life = 33;
         hooks::invoke_element_pointer((*ship.ptr()).preprocess_func.unwrap(), ship.ptr());
         assert_eq!({ shared::tail() }, ship.handle);
-        assert_eq!((*prim(ship.ptr())).kind, gfx_object_NUM_PRIMS as u8);
+        assert_eq!((*prim(ship.ptr())).kind, EMPTY_PRIMITIVE);
         assert!((*ship.ptr()).preprocess_func.is_none());
     })
 }
@@ -784,7 +807,7 @@ fn sample_weapon(input: &uqm_rust::engine::input::InputSession, side: usize, pre
     input.advance(
         sampled,
         sampled,
-        uqm_rust::time::counter_abi::GetTimeCounter(),
+        uqm_rust::time::counter_abi::get_time_counter(),
     );
 }
 
@@ -833,13 +856,13 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         }));
                     });
                     crate::battle_context::with(|cx| {
-                        cx.world.set_activity((SUPER_MELEE | IN_BATTLE) as u16)
+                        cx.world.set_activity(SUPER_MELEE | IN_BATTLE)
                     });
                     crate::battle_context::with(|cx| cx.b.counters = initial);
                     let mut ship = Ship::new(&_battle, 0);
                     let mut other = Ship::new(&_battle, 1);
-                    ship.inner.ship_mut().SpeciesID = SPECIES_ID_SHOFIXTI_ID;
-                    other.inner.ship_mut().SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                    ship.inner.ship_mut().species_id = SPECIES_ID_SHOFIXTI_ID;
+                    other.inner.ship_mut().species_id = SPECIES_ID_SHOFIXTI_ID;
                     let mut reserves = [PoolShip::new(0), PoolShip::new(1)];
                     let inputs = std::array::from_fn::<_, 2, _>(|side| {
                         uqm_rust::engine::battle::input::InputContext::new(
@@ -859,9 +882,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         } else {
                             &raw mut *other.inner.ship_mut()
                         };
-                        reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                        reserves[side].species_id = SPECIES_ID_SHOFIXTI_ID;
                         reserves[side].index = 1;
-                        reserves[side].playerNr = side as SIZE;
+                        reserves[side].player_nr = side as i16;
                         crate::battle_context::with(|cx| {
                             let mut ships = cx.kernel.ships(side);
                             let active = ships.id(active as usize).unwrap();
@@ -889,8 +912,8 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
                         (
-                            ship.inner.ship_mut().SpeciesID,
-                            other.inner.ship_mut().SpeciesID
+                            ship.inner.ship_mut().species_id,
+                            other.inner.ship_mut().species_id
                         ),
                         (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
                     );
@@ -961,7 +984,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                         },
                                     );
                                     assert_eq!(chosen.is_some(), expected_selection);
-                                    chosen.is_some() as BOOLEAN
+                                    chosen.is_some() as u32
                                 }
                             })
                         });
@@ -970,12 +993,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let remaining = crate::battle_context::with(|cx| cx.b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
-                        crate::battle_context::with(|cx| cx.world.activity()) & CHECK_ABORT as u16,
+                        crate::battle_context::with(|cx| cx.world.activity()) & CHECK_ABORT,
                         0
                     );
                     assert_eq!(
-                        crate::battle_context::with(|cx| cx.world.activity()) & IN_BATTLE as u16
-                            != 0,
+                        crate::battle_context::with(|cx| cx.world.activity()) & IN_BATTLE != 0,
                         expected_selection
                     );
                     crate::battle_context::with(|cx| {

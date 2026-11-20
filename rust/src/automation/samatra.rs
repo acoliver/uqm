@@ -172,10 +172,7 @@ impl Controller {
             if remaining == 0 && escort_hazards(s).next().is_none() {
                 // The ordinary escort retreat leaves the flagship available in
                 // the next picker. BOMB_CARRIER disables retreat for the SIS.
-                return Progress::Running(Controls {
-                    escape: true,
-                    ..Controls::default()
-                });
+                return retreat();
             }
         }
         let distance = |x, y| {
@@ -207,9 +204,9 @@ impl Controller {
             }
         }
         if !s.bomb_carrier && remaining == 0 {
-            let hazard = escort_hazards(s)
-                .min_by_key(|h| distance(h.x, h.y).2)
-                .expect("remaining hazards before escort retreat");
+            let Some(hazard) = escort_hazards(s).min_by_key(|h| distance(h.x, h.y).2) else {
+                return retreat();
+            };
             let (dx, dy, squared) = distance(hazard.x, hazard.y);
             let aim = if s.selected_species == Some(5) {
                 missile_aim(
@@ -291,6 +288,14 @@ impl Controller {
             ..Controls::default()
         }
     }
+}
+
+/// Leave the field: the ordinary escort retreat.
+fn retreat() -> Progress {
+    Progress::Running(Controls {
+        escape: true,
+        ..Controls::default()
+    })
 }
 
 fn escort_hazards(s: &Snapshot) -> impl Iterator<Item = &Hazard> {

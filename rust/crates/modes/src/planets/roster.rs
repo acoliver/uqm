@@ -112,7 +112,7 @@ fn update_crew(
 
 pub(crate) mod live {
     use super::{navigate, update_crew, SHIP_POS};
-    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::time::counter_abi::get_time_counter;
     use crate::engine::{battle::Cx, observe::Io};
     use crate::input::frames::*;
     use crate::ui::sis::capacity::crew_capacity;
@@ -155,7 +155,8 @@ pub(crate) mod live {
         if delta == 0 {
             menu.frame = frame;
         }
-        let message = CString::new(value).unwrap();
+        let message =
+            CString::new(value).unwrap_or_else(|_| panic!("a crew count has no NUL byte"));
         cx.kernel.sis_highlight.pre_update_flash_rect();
         crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
         cx.kernel.sis_highlight.post_update_flash_rect();
@@ -173,7 +174,7 @@ pub(crate) mod live {
     }
 
     fn flash_ship(flash: &mut crate::engine::kernel::roster_flash::RosterFlash, menu: &Menu) {
-        if let Some(color) = flash.advance(GetTimeCounter) {
+        if let Some(color) = flash.advance(get_time_counter) {
             menu.context.set_foreground(color);
             draw(menu, true);
         }

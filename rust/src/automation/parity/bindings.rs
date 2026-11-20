@@ -1,6 +1,6 @@
 //! Image assignments and copies retain the identity observed at the write boundary.
 use super::{Fields, Journal};
-use crate::engine::battle::record::{state__bindgen_ty_1, ElementRecord as Element, STATE};
+use crate::engine::battle::record::{ElementImage, ElementRecord as Element, ElementVisual};
 use crate::graphics::{intersection::IntersectControl, intersection::Stamp};
 use std::collections::BTreeMap;
 
@@ -213,9 +213,9 @@ impl Journal {
         let current = std::mem::offset_of!(Element, current);
         let next = std::mem::offset_of!(Element, next);
         let frame =
-            std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, frame);
+            std::mem::offset_of!(ElementVisual, image) + std::mem::offset_of!(ElementImage, frame);
         let set =
-            std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, frames);
+            std::mem::offset_of!(ElementVisual, image) + std::mem::offset_of!(ElementImage, frames);
         address
             + match name {
                 "current.frame" => current + frame,
@@ -223,7 +223,7 @@ impl Journal {
                 "current.farray" => current + set,
                 "next.farray" => next + set,
                 "intersect.frame" => {
-                    std::mem::offset_of!(Element, IntersectControl)
+                    std::mem::offset_of!(Element, intersect_control)
                         + std::mem::offset_of!(IntersectControl, IntersectStamp)
                         + std::mem::offset_of!(Stamp, frame)
                 }

@@ -1,7 +1,7 @@
 //! Save-location preparation from explicit session topology and persistence identity.
 
 use super::solar::SolarError;
-use crate::engine::battle::schema::GAME_STATE as CGameState;
+use crate::engine::battle::schema::GameRecord as CGameState;
 pub use crate::engine::save::location::LocationError;
 use crate::engine::save::location::{OrbitLocation, SolarLocation};
 use crate::engine::world::generation::SolarSnapshot;

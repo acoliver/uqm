@@ -46,6 +46,11 @@ pub struct MixerBuffer {
 }
 
 impl MixerBuffer {
+    /// Sample bytes of a filled buffer; empty until data is uploaded.
+    pub fn bytes(&self) -> &[u8] {
+        self.data.as_deref().unwrap_or_default()
+    }
+
     /// Create a new uninitialized buffer
     pub fn new() -> Self {
         MixerBuffer {

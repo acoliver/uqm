@@ -6,69 +6,33 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            i32::try_from(r).expect("invalid response"),
-        )
+        s.handle(Handler::ExitConversation, i32::from(r))
     });
 }
-fn mind_fuck_urquan(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn mind_fuck_urquan(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| {
-        s.handle(
-            Handler::MindFuckUrquan,
-            i32::try_from(r).expect("invalid response"),
-        )
+        s.handle(Handler::MindFuckUrquan, i32::from(r))
     });
 }
-fn mind_control(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::MindControl,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn mind_control(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::MindControl, i32::from(r)));
 }
-fn pet_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::PetInfo,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn pet_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::PetInfo, i32::from(r)));
 }
-fn pet_device(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::PetDevice,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn pet_device(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::PetDevice, i32::from(r)));
 }
-fn compel_player(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::CompelPlayer,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn compel_player(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::CompelPlayer, i32::from(r)));
 }
-fn kill_pet(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::KillPet,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn kill_pet(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::KillPet, i32::from(r)));
 }
-fn pet_deal(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::PetDeal,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn pet_deal(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::PetDeal, i32::from(r)));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

@@ -3,7 +3,7 @@
 use super::dcq::Screen;
 use super::geometry::Rect;
 use super::state::{self, SCREEN_HEIGHT, SCREEN_WIDTH};
-use crate::time::counter_abi::GetTimeCounter;
+use crate::time::counter_abi::get_time_counter;
 
 /// C: `DrawFromExtraScreen`.
 pub fn draw_from_extra_screen(rect: Option<Rect>) {
@@ -65,11 +65,11 @@ pub fn screen_transition(rect: Option<Rect>) {
         g.transition_amount = 0;
     });
     state::wait_for_signal();
-    let start = GetTimeCounter();
+    let start = get_time_counter();
     while state::with(|g| g.transition_amount) < 255 {
         // SAFETY: transitions run on the game thread with graphics and input up.
         crate::threading::pacing::linked::sleep_thread(840 / 100);
-        let delta = GetTimeCounter().wrapping_sub(start);
+        let delta = get_time_counter().wrapping_sub(start);
         let amount = ((delta.wrapping_mul(255) / DURATION) as i32).min(255);
         state::with(|g| g.transition_amount = amount);
     }

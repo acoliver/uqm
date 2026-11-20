@@ -10,7 +10,39 @@ use battle::Battle as Battlefield;
 use battle::{prim, PoolElement, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_rust::engine::battle::ai_constants::IMMEDIATE_WEAPON;
+use uqm_rust::engine::battle::ai_constants::LEFT;
+use uqm_rust::engine::battle::ai_constants::POINT_DEFENSE;
+use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::ai_constants::WEAPON;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::CHANGING;
+use uqm_rust::engine::battle::flags::COLLISION;
+use uqm_rust::engine::battle::flags::DISAPPEARING;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::flags::POST_PROCESS;
+use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_rust::engine::battle::record::ElementRecord;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
+use uqm_rust::engine::battle::LINE_PRIMITIVE;
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
+use uqm_rust::engine::species::species_id::SPECIES_ID_CHMMR_ID;
+use uqm_rust::graphics::geometry::Color;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::arctan;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::square_root;
+use uqm_rust::math::velocity::VelocityDesc;
+use uqm_rust::math::velocity::VELOCITY_SHIFT;
+use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
 
 // Layouts from libs/graphics/drawable.h. These are real frame arrays and parent
 // descriptors, so SetAbsFrameIndex and GetFrameRect exercise the engine ABI.
@@ -18,17 +50,17 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 fn rgba(c: Color) -> [u8; 4] {
     [c.r, c.g, c.b, c.a]
 }
-fn point(p: POINT) -> (i16, i16) {
+fn point(p: Point) -> (i16, i16) {
     (p.x, p.y)
 }
 
-unsafe fn velocity(el: *mut ElementRecord) -> (SIZE, SIZE) {
+unsafe fn velocity(el: *mut ElementRecord) -> (i16, i16) {
     let (velocity_x, velocity_y) = ((*el).velocity).get_current_components();
     let (x, y) = (velocity_x as i16, velocity_y as i16);
     (x, y)
 }
 
-fn velocity_fields(v: &VELOCITY_DESC) -> [i16; 9] {
+fn velocity_fields(v: &VelocityDesc) -> [i16; 9] {
     [
         v.travel_angle as i16,
         v.vector.width,
@@ -43,12 +75,12 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i16; 9] {
 }
 
 unsafe fn assert_rng_after(seed: u32, draws: usize) {
-    let actual = TFB_Random();
-    TFB_SeedRandom(seed);
+    let actual = random();
+    seed_random(seed);
     for _ in 0..draws {
-        TFB_Random();
+        random();
     }
-    assert_eq!(actual, TFB_Random(), "RNG draws for seed {seed}");
+    assert_eq!(actual, random(), "RNG draws for seed {seed}");
 }
 
 unsafe fn exhaust() -> Vec<*mut std::ffi::c_void> {
@@ -153,8 +185,8 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
             assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (
-                    d.cyborg_control.ManeuverabilityIndex,
-                    d.cyborg_control.WeaponRange
+                    d.cyborg_control.maneuverability_index,
+                    d.cyborg_control.weapon_range
                 ),
                 (0, 200)
             );
@@ -189,10 +221,10 @@ fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
             for face in 0..16u16 {
                 ship.ship_mut().ship_facing = face;
                 ship.set_hot_spot(1, face as usize, [3, -5]);
-                (*ship.ptr()).next.location = POINT { x: -101, y: 32767 };
+                (*ship.ptr()).next.location = Point { x: -101, y: 32767 };
                 for counter in 0..4u8 {
                     ship.ship_mut().special_counter = counter;
-                    TFB_SeedRandom(55);
+                    seed_random(55);
                     let h = laser(&mut ship);
                     assert!(!h.is_null());
                     let laser = battle::element(h);
@@ -202,14 +234,14 @@ fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
                     assert_eq!((*laser).life, 1);
                     assert_eq!((*laser).turn, (counter + 1) % 4);
                     assert!((*laser).death_func.is_some());
-                    assert_eq!((*prim(laser)).kind, gfx_object_LINE_PRIM as u8);
+                    assert_eq!((*prim(laser)).kind, LINE_PRIMITIVE);
                     assert_eq!(rgba((*prim(laser)).color), colors[counter as usize]);
                     let a = facing_to_angle(i32::from(face));
                     assert_eq!(
                         velocity(laser),
                         (
-                            (i32::from(cosine(a, 600)) << VELOCITY_SHIFT) as SIZE,
-                            (i32::from(sine(a, 600)) << VELOCITY_SHIFT) as SIZE
+                            (i32::from(cosine(a, 600)) << VELOCITY_SHIFT) as i16,
+                            (i32::from(sine(a, 600)) << VELOCITY_SHIFT) as i16
                         )
                     );
                     assert_rng_after(55, 0);
@@ -228,7 +260,7 @@ fn weapon_allocation_failure_still_returns_one_null_slot() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
             let held = exhaust();
-            TFB_SeedRandom(9);
+            seed_random(9);
             assert!(laser(&mut ship).is_null());
             assert_rng_after(9, 0);
             for h in held {
@@ -252,17 +284,17 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
             let mut gates = [false; 2];
             for seed in 1..64 {
                 for distance in [111i16, 112, 600] {
-                    TFB_SeedRandom(seed);
-                    let gate = TFB_Random() as u8 & 7 != 0;
-                    let draw = TFB_Random() as u16;
+                    seed_random(seed);
+                    let gate = random() as u8 & 7 != 0;
+                    let draw = random() as u16;
                     gates[gate as usize] = true;
-                    (*laser).current.location = POINT {
+                    (*laser).current.location = Point {
                         x: origin.x + distance,
                         y: origin.y,
                     };
                     ship.ship_mut().special_counter = 0;
                     let tail = battle::tail();
-                    TFB_SeedRandom(seed);
+                    seed_random(seed);
                     hooks::invoke_element_pointer(death, laser);
                     assert_eq!(ship.ship_mut().special_counter, 1);
                     if gate && distance >= 112 {
@@ -278,7 +310,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         assert_eq!((*spot).current.image.frames, ship.frame_set(1));
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
-                        assert_eq!((*prim(spot)).kind, gfx_object_STAMP_PRIM as u8);
+                        assert_eq!((*prim(spot)).kind, STAMP_PRIMITIVE);
                         assert_eq!(
                             (*spot).parent,
                             uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -303,14 +335,14 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                 }
             }
             assert_eq!(gates, [true, true]);
-            ship.ship_mut().hShip = None;
-            TFB_SeedRandom(123);
+            ship.ship_mut().ship_element = None;
+            seed_random(123);
             hooks::invoke_element_pointer(death, laser);
             assert_rng_after(123, 0);
-            ship.ship_mut().hShip = Some(ship.id);
+            ship.ship_mut().ship_element = Some(ship.id);
             (*laser).current.location.x = origin.x + 600;
             let held = exhaust();
-            TFB_SeedRandom(7);
+            seed_random(7);
             hooks::invoke_element_pointer(death, laser);
             assert_rng_after(7, 1);
             for h in held {
@@ -333,22 +365,22 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
             ship.postprocess(); // tail is the ship itself
             assert_eq!({ battle::tail() }, ship.handle);
             for (counter, player, appearing, kind, expected) in [
-                (0, 0, true, gfx_object_LINE_PRIM, true),
-                (2, 0, true, gfx_object_LINE_PRIM, true),
-                (1, 0, true, gfx_object_LINE_PRIM, false),
-                (3, 0, true, gfx_object_LINE_PRIM, false),
-                (0, 1, true, gfx_object_LINE_PRIM, false),
-                (0, 0, false, gfx_object_LINE_PRIM, false),
-                (0, 0, true, gfx_object_STAMP_PRIM, false),
+                (0, 0, true, LINE_PRIMITIVE, true),
+                (2, 0, true, LINE_PRIMITIVE, true),
+                (1, 0, true, LINE_PRIMITIVE, false),
+                (3, 0, true, LINE_PRIMITIVE, false),
+                (0, 1, true, LINE_PRIMITIVE, false),
+                (0, 0, false, LINE_PRIMITIVE, false),
+                (0, 0, true, STAMP_PRIMITIVE, false),
             ] {
                 ship.ship_mut().special_counter = counter;
                 let h = laser(&mut ship);
                 let laser = battle::element(h);
-                (*laser).playerNr = player;
+                (*laser).player_nr = player;
                 if !appearing {
                     (*laser).state_flags &= !(APPEARING as u16);
                 }
-                (*prim(laser)).kind = kind as u8;
+                (*prim(laser)).kind = kind;
                 battle::put(h);
                 ship.postprocess();
                 assert_eq!(ship.ship_mut().special_counter, 0);
@@ -362,7 +394,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                     );
                     assert_eq!(((*flash).current.image.frame.raw()).index(), 21);
                     assert_eq!((*flash).life, 1);
-                    assert_eq!((*prim(flash)).kind, gfx_object_STAMP_PRIM as u8);
+                    assert_eq!((*prim(flash)).kind, STAMP_PRIMITIVE);
                     assert_eq!(
                         (*flash).parent,
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -393,29 +425,29 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                 uqm_rust::engine::battle::Selection::Disabled
             ));
             assert_eq!((*transit).life, 16);
-            assert_eq!((*prim(transit)).kind, gfx_object_NUM_PRIMS as u8);
+            assert_eq!((*prim(transit)).kind, EMPTY_PRIMITIVE);
             assert_eq!(
                 (*transit).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16
             );
             // The delayed element's position and player are not the spawn source.
-            (*transit).playerNr = 0;
-            (*transit).next.location = POINT { x: -1000, y: -2000 };
-            (*ship.ptr()).next.location = POINT { x: 7000, y: 6000 };
-            TFB_SeedRandom(77);
+            (*transit).player_nr = 0;
+            (*transit).next.location = Point { x: -1000, y: -2000 };
+            (*ship.ptr()).next.location = Point { x: 7000, y: 6000 };
+            seed_random(77);
             let indices = [
-                TFB_Random() as u16 & 7,
-                TFB_Random() as u16 & 7,
-                TFB_Random() as u16 & 7,
+                random() as u16 & 7,
+                random() as u16 & 7,
+                random() as u16 & 7,
             ];
-            TFB_SeedRandom(77);
+            seed_random(77);
             hooks::invoke_element_pointer((*transit).death_func.unwrap(), transit);
             let mut h = battle::succ(transit);
             for (i, index) in indices.into_iter().enumerate() {
                 assert!(!h.is_null());
                 let s = battle::element(h);
                 let angle = (i as i32 * 64 + 1) / 3;
-                assert_eq!((*s).playerNr, 1);
+                assert_eq!((*s).player_nr, 1);
                 assert_eq!((*s).turn, angle as u8);
                 assert_eq!((*s).life, 2);
                 assert_eq!((*s).hits, 10);
@@ -425,7 +457,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                     (7000 + cosine(angle, 256), 6000 + sine(angle, 256))
                 );
                 assert_eq!(((*s).current.image.frame.raw()).index(), index);
-                assert_eq!((*prim(s)).kind, gfx_object_STAMP_PRIM as u8);
+                assert_eq!((*prim(s)).kind, STAMP_PRIMITIVE);
                 assert!((*s).preprocess_func.is_some());
                 assert!((*s).postprocess_func.is_some());
                 assert!((*s).death_func.is_some());
@@ -447,18 +479,18 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
             let delay = delayed_spawn(&mut ship);
             let death = (*battle::element(delay)).death_func.unwrap();
-            TFB_SeedRandom(88);
+            seed_random(88);
             hooks::invoke_element_pointer(death, battle::element(delay)); // only one free slot
             assert_eq!((*battle::element(battle::tail())).hits, 10);
             assert_rng_after(88, 1);
-            TFB_SeedRandom(88);
+            seed_random(88);
             hooks::invoke_element_pointer(death, battle::element(delay));
             assert_rng_after(88, 0);
-            ship.ship_mut().hShip = None;
-            TFB_SeedRandom(88);
+            ship.ship_mut().ship_element = None;
+            seed_random(88);
             hooks::invoke_element_pointer(death, battle::element(delay));
             assert_rng_after(88, 0);
-            ship.ship_mut().hShip = Some(ship.id);
+            ship.ship_mut().ship_element = Some(ship.id);
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
             let tail = battle::tail();
             ship.preprocess();
@@ -499,7 +531,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                 let desired_x =
                     i32::from((*ship.ptr()).next.location.x) + i32::from(cosine(0, 256));
                 let desired_y = i32::from((*ship.ptr()).next.location.y) + i32::from(sine(0, 256));
-                (*s).current.location = POINT {
+                (*s).current.location = Point {
                     x: (desired_x - dx) as i16,
                     y: (desired_y - dy) as i16,
                 };
@@ -514,17 +546,14 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                 );
                 let expected =
                     if i64::from(wx) * i64::from(wx) + i64::from(wy) * i64::from(wy) <= 6400 {
-                        (
-                            (wx << VELOCITY_SHIFT) as SIZE,
-                            (wy << VELOCITY_SHIFT) as SIZE,
-                        )
+                        ((wx << VELOCITY_SHIFT) as i16, (wy << VELOCITY_SHIFT) as i16)
                     } else {
-                        let a = i32::from(ARCTAN(wx as SIZE, wy as SIZE));
+                        let a = i32::from(arctan(wx as i16, wy as i16));
                         (cosine(a, 2560), sine(a, 2560))
                     };
                 assert_eq!(velocity(s), expected, "delta {dx}/{dy}");
             }
-            ship.ship_mut().hShip = None;
+            ship.ship_mut().ship_element = None;
             let before = velocity_fields(&(*s).velocity);
             hooks::invoke_element_pointer(preprocess, s);
             assert_eq!(velocity_fields(&(*s).velocity), before);
@@ -542,13 +571,13 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             let satellites = satellites(&mut ship);
             let s = battle::element(satellites[0]);
             let mut other = PoolElement::new();
-            let mut p = POINT { x: 1, y: 2 };
+            let mut p = Point { x: 1, y: 2 };
             hooks::invoke_collision_pointer(
                 (*s).collision_func.unwrap(),
                 s,
                 &mut p,
                 &mut *other,
-                &mut POINT { x: 0, y: 0 },
+                &mut Point { x: 0, y: 0 },
                 hooks::CollisionCall::Hook,
             );
             assert_eq!((*s).hits, 10);
@@ -597,14 +626,14 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
 unsafe fn target(satellite: *mut ElementRecord, dx: i16, dy: i16, hp: u16) -> PoolElement {
     let mut fixture = PoolElement::new();
     let e = &raw mut *fixture;
-    (*e).playerNr = 1;
+    (*e).player_nr = 1;
     (*e).hits = hp;
     (*e).mass = 1;
-    (*e).next.location = POINT {
+    (*e).next.location = Point {
         x: (*satellite).next.location.x.wrapping_add(dx),
         y: (*satellite).next.location.y.wrapping_add(dy),
     };
-    (*prim(e)).kind = gfx_object_STAMP_PRIM as u8;
+    (*prim(e)).kind = STAMP_PRIMITIVE;
     battle::put(e.cast());
     fixture
 }
@@ -643,7 +672,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             let mut after_fixture = target(s, 0, 4, 0);
             let after: *mut std::ffi::c_void = (&raw mut *after_fixture).cast();
             let before = battle::tail();
-            TFB_SeedRandom(12);
+            seed_random(12);
             hooks::invoke_element_pointer(
                 (*battle::element(d)).death_func.unwrap(),
                 battle::element(d),
@@ -699,13 +728,13 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                 let h: *mut std::ffi::c_void = (&raw mut *h_fixture).cast();
                 let obj = battle::element(h);
                 match exclusion {
-                    1 => (*obj).playerNr = 0,
-                    2 => (*obj).playerNr = -1,
+                    1 => (*obj).player_nr = 0,
+                    2 => (*obj).player_nr = -1,
                     3 => (*obj).state_flags = NONSOLID as u16,
                     4 => (*obj).state_flags = DISAPPEARING as u16,
-                    5 => (*prim(obj)).kind = gfx_object_NUM_PRIMS as u8,
+                    5 => (*prim(obj)).kind = EMPTY_PRIMITIVE,
                     6 => {
-                        (*prim(obj)).kind = gfx_object_STAMPFILL_PRIM as u8;
+                        (*prim(obj)).kind = STAMPFILL_PRIMITIVE;
                         (*prim(obj)).color = Color {
                             r: 0,
                             g: 0,
@@ -807,7 +836,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 let mut enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 (*enemy.ptr()).mass = mass;
-                (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
+                (*enemy.ptr()).current.location = Point { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
                 ((*enemy.ptr()).velocity).set_components(i32::from(initial_vx), 0);
@@ -818,7 +847,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 ship.ship_mut().special_counter = 3;
                 observation::enable();
                 observation::drain();
-                TFB_SeedRandom(99);
+                seed_random(99);
                 ship.postprocess();
                 assert_eq!(special_hooks::count(&observation::drain(), "chmmr"), 1);
                 let vx = initial_vx + (384 / i32::from(mass)) as i16;
@@ -834,7 +863,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 for (offset, blue) in [(60, 57), (42, 74), (28, 99), (17, 115), (8, 132)] {
                     let shadow = battle::element(h);
                     assert_ne!(h, ship.handle);
-                    assert_eq!((*shadow).playerNr, 1);
+                    assert_eq!((*shadow).player_nr, 1);
                     assert_eq!(
                         (*shadow).parent,
                         uqm_rust::engine::battle::Parent::Ship(enemy.ship_id)
@@ -854,7 +883,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                         (*enemy.ptr()).next.image.frame.raw()
                     );
                     assert_eq!(velocity(shadow), (vx, 0));
-                    assert_eq!((*prim(shadow)).kind, gfx_object_STAMPFILL_PRIM as u8);
+                    assert_eq!((*prim(shadow)).kind, STAMPFILL_PRIMITIVE);
                     assert_eq!(rgba((*prim(shadow)).color), [0, 0, blue, 255]);
                     h = battle::succ(shadow);
                 }
@@ -883,7 +912,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                 let enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 (*enemy.ptr()).mass = mass;
-                (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
+                (*enemy.ptr()).current.location = Point { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 if has_target {
                     (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
@@ -898,7 +927,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                 let tail = battle::tail();
                 observation::enable();
                 observation::drain();
-                TFB_SeedRandom(22);
+                seed_random(22);
                 ship.postprocess();
                 // Energy is paid before TrackShip, so a targetless tractor still fires.
                 assert_eq!(
@@ -931,8 +960,8 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            concerns[0].ObjectPtr = enemy.ptr();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+            concerns[0].object_ptr = enemy.ptr();
             concerns[0].which_turn = 13;
 
             for own_angle in 0..64u16 {
@@ -960,7 +989,7 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
                 (13, 0, 0, false, false),
             ] {
                 concerns[0].which_turn = turn;
-                concerns[0].ObjectPtr = if has_enemy {
+                concerns[0].object_ptr = if has_enemy {
                     enemy.ptr()
                 } else {
                     ptr::null_mut()
@@ -968,7 +997,7 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
                 ship.ship_mut().special_counter = counter;
                 ship.ship_mut().weapon_counter = weapon_counter;
                 ship.ship_mut().ship_input_state = (WEAPON | SPECIAL) as u8;
-                TFB_SeedRandom(101);
+                seed_random(101);
                 ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
                 assert_eq!(
                     ship.ship_mut().ship_input_state & SPECIAL as u8 != 0,
@@ -995,11 +1024,11 @@ fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
                 let enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 // South is exactly half a circle from TrackShip's initial facing.
-                (*enemy.ptr()).current.location = POINT { x: 4000, y: 5000 };
+                (*enemy.ptr()).current.location = Point { x: 4000, y: 5000 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 ship.ship_mut().cur_status_flags = SPECIAL as u16;
                 assert!((*ship.ptr()).target.is_none());
-                TFB_SeedRandom(seed);
+                seed_random(seed);
                 ship.postprocess();
                 assert_eq!(
                     (*ship.ptr()).target,
@@ -1028,27 +1057,27 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
             let h = laser(&mut ship);
             let laser = battle::element(h);
-            (*ship.ptr()).current.location = POINT { x: 32760, y: 32760 };
-            (*laser).current.location = POINT { x: -8, y: -8 };
+            (*ship.ptr()).current.location = Point { x: 32760, y: 32760 };
+            (*laser).current.location = Point { x: -8, y: -8 };
             (*laser).turn = 255;
             let mut saw_large_magnitude = false;
             for seed in 1..128 {
-                TFB_SeedRandom(seed);
-                let gate = TFB_Random() as u8 & 7 != 0;
-                let draw = TFB_Random() as COUNT;
+                seed_random(seed);
+                let gate = random() as u8 & 7 != 0;
+                let draw = random() as u16;
                 let distance_squared = 2_147_483_648u32;
                 let magnitude = (i32::from(draw)
                     % (i32::from(square_root(distance_squared)) + 1 - 112)
-                    + 112) as COUNT;
+                    + 112) as u16;
                 let tail = battle::tail();
-                TFB_SeedRandom(seed);
+                seed_random(seed);
                 hooks::invoke_element_pointer((*laser).death_func.unwrap(), laser);
                 assert_eq!(ship.ship_mut().special_counter, 255);
                 if gate {
                     saw_large_magnitude |= magnitude > i16::MAX as u16;
                     let spot_handle = battle::tail();
                     let spot = battle::element(spot_handle);
-                    let a = i32::from(ARCTAN(i16::MIN, i16::MIN));
+                    let a = i32::from(arctan(i16::MIN, i16::MIN));
                     assert_eq!(
                         point((*spot).current.location),
                         (
@@ -1078,7 +1107,7 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
             ship.ship_mut().special_counter = 3;
-            TFB_SeedRandom(81);
+            seed_random(81);
             ship.postprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 42);

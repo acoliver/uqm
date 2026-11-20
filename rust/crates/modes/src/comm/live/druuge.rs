@@ -14,69 +14,29 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     comm.race_scratch.druuge = Some(session);
 }
 
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExitConversation, r));
 }
-fn buy(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::Buy,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn buy(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Buy, r));
 }
-fn trade(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::Trade,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn trade(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Trade, r));
 }
-fn sell(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::Sell,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn sell(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Sell, r));
 }
-fn explain_slave_trade(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExplainSlaveTrade,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn explain_slave_trade(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExplainSlaveTrade, r));
 }
-fn trade_world(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::TradeWorld,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn trade_world(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::TradeWorld, r));
 }
-fn bomb_ambush(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::BombAmbush,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn bomb_ambush(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::BombAmbush, r));
 }
-fn space(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::Space,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn space(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Space, r));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

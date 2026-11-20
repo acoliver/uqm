@@ -1,9 +1,10 @@
 //! Typed access to engine owners shared with the melee menu.
 use super::*;
+use crate::engine::battle::net::NetState;
 #[derive(Clone, Copy)]
 pub(super) struct ConnectionView {
     pub player: usize,
-    pub state: u32,
+    pub state: NetState,
     pub connected: bool,
     pub server: bool,
     pub discriminant: bool,

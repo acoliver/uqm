@@ -6,61 +6,28 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            i32::try_from(r).expect("invalid response"),
-        )
+        s.handle(Handler::ExitConversation, i32::from(r))
     });
 }
-fn not_ready(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NotReady,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn not_ready(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NotReady, i32::from(r)));
 }
-fn improve_bomb(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ImproveBomb,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn improve_bomb(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ImproveBomb, i32::from(r)));
 }
-fn chmmr_free(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ChmmrFree,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn chmmr_free(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ChmmrFree, i32::from(r)));
 }
-fn chmmr_advice(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ChmmrAdvice,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn chmmr_advice(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ChmmrAdvice, i32::from(r)));
 }
-fn chmmr_shielded(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ChmmrShielded,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn chmmr_shielded(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ChmmrShielded, i32::from(r)));
 }
-fn after_bomb(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AfterBomb,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn after_bomb(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AfterBomb, i32::from(r)));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

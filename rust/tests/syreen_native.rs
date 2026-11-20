@@ -7,7 +7,14 @@ mod battle_context;
 use battle::*;
 
 use std::{ffi::CStr, mem, ptr};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::{
+    ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, SPECIAL,
+};
+use uqm_rust::engine::battle::flags::{APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP};
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::species::species_id::SPECIES_ID_SYREEN_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::velocity::VelocityDesc;
 
 /// The queue holds exactly the elements a test creates, so a test can also
 /// exhaust the allocator.
@@ -15,7 +22,7 @@ const QUEUE_SLOTS: u16 = 6;
 
 use battle::Battle as Battlefield;
 
-fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
+fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
     [
         v.travel_angle.into(),
         v.vector.width.into(),
@@ -29,9 +36,9 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     ]
 }
 
-fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
+fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
     unsafe {
-        let mut v: VELOCITY_DESC = mem::zeroed();
+        let mut v: VelocityDesc = mem::zeroed();
         uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
@@ -93,8 +100,8 @@ fn descriptor_matches_the_c_race_data() {
             assert_eq!(text(desc.ship_data.ship_sounds_rsc), c"ship.syreen.sounds");
 
             // MISSILE_SPEED * MISSILE_LIFE * 2 / 3 with MISSILE_SPEED = 120
-            assert_eq!(desc.cyborg_control.WeaponRange, 800);
-            assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
+            assert_eq!(desc.cyborg_control.weapon_range, 800);
+            assert_eq!(desc.cyborg_control.maneuverability_index, 0);
             assert!(desc.callbacks()[4] != 0);
             assert!(desc.callbacks()[2] != 0);
             assert!(desc.callbacks()[3] != 0);
@@ -111,7 +118,7 @@ fn dagger_is_launched_with_the_c_missile_block() {
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
             ship.ship_mut().ship_facing = 4;
-            ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
+            ship.element_mut().next.location = Point { x: 1000, y: 2000 };
             let slots = ship.weapon(1);
             let daggers = [ship.weapon_record(slots[0]).cast()];
 
@@ -169,7 +176,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
-            ship.element_mut().next.location = POINT { x: 1234, y: 4321 };
+            ship.element_mut().next.location = Point { x: 1234, y: 4321 };
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
 
@@ -182,7 +189,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
             assert_eq!((*scan).life, 0);
-            assert_eq!((*scan).playerNr, 0);
+            assert_eq!((*scan).player_nr, 0);
             assert_eq!(
                 ((*scan).next.location.x, (*scan).next.location.y),
                 (1234, 4321)
@@ -199,7 +206,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
     })
 }
 
-unsafe fn enter_battle(ship: &mut Ship<'_>, location: POINT, crew: u16) {
+unsafe fn enter_battle(ship: &mut Ship<'_>, location: Point, crew: u16) {
     ship.element_mut().next.location = location;
     ship.element_mut().set_hit_points(crew);
     ship.descriptor_mut().ship_info.crew_level = crew;
@@ -222,7 +229,7 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
-            ship.element_mut().next.location = POINT { x: 5000, y: 5000 };
+            ship.element_mut().next.location = Point { x: 5000, y: 5000 };
             let (scan, run_scan) = queued_scan(&mut ship);
 
             // Queue candidates the scan must skip: a far ship, a friendly ship, a
@@ -230,19 +237,19 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             let mut far = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 1);
             enter_battle(
                 &mut far,
-                POINT {
+                Point {
                     x: 5000 + 4 * 209,
                     y: 5000,
                 },
                 10,
             );
             let mut friend = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
-            enter_battle(&mut friend, POINT { x: 5100, y: 5000 }, 10);
+            enter_battle(&mut friend, Point { x: 5100, y: 5000 }, 10);
             let mut last_crew = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 1);
-            enter_battle(&mut last_crew, POINT { x: 5100, y: 5000 }, 1);
+            enter_battle(&mut last_crew, Point { x: 5100, y: 5000 }, 1);
             let mut shot = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 1);
             shot.element_mut().state_flags = 0;
-            enter_battle(&mut shot, POINT { x: 5100, y: 5000 }, 10);
+            enter_battle(&mut shot, Point { x: 5100, y: 5000 }, 10);
 
             let before = (battle::head(), battle::tail());
             hooks::invoke_element_pointer(run_scan, scan);
@@ -278,7 +285,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
-            ship.element_mut().next.location = POINT { x: 5000, y: 5000 };
+            ship.element_mut().next.location = Point { x: 5000, y: 5000 };
             let (scan, run_scan) = queued_scan(&mut ship);
 
             // A ship at the edge of the abandon range reaches AbandonShip. With
@@ -287,7 +294,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
             let mut victim = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 1);
             enter_battle(
                 &mut victim,
-                POINT {
+                Point {
                     x: 5000 + 4 * 208,
                     y: 5000,
                 },
@@ -318,7 +325,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
 struct Duel<'a> {
     ship: Ship<'a>,
     enemy: Ship<'a>,
-    concerns: [EVALUATE_DESC; 4],
+    concerns: [EvaluateRecord; 4],
 }
 
 impl<'a> Duel<'a> {
@@ -330,7 +337,7 @@ impl<'a> Duel<'a> {
         };
         duel.enemy.element_mut().hits = 5;
         let slot = &mut duel.concerns[ENEMY_SHIP_INDEX as usize];
-        slot.ObjectPtr = duel.enemy.el();
+        slot.object_ptr = duel.enemy.el();
         slot.which_turn = which_turn;
         duel
     }
@@ -389,7 +396,7 @@ fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
             // Without a target the request is left alone.
             drop(duel);
             let mut duel = Duel::new(&_battle, 14);
-            duel.concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = ptr::null_mut();
+            duel.concerns[ENEMY_SHIP_INDEX as usize].object_ptr = ptr::null_mut();
             duel.ship.ship_mut().ship_input_state = special;
             duel.run();
             assert_eq!(duel.input(), special);

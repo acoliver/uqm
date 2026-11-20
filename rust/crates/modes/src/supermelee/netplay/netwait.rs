@@ -1,5 +1,6 @@
 //! Ordered ready/reset exchanges across the caller's input frames.
-use super::{abi::*, netconnection::ReadyAction};
+use super::netconnection::ReadyAction;
+use crate::engine::battle::net::NetState;
 use crate::engine::battle::net::ProtocolDriver;
 const NETWORK_POLL_DELAY: u32 = uqm_engine::time::counter_abi::ONE_SECOND / 24;
 
@@ -7,14 +8,14 @@ impl super::session::SessionCore {
     pub fn negotiate_ready_connections(
         &self,
         notify: bool,
-        next: u32,
+        next: NetState,
         driver: &mut dyn ProtocolDriver,
     ) -> bool {
         self.wait_connections(|side| {
             self.negotiate_ready(side, notify, next, driver);
         })
     }
-    pub fn wait_reset_connections(&self, next: u32, driver: &mut dyn ProtocolDriver) -> bool {
+    pub fn wait_reset_connections(&self, next: NetState, driver: &mut dyn ProtocolDriver) -> bool {
         self.wait_connections(|side| {
             let generation = {
                 let mut conn = self
@@ -36,7 +37,7 @@ impl super::session::SessionCore {
                         .connection_mut(side)
                         .unwrap_or_else(|| panic!("reset connection"));
                     if !conn.flags.reset.local {
-                        conn.local_reset(2)
+                        conn.local_reset(super::ResetReason::ManualReset as u32)
                     } else {
                         Vec::new()
                     }
@@ -91,7 +92,7 @@ impl super::session::SessionCore {
         &self,
         side: usize,
         notify: bool,
-        next: u32,
+        next: NetState,
         driver: &mut dyn ProtocolDriver,
     ) -> bool {
         let (generation, effects) = {
@@ -128,10 +129,10 @@ impl super::session::SessionCore {
             .connection(side)
             .unwrap_or_else(|| panic!("end connection"))
             .state;
-        if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
+        if state == NetState::InterBattle || state == NetState::InSetup {
             return true;
         }
-        if state == NetState_NetState_inBattle {
+        if state == NetState::InBattle {
             let effects = {
                 let mut conn = self
                     .connection_mut(side)
@@ -146,7 +147,7 @@ impl super::session::SessionCore {
                 .connection(side)
                 .unwrap_or_else(|| panic!("end connection"))
                 .state
-                == NetState_NetState_inBattle
+                == NetState::InBattle
             {
                 return false;
             }
@@ -154,27 +155,24 @@ impl super::session::SessionCore {
         let conn = self
             .connection(side)
             .unwrap_or_else(|| panic!("end connection"));
-        assert!(
-            conn.state == NetState_NetState_endingBattle
-                || conn.state == NetState_NetState_endingBattle2
-        );
+        assert!(conn.state == NetState::EndingBattle || conn.state == NetState::EndingBattle2);
         if self.frame_count.get() < conn.end_frame_count {
             return false;
         }
         let generation = conn.ready_generation;
         let state = conn.state;
         drop(conn);
-        if state == NetState_NetState_endingBattle {
+        if state == NetState::EndingBattle {
             self.wait_exchange(side, generation, false, driver);
             let conn = self
                 .connection(side)
                 .unwrap_or_else(|| panic!("end connection"));
-            assert_eq!(conn.state, NetState_NetState_endingBattle2);
+            assert_eq!(conn.state, NetState::EndingBattle2);
             if self.frame_count.get() < conn.end_frame_count {
                 return false;
             }
         }
-        self.negotiate_ready(side, true, NetState_NetState_interBattle, driver);
+        self.negotiate_ready(side, true, NetState::InterBattle, driver);
         true
     }
 }

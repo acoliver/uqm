@@ -4,7 +4,9 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Object, Ship};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_SLYLANDRO_ID};
+use uqm_rust::graphics::geometry::Point;
 
 #[test]
 fn legacy_slylandro_receives_the_fifth_junk_concern() {
@@ -17,10 +19,10 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
             let location = ship.element_mut().current.location;
             {
                 let e = junk.element_mut();
-                e.playerNr = -1;
+                e.player_nr = -1;
                 e.set_mass_points(1);
                 e.set_life_span(1);
-                e.current.location = POINT {
+                e.current.location = Point {
                     x: location.x + 32,
                     y: location.y,
                 };
@@ -45,8 +47,8 @@ fn typed_ai_uses_the_supplied_subject_projection() {
         unsafe {
             let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
             let mut target = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 1);
-            ship.element_mut().current.location = POINT { x: 1000, y: 1000 };
-            target.element_mut().current.location = POINT { x: 3000, y: 1000 };
+            ship.element_mut().current.location = Point { x: 1000, y: 1000 };
+            target.element_mut().current.location = Point { x: 3000, y: 1000 };
             crate::battle_context::with(|cx| {
                 let live = cx.weapon_origin(ship.id);
                 let other = cx.weapon_origin(target.id);

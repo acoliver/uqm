@@ -3,7 +3,7 @@ use crate::engine::battle::services::PrimitiveServices;
 use crate::engine::battle::views::FrameSelection;
 use crate::engine::battle::{Cx, ElementId, ShipId};
 use crate::graphics::{geometry::Point, geometry::Rect};
-use crate::ships::native::abi::OPT_PC;
+use crate::ui::settings::OPT_PC;
 
 pub fn install(kernel: &mut crate::engine::Kernel) {
     kernel.install_primitive_services(&ModeServices);
@@ -26,7 +26,7 @@ impl PrimitiveServices for ModeServices {
         crate::ui::shipstat::update_statistics(
             context.as_ref(),
             true,
-            cx.kernel.configuration.preferences().menu == OPT_PC as i32,
+            cx.kernel.configuration.preferences().menu == OPT_PC,
             font.as_ref(),
             &mut info,
             y,
@@ -44,7 +44,7 @@ impl PrimitiveServices for ModeServices {
                 .status_context
                 .map(crate::graphics::context::ContextLease::retain);
             let height = (cx.screen_dimensions().1 >> 1) as i16;
-            let pc_menu = cx.kernel.configuration.preferences().menu == OPT_PC as i32;
+            let pc_menu = cx.kernel.configuration.preferences().menu == OPT_PC;
             crate::battle::status_native::draw_captains_window(
                 cx,
                 ship,

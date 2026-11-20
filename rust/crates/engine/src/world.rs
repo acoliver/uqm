@@ -7,7 +7,7 @@ pub mod planet;
 #[cfg(test)]
 mod space_tests;
 
-use crate::battle::schema::GAME_STATE;
+use crate::battle::schema::GameRecord;
 pub const MUSIC_DISABLED: u8 = 8;
 pub const SOUND_DISABLED: u8 = 16;
 
@@ -26,7 +26,7 @@ use queues::{Encounter, Fleet, Fragment, Group};
 #[derive(Clone, Copy)]
 pub struct WorldData {
     pub flagship: SisState,
-    pub game: GAME_STATE,
+    pub game: GameRecord,
 }
 
 impl WorldData {

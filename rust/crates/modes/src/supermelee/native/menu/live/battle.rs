@@ -1,5 +1,10 @@
 //! Battle launch and network confirmation.
 use super::*;
+use crate::engine::battle::net::NetState;
+use crate::engine::sound::types::NORMAL_VOLUME;
+use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
+use crate::starbase::ids::NETMELEE_STRING_BASE;
 pub(super) fn ready(state: &MeleeSession, controls: [u8; 2]) -> isize {
     let mut done = 0;
     for player in [0usize, 1] {
@@ -11,7 +16,7 @@ pub(super) fn ready(state: &MeleeSession, controls: [u8; 2]) -> isize {
         if conn.is_none() || !net_connection_is_connected(conn) {
             return -1;
         }
-        if conn.unwrap_or_else(|| panic!("connection")).state > 3 {
+        if conn.unwrap_or_else(|| panic!("connection")).state > NetState::InSetup {
             done += 1;
         }
     }
@@ -29,7 +34,7 @@ fn prepare_confirmation(
     if key(input, KEY_MENU_CANCEL) {
         state.phase = crate::supermelee::session::MenuPhase::Menu;
         state.netplay.cancel_confirmations();
-        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 4) as usize);
+        status_game(cx, state, (NETMELEE_STRING_BASE + 4) as usize);
         return Some(1);
     }
     if key(input, KEY_MENU_LEFT) || key(input, KEY_MENU_UP) || key(input, KEY_MENU_DOWN) {
@@ -75,7 +80,7 @@ fn prepare_confirmation(
             continue;
         }
         if conn.unwrap_or_else(|| panic!("connection")).discriminant {
-            let seed = GetTimeCounter();
+            let seed = get_time_counter();
             crate::math::seed_random(seed);
             netplay_notify_seed_random(state, conn, seed);
         }
@@ -95,7 +100,7 @@ pub(super) fn confirm(
     }
     let session = state.netplay.clone();
     if !changes::with_protocol_driver(state, cx, io, |driver| {
-        session.negotiate_ready_connections(true, 5, driver)
+        session.negotiate_ready_connections(true, NetState::InterBattle, driver)
     }) {
         return 0;
     }
@@ -104,7 +109,7 @@ pub(super) fn confirm(
     }
     state.phase = crate::supermelee::session::MenuPhase::Menu;
     start(state, cx, io);
-    u32::from(cx.world.activity() & CHECK_ABORT as u16 == 0)
+    u32::from(cx.world.activity() & CHECK_ABORT == 0)
 }
 pub(super) fn start(
     state: &mut MeleeSession,
@@ -143,12 +148,12 @@ pub(super) fn start(
         cx.b.selection_frames = None;
         cx.kernel.free_gravity_well();
         cx.kernel.clear_player_inputs();
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT != 0 {
             return;
         }
         fade(cx, FADE_ALL_TO_BLACK);
     }
-    cx.world.set_activity(SUPER_MELEE as u16);
+    cx.world.set_activity(SUPER_MELEE);
     state.initialized = 0;
 }
 pub(super) fn start_button(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
@@ -158,13 +163,13 @@ pub(super) fn start_button(state: &mut MeleeSession, cx: &mut crate::engine::bat
         return;
     }
     if controls[0] & NETWORK_CONTROL != 0 && controls[1] & NETWORK_CONTROL != 0 {
-        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 32) as usize);
+        status_game(cx, state, (NETMELEE_STRING_BASE + 32) as usize);
         return;
     }
     if (controls[0] & NETWORK_CONTROL != 0 && controls[1] & COMPUTER_CONTROL != 0)
         || (controls[1] & NETWORK_CONTROL != 0 && controls[0] & COMPUTER_CONTROL != 0)
     {
-        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 33) as usize);
+        status_game(cx, state, (NETMELEE_STRING_BASE + 33) as usize);
         return;
     }
     let mut ok = true;
@@ -173,13 +178,15 @@ pub(super) fn start_button(state: &mut MeleeSession, cx: &mut crate::engine::bat
             continue;
         }
         let index = match connection(state, player).filter(|conn| conn.connected) {
-            Some(conn) if conn.state != 3 => Some(if player == 0 { 14 } else { 15 }),
+            Some(conn) if conn.state != NetState::InSetup => {
+                Some(if player == 0 { 14 } else { 15 })
+            }
             Some(_) => None,
             None => Some(if player == 0 { 5 } else { 6 }),
         };
         if let Some(index) = index {
             ok = false;
-            status_game(cx, state, (NETMELEE_STRING_BASE as i32 + index) as usize);
+            status_game(cx, state, (NETMELEE_STRING_BASE + index) as usize);
         }
     }
     if !ok {
@@ -187,7 +194,7 @@ pub(super) fn start_button(state: &mut MeleeSession, cx: &mut crate::engine::bat
         return;
     }
     if ready(state, controls) != 2 {
-        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 7) as usize);
+        status_game(cx, state, (NETMELEE_STRING_BASE + 7) as usize);
     }
     state.netplay.confirm_connections();
     state.phase = crate::supermelee::session::MenuPhase::Confirm;
@@ -201,10 +208,10 @@ pub(super) fn connecting(
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
     {
-        let time = GetTimeCounter();
+        let time = get_time_counter();
         let side = usize::from(state.melee_option == 0);
         input.set_paused(false);
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT != 0 {
             return 0;
         }
         input.set_menu_sounds(0, 0);
@@ -225,18 +232,18 @@ pub(super) fn connecting(
             }
             redraw(cx, state);
             state.phase = crate::supermelee::session::MenuPhase::Menu;
-            state.last_input_time = GetTimeCounter();
+            state.last_input_time = get_time_counter();
             flush_menu(state, cx, io);
             return 1;
         }
         if let Some(conn) = connection(state, side) {
-            if conn.state == 2 || conn.state == 3 {
+            if matches!(conn.state, NetState::Init | NetState::InSetup) {
                 cx.kernel.player_control[side] = NETWORK_CONTROL | 16;
                 controls(cx, state, side, true);
                 redraw(cx, state);
                 status_player(cx, state, side as isize);
                 state.phase = crate::supermelee::session::MenuPhase::Menu;
-                state.last_input_time = GetTimeCounter();
+                state.last_input_time = get_time_counter();
                 highlight(cx, state, state.melee_option, false);
                 state.melee_option = 4;
             }

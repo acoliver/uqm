@@ -5,7 +5,7 @@ use super::live::*;
 fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     let controls = step.input;
     if reset {
-        FlushInput(controls);
+        flush_input(controls);
     }
     crate::mainloop::input_frame::rust_begin_input_loop();
     loop {
@@ -19,7 +19,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         {
             break;
         }
-        UpdateInputState(step.cx, controls);
+        update_input_state(step.cx, controls);
         let activity = step.cx.world.activity();
         if step
             .input(crate::engine::observe::InputView::AfterUpdate(activity))
@@ -35,7 +35,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         }
     }
     if reset {
-        FlushInput(controls);
+        flush_input(controls);
     }
 }
 
@@ -44,11 +44,11 @@ fn process_utility_keys(input: &crate::engine::input::InputSession) {
     use crate::engine::input::frames::{KEY_ABORT, KEY_FULLSCREEN};
     let state = input.immediate();
     if state.menu[KEY_ABORT as usize] != 0 {
-        crate::log_abi::log_showBox(false, false);
+        crate::log_abi::log_show_box(false, false);
         std::process::exit(0);
     }
     if state.menu[KEY_FULLSCREEN as usize] != 0 {
-        FlushInput(input);
+        flush_input(input);
         crate::graphics::present::toggle_fullscreen();
     }
 }
@@ -154,15 +154,15 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
     }
 
     fn flush(&self) {
-        FlushInput(&self.input);
+        flush_input(&self.input);
     }
 
     fn confirm_exit(&self, cx: &mut crate::engine::battle::Cx<'_>) -> bool {
-        ConfirmExit(cx, &self.input) != 0
+        confirm_exit(cx, &self.input) != 0
     }
 
     fn update(&self, cx: &mut crate::engine::battle::Cx<'_>) {
-        UpdateInputState(cx, &self.input);
+        update_input_state(cx, &self.input);
     }
 
     fn run(

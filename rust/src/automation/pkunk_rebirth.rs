@@ -86,8 +86,8 @@ impl Tracker {
     }
 
     fn observe_ship(&mut self, side: u8, tick: u64, counters: [u8; 2], ship: Option<BattleShip>) {
-        let Some(ship) =
-            ship.filter(|ship| ship.species == crate::ships::native::abi::SPECIES_ID_PKUNK_ID)
+        let Some(ship) = ship
+            .filter(|ship| ship.species == crate::engine::species::species_id::SPECIES_ID_PKUNK_ID)
         else {
             self.living = None;
             self.death = None;
@@ -224,7 +224,7 @@ fn pkunk_sample<'a>(
         (evidence.frame == frame
             && tick.phase == BattlePhase::Advanced
             && tick.activity & (1 << 9) != 0
-            && ship.species == crate::ships::native::abi::SPECIES_ID_PKUNK_ID
+            && ship.species == crate::engine::species::species_id::SPECIES_ID_PKUNK_ID
             && ship.identity.map(u64::from) == [slot, generation]
             && crew.map_or(ship.crew > 0, |crew| ship.crew == crew))
         .then_some((index, tick))
@@ -288,7 +288,7 @@ mod tests {
         let mut ships = [None; 2];
         ships[side] = Some(BattleShip {
             identity: [3, 7],
-            species: crate::ships::native::abi::SPECIES_ID_PKUNK_ID,
+            species: crate::engine::species::species_id::SPECIES_ID_PKUNK_ID,
             position: [0; 2],
             velocity: [0; 2],
             facing: 0,

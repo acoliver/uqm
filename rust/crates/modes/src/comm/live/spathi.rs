@@ -14,69 +14,29 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     comm.race_scratch.spathi = Some(session);
 }
 
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExitConversation, r));
 }
-fn spathi_on_pluto(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiOnPluto,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_on_pluto(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiOnPluto, r));
 }
-fn spathi_must_grovel(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiMustGrovel,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_must_grovel(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiMustGrovel, r));
 }
-fn spathi_allies(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiAllies,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_allies(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiAllies, r));
 }
-fn spathi_friendly(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiFriendly,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_friendly(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiFriendly, r));
 }
-fn spathi_befriend(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiBefriend,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_befriend(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiBefriend, r));
 }
-fn spathi_antagonize(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiAntagonize,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_antagonize(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiAntagonize, r));
 }
-fn spathi_neutral(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SpathiNeutral,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn spathi_neutral(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SpathiNeutral, r));
 }
 pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {

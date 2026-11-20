@@ -25,10 +25,15 @@ impl<R: Read> Reader<R> {
         Ok(self.bytes(1)?[0])
     }
     fn count(&mut self) -> io::Result<u16> {
-        Ok(u16::from_le_bytes(self.bytes(2)?.try_into().unwrap()))
+        Ok(u16::from_le_bytes(self.array_of()?))
     }
     fn word(&mut self) -> io::Result<u32> {
-        Ok(u32::from_le_bytes(self.bytes(4)?.try_into().unwrap()))
+        Ok(u32::from_le_bytes(self.array_of()?))
+    }
+    fn array_of<const N: usize>(&mut self) -> io::Result<[u8; N]> {
+        self.bytes(N)?
+            .try_into()
+            .map_err(|_| io::ErrorKind::UnexpectedEof.into())
     }
     fn array(&mut self) -> io::Result<Vec<u8>> {
         let n = self.word()?;
@@ -99,6 +104,31 @@ fn ships<R: Read>(r: &mut Reader<R>, wire: &mut Vec<u8>, tag: u32) -> io::Result
     Ok(())
 }
 
+fn encounters<R: Read>(r: &mut Reader<R>, wire: &mut Vec<u8>) -> io::Result<()> {
+    let count = r.count()?;
+    let mut encounters = Vec::new();
+    for _ in 0..count {
+        r.skip(12)?;
+        encounters.extend(r.bytes(13)?);
+        let packed = r.byte()?;
+        encounters.extend([packed & 15, packed & 0xf0]);
+        r.skip(2)?;
+        for _ in 0..7 {
+            r.skip(2)?;
+            encounters.push(r.byte()?);
+            r.skip(1)?;
+            encounters.extend(u16::from(r.byte()?).to_le_bytes());
+            encounters.extend(u16::from(r.byte()?).to_le_bytes());
+            r.skip(1)?;
+            encounters.push(r.byte()?);
+            r.skip(16)?;
+        }
+        encounters.extend(r.bytes(8)?);
+    }
+    chunk(wire, ENCOUNTERS_TAG, &encounters);
+    Ok(())
+}
+
 pub fn decode_legacy_payload<R: Read>(
     summary: &Summary,
     input: R,
@@ -108,7 +138,7 @@ pub fn decode_legacy_payload<R: Read>(
     let mut wire = SAVEFILE_TAG.to_le_bytes().to_vec();
     // The existing encoder supplies the summary representation without another
     // copy of its field order in the legacy reader.
-    let summary_wire = super::encode::encode_summary(summary);
+    let summary_wire = super::encode::encode_summary(summary)?;
     wire.extend(summary_wire);
     r.skip(1)?;
     let mut global = r.bytes(31)?;
@@ -169,27 +199,7 @@ pub fn decode_legacy_payload<R: Read>(
         r.skip(3)?;
     }
     chunk(&mut wire, EVENTS_TAG, &events);
-    let count = r.count()?;
-    let mut encounters = Vec::new();
-    for _ in 0..count {
-        r.skip(12)?;
-        encounters.extend(r.bytes(13)?);
-        let packed = r.byte()?;
-        encounters.extend([packed & 15, packed & 0xf0]);
-        r.skip(2)?;
-        for _ in 0..7 {
-            r.skip(2)?;
-            encounters.push(r.byte()?);
-            r.skip(1)?;
-            encounters.extend(u16::from(r.byte()?).to_le_bytes());
-            encounters.extend(u16::from(r.byte()?).to_le_bytes());
-            r.skip(1)?;
-            encounters.push(r.byte()?);
-            r.skip(16)?;
-        }
-        encounters.extend(r.bytes(8)?);
-    }
-    chunk(&mut wire, ENCOUNTERS_TAG, &encounters);
+    encounters(&mut r, &mut wire)?;
     let state_files = [r.array()?, r.array()?, r.array()?];
     chunk(&mut wire, STAR_TAG, &r.bytes(8)?);
     Ok(LegacySave {

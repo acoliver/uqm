@@ -3,7 +3,7 @@ use super::menu_state::PM_CREW;
 use super::session::{draw_piece, MenuAssets};
 use super::shipyard_catalog as catalog;
 use super::shipyard_crew as crew;
-use super::shipyard_layout::{DMS_MoveCursor, SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH, USE_3DO_HANGAR};
+use super::shipyard_layout::{move_cursor, SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH, USE_3DO_HANGAR};
 use super::shipyard_selection::{
     dms_flash_active_ship, dms_flash_escort_ship_crew_count, dms_flash_flag_ship_crew_count,
     dms_set_mode, ModifyMode, SOUND_ARROWS, SOUND_SELECT,
@@ -36,6 +36,7 @@ use sis::{
     set_menu_flash,
 };
 use std::{cell::RefCell, rc::Rc};
+
 use uqm_engine::time::counter_abi::ONE_SECOND;
 const HANGAR_ANIM_RATE: u32 = 15;
 const SHIPYARD: u32 = 2;
@@ -478,7 +479,7 @@ fn dms_navigate_ship_slots(
         })
     };
     if dx != 0 || dy != 0 {
-        let new_state = DMS_MoveCursor(menu.state, dx, dy);
+        let new_state = move_cursor(menu.state, dx, dy);
         if new_state != menu.state {
             menu.state = new_state;
             dms_flash_active_ship(cx, menu.state);

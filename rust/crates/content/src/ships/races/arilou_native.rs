@@ -6,8 +6,8 @@
 //! /COORD conversions the C macros perform.
 
 #[cfg(test)]
-use crate::ships::native::abi::SIN_SHIFT;
-use crate::ships::native::abi::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT};
+use crate::math::battle_types::SIN_SHIFT;
+use crate::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT};
 
 /// `MAX_REDUCTION` from `units.h`: how far the battle view can zoom out.
 const MAX_REDUCTION: i32 = 3;
@@ -73,8 +73,20 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
 
 pub mod engine {
     use super::*;
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, IMMEDIATE_WEAPON, LEFT,
+        MOVEMENT_STATE_ENTICE, RIGHT, SEEKING_SPECIAL, SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, CREW_OBJECT, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
+        SHIP_AT_MAX_SPEED,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
     use crate::engine::battle::{Concerns, Cx, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::ships::native::abi::*;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::velocity::VelocityDesc;
 
     // Core characteristics
     const MAX_CREW: u16 = 6;
@@ -128,8 +140,8 @@ pub mod engine {
                 ..Default::default()
             },
             fleet_strength: 250 / SPHERE_RADIUS_INCREMENT as u16 * 2,
-            fleet_location: POINT { x: 438, y: 6372 },
-            characteristics: CHARACTERISTIC_STUFF {
+            fleet_location: Point { x: 438, y: 6372 },
+            characteristics: CharacteristicRecord {
                 max_thrust: MAX_THRUST,
                 thrust_increment: THRUST_INCREMENT,
                 energy_regeneration: ENERGY_REGENERATION,
@@ -143,7 +155,7 @@ pub mod engine {
                 ship_mass: SHIP_MASS,
             },
             intelligence: crate::engine::battle::views::Intelligence {
-                weapon_range: (LASER_RANGE >> 1) as COUNT,
+                weapon_range: (LASER_RANGE >> 1) as u16,
                 ..Default::default()
             },
             ..Default::default()
@@ -175,7 +187,7 @@ pub mod engine {
         let angle = facing_to_angle(i32::from(face));
         vec![cx.spawn_laser(crate::engine::battle::views::Laser {
             origin: origin.next.location,
-            end: POINT {
+            end: Point {
                 x: crate::ships::native::cosine(angle, LASER_RANGE),
                 y: crate::ships::native::sine(angle, LASER_RANGE),
             },
@@ -233,15 +245,15 @@ pub mod engine {
         let special = cx.ship_frame_set(ss, 2);
         if cx.element(ship).flags & NONSOLID as u16 == 0 {
             if cx.element(ship).thrust == 0 {
-                cx.element_mut(ship).velocity = VELOCITY_DESC::default();
+                cx.element_mut(ship).velocity = VelocityDesc::default();
                 cx.ship_state_mut(ss).status &= !(SHIP_AT_MAX_SPEED as u16);
             }
             if cx.ship_state(ss).status & SPECIAL as u16 != 0
                 && cx.ship_state(ss).special_counter == 0
-                && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
+                && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as i16))
             {
                 cx.observe_special(ss, special_hook);
-                cx.element_mut(ship).velocity = VELOCITY_DESC::default();
+                cx.element_mut(ship).velocity = VelocityDesc::default();
                 cx.ship_state_mut(ss).status &=
                     !((SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON) as u16);
                 cx.element_mut(ship).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
@@ -267,7 +279,7 @@ pub mod engine {
                 state.thrust = state.thrust.wrapping_add(1);
             }
             let mut life = cx.element(ship).life;
-            if life == NORMAL_LIFE as COUNT {
+            if life == NORMAL_LIFE as u16 {
                 cx.element_mut(ship).flags &= !((NONSOLID | FINITE_LIFE) as u16);
                 cx.element_mut(ship).flags |= APPEARING as u16;
                 let frames = cx.ship_frame_set(ss, 0);
@@ -292,9 +304,9 @@ pub mod engine {
                     let width = log_space_width(width);
                     let height = log_space_height(height);
                     cx.element_mut(ship).next.location.x =
-                        wrap_val(display_align(cx.random(), width), width) as COORD;
+                        wrap_val(display_align(cx.random(), width), width) as i16;
                     cx.element_mut(ship).next.location.y =
-                        wrap_val(display_align(cx.random(), height), height) as COORD;
+                        wrap_val(display_align(cx.random(), height), height) as i16;
                 }
             }
             cx.element_mut(ship).flags |= CHANGING as u16;

@@ -1,5 +1,6 @@
 //! Fleet-slot and team-name editing.
 use super::*;
+use crate::engine::input_port::frames::{KEY_MENU_DELETE, KEY_MENU_RIGHT, KEY_MENU_SPECIAL};
 struct NameCallbacks<'a>(&'a mut MeleeSession);
 
 impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
@@ -74,9 +75,9 @@ pub(super) fn edit(
     io: &mut crate::engine::observe::Io<'_>,
     input: &crate::engine::input::InputSession,
 ) -> u32 {
-    let time = GetTimeCounter();
+    let time = get_time_counter();
     input.set_paused(false);
-    if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+    if cx.world.activity() & CHECK_ABORT != 0 {
         return 0;
     }
     input.set_menu_sounds(15, 16 | 512);
@@ -96,7 +97,7 @@ pub(super) fn edit(
         state.current_ship = 255;
         state.melee_option = 4;
         state.phase = crate::supermelee::session::MenuPhase::Menu;
-        state.last_input_time = GetTimeCounter();
+        state.last_input_time = get_time_counter();
     } else if row < 2 && key(input, KEY_MENU_SELECT) {
         highlight(cx, state, 10, false);
         state.melee_option = 11;

@@ -1,14 +1,27 @@
 //! Chenjesu callbacks and descriptor translated from `sc2/src/uqm/ships/chenjesu/chenjesu.c`.
 
 pub mod engine {
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, MEDIUM_SHIP,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SEEKING_SPECIAL, SEEKING_WEAPON, SLOW_SHIP,
+        SPECIAL, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, DEFY_PHYSICS, DISAPPEARING, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
+    };
     use crate::engine::battle::hooks::animation_preprocess;
+    use crate::engine::battle::record::CharacteristicRecord;
     use crate::engine::battle::views::Missile;
+    use crate::engine::battle::STAMP_PRIMITIVE;
+    use crate::engine::battle::{CollisionHook, ElementHook};
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
-    };
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::VelocityDesc;
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    const COLLISION_THRUST_WAIT: u32 = 3;
 
     const MAX_CREW: u16 = 36;
     const MAX_ENERGY: u8 = 30;
@@ -55,7 +68,7 @@ pub mod engine {
         d.resources.strings = Some(c"ship.chenjesu.text");
         d.resources.icons = Some(c"ship.chenjesu.icons");
         d.resources.melee_icon = Some(c"ship.chenjesu.meleeicons");
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -124,7 +137,7 @@ pub mod engine {
                 cx.set_parent(h, Some(ss));
                 cx.put(h);
             }
-            block.face = (i32::from(block.face) + facing_circle / NUM_FRAGMENTS) as COUNT;
+            block.face = (i32::from(block.face) + facing_circle / NUM_FRAGMENTS) as u16;
         }
         cx.process_ship_sound(ss, 1, e);
     }
@@ -142,9 +155,9 @@ pub mod engine {
     pub fn crystal_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         let h = cx.weapon_collision(a, pa, b, pb);
         if let Some(h) = h {
@@ -182,9 +195,9 @@ pub mod engine {
                 // ARCTAN takes SIZE: C promotes the subtraction to int, then
                 // truncates each argument to signed 16 bits at the call.
                 let dx = (i32::from(cx.element(target).current.location.x)
-                    - i32::from(cx.element(e).current.location.x)) as SIZE;
+                    - i32::from(cx.element(e).current.location.x)) as i16;
                 let dy = (i32::from(cx.element(target).current.location.y)
-                    - i32::from(cx.element(e).current.location.y)) as SIZE;
+                    - i32::from(cx.element(e).current.location.y)) as i16;
                 facing = normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
                 let delta_facing = normalize_facing(
                     i32::from(facing)
@@ -194,9 +207,9 @@ pub mod engine {
                     && i32::from(delta_facing) < angle_to_facing(HALF_CIRCLE as i32 + OCTANT as i32)
                 {
                     if i32::from(delta_facing) >= angle_to_facing(HALF_CIRCLE as i32) {
-                        facing = (i32::from(facing) - angle_to_facing(QUADRANT as i32)) as COUNT;
+                        facing = (i32::from(facing) - angle_to_facing(QUADRANT as i32)) as u16;
                     } else {
-                        facing = (i32::from(facing) + angle_to_facing(QUADRANT as i32)) as COUNT;
+                        facing = (i32::from(facing) + angle_to_facing(QUADRANT as i32)) as u16;
                     }
                 }
                 facing = normalize_facing(i32::from(facing));
@@ -217,7 +230,7 @@ pub mod engine {
         cx.element_mut(e).pre = Some(ElementHook::Native(animation_preprocess));
         cx.element_mut(e).death = None;
         cx.element_mut(e).collide = None;
-        cx.element_mut(e).velocity = VELOCITY_DESC::new();
+        cx.element_mut(e).velocity = VelocityDesc::new();
         cx.element_mut(e).turn = 0;
         cx.element_mut(e).thrust = 0;
     }
@@ -225,9 +238,9 @@ pub mod engine {
     pub fn doggy_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         crate::engine::battle::motion::collision(cx, a, pa, b, pb);
         if cx.element(b).flags & PLAYER_SHIP as u16 != 0
@@ -255,22 +268,22 @@ pub mod engine {
             cx.element_mut(dog).thrust = 0;
             cx.element_mut(dog).player = cx.element(e).player;
             cx.element_mut(dog).flags = APPEARING as u16;
-            cx.element_mut(dog).life = NORMAL_LIFE as COUNT;
-            cx.primitive_style_mut(dog).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            cx.element_mut(dog).life = NORMAL_LIFE as u16;
+            cx.primitive_style_mut(dog).kind = STAMP_PRIMITIVE;
             cx.element_mut(dog).pre = Some(ElementHook::Native(doggy_preprocess));
             cx.element_mut(dog).post = None;
             cx.element_mut(dog).collide = Some(CollisionHook::Native(doggy_collision));
             cx.element_mut(dog).death = Some(ElementHook::Native(doggy_death));
             let ss = cx.owner(e);
-            let angle = (facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32)
-                as COUNT;
+            let angle =
+                (facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32) as u16;
             let offset = (i32::from(CHENJESU_OFFSET) + DOGGY_OFFSET) << ONE_SHIFT;
             cx.element_mut(dog).current.location.x = (i32::from(cx.element(e).next.location.x)
                 + i32::from(cosine(i32::from(angle), offset)))
-                as COORD;
+                as i16;
             cx.element_mut(dog).current.location.y = (i32::from(cx.element(e).next.location.y)
                 + i32::from(sine(i32::from(angle), offset)))
-                as COORD;
+                as i16;
             cx.set_frames(dog, false, cx.ship_frame_set(ss, 2));
             cx.set_frame(dog, false, cx.ship_frame(ss, 2).to_owned());
             cx.element_mut(dog).velocity.set_vector(
@@ -290,7 +303,7 @@ pub mod engine {
             &crystal_origin,
             &target_origin,
             life,
-            (FRAGMENT_RANGE / 2) as COUNT,
+            (FRAGMENT_RANGE / 2) as u16,
         );
         turn == 0 || (turn == 1 && cx.plot_intercept(&crystal_origin, &target_origin, life, 0) == 0)
     }
@@ -358,7 +371,7 @@ pub mod engine {
                     && cx.ship_weapons(
                         &concerns.subject,
                         &cx.weapon_origin(selected),
-                        (FRAGMENT_RANGE / 2) as COUNT,
+                        (FRAGMENT_RANGE / 2) as u16,
                     ) != 0
                 {
                     cx.ship_state_mut(ss).input |= WEAPON as u8;

@@ -1,8 +1,9 @@
 //! View calculations for the observed element queue, independent of hook invocation.
 
 use super::*;
+use crate::graphics::geometry::Point;
 
-pub(super) fn render_scale(mode: i32, zoom: SIZE) -> i32 {
+pub(super) fn render_scale(mode: i32, zoom: i16) -> i32 {
     if mode == SCALE_STEP {
         0
     } else {
@@ -26,33 +27,33 @@ pub(super) fn draw_frame(counter: &mut u16) -> bool {
 }
 
 pub(super) struct CameraBounds {
-    minimum: SIZE,
-    maximum: SIZE,
-    pub origin: POINT,
-    pub ships_alive: COUNT,
+    minimum: i16,
+    maximum: i16,
+    pub origin: Point,
+    pub ships_alive: u16,
 }
 
 pub(super) struct ViewConfig {
-    pub limit: SIZE,
-    pub zoom: SIZE,
+    pub limit: i16,
+    pub zoom: i16,
     pub step: bool,
-    pub activity: BYTE,
+    pub activity: u8,
     pub dimensions: (i32, i32),
 }
 
 impl CameraBounds {
     pub(super) fn new(step: bool, dimensions: (i32, i32)) -> Self {
         let minimum = if step {
-            (MAX_VIS_REDUCTION + 1) as SIZE
+            (MAX_VIS_REDUCTION + 1) as i16
         } else {
-            (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE
+            (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as i16
         };
         Self {
             minimum,
             maximum: minimum,
-            origin: POINT {
-                x: (dimensions.0 >> 1) as COORD,
-                y: (dimensions.1 >> 1) as COORD,
+            origin: Point {
+                x: (dimensions.0 >> 1) as i16,
+                y: (dimensions.1 >> 1) as i16,
             },
             ships_alive: 0,
         }
@@ -60,9 +61,9 @@ impl CameraBounds {
 
     pub(super) fn include(
         &mut self,
-        location: POINT,
-        player: SIZE,
-        active_sides: COUNT,
+        location: Point,
+        player: i16,
+        active_sides: u16,
         view: &ViewConfig,
     ) {
         self.ships_alive = self.ships_alive.wrapping_add(1);
@@ -71,11 +72,11 @@ impl CameraBounds {
             self.origin.y = display_align(i32::from(location.y));
         }
         let mut dx = wrap_delta(
-            (i32::from(display_align(i32::from(location.x))) - i32::from(self.origin.x)) as SIZE,
+            (i32::from(display_align(i32::from(location.x))) - i32::from(self.origin.x)) as i16,
             view.dimensions.0,
         );
         let mut dy = wrap_delta(
-            (i32::from(display_align(i32::from(location.y))) - i32::from(self.origin.y)) as SIZE,
+            (i32::from(display_align(i32::from(location.y))) - i32::from(self.origin.y)) as i16,
             view.dimensions.1,
         );
         if active_sides <= 2 || player == 0 {
@@ -94,14 +95,14 @@ impl CameraBounds {
             dx = dx.wrapping_abs();
             dy = dy.wrapping_abs();
             let reduction =
-                view.reduction((i32::from(dx) << 1) as SIZE, (i32::from(dy) << 1) as SIZE);
+                view.reduction((i32::from(dx) << 1) as i16, (i32::from(dy) << 1) as i16);
             if self.minimum > view.limit || reduction < self.minimum {
                 self.minimum = reduction;
             }
         }
     }
 
-    pub(super) fn finish(&mut self, limit: SIZE, zoom: SIZE, step: bool) -> SIZE {
+    pub(super) fn finish(&mut self, limit: i16, zoom: i16, step: bool) -> i16 {
         if (self.minimum > limit || self.minimum <= self.maximum)
             && {
                 self.minimum = self.maximum;
@@ -119,7 +120,7 @@ impl CameraBounds {
 }
 
 impl ViewConfig {
-    fn reduction(&self, dx: SIZE, dy: SIZE) -> SIZE {
+    fn reduction(&self, dx: i16, dy: i16) -> i16 {
         calc_reduction(
             dx,
             dy,
@@ -128,20 +129,20 @@ impl ViewConfig {
             self.activity,
             self.dimensions.0,
             self.dimensions.1,
-        ) as SIZE
+        ) as i16
     }
 }
 
 pub(super) struct Projection {
     pub dimensions: (i32, i32),
-    pub origin: POINT,
-    pub reduction: SIZE,
+    pub origin: Point,
+    pub reduction: i16,
     pub step: bool,
 }
 
 impl Projection {
-    pub(super) fn scroll(&self, location: POINT, delta: (SIZE, SIZE)) -> POINT {
-        POINT {
+    pub(super) fn scroll(&self, location: Point, delta: (i16, i16)) -> Point {
+        Point {
             x: wrap_value(
                 i32::from(location.x) + i32::from(delta.0),
                 self.dimensions.0,
@@ -153,8 +154,8 @@ impl Projection {
         }
     }
 
-    pub(super) fn display(&self, location: POINT) -> POINT {
-        POINT {
+    pub(super) fn display(&self, location: Point) -> Point {
+        Point {
             x: calc_display_coord(location.x, self.origin.x, self.reduction, self.step),
             y: calc_display_coord(location.y, self.origin.y, self.reduction, self.step),
         }
@@ -162,10 +163,10 @@ impl Projection {
 
     pub(super) fn line(
         &self,
-        current: POINT,
-        next: POINT,
-        delta: (SIZE, SIZE),
-    ) -> (POINT, POINT, POINT) {
+        current: Point,
+        next: Point,
+        delta: (i16, i16),
+    ) -> (Point, Point, Point) {
         let dx = next.x.wrapping_sub(current.x);
         let dy = next.y.wrapping_sub(current.y);
         let mut next = self.scroll(current, delta);

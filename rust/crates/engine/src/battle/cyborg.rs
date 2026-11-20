@@ -170,13 +170,13 @@ pub(crate) fn intelligence(
     while i != 0 {
         i -= 1;
         let item = &mut concerns[i as usize];
-        if item.object.is_none() {
+        let Some(object) = item.object else {
             continue;
-        }
+        };
         if !ship_moved
             && (i != ENEMY_WEAPON_INDEX as u16
                 || item.movement == MOVEMENT_STATE_PURSUE
-                || cx.element(item.object.unwrap()).flags & CREW_OBJECT as u16 != 0
+                || cx.element(object).flags & CREW_OBJECT as u16 != 0
                 || cx.race_stats(owner).intelligence.maneuverability >= MEDIUM_SHIP as u16)
         {
             if item.which_turn == 0 {
@@ -193,7 +193,7 @@ pub(crate) fn intelligence(
             && (i == ENEMY_SHIP_INDEX as u16
                 || (i == ENEMY_WEAPON_INDEX as u16 && item.movement != MOVEMENT_STATE_AVOID))
         {
-            ship_fired = weapons(cx, ship, &cx.weapon_origin(item.object.unwrap()), margin) != 0;
+            ship_fired = weapons(cx, ship, &cx.weapon_origin(object), margin) != 0;
             if ship_fired {
                 cx.ship_state_mut(owner).input |= WEAPON as u8;
             }

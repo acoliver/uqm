@@ -1,6 +1,9 @@
 //! Input-driven contact decisions and exact first-save persistence receipts.
 
 use super::*;
+use crate::engine::battle::ai_constants::THRUST;
+use crate::engine::world::IN_HYPERSPACE;
+use crate::math::velocity::VELOCITY_SHIFT;
 
 pub(super) fn witness(
     proof: &mut FixtureRun,
@@ -38,7 +41,7 @@ pub(super) fn advance(
             match run.proof.star.phase {
                 0 if world.activity as u8 == IN_INTERPLANETARY as u8 => run.proof.star.phase = 1,
                 1 if world.activity as u8 == IN_HYPERSPACE as u8
-                    && world.activity & IN_BATTLE as u16 != 0 =>
+                    && world.activity & IN_BATTLE != 0 =>
                 {
                     let ship = world.order.iter().copied().find(|h| {
                         let e = &world.elements[h];
@@ -119,7 +122,7 @@ mod tests {
 
     #[test]
     fn persistence_follows_the_first_slot_and_compares_every_position_field() {
-        let mut proof = start(IN_INTERPLANETARY as u16).unwrap();
+        let mut proof = start(IN_INTERPLANETARY).unwrap();
         let original = SavedPosition {
             slot: 0,
             log_x: 27987,

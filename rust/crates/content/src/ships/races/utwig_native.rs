@@ -1,6 +1,21 @@
 //! Live utwig callbacks translated from ships/utwig/utwig.c.
 pub mod engine {
-    use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, POINT_DEFENSE, SHIELD_DEFENSE, SPECIAL,
+        WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CREW_OBJECT, FINITE_LIFE, NORMAL_LIFE, PLAYER_SHIP, STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::motion::collision;
+    use crate::engine::battle::CollisionHook;
+    use crate::engine::battle::STAMP_PRIMITIVE;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{ONE_SHIFT, QUADRANT};
+    use crate::ships::native::{cosine, facing_to_angle, sine};
     const fn color(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -21,7 +36,7 @@ pub mod engine {
         d.resources.icons = Some(c"ship.utwig.icons");
         d.resources.melee_icon = Some(c"ship.utwig.meleeicons");
         d.fleet_strength = (666 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet_location = POINT { x: 8534, y: 8797 };
+        d.fleet_location = Point { x: 8534, y: 8797 };
         d.characteristics.max_thrust = 36;
         d.characteristics.thrust_increment = 6;
         d.characteristics.energy_regeneration = 0;
@@ -81,7 +96,7 @@ pub mod engine {
             cy: 0,
         };
         for (x, y) in [(5, -18), (13, -9), (17, -4)] {
-            let angle = (facing_to_angle(i32::from(block.face)) + QUADRANT as i32) as COUNT;
+            let angle = (facing_to_angle(i32::from(block.face)) + QUADRANT as i32) as u16;
             let cc = cosine(i32::from(angle), x << ONE_SHIFT);
             let ssin = sine(i32::from(angle), y << ONE_SHIFT);
             let sc = sine(i32::from(angle), x << ONE_SHIFT);
@@ -91,8 +106,8 @@ pub mod engine {
             block.cx = origin.next.location.x.wrapping_add(cos0);
             block.cy = origin.next.location.y.wrapping_add(sin0);
             out.push(cx.missile(&mut block));
-            let cos0 = (-(i32::from(cc)) - i32::from(ssin)) as SIZE;
-            let sin0 = (-(i32::from(sc)) + i32::from(cs)) as SIZE;
+            let cos0 = (-(i32::from(cc)) - i32::from(ssin)) as i16;
+            let sin0 = (-(i32::from(sc)) + i32::from(cs)) as i16;
             block.cx = origin.next.location.x.wrapping_add(cos0);
             block.cy = origin.next.location.y.wrapping_add(sin0);
             out.push(cx.missile(&mut block));
@@ -102,7 +117,7 @@ pub mod engine {
 
     pub fn utwig_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let weapon = ENEMY_WEAPON_INDEX as usize;
-        let mut shield: SIZE = 0;
+        let mut shield: i16 = 0;
         if cx.race_stats(ss).ship_info.energy_level != 0 {
             shield = -1;
             if concerns.objects[weapon].object.is_some()
@@ -181,9 +196,9 @@ pub mod engine {
     pub fn utwig_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         if u32::from(cx.element(a).life) > NORMAL_LIFE
             && cx.element(b).flags & FINITE_LIFE as u16 != 0
@@ -208,7 +223,7 @@ pub mod engine {
         if u32::from(cx.element(e).life) > NORMAL_LIFE + 1 {
             cx.delta_energy(
                 e,
-                (u32::from(cx.element(e).life) - (NORMAL_LIFE + 1)) as SIZE,
+                (u32::from(cx.element(e).life) - (NORMAL_LIFE + 1)) as i16,
             );
             cx.process_ship_sound(ss, 1, e);
         }
@@ -228,8 +243,8 @@ pub mod engine {
         if cx.ship_state(ss).special_counter == 0 {
             cx.primitive_style_mut(e).color = color(0x1f, 0x1c, 0);
             cx.element_mut(e).color_cycle = 0;
-            cx.element_mut(e).life = NORMAL_LIFE as COUNT;
-            cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            cx.element_mut(e).life = NORMAL_LIFE as u16;
+            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
         } else {
             const COLORS: [Color; 7] = [
                 color(0x1f, 0x15, 0),
@@ -248,8 +263,8 @@ pub mod engine {
                 cx.element_mut(e).color_cycle = 1;
             }
             cx.primitive_style_mut(e).color = COLORS[usize::from(cx.element(e).color_cycle) - 1];
-            cx.element_mut(e).life = (NORMAL_LIFE + 1) as COUNT;
-            cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
+            cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
+            cx.primitive_style_mut(e).kind = STAMPFILL_PRIMITIVE;
         }
     }
 }

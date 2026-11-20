@@ -6,22 +6,22 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut a = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut a })
 }
-fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Exit, r as i32))
 }
-fn maidens(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn maidens(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::GiveMaidens, r as i32))
 }
-fn console(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn console(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Console, r as i32))
 }
-fn explain(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn explain(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Explain, r as i32))
 }
-fn realize(comm: &mut Comm, cx: &mut Cx<'_>, _: u32) {
+fn realize(comm: &mut Comm, cx: &mut Cx<'_>, _: u16) {
     run(comm, cx, |s| s.handle(Handler::Realize, 0))
 }
-fn friendly(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn friendly(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Friendly, r as i32))
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {

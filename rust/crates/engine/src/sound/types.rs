@@ -121,7 +121,7 @@ pub const ACCEL_SCROLL_SPEED: u32 = 300;
 /// Text display speed for subtitles.
 pub const TEXT_SPEED: u32 = 80;
 
-/// One second in GetTimeCounter ticks.
+/// One second in game-time ticks.
 pub const ONE_SECOND: u32 = 840;
 
 /// Number of mixer buffers per streaming source.
@@ -134,13 +134,9 @@ pub const BUFFER_SIZE: usize = 16384;
 // Time FFI (REQ-CROSS-GENERAL-05)
 // =============================================================================
 
-#[cfg(not(test))]
-use crate::time::counter_abi::GetTimeCounter;
 /// Current game time in 840 units per second.
 #[cfg(not(test))]
-pub fn get_time_counter() -> u32 {
-    GetTimeCounter()
-}
+pub use crate::time::counter_abi::get_time_counter;
 
 /// Whether the window asked to quit (C: `QuitPosted`).
 #[cfg(not(test))]
@@ -148,7 +144,7 @@ pub fn quit_posted() -> bool {
     crate::graphics::state::quit_posted()
 }
 
-/// Test stub for `GetTimeCounter()` — returns 0.
+/// Test stub for `get_time_counter` — returns 0.
 #[cfg(test)]
 pub fn get_time_counter() -> u32 {
     0
@@ -249,7 +245,7 @@ pub struct SoundSource {
     pub handle: usize,
     /// Whether this source should currently be streaming audio.
     pub stream_should_be_playing: bool,
-    /// Playback start timestamp (GetTimeCounter ticks).
+    /// Playback start timestamp (game-time ticks).
     pub start_time: i32,
     /// Pause timestamp (0 = not paused).
     pub pause_time: u32,
@@ -305,7 +301,7 @@ impl SoundSource {
 
 /// Fade state — protected by its own mutex, separate from sources.
 pub struct FadeState {
-    /// Fade start time (GetTimeCounter ticks).
+    /// Fade start time (game-time ticks).
     pub start_time: u32,
     /// Fade interval in ticks (0 = inactive).
     pub interval: u32,
@@ -360,7 +356,7 @@ impl SoundPosition {
 pub struct SoundChunk {
     /// Sound sample for this chunk.
     pub sample: Option<Arc<Mutex<SoundSample>>>,
-    /// Start timestamp for this chunk (GetTimeCounter ticks).
+    /// Start timestamp for this chunk (game-time ticks).
     pub start_time: u32,
     /// Tag data for subtitle matching.
     pub tag_me: bool,

@@ -7,16 +7,31 @@ mod battle_context;
 mod battle;
 use battle::{Battle, Object, Ship};
 use std::{ffi::CStr, mem};
+use uqm_rust::engine::battle::ai_constants::{
+    CREW_OBJECT_INDEX, ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
+    MOVEMENT_STATE_AVOID, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SEEKING_WEAPON,
+    SPECIAL, THRUST, WEAPON,
+};
+use uqm_rust::engine::battle::flags::{
+    CHANGING, CREW_OBJECT, FINITE_LIFE, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+};
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord, MovementState};
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
 use uqm_rust::engine::battle::{Cx, ElementId, RaceState};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::HALF_CIRCLE;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::VelocityDesc;
+use uqm_rust::math::{arctan, random};
 
-fn original_collision(_: &mut Cx<'_>, _: ElementId, _: &mut POINT, _: ElementId, _: &mut POINT) {}
+fn original_collision(_: &mut Cx<'_>, _: ElementId, _: &mut Point, _: ElementId, _: &mut Point) {}
 
 fn address(func: Option<uqm_rust::engine::battle::CollisionHook>) -> Option<usize> {
     func.map(|f| (f).address())
 }
 
-fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
+fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
     [
         v.travel_angle.into(),
         v.vector.width.into(),
@@ -30,9 +45,9 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     ]
 }
 
-fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
+fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
     unsafe {
-        let mut v: VELOCITY_DESC = mem::zeroed();
+        let mut v: VelocityDesc = mem::zeroed();
         uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
@@ -117,8 +132,8 @@ fn descriptor_matches_the_c_race_data() {
             );
 
             // LONG_RANGE_WEAPON >> 2
-            assert_eq!(desc.cyborg_control.WeaponRange, 1000);
-            assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
+            assert_eq!(desc.cyborg_control.weapon_range, 1000);
+            assert_eq!(desc.cyborg_control.maneuverability_index, 0);
             assert!(desc.callbacks()[4] != 0);
             assert!(desc.callbacks()[0] != 0);
             assert!(desc.callbacks()[1] != 0);
@@ -135,7 +150,7 @@ fn bubble_is_launched_with_the_c_missile_block() {
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
             ship.ship_mut().ship_facing = 4;
-            ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
+            ship.element_mut().next.location = Point { x: 1000, y: 2000 };
             let bubbles = ship.weapon(1);
 
             let bubble = ship.weapon_record(bubbles[0]);
@@ -177,10 +192,10 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
             // Thrust wait expires and the turn wait is zero: one draw for the new
             // thrust wait, then no target in the queue so one draw for the facing.
             (*bubble).turn = 0;
-            TFB_SeedRandom(0x5eed);
-            let thrust_draw = TFB_Random();
-            let facing_draw = TFB_Random();
-            TFB_SeedRandom(0x5eed);
+            seed_random(0x5eed);
+            let thrust_draw = random();
+            let facing_draw = random();
+            seed_random(0x5eed);
             hooks::invoke_element_pointer(preprocess, bubble);
             let thrust_wait = (thrust_draw as u16 & 3) as u8;
             assert_eq!((*bubble).turn, make_byte(2, thrust_wait));
@@ -190,11 +205,11 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
                 velocity_toward(32, facing_draw as u16)
             );
             // Exactly two draws were consumed.
-            let next_draw = TFB_Random();
-            TFB_SeedRandom(0x5eed);
-            TFB_Random();
-            TFB_Random();
-            assert_eq!(next_draw, TFB_Random());
+            let next_draw = random();
+            seed_random(0x5eed);
+            random();
+            random();
+            assert_eq!(next_draw, random());
             battle_context::dispose(bubble.cast());
         }
     })
@@ -209,25 +224,25 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
             let bubbles = ship.weapon(1);
             let bubble = ship.weapon_record(bubbles[0]);
             let preprocess = (*bubble).preprocess_func.unwrap();
-            (*bubble).current.location = POINT { x: 0, y: 0 };
-            (*bubble).next.location = POINT { x: 0, y: 0 };
+            (*bubble).current.location = Point { x: 0, y: 0 };
+            (*bubble).next.location = Point { x: 0, y: 0 };
 
             // East of the bubble: a short turn (delta facing 4), then a positive
             // wobble. West of it: delta facing 12, then a negative wobble.
             for (location, turn_is_short) in [
-                (POINT { x: 300, y: 0 }, true),
-                (POINT { x: -300, y: 0 }, false),
+                (Point { x: 300, y: 0 }, true),
+                (Point { x: -300, y: 0 }, false),
             ] {
                 let mut enemy_ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 1);
                 enemy_ship.descriptor_mut().ship_info.crew_level = 5;
                 enemy_ship.element_mut().set_life_span(1);
                 enemy_ship.element_mut().current.location = location;
                 enemy_ship.element_mut().next.location = location;
-                (*battle::prim(enemy_ship.ptr())).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                (*battle::prim(enemy_ship.ptr())).kind = STAMP_PRIMITIVE;
                 enemy_ship.queue();
                 let enemy = enemy_ship.ptr();
                 (*bubble).target = None;
-                let mut tracked_facing: COUNT = 0;
+                let mut tracked_facing: u16 = 0;
                 let delta = crate::battle_context::with(|cx| {
                     let mut subject = cx.weapon_origin(bubbles[0].unwrap());
                     cx.track_subject(&mut subject, &mut tracked_facing)
@@ -236,9 +251,9 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 assert!(delta > 0 && delta != 8);
 
                 (*bubble).turn = 0x30;
-                TFB_SeedRandom(77);
-                let wobble = TFB_Random() as u16 & 7;
-                TFB_SeedRandom(77);
+                seed_random(77);
+                let wobble = random() as u16 & 7;
+                seed_random(77);
                 hooks::invoke_element_pointer(preprocess, bubble);
                 let facing = if turn_is_short {
                     tracked_facing.wrapping_add(wobble)
@@ -530,7 +545,7 @@ fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
     })
 }
 
-unsafe fn intelligence(ship: &mut Ship, concerns: &mut [EVALUATE_DESC; 4]) {
+unsafe fn intelligence(ship: &mut Ship, concerns: &mut [EvaluateRecord; 4]) {
     // A zero concern count lets only the Androsynth decisions run; the shared
     // cyborg pass has nothing to evaluate.
     ship.intelligence(&mut *ship.ptr(), concerns, 0);
@@ -556,31 +571,31 @@ fn blazer_ai_ignores_crew_and_avoids_only_finite_life_weapons() {
             ] {
                 let mut weapon = Object::new(&_battle);
                 weapon.element_mut().state_flags = flags;
-                let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                concerns[concern_slot(CREW_OBJECT_INDEX)].ObjectPtr = other.ptr();
-                concerns[weapon_slot].ObjectPtr = weapon.ptr();
-                concerns[weapon_slot].MoveState = MOVEMENT_STATE_ENTICE;
+                let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                concerns[concern_slot(CREW_OBJECT_INDEX)].object_ptr = other.ptr();
+                concerns[weapon_slot].object_ptr = weapon.ptr();
+                concerns[weapon_slot].move_state = MOVEMENT_STATE_ENTICE;
                 intelligence(&mut ship, &mut concerns);
                 assert!(concerns[concern_slot(CREW_OBJECT_INDEX)]
-                    .ObjectPtr
+                    .object_ptr
                     .is_null());
                 if expect_avoid {
-                    assert_eq!(concerns[weapon_slot].ObjectPtr, weapon.ptr());
-                    assert_eq!(concerns[weapon_slot].MoveState, MOVEMENT_STATE_AVOID);
+                    assert_eq!(concerns[weapon_slot].object_ptr, weapon.ptr());
+                    assert_eq!(concerns[weapon_slot].move_state, MOVEMENT_STATE_AVOID);
                 } else {
-                    assert!(concerns[weapon_slot].ObjectPtr.is_null());
+                    assert!(concerns[weapon_slot].object_ptr.is_null());
                 }
             }
 
             // Weapons that are not luring keep their state.
             let mut weapon = Object::new(&_battle);
             weapon.element_mut().state_flags = 0;
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            concerns[weapon_slot].ObjectPtr = weapon.ptr();
-            concerns[weapon_slot].MoveState = MOVEMENT_STATE_PURSUE;
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+            concerns[weapon_slot].object_ptr = weapon.ptr();
+            concerns[weapon_slot].move_state = MOVEMENT_STATE_PURSUE;
             intelligence(&mut ship, &mut concerns);
-            assert_eq!(concerns[weapon_slot].ObjectPtr, weapon.ptr());
-            assert_eq!(concerns[weapon_slot].MoveState, MOVEMENT_STATE_PURSUE);
+            assert_eq!(concerns[weapon_slot].object_ptr, weapon.ptr());
+            assert_eq!(concerns[weapon_slot].move_state, MOVEMENT_STATE_PURSUE);
         }
     })
 }
@@ -592,8 +607,8 @@ struct Opponent<'a> {
 impl<'a> Opponent<'a> {
     unsafe fn new(_battle: &'a Battle, weapon_range: u16, crew: u16, maneuverability: u16) -> Self {
         let mut ship = Ship::bare(_battle, SPECIES_ID_ANDROSYNTH_ID, 1);
-        ship.descriptor_mut().cyborg_control.WeaponRange = weapon_range;
-        ship.descriptor_mut().cyborg_control.ManeuverabilityIndex = maneuverability;
+        ship.descriptor_mut().cyborg_control.weapon_range = weapon_range;
+        ship.descriptor_mut().cyborg_control.maneuverability_index = maneuverability;
         ship.element_mut().hits = crew;
         Self { ship }
     }
@@ -602,7 +617,7 @@ impl<'a> Opponent<'a> {
 struct Duel<'a> {
     ship: Ship<'a>,
     enemy: Opponent<'a>,
-    concerns: [EVALUATE_DESC; 4],
+    concerns: [EvaluateRecord; 4],
 }
 
 impl<'a> Duel<'a> {
@@ -613,14 +628,14 @@ impl<'a> Duel<'a> {
             concerns: unsafe { mem::zeroed() },
         };
         let slot = &mut duel.concerns[concern_slot(ENEMY_SHIP_INDEX)];
-        slot.ObjectPtr = duel.enemy.ship.el();
+        slot.object_ptr = duel.enemy.ship.el();
         slot.which_turn = which_turn;
         duel
     }
 
     fn weapon_threat(mut self, threat: *mut ElementRecord, which_turn: u16) -> Self {
         let slot = &mut self.concerns[concern_slot(ENEMY_WEAPON_INDEX)];
-        slot.ObjectPtr = threat;
+        slot.object_ptr = threat;
         slot.which_turn = which_turn;
         self
     }
@@ -629,8 +644,8 @@ impl<'a> Duel<'a> {
         unsafe { intelligence(&mut self.ship, &mut self.concerns) }
     }
 
-    fn enemy_state(&self) -> MOVEMENT_STATE {
-        self.concerns[concern_slot(ENEMY_SHIP_INDEX)].MoveState
+    fn enemy_state(&self) -> MovementState {
+        self.concerns[concern_slot(ENEMY_SHIP_INDEX)].move_state
     }
 
     unsafe fn input(&mut self) -> u8 {
@@ -747,9 +762,9 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
                 let mut duel = Duel::new(&_battle, Opponent::new(&_battle, 1000, 5, 0), turn);
                 duel.ship.ship_mut().special_counter = 1;
                 duel.ship.ship_mut().weapon_counter = weapon_counter;
-                duel.ship.element_mut().next.location = POINT { x: 5000, y: 5000 };
+                duel.ship.element_mut().next.location = Point { x: 5000, y: 5000 };
                 let dy = if enemy_north { -400 } else { 400 };
-                duel.enemy.ship.element_mut().next.location = POINT {
+                duel.enemy.ship.element_mut().next.location = Point {
                     x: 5000,
                     y: 5000 + dy,
                 };
@@ -763,8 +778,8 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
                 duel.input() & WEAPON as u8 != 0
             };
 
-            assert_eq!(ARCTAN(0, -400), 0);
-            assert_eq!(ARCTAN(0, 400), HALF_CIRCLE as u16);
+            assert_eq!(arctan(0, -400), 0);
+            assert_eq!(arctan(0, 400), HALF_CIRCLE);
 
             assert!(fire(4, false, 0), "point blank");
             assert!(fire(8, true, 0), "drifting toward the target");

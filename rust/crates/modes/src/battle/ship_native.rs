@@ -2,30 +2,40 @@
 
 use crate::battle::context_access::ContextOps;
 use crate::battle::tactrans_native::engine::{ship_death, ship_transition};
-use crate::ships::native::abi::*;
+use crate::engine::battle::ai_constants::{IGNORE_SIMILAR, LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+use crate::engine::battle::flags::{
+    APPEARING, CHANGING, IN_LAST_BATTLE, NORMAL_LIFE, NPC_PLAYER_NUM, PLAYER_SHIP,
+};
+use crate::engine::battle::STAMP_PRIMITIVE;
+use crate::engine::battle::{CollisionHook, ElementHook};
+use crate::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
+use crate::graphics::geometry::Point;
+use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
+use crate::ships::DescriptorLoader;
+use crate::starbase::ids::STATUS_WIDTH;
 use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
-const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;
+const INPUT_FLAGS: u16 = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
 
-fn input_flags(old: STATUS_FLAGS, input: BYTE, appearing: bool) -> STATUS_FLAGS {
+fn input_flags(old: u16, input: u8, appearing: bool) -> u16 {
     (old & !INPUT_FLAGS)
         | if appearing {
             0
         } else {
-            STATUS_FLAGS::from(input) & INPUT_FLAGS
+            u16::from(input) & INPUT_FLAGS
         }
 }
 
-fn spawn_crew(activity: BYTE, crew: COUNT, current: COUNT, maximum: COUNT) -> COUNT {
-    if activity == IN_ENCOUNTER as BYTE || activity == IN_LAST_BATTLE as BYTE {
+fn spawn_crew(activity: u8, crew: u16, current: u16, maximum: u16) -> u16 {
+    if activity == IN_ENCOUNTER as u8 || activity == IN_LAST_BATTLE as u8 {
         (if crew != 0 { crew } else { current }).min(maximum)
     } else {
         current
     }
 }
 
-fn spawn_coordinate(random: u32, extent: i32) -> COORD {
-    let aligned = (i32::from(random as COUNT) % extent) as COORD & !((1 << ONE_SHIFT) - 1);
+fn spawn_coordinate(random: u32, extent: i32) -> i16 {
+    let aligned = (i32::from(random as u16) % extent) as i16 & !((1 << ONE_SHIFT) - 1);
     let value = i32::from(aligned);
     (if value < 0 {
         value + extent
@@ -33,7 +43,7 @@ fn spawn_coordinate(random: u32, extent: i32) -> COORD {
         value - extent
     } else {
         value
-    }) as COUNT as COORD
+    }) as u16 as i16
 }
 
 fn install_ship_hooks(
@@ -52,14 +62,15 @@ fn install_ship_hooks(
     crate::battle::process_native::dispatch::record_spawn(
         cx.ship_pointer(ship) as usize,
         cx.ship_state(ship).player,
-        cx.ship(ship).SpeciesID,
+        cx.ship(ship).species_id,
     );
     cx.set_target(element, None);
 }
 
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::status_native::PostProcessStatus;
+    use crate::battle::status_native::post_process_status;
+    use crate::engine::battle::input::NUM_PLAYERS;
     use crate::engine::battle::{Cx, ElementId, ShipId};
     use crate::ships::native::normalize_facing;
 
@@ -75,11 +86,11 @@ pub(crate) mod engine {
         if cx.element(e).flags & APPEARING as u16 != 0 {
             let crew = cx.desc(ship).ship_info.crew_level;
             cx.element_mut(e).set_hit_points(crew);
-            let activity = cx.world.activity() as BYTE;
+            let activity = cx.world.activity() as u8;
             let player = cx.element(e).player;
-            if player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE {
+            if player == NPC_PLAYER_NUM as i16 && activity == IN_LAST_BATTLE as u8 {
                 cx.draw_final_battle_captain(ship);
-            } else if activity <= IN_ENCOUNTER as BYTE {
+            } else if activity <= IN_ENCOUNTER as u8 {
                 cx.init_ship_status(ship, None);
                 cx.invoke_ship_process(ship, false);
                 if cx.target(e).is_none() {
@@ -92,9 +103,9 @@ pub(crate) mod engine {
             } else {
                 let (w, h) = cx.screen_dimensions();
                 cx.element_mut(e).current.location.x =
-                    (((w - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
+                    (((w - STATUS_WIDTH) << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as i16;
                 cx.element_mut(e).current.location.y =
-                    ((h << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
+                    ((h << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as i16;
                 cx.element_mut(e).next.location = cx.element(e).current.location;
                 cx.init_intersect(e);
                 if cx.hyper_transition(e) {
@@ -108,7 +119,7 @@ pub(crate) mod engine {
         } else if cx.desc(ship).ship_info.energy_level < cx.desc(ship).ship_info.max_energy
             || (cx.desc(ship).characteristics.energy_regeneration as i8) < 0
         {
-            let delta = cx.desc(ship).characteristics.energy_regeneration as i8 as SIZE;
+            let delta = cx.desc(ship).characteristics.energy_regeneration as i8 as i16;
             cx.delta_energy(e, delta);
         }
         if cx.invoke_ship_process(ship, false) {
@@ -147,11 +158,11 @@ pub(crate) mod engine {
             cx.ship_state_mut(ship).status |= result;
             cx.element_mut(e)
                 .set_thrust_wait(characteristics.thrust_wait);
-            if !cx.object_cloaked(e) && cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
+            if !cx.object_cloaked(e) && cx.world.activity() as u8 <= IN_ENCOUNTER as u8 {
                 cx.spawn_ion_trail(e);
             }
         }
-        if cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
+        if cx.world.activity() as u8 <= IN_ENCOUNTER as u8 {
             cx.preprocess_status(e);
         }
     }
@@ -166,7 +177,7 @@ pub(crate) mod engine {
         } else if cx.ship(ship).cur_status_flags & WEAPON as u16 != 0
             && cx.delta_energy(
                 e,
-                -SIZE::from(cx.desc(ship).characteristics.weapon_energy_cost),
+                -i16::from(cx.desc(ship).characteristics.weapon_energy_cost),
             )
         {
             let weapons = crate::engine::battle::Cx::spawn_weapons(cx, ship, cx.weapon_origin(e));
@@ -190,14 +201,14 @@ pub(crate) mod engine {
             cx.ship_state_mut(ship).special_counter -= 1;
         }
         cx.invoke_ship_process(ship, true);
-        if cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
-            PostProcessStatus(cx, e);
+        if cx.world.activity() as u8 <= IN_ENCOUNTER as u8 {
+            post_process_status(cx, e);
         }
     }
 
-    pub fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> BOOLEAN {
+    pub fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> u32 {
         let Some(descriptor) =
-            crate::engine::battle::RaceDesc::load(cx.world, cx.ship(ship).SpeciesID, true)
+            crate::engine::battle::RaceDesc::load(cx.world, cx.ship(ship).species_id, true)
         else {
             return 0;
         };
@@ -207,7 +218,7 @@ pub(crate) mod engine {
         cx.ship_state_mut(ship).old_status = 0;
         let info = cx.race_stats(ship).ship_info;
         cx.race_stats_mut(ship).ship_info.crew_level = spawn_crew(
-            cx.world.activity() as BYTE,
+            cx.world.activity() as u8,
             cx.ship_state(ship).crew,
             info.crew_level,
             info.max_crew,
@@ -232,22 +243,22 @@ pub(crate) mod engine {
         cx.element_mut(id).flags = (APPEARING | PLAYER_SHIP | IGNORE_SIMILAR) as u16;
         cx.element_mut(id).turn = 0;
         cx.element_mut(id).thrust = 0;
-        cx.element_mut(id).life = NORMAL_LIFE as COUNT;
+        cx.element_mut(id).life = NORMAL_LIFE as u16;
         cx.element_mut(id).color_cycle = 0;
-        cx.primitive_style_mut(id).kind = gfx_object_STAMP_PRIM as u8;
+        cx.primitive_style_mut(id).kind = STAMP_PRIMITIVE;
         cx.set_frames(id, false, cx.ship_frame_set(ship, 0));
         let (width, height) = cx.screen_dimensions();
-        let width = (width - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION);
+        let width = (width - STATUS_WIDTH) << (ONE_SHIFT + MAX_REDUCTION);
         let height = height << (ONE_SHIFT + MAX_REDUCTION);
-        if cx.element(id).player == NPC_PLAYER_NUM as SIZE
-            && cx.world.activity() as BYTE == IN_LAST_BATTLE as BYTE
+        if cx.element(id).player == NPC_PLAYER_NUM as i16
+            && cx.world.activity() as u8 == IN_LAST_BATTLE as u8
         {
             cx.ship_state_mut(ship).facing = 0;
             let frame = cx.absolute_frame(cx.ship_frame(ship, 0), cx.ship_state(ship).facing);
             cx.set_frame(id, false, frame);
-            cx.element_mut(id).current.location = POINT {
-                x: (width >> 1) as COORD,
-                y: (height >> 1) as COORD,
+            cx.element_mut(id).current.location = Point {
+                x: (width >> 1) as i16,
+                y: (height >> 1) as i16,
             };
             cx.element_mut(id).life += 1;
         } else {
@@ -270,7 +281,7 @@ pub(crate) mod engine {
         1
     }
 
-    pub fn next_star_ship(cx: &mut Cx<'_>, mut last: Option<ShipId>, side: COUNT) -> BOOLEAN {
+    pub fn next_star_ship(cx: &mut Cx<'_>, mut last: Option<ShipId>, side: u16) -> u32 {
         let activity = cx.world.activity_control();
         let runtime = cx.kernel.input_runtime();
         let selected = crate::battle::context_access::reader_legacy::get_encounter_star_ship(
@@ -295,16 +306,16 @@ pub(crate) mod engine {
         if let Some(last) = last {
             cx.set_ship_element(last, None);
         }
-        selected.is_some() as BOOLEAN
+        selected.is_some() as u32
     }
 
-    pub fn initial_star_ships(cx: &mut Cx<'_>) -> BOOLEAN {
-        if cx.world.activity() as BYTE == SUPER_MELEE as BYTE {
+    pub fn initial_star_ships(cx: &mut Cx<'_>) -> u32 {
+        if cx.world.activity() as u8 == SUPER_MELEE as u8 {
             let runtime = cx.kernel.input_runtime();
             let Some(ships) = get_initial_melee_star_ships(cx, runtime.input()) else {
                 return 0;
             };
-            for rank in 0..NUM_PLAYERS as COUNT {
+            for rank in 0..NUM_PLAYERS as u16 {
                 let player = cx.kernel.player_order(rank);
                 let ship = ships[player as usize]
                     .unwrap_or_else(|| panic!("successful picker returned no initial ship"));
@@ -313,7 +324,7 @@ pub(crate) mod engine {
                 }
             }
         } else {
-            for player in (0..NUM_PLAYERS as COUNT).rev() {
+            for player in (0..NUM_PLAYERS as u16).rev() {
                 if next_star_ship(cx, None, player) == 0 {
                     return 0;
                 }
@@ -330,27 +341,28 @@ pub use engine::{
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::battle::flags::{LOW_ON_ENERGY, SHIP_AT_MAX_SPEED};
 
     use super::*;
 
     #[test]
     fn appearing_ship_does_not_process_controls_and_preserves_non_input_status() {
-        let state = (LEFT | LOW_ON_ENERGY | SHIP_AT_MAX_SPEED) as STATUS_FLAGS;
+        let state = (LEFT | LOW_ON_ENERGY | SHIP_AT_MAX_SPEED) as u16;
         assert_eq!(
-            input_flags(state, (RIGHT | WEAPON) as BYTE, true),
-            (LOW_ON_ENERGY | SHIP_AT_MAX_SPEED) as STATUS_FLAGS
+            input_flags(state, (RIGHT | WEAPON) as u8, true),
+            (LOW_ON_ENERGY | SHIP_AT_MAX_SPEED) as u16
         );
         assert_eq!(
-            input_flags(state, (RIGHT | WEAPON) as BYTE, false),
-            (LOW_ON_ENERGY | SHIP_AT_MAX_SPEED | RIGHT | WEAPON) as STATUS_FLAGS
+            input_flags(state, (RIGHT | WEAPON) as u8, false),
+            (LOW_ON_ENERGY | SHIP_AT_MAX_SPEED | RIGHT | WEAPON) as u16
         );
     }
 
     #[test]
     fn encounter_crew_and_sis_zero_sentinel_match_spawn_policy() {
-        assert_eq!(spawn_crew(IN_ENCOUNTER as BYTE, 0, 90, 42), 42);
-        assert_eq!(spawn_crew(IN_LAST_BATTLE as BYTE, 5, 90, 42), 5);
-        assert_eq!(spawn_crew(SUPER_MELEE as BYTE, 5, 90, 42), 90);
+        assert_eq!(spawn_crew(IN_ENCOUNTER as u8, 0, 90, 42), 42);
+        assert_eq!(spawn_crew(IN_LAST_BATTLE as u8, 5, 90, 42), 5);
+        assert_eq!(spawn_crew(SUPER_MELEE as u8, 5, 90, 42), 90);
     }
 
     #[test]

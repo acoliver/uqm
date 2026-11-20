@@ -11,9 +11,9 @@ use std::mem::size_of;
 
 use super::hyper_save::*;
 use crate::comm::locdata::CGameState;
+use crate::engine::battle::flags::{PLAYER_SHIP, RPG_PLAYER_NUM};
 use crate::engine::battle::link_queue::RacePool;
 use crate::engine::battle::record::{ElementRecord, ShipRecord};
-use crate::ships::native::abi::{PLAYER_SHIP, RPG_PLAYER_NUM};
 
 /// `PLAYER_SHIP` (element.h), written out so the generated value is checked
 /// against the header's `1 << 2`.
@@ -59,7 +59,7 @@ fn starship(facing: u16, element: Option<ElementId>) -> ShipRecord {
     // SAFETY: `STARSHIP` is integers, pointers and optional function pointers.
     let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
     ship.ship_facing = facing;
-    ship.hShip = element;
+    ship.ship_element = element;
     ship.captains_name_index = 1;
     ship.crew_level = 42;
     ship
@@ -70,7 +70,7 @@ fn element(flags: u16, owner: Parent) -> ElementRecord {
     let mut element: ElementRecord = unsafe { std::mem::zeroed() };
     element.state_flags = flags;
     element.parent = owner;
-    element.playerNr = 0;
+    element.player_nr = 0;
     element
 }
 
@@ -103,7 +103,9 @@ impl Queues {
         );
         push_element(&mut queues.display, element(0, Parent::None));
         // SAFETY: `ship` is the slot just pushed.
-        unsafe { (*ship).hShip = queues.display.id(std::ptr::NonNull::new(flagship.cast())) };
+        unsafe {
+            (*ship).ship_element = queues.display.id(std::ptr::NonNull::new(flagship.cast()))
+        };
         queues
     }
 
@@ -118,7 +120,11 @@ impl Queues {
 
     fn flagship_element(&self) -> *mut ElementRecord {
         // SAFETY: the head is a slot of the ship pool.
-        unsafe { self.display.raw((*self.head_ship()).hShip.unwrap()).cast() }
+        unsafe {
+            self.display
+                .raw((*self.head_ship()).ship_element.unwrap())
+                .cast()
+        }
     }
 
     fn save(&self, game: &mut CGameState) -> Result<HyperFlagship, HyperSaveError> {
@@ -275,7 +281,7 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
     );
     // SAFETY: `other_owner` is a slot of the ship pool.
     unsafe {
-        (*other_owner).hShip = queues
+        (*other_owner).ship_element = queues
             .display
             .id(std::ptr::NonNull::new(other_element.cast()))
     };
@@ -300,7 +306,7 @@ fn an_empty_player_queue_is_a_no_op() {
 fn a_flagship_without_an_element_is_a_no_op_and_the_display_list_is_not_read() {
     let queues = Queues::flight(5);
     // SAFETY: the head is a slot of the ship pool.
-    unsafe { (*queues.head_ship()).hShip = None };
+    unsafe { (*queues.head_ship()).ship_element = None };
 
     let mut game = game();
     let before_game = bytes_of(&*game);
@@ -320,7 +326,7 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
     );
     // SAFETY: the head is a slot of the ship pool.
     unsafe {
-        (*queues.head_ship()).hShip = queues.display.id(std::ptr::NonNull::new(loose.cast()))
+        (*queues.head_ship()).ship_element = queues.display.id(std::ptr::NonNull::new(loose.cast()))
     };
 
     let mut game = game();
@@ -343,7 +349,7 @@ fn a_stale_generation_or_slot_outside_the_pool_is_refused() {
         ElementId::fixture(u8::MAX, 0),
     ] {
         // SAFETY: the head is a slot of the ship pool.
-        unsafe { (*queues.head_ship()).hShip = Some(id) };
+        unsafe { (*queues.head_ship()).ship_element = Some(id) };
         let mut game = game();
         assert_eq!(
             queues.save(&mut game),

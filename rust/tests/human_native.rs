@@ -7,7 +7,11 @@ mod battle_context;
 
 use battle::*;
 use std::{ffi::CStr, mem};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, POINT_DEFENSE, SEEKING_WEAPON, SPECIAL};
+use uqm_rust::engine::battle::flags::{APPEARING, FINITE_LIFE, NONSOLID};
+use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::velocity::VelocityDesc;
 
 #[test]
 fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
@@ -35,7 +39,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             );
             assert_eq!(desc.characteristics.special_energy_cost, 4);
             assert_eq!(desc.characteristics.special_wait, 9);
-            assert_eq!(desc.cyborg_control.WeaponRange, 4000);
+            assert_eq!(desc.cyborg_control.weapon_range, 4000);
             assert!(desc.race.is_some());
             assert_eq!(desc.callbacks()[0], 0);
             assert_eq!(desc.callbacks()[1], 0);
@@ -43,7 +47,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_ne!(desc.callbacks()[3], 0);
             assert_ne!(desc.callbacks()[4], 0);
 
-            ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
+            ship.element_mut().next.location = Point { x: 1000, y: 2000 };
             let weapons = ship.weapon(1);
             let nuke = ship.weapon_record(weapons[0]);
             assert_eq!((*nuke).life, 60);
@@ -57,7 +61,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             }
             (*nuke).life = 50;
             call_element("ships::races::human_native::nuke_preprocess", id(nuke));
-            let mut expected: VELOCITY_DESC = mem::zeroed();
+            let mut expected: VelocityDesc = mem::zeroed();
             uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 80, 0);
             assert_eq!((*nuke).velocity.vector.width, expected.vector.width);
             assert_eq!((*nuke).velocity.vector.height, expected.vector.height);

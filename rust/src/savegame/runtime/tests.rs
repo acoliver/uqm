@@ -7,7 +7,7 @@
 
 use super::*;
 use crate::engine::battle::link_queue::LinkId;
-use crate::engine::battle::schema::GAME_STATE;
+use crate::engine::battle::schema::GameRecord;
 use crate::engine::clock::NUM_EVENTS;
 use crate::engine::clock::{GameClock, ScheduledEvent};
 use crate::savegame::decode::decode_save;
@@ -99,29 +99,29 @@ fn get(game: &CGameState, offset: usize, len: usize) -> Vec<u8> {
 
 /// Offsets of the `GlSt` fields in `GAME_STATE`, from the C headers.
 mod c_offset {
-    use super::{offset_of, GAME_STATE};
-    pub const GLOB_FLAGS: usize = offset_of!(GAME_STATE, glob_flags);
-    pub const CREW_COST: usize = offset_of!(GAME_STATE, crew_cost);
-    pub const FUEL_COST: usize = offset_of!(GAME_STATE, fuel_cost);
-    pub const MODULE_COST: usize = offset_of!(GAME_STATE, module_cost);
-    pub const ELEMENT_WORTH: usize = offset_of!(GAME_STATE, element_worth);
-    pub const CLOCK_DAY: usize = offset_of!(GAME_STATE, game_clock.day_index);
-    pub const CLOCK_MONTH: usize = offset_of!(GAME_STATE, game_clock.month_index);
-    pub const CLOCK_YEAR: usize = offset_of!(GAME_STATE, game_clock.year_index);
-    pub const CLOCK_TICKS: usize = offset_of!(GAME_STATE, game_clock.tick_count);
-    pub const CLOCK_DAY_TICKS: usize = offset_of!(GAME_STATE, game_clock.day_in_ticks);
-    pub const AUTOPILOT: usize = offset_of!(GAME_STATE, autopilot);
-    pub const IP_LOCATION: usize = offset_of!(GAME_STATE, ip_location);
-    pub const STAMP_ORIGIN: usize = offset_of!(GAME_STATE, ship_stamp.origin);
-    pub const SHIP_FACING: usize = offset_of!(GAME_STATE, ship_facing);
-    pub const IP_PLANET: usize = offset_of!(GAME_STATE, ip_planet);
-    pub const IN_ORBIT: usize = offset_of!(GAME_STATE, in_orbit);
-    pub const VELOCITY_ANGLE: usize = offset_of!(GAME_STATE, velocity.travel_angle);
-    pub const VELOCITY_VECTOR: usize = offset_of!(GAME_STATE, velocity.vector);
-    pub const VELOCITY_FRACT: usize = offset_of!(GAME_STATE, velocity.fract);
-    pub const VELOCITY_ERROR: usize = offset_of!(GAME_STATE, velocity.error);
-    pub const VELOCITY_INCR: usize = offset_of!(GAME_STATE, velocity.incr);
-    pub const BATTLE_GROUP_REF: usize = offset_of!(GAME_STATE, battle_group_ref);
+    use super::{offset_of, GameRecord};
+    pub const GLOB_FLAGS: usize = offset_of!(GameRecord, glob_flags);
+    pub const CREW_COST: usize = offset_of!(GameRecord, crew_cost);
+    pub const FUEL_COST: usize = offset_of!(GameRecord, fuel_cost);
+    pub const MODULE_COST: usize = offset_of!(GameRecord, module_cost);
+    pub const ELEMENT_WORTH: usize = offset_of!(GameRecord, element_worth);
+    pub const CLOCK_DAY: usize = offset_of!(GameRecord, game_clock.day_index);
+    pub const CLOCK_MONTH: usize = offset_of!(GameRecord, game_clock.month_index);
+    pub const CLOCK_YEAR: usize = offset_of!(GameRecord, game_clock.year_index);
+    pub const CLOCK_TICKS: usize = offset_of!(GameRecord, game_clock.tick_count);
+    pub const CLOCK_DAY_TICKS: usize = offset_of!(GameRecord, game_clock.day_in_ticks);
+    pub const AUTOPILOT: usize = offset_of!(GameRecord, autopilot);
+    pub const IP_LOCATION: usize = offset_of!(GameRecord, ip_location);
+    pub const STAMP_ORIGIN: usize = offset_of!(GameRecord, ship_stamp.origin);
+    pub const SHIP_FACING: usize = offset_of!(GameRecord, ship_facing);
+    pub const IP_PLANET: usize = offset_of!(GameRecord, ip_planet);
+    pub const IN_ORBIT: usize = offset_of!(GameRecord, in_orbit);
+    pub const VELOCITY_ANGLE: usize = offset_of!(GameRecord, velocity.travel_angle);
+    pub const VELOCITY_VECTOR: usize = offset_of!(GameRecord, velocity.vector);
+    pub const VELOCITY_FRACT: usize = offset_of!(GameRecord, velocity.fract);
+    pub const VELOCITY_ERROR: usize = offset_of!(GameRecord, velocity.error);
+    pub const VELOCITY_INCR: usize = offset_of!(GameRecord, velocity.incr);
+    pub const BATTLE_GROUP_REF: usize = offset_of!(GameRecord, battle_group_ref);
 }
 
 /// `SaveGameState` writes the 75 "GlSt" bytes in this order: (position in the

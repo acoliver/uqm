@@ -30,10 +30,20 @@ fn battle_song_release_uses_the_already_borrowed_kernel() {
 }
 
 use std::mem;
-use uqm_rust::{
-    engine::{Game, World},
-    ships::native::abi::*,
+use uqm_rust::engine::battle::ai_constants::MAX_ENERGY_SIZE;
+use uqm_rust::engine::battle::flags::RPG_PLAYER_NUM;
+use uqm_rust::engine::species::ship::SAMATRA_SHIP;
+use uqm_rust::engine::species::species_id::{
+    SPECIES_ID_EARTHLING_ID, SPECIES_ID_SA_MATRA_ID, SPECIES_ID_SIS_SHIP_ID, SPECIES_ID_VUX_ID,
 };
+use uqm_rust::engine::world::activity::activity_flags::{
+    CHECK_ABORT, IN_BATTLE, START_INTERPLANETARY,
+};
+use uqm_rust::engine::world::IN_HYPERSPACE;
+use uqm_rust::engine::{Game, World};
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::{MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ZOOM_SHIFT};
+const CREW_POD: u32 = 3;
 
 #[test]
 fn public_campaign_copy_does_not_traverse_live_records() {
@@ -149,7 +159,7 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
     game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
     {
         {
-            let point = POINT { x: 1752, y: 1450 };
+            let point = Point { x: 1752, y: 1450 };
             {
                 let world = &mut game.world;
                 let selected = uqm_rust::planets::starmap::find_star_id(
@@ -235,7 +245,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         ),
     ));
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
-    game.world.set_activity(CHECK_ABORT as u16);
+    game.world.set_activity(CHECK_ABORT);
     let mut observer = Recording(Vec::new());
     let _quiet = game.kernel.diagnostics.suppress_interaction();
     {
@@ -260,7 +270,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
             );
         });
     }
-    assert_eq!(game.world.activity(), CHECK_ABORT as u16);
+    assert_eq!(game.world.activity(), CHECK_ABORT);
     assert_eq!(
         observer.0,
         [format!(
@@ -306,7 +316,7 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
     for (index, crew) in [(7, 5), (11, u16::MAX)] {
         let id = fragments.alloc().unwrap();
         let fragment = fragments.get_mut(id);
-        fragment.race_id = SAMATRA_SHIP as u8;
+        fragment.race_id = SAMATRA_SHIP;
         fragment.species_id = SPECIES_ID_VUX_ID;
         fragment.race_strings = Some(uqm_rust::strings::owned_table::EntryRef::new(1, 0));
         fragment.icons = uqm_rust::graphics::drawable::FrameId::from_bits(1 << 16);
@@ -351,7 +361,7 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
 #[serial_test::serial]
 fn encounter_teardown_uses_retained_owners_without_reacquisition() {
     let mut game = Game::new();
-    game.world.set_activity(CHECK_ABORT as u16);
+    game.world.set_activity(CHECK_ABORT);
     let input = uqm_rust::engine::input::InputSession::new(
         Default::default(),
         game.kernel.configuration.clone(),
@@ -372,7 +382,7 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
             });
         };
     }
-    assert_eq!(game.world.activity(), CHECK_ABORT as u16);
+    assert_eq!(game.world.activity(), CHECK_ABORT);
 }
 
 #[test]
@@ -602,8 +612,8 @@ fn instant_move_selects_a_star_with_the_retained_world() {
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);
-    game.world.set_activity((IN_HYPERSPACE | IN_BATTLE) as u16);
-    game.world.data.game.autopilot = POINT { x: 1752, y: 1450 };
+    game.world.set_activity(IN_HYPERSPACE as u16 | IN_BATTLE);
+    game.world.data.game.autopilot = Point { x: 1752, y: 1450 };
     game.world.data.game.ship_facing = 7;
     game.world.data.game.ip_planet = 2;
     game.world.data.game.in_orbit = 1;
@@ -612,7 +622,7 @@ fn instant_move_selects_a_star_with_the_retained_world() {
     for star in catalog.iter_mut() {
         star.star_pt.y = i16::MAX;
     }
-    catalog[0].star_pt = POINT { x: 1752, y: 1450 };
+    catalog[0].star_pt = Point { x: 1752, y: 1450 };
     game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
     uqm_rust::front_end::uqmdebug::move_flagship(&mut game.world, (320, 240));
     assert_eq!(
@@ -620,10 +630,10 @@ fn instant_move_selects_a_star_with_the_retained_world() {
         game.world.catalog().as_ptr().cast_mut()
     );
     assert_eq!(game.world.story_state(StoryKey::USED_BROADCASTER), 0);
-    assert_eq!(game.world.activity() & IN_BATTLE as u16, 0);
-    assert_ne!(game.world.activity() & START_INTERPLANETARY as u16, 0);
+    assert_eq!(game.world.activity() & IN_BATTLE, 0);
+    assert_ne!(game.world.activity() & START_INTERPLANETARY, 0);
     assert_eq!(game.world.data.game.ship_facing, 0);
     assert_eq!(game.world.data.game.ip_planet, 0);
     assert_eq!(game.world.data.game.in_orbit, 0);
-    assert_eq!(game.world.data.game.autopilot, POINT { x: -1, y: -1 });
+    assert_eq!(game.world.data.game.autopilot, Point { x: -1, y: -1 });
 }

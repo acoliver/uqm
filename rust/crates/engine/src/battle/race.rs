@@ -29,7 +29,7 @@ pub enum RaceState {
         collision: Option<CollisionHook>,
     } = 1,
     Mmrnmhrm {
-        alternate: super::record::CHARACTERISTIC_STUFF,
+        alternate: super::record::CharacteristicRecord,
     } = 2,
     Pkunk {
         phoenix: Option<ElementId>,

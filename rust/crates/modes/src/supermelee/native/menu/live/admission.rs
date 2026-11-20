@@ -1,4 +1,6 @@
 //! The live menu lends setup effects only for the current admitted input call.
+use crate::engine::battle::net::NetState;
+use crate::engine::world::activity::activity_flags::IN_BATTLE;
 use crate::engine::{
     battle::Cx,
     input::Frame,
@@ -15,7 +17,7 @@ impl InputSetup for Setup<'_, '_, '_> {
     fn configure_fleet(&mut self, ships: [[u8; 7]; 2], cyborg: bool) -> Result<(), String> {
         self.state.configure_fleets(
             &mut self.cx.kernel.player_control,
-            self.cx.world.activity() & super::IN_BATTLE as u16 != 0,
+            self.cx.world.activity() & IN_BATTLE != 0,
             ships,
             cyborg,
         )
@@ -61,7 +63,7 @@ impl InputSetup for Setup<'_, '_, '_> {
         let side = usize::from(remote_player);
         let connection = self.state.netplay.connection(side)?;
         Some(PeerSetup {
-            ready: connection.state == crate::supermelee::netplay::abi::NetState_NetState_inSetup
+            ready: connection.state == NetState::InSetup
                 && self.state.melee_setup.sent[side].is_synchronized(),
             disconnected: connection.flags.disconnected,
         })

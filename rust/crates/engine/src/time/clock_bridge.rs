@@ -4,7 +4,7 @@ use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
 
-pub use crate::battle::schema::CLOCK_STATE as ClockState;
+pub use crate::battle::schema::ClockRecord as ClockState;
 
 use super::clock_abi::START_YEAR;
 use crate::World;

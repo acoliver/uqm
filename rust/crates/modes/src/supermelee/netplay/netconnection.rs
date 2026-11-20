@@ -1,5 +1,7 @@
 //! Owned protocol state for one remote player.
-use super::{abi::*, checkbuf::ChecksumBuffer, packet::Packet, packetq::PacketQueue};
+use super::{checkbuf::ChecksumBuffer, packet::Packet, packetq::PacketQueue};
+use crate::engine::battle::net::NetState;
+use crate::supermelee::netplay::{CHECKSUM_INTERVAL, READ_BUFFER_SIZE};
 
 #[derive(Debug, Clone)]
 pub struct PeerOptions {
@@ -106,9 +108,9 @@ impl NetConnection {
         Self {
             socket: None,
             player,
-            state: NetState_NetState_unconnected,
+            state: NetState::Unconnected,
             flags: Flags {
-                checksum_interval: NETPLAY_CHECKSUM_INTERVAL as usize,
+                checksum_interval: CHECKSUM_INTERVAL,
                 ..Flags::default()
             },
             ready_action: None,
@@ -120,7 +122,7 @@ impl NetConnection {
             packets_received: 0,
             packet_types_received: [0; 18],
             checksums: ChecksumBuffer::default(),
-            read_buffer: Vec::with_capacity(NETPLAY_READBUFSIZE as usize),
+            read_buffer: Vec::with_capacity(READ_BUFFER_SIZE),
             battle_active: false,
             end_frame_count: 0,
         }
@@ -168,7 +170,7 @@ impl NetConnection {
         self.ready_generation += 1;
         match action {
             ReadyAction::EnterSetup => {
-                self.state = NetState_NetState_inSetup;
+                self.state = NetState::InSetup;
                 vec![self.event(Effect::Connected), self.event(Effect::Bootstrap)]
             }
             ReadyAction::Transition(next) => {
@@ -176,20 +178,20 @@ impl NetConnection {
                 Vec::new()
             }
             ReadyAction::EndBattle => {
-                self.state = NetState_NetState_endingBattle;
+                self.state = NetState::EndingBattle;
                 let target = frame.wrapping_add(1);
                 self.end_frame_count = self.end_frame_count.max(target);
                 self.queue(Packet::FrameCount(target));
                 vec![self.event(Effect::EndBattle)]
             }
             ReadyAction::EndBattle2 => {
-                self.state = NetState_NetState_endingBattle2;
+                self.state = NetState::EndingBattle2;
                 Vec::new()
             }
         }
     }
     pub fn confirm(&mut self) -> bool {
-        assert_eq!(self.state, NetState_NetState_inSetup);
+        assert_eq!(self.state, NetState::InSetup);
         if self.flags.handshake.local {
             return false;
         }
@@ -204,7 +206,7 @@ impl NetConnection {
         true
     }
     pub fn cancel_confirmation(&mut self) -> bool {
-        assert_eq!(self.state, NetState_NetState_inSetup);
+        assert_eq!(self.state, NetState::InSetup);
         if !self.flags.handshake.local {
             return false;
         }
@@ -220,9 +222,7 @@ impl NetConnection {
             if let Some(next) = self.reset_next.take() {
                 self.flags.reset = Exchange::default();
                 self.reset_generation += 1;
-                if next != NetState::MAX {
-                    self.state = next;
-                }
+                self.state = next;
             }
         }
     }
@@ -256,7 +256,7 @@ impl NetConnection {
         }
     }
     fn reset_feedback(&self, reason: u32, remote: bool) -> Vec<Event> {
-        if (NetState_NetState_preBattle..=NetState_NetState_endingBattle2).contains(&self.state) {
+        if (NetState::PreBattle..=NetState::EndingBattle2).contains(&self.state) {
             vec![self.event(Effect::Reset { reason, remote })]
         } else {
             Vec::new()

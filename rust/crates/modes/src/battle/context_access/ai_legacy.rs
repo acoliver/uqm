@@ -5,7 +5,7 @@ pub(crate) fn computer_intelligence(
     player: u16,
     id: Option<crate::engine::battle::ShipId>,
 ) -> u8 {
-    if cx.world.activity() as u8 == crate::ships::native::abi::IN_LAST_BATTLE as u8 {
+    if cx.world.activity() as u8 == crate::engine::battle::flags::IN_LAST_BATTLE as u8 {
         return 0;
     }
     let control = if id.is_none() {
@@ -56,6 +56,6 @@ impl AiOps for Cx<'_> {
 
     fn selection_delay(&mut self) {
         let runtime = self.kernel.input_runtime();
-        runtime.sleep(self, crate::ships::native::abi::ONE_SECOND >> 1);
+        runtime.sleep(self, crate::engine::time::counter_abi::ONE_SECOND >> 1);
     }
 }

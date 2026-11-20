@@ -97,6 +97,17 @@ impl SaveName {
         Ok(SaveName(bytes))
     }
 
+    /// The name a C `strncpy` into the save-name field keeps: everything up
+    /// to the first NUL, cut to `MAX_BYTES`.
+    pub fn from_c_bytes(bytes: &[u8]) -> Self {
+        let end = bytes
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(bytes.len())
+            .min(Self::MAX_BYTES);
+        SaveName(bytes[..end].to_vec())
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }

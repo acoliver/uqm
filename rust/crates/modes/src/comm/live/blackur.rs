@@ -6,10 +6,10 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut a = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut a });
 }
-fn combat(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn combat(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Combat, r as i32));
 }
-fn story(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn story(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Story, r as i32));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {

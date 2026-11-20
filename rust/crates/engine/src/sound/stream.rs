@@ -406,7 +406,7 @@ pub fn playing_stream(source_index: usize) -> bool {
 }
 
 /// Get current stream playback position in game ticks (ONE_SECOND units).
-/// Mirrors C trackplayer logic: pos = GetTimeCounter() - source.start_time.
+/// Mirrors C trackplayer logic: pos = get_time_counter() - source.start_time.
 pub fn get_stream_position_ticks(source_index: usize) -> u32 {
     let source = match get_source(source_index) {
         Ok(s) => s,
@@ -652,7 +652,7 @@ fn read_scope_sample(buffer: &[u8], pos: usize, size: usize, sample_size: usize)
 /// Set up a music volume fade.
 ///
 /// # Arguments
-/// * `how_long` - Duration of fade in GetTimeCounter ticks.
+/// * `how_long` - Duration of fade in get_time_counter ticks.
 /// * `end_volume` - Target volume at end of fade.
 pub fn set_music_stream_fade(how_long: u32, end_volume: i32) -> bool {
     if how_long == 0 {
@@ -1022,7 +1022,7 @@ fn consume_replay_frames(frames: u64) {
     while remaining != 0 {
         let frames = remaining.min((output.len() / frame_bytes) as u64);
         mixer_mix::mixer_mix_channels(&mut output[..frames as usize * frame_bytes])
-            .expect("replay mixer failed");
+            .unwrap_or_else(|error| panic!("replay mixer failed: {error:?}"));
         remaining -= frames;
         process_decoder_pass(true);
     }
@@ -1184,16 +1184,13 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
                 remove_scope_data(&mut source, buf_bytes);
             }
 
-            if sample.decoder.is_none() {
+            let Some(decoder) = sample.decoder.as_mut() else {
                 continue;
-            }
+            };
 
             // Decode into the unqueued buffer
             let mut buf = vec![0u8; BUFFER_SIZE];
-            let decode_result = {
-                let decoder = sample.decoder.as_mut().unwrap();
-                decoder.decode(&mut buf)
-            };
+            let decode_result = decoder.decode(&mut buf);
 
             let n = match decode_result {
                 Ok(0) => {

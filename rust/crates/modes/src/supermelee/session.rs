@@ -1,6 +1,6 @@
 //! The owner retained through setup, nested pickers and battle handoff.
 
-use super::netplay::{abi::*, session::NetplaySession};
+use super::netplay::session::NetplaySession;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuPhase {
@@ -29,18 +29,18 @@ pub struct MeleeSession {
     selection_highlighted: bool,
     pub activity: crate::engine::world::activity::ActivityControl,
     pub phase: MenuPhase,
-    pub initialized: BOOLEAN,
-    pub melee_started: BOOLEAN,
-    pub melee_option: MELEE_OPTIONS,
-    pub side: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
+    pub initialized: u32,
+    pub melee_started: u32,
+    pub melee_option: u8,
+    pub side: u16,
+    pub row: u16,
+    pub col: u16,
     pub melee_setup: crate::supermelee::setup::team::MeleeSetup,
     pub load: crate::supermelee::setup::browser::TeamBrowser,
-    pub current_ship: MeleeShip,
-    pub cur_index: COUNT,
-    pub build_pick_confirmed: BOOLEAN,
-    pub last_input_time: TimeCount,
+    pub current_ship: u32,
+    pub cur_index: u16,
+    pub build_pick_confirmed: u32,
+    pub last_input_time: u32,
     pub h_music: Option<uqm_engine::sound::resource_types::LoadedMusic>,
     pub netplay: NetplaySession,
     pub(crate) catalog: Vec<crate::ships::master_native::ShipChoice>,

@@ -6,7 +6,7 @@ use uqm_rust::{
     engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
     front_end::gameopt::{picker_action, PickerAction},
     mainloop::{
-        input_abi::{FlushInput, UpdateInputState},
+        input_abi::{flush_input, update_input_state},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
             restart_ops::{RestartHost, RestartMenu, RestartMenuOps},
@@ -74,7 +74,7 @@ unsafe fn picker_frame(
         PickerAction::Continue if state.actions.len() == 1 => {
             key_event(input, RETURN, true, true);
             key_event(input, ESCAPE, true, true);
-            UpdateInputState(cx, input);
+            update_input_state(cx, input);
             state.repeat_pulses = (input.pulsed().menu[SELECT], input.pulsed().menu[CANCEL]);
             key_event(input, RETURN, false, false);
             key_event(input, ESCAPE, false, false);
@@ -94,10 +94,10 @@ unsafe fn open_from_restart_while_select_is_held(
     input: &uqm_rust::engine::input::InputSession,
     occupied: bool,
 ) {
-    FlushInput(input);
+    flush_input(input);
     crate::battle_context::with(|cx| cx.world.set_activity(0));
     key_event(input, RETURN, true, false);
-    crate::battle_context::with(|cx| UpdateInputState(cx, input));
+    crate::battle_context::with(|cx| update_input_state(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
     let context = uqm_rust::graphics::context::LoadedContext::create(c"load-picker-restart");
     let mut owner = RestartMenu::default();
@@ -173,7 +173,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
         let profile = tempfile::tempdir_in(root).unwrap();
         unsafe {
             uqm_rust::graphics::state::init_headless(Default::default());
-            input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
+            input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
             uqm_rust::input::sdl_input::attach_controls(input.controls());
             input.vcontrol(|vc| {
                 vc.init();

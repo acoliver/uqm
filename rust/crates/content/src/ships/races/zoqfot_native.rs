@@ -1,8 +1,16 @@
 //! Live zoqfotpik callbacks translated from ships/zoqfot/zoqfot.c.
 pub mod engine {
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_AVOID,
+        MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
     };
+    use crate::engine::battle::flags::{CHANGING, NONSOLID, PLAYER_SHIP};
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32) as _;
@@ -15,7 +23,7 @@ pub mod engine {
         d.resources.icons = Some(c"ship.zoqfotpik.icons");
         d.resources.melee_icon = Some(c"ship.zoqfotpik.meleeicons");
         d.fleet_strength = (320 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet_location = POINT { x: 3761, y: 5333 };
+        d.fleet_location = Point { x: 3761, y: 5333 };
         d.characteristics.max_thrust = 40;
         d.characteristics.thrust_increment = 10;
         d.characteristics.energy_regeneration = 1;
@@ -72,14 +80,14 @@ pub mod engine {
             let mut angle = cx.element(e).velocity.travel_angle;
             let index = cx.frame_number(cx.element(e).next.image.frame.view());
             if index == 1 {
-                angle = (i32::from(angle) + (i32::from(cx.random() as COUNT) % 3) - 1) as COUNT;
+                angle = (i32::from(angle) + (i32::from(cx.random() as u16) % 3) - 1) as u16;
             }
             let speed = (((i32::from(cx.frame_count(cx.element(e).next.image.frame.view()))
                 - i32::from(index))
                 << ONE_SHIFT)
                 << 1)
                 << VELOCITY_SHIFT;
-            let speed = speed as COUNT;
+            let speed = speed as u16;
             cx.element_mut(e).velocity.set_components(
                 i32::from(cosine(i32::from(angle), i32::from(speed))),
                 i32::from(sine(i32::from(angle), i32::from(speed))),
@@ -99,7 +107,7 @@ pub mod engine {
             sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 13,
-            speed: ((i32::from(cx.frame_count(cx.ship_frame(ss, 1))) << ONE_SHIFT) << 1) as SIZE,
+            speed: ((i32::from(cx.frame_count(cx.ship_frame(ss, 1))) << ONE_SHIFT) << 1) as i16,
             hit_points: 1,
             damage: 1,
             life: 10,
@@ -117,9 +125,9 @@ pub mod engine {
     pub fn tongue_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         let ss = cx.owner(a);
         if cx.ship_state(ss).special_counter == cx.race_stats(ss).characteristics.special_wait {
@@ -159,20 +167,20 @@ pub mod engine {
             } else {
                 cx.element_mut(tongue).turn = cx.element(e).turn.wrapping_sub(1);
                 let r = cx.frame_rect(cx.element(tongue).current.image.frame.view());
-                let x = ((i32::from(r.extent.width) >> 1) << ONE_SHIFT) as SIZE;
-                let y = ((i32::from(r.extent.height) >> 1) << ONE_SHIFT) as SIZE;
-                let angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as COUNT;
-                if u32::from(angle) > HALF_CIRCLE && u32::from(angle) < FULL_CIRCLE {
+                let x = ((i32::from(r.extent.width) >> 1) << ONE_SHIFT) as i16;
+                let y = ((i32::from(r.extent.height) >> 1) << ONE_SHIFT) as i16;
+                let angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as u16;
+                if angle > HALF_CIRCLE && angle < FULL_CIRCLE {
                     cx.element_mut(tongue).current.location.x =
                         cx.element(tongue).current.location.x.wrapping_sub(x);
-                } else if angle > 0 && u32::from(angle) < HALF_CIRCLE {
+                } else if angle > 0 && angle < HALF_CIRCLE {
                     cx.element_mut(tongue).current.location.x =
                         cx.element(tongue).current.location.x.wrapping_add(x);
                 }
-                if u32::from(angle) < QUADRANT || u32::from(angle) > FULL_CIRCLE - QUADRANT {
+                if !(QUADRANT..=FULL_CIRCLE - QUADRANT).contains(&angle) {
                     cx.element_mut(tongue).current.location.y =
                         cx.element(tongue).current.location.y.wrapping_sub(y);
-                } else if u32::from(angle) > QUADRANT && u32::from(angle) < FULL_CIRCLE - QUADRANT {
+                } else if angle > QUADRANT && angle < FULL_CIRCLE - QUADRANT {
                     cx.element_mut(tongue).current.location.y =
                         cx.element(tongue).current.location.y.wrapping_add(y);
                 }

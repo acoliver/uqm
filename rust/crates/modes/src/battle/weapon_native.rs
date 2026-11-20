@@ -1,6 +1,10 @@
 //! Battle-mode silhouette changes for the supplied status display.
 
-use crate::ships::native::abi::*;
+use crate::engine::battle::flags::MAX_TIME_VALUE;
+use crate::graphics::geometry::Point;
+use crate::graphics::intersection::Stamp;
+const MODIFY_IMAGE: u32 = 1;
+const MODIFY_SWAP: u32 = 2;
 
 pub(crate) mod engine {
     use super::*;
@@ -10,16 +14,16 @@ pub(crate) mod engine {
     pub fn modify_silhouette(
         cx: &mut Cx<'_>,
         e: ElementId,
-        origin: POINT,
+        origin: Point,
         frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
         let mut object = crate::graphics::intersection::IntersectControl {
-            IntersectStamp: STAMP {
+            IntersectStamp: Stamp {
                 origin,
                 frame: frame.raw(),
             },
-            EndPoint: POINT { x: 0, y: 0 },
+            EndPoint: Point { x: 0, y: 0 },
             last_time_val: 0,
         };
         let mut object_rect = cx.frame_rect(frame.view());
@@ -31,11 +35,11 @@ pub(crate) mod engine {
                 1,
             );
             let mut ship_intersect = crate::graphics::intersection::IntersectControl {
-                IntersectStamp: STAMP {
-                    origin: POINT { x: 0, y: 0 },
+                IntersectStamp: Stamp {
+                    origin: Point { x: 0, y: 0 },
                     frame: crate::graphics::drawable::FrameId::NULL,
                 },
-                EndPoint: POINT { x: 0, y: 0 },
+                EndPoint: Point { x: 0, y: 0 },
                 last_time_val: 0,
             };
             image!(frame; ship_intersect.IntersectStamp.frame, silhouette.raw());

@@ -6,8 +6,8 @@
 //! `ShipStamp.frame`, `BattleGroupRef`, the queues and the clock's event queue
 //! belong to other sections or to the running game.
 
-use super::super::battle::record::VELOCITY_DESC as VelocityDesc;
-use super::super::battle::schema::GAME_STATE as CGameState;
+use super::super::battle::record::VelocityDesc;
+use super::super::battle::schema::GameRecord as CGameState;
 use crate::graphics::{geometry::Extent as LiveExtent, geometry::Point as CPoint};
 use uqm_save::{ClockState, Extent, GlobalState, Point, Velocity};
 

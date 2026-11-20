@@ -372,12 +372,13 @@ impl FleetRetreat {
                 && self.enemy_left > 0
                 && matches!(obs.activity & 0xff, 3 | 4)
             {
-                Escaped(format!(
-                    "fleet_escaped:enemy_initial={}:flagship_crew={}:ticks={}",
-                    self.enemy_left,
-                    obs.flagship_crew.unwrap(),
-                    self.ticks
-                ))
+                match obs.flagship_crew {
+                    Some(crew) => Escaped(format!(
+                        "fleet_escaped:enemy_initial={}:flagship_crew={crew}:ticks={}",
+                        self.enemy_left, self.ticks
+                    )),
+                    None => Failed("fleet_escaped_without_flagship_crew".into()),
+                }
             } else {
                 Input {
                     menu: None,

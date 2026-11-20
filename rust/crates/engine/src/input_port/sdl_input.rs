@@ -152,7 +152,7 @@ fn flight_target(template: usize, control: usize) -> Target {
 
 fn resource_key(mut key: String) -> CString {
     key.truncate(GESTURE_TEXT_MAX);
-    CString::new(key).expect("control resource keys contain no NUL")
+    CString::new(key).unwrap_or_else(|_| panic!("control resource keys contain no NUL"))
 }
 
 fn flight_key(template: usize, name: &str, alternate: usize) -> CString {

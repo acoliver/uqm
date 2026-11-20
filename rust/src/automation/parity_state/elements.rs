@@ -110,7 +110,7 @@ mod tests {
         elements.fixture_record_mut(first).velocity.error.width = -23;
         elements
             .fixture_record_mut(first)
-            .IntersectControl
+            .intersect_control
             .last_time_val = 19;
         let mut view = crate::engine::battle::access::observe::element(&elements, first, 0);
         let mut fields = Fields::new();

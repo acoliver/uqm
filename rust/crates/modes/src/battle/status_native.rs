@@ -2,18 +2,22 @@
 
 use crate::battle::context_access::ContextOps;
 use crate::battle::context_access::StatusOps;
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign};
-use crate::ships::native::abi::*;
+use crate::engine::battle::ai_constants::{
+    LEFT, MAX_CREW_SIZE, PLAYER_CAPTAIN, RIGHT, SPECIAL, THRUST, WEAPON,
+};
+use crate::engine::battle::flags::{LOW_ON_ENERGY, RPG_PLAYER_NUM};
+use crate::engine::battle::record::CaptainRecord;
+use crate::graphics::geometry::{Color, Extent, Point, Rect, TextAlign};
 
 pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
-    kernel.status_offsets = [(height_pixels >> 1) as COORD, 0];
+    kernel.status_offsets = [(height_pixels >> 1) as i16, 0];
 }
 
-pub(crate) fn has_crew_counter(maximum: COUNT, flags: u16) -> bool {
-    maximum > MAX_CREW_SIZE as COUNT || flags & PLAYER_CAPTAIN as u16 != 0
+pub(crate) fn has_crew_counter(maximum: u16, flags: u16) -> bool {
+    maximum > MAX_CREW_SIZE as u16 || flags & PLAYER_CAPTAIN as u16 != 0
 }
 
-fn crew_counter_layout(y: COORD, pc_menu: bool) -> (Point, Rect) {
+fn crew_counter_layout(y: i16, pc_menu: bool) -> (Point, Rect) {
     let baseline = Point {
         x: if pc_menu { 4 } else { 12 },
         y: y.wrapping_add(64),
@@ -22,7 +26,7 @@ fn crew_counter_layout(y: COORD, pc_menu: bool) -> (Point, Rect) {
     (baseline, background)
 }
 
-fn crew_text(value: COUNT) -> [u8; 40] {
+fn crew_text(value: u16) -> [u8; 40] {
     let mut buffer = [0; 40];
     let mut digits = [0; 5];
     let mut remaining = value;
@@ -56,14 +60,14 @@ fn rgb15(r: u8, g: u8, b: u8) -> Color {
     }
 }
 
-fn rect(x: COORD, y: COORD, width: SIZE, height: SIZE) -> Rect {
+fn rect(x: i16, y: i16, width: i16, height: i16) -> Rect {
     Rect {
         corner: Point { x, y },
         extent: Extent { width, height },
     }
 }
 
-fn turn_frames(delta: STATUS_FLAGS, current: STATUS_FLAGS, pass: COUNT) -> ([i16; 2], usize) {
+fn turn_frames(delta: u16, current: u16, pass: u16) -> ([i16; 2], usize) {
     if delta & LEFT as u16 != 0 {
         if delta & RIGHT as u16 == 0 {
             (
@@ -113,9 +117,9 @@ fn turn_frames(delta: STATUS_FLAGS, current: STATUS_FLAGS, pass: COUNT) -> ([i16
     }
 }
 
-pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, Rect, bool)) {
+pub(crate) fn explosion_flash(life: u16, y: i16, mut draw: impl FnMut(Color, Rect, bool)) {
     let black = rgb15(0, 0, 0);
-    let mut i = (35u16.wrapping_sub(life)) as BYTE;
+    let mut i = (35u16.wrapping_sub(life)) as u8;
     let (color, r) = if i <= 4 {
         let colors = [
             (15, 0, 0),
@@ -199,7 +203,7 @@ pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color,
     draw(color, r, true);
 }
 
-fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, Rect)) {
+fn captain_border(y: i16, height: i16, mut fill: impl FnMut(Color, Rect)) {
     let dark = rgb15(8, 8, 8);
     let light = rgb15(16, 16, 16);
     fill(
@@ -240,8 +244,8 @@ fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, Rect)) {
 pub(crate) fn draw_battle_crew_amount(
     context: &crate::graphics::context::ContextLease,
     font: &crate::graphics::font::FontLease,
-    crew: COUNT,
-    y_offs: COORD,
+    crew: u16,
+    y_offs: i16,
     pc_menu: bool,
 ) {
     let buffer = crew_text(crew);
@@ -252,7 +256,6 @@ pub(crate) fn draw_battle_crew_amount(
     context.draw_text(font, string, baseline, TextAlign::Left, rgb15(0, 0, 0));
 }
 
-#[allow(non_snake_case)]
 pub mod engine {
     use super::*;
     use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
@@ -260,10 +263,10 @@ pub mod engine {
     pub(crate) fn captains_window(
         cx: &Cx<'_>,
         ship: crate::engine::battle::ShipId,
-        y: COORD,
-        delta: STATUS_FLAGS,
-        current: STATUS_FLAGS,
-        pass: COUNT,
+        y: i16,
+        delta: u16,
+        current: u16,
+        pass: u16,
     ) {
         let captain = cx.captain_controls(ship);
         let origin = Point {
@@ -293,7 +296,7 @@ pub mod engine {
         }
     }
 
-    fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CAPTAIN_STUFF {
+    fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CaptainRecord {
         let mut captain = cx.captain_controls(ship).clone();
         let background = FrameSelection::retain(captain.background);
         if !background.is_absent() {
@@ -315,7 +318,7 @@ pub mod engine {
         cx: &mut Cx<'_>,
         ship: crate::engine::battle::ShipId,
         context: Option<&crate::graphics::context::ContextLease>,
-        height: SIZE,
+        height: i16,
         pc_menu: bool,
     ) {
         let captain = prepare_captain(cx, ship);
@@ -329,7 +332,7 @@ pub mod engine {
             let background = crate::graphics::drawable::ContextFrame::retain(captain.background);
             context.draw_stamp(&background, Point { x: 4, y: cy });
             if cx.ship(ship).captains_name_index == 0
-                && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+                && cx.ship(ship).player_nr == RPG_PLAYER_NUM as i16
             {
                 let font = cx.kernel.tiny_font_lease().unwrap_or_else(|| {
                     panic!("captain name display requires the loaded tiny font")
@@ -363,7 +366,7 @@ pub mod engine {
     pub fn preprocess_status(cx: &mut Cx<'_>, e: ElementId) {
         let ship = cx.owner(e);
         if cx.ship(ship).captains_name_index != 0
-            || cx.ship_state(ship).player == RPG_PLAYER_NUM as SIZE
+            || cx.ship_state(ship).player == RPG_PLAYER_NUM as i16
         {
             let current = cx.ship_state(ship).status;
             let delta = (cx.ship_state(ship).old_status ^ current)
@@ -375,10 +378,10 @@ pub mod engine {
         }
     }
 
-    pub fn PostProcessStatus(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn post_process_status(cx: &mut Cx<'_>, e: ElementId) {
         let ship = cx.owner(e);
         if cx.ship(ship).captains_name_index != 0
-            || cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+            || cx.ship(ship).player_nr == RPG_PLAYER_NUM as i16
         {
             let current = cx.ship(ship).cur_status_flags;
             let y = cx.status_offset(ship);
@@ -412,11 +415,12 @@ pub mod engine {
     }
 }
 
-pub use engine::{draw_captains_window, preprocess_status, PostProcessStatus};
+pub use engine::{draw_captains_window, post_process_status, preprocess_status};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::battle::flags::CREW_IMMUNE;
 
     #[test]
     fn captain_name_borrows_only_the_bounded_name_before_its_terminator() {

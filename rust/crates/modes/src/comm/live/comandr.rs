@@ -12,7 +12,7 @@ fn api<'a, 'b>(
 
 macro_rules! callbacks {
     ($($handler:ident => $name:ident),* $(,)?) => {
-        $(fn $name(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) { Commander(&mut api(comm, cx)).handle(Handler::$handler, u16::try_from(r).expect("response reference exceeds COUNT")); })*
+        $(fn $name(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) { Commander(&mut api(comm, cx)).handle(Handler::$handler, r); })*
         fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
             match handler { $(Handler::$handler => $name,)* }
         }

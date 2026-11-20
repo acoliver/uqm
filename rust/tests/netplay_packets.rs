@@ -9,13 +9,13 @@ use uqm_engine::{
     host::{Connection, Net},
     network::loopback::LoopbackNet,
 };
+use uqm_rust::engine::battle::net::NetState;
 use uqm_rust::engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolPoll};
 use uqm_rust::supermelee::netplay::{
-    abi::*,
     checkbuf::ChecksumBuffer,
     netconnection::{NetConnection, PeerOptions, ReadyAction},
     packet::{DecodeError, Packet},
-    Effect, Event, NetplaySession,
+    Effect, Event, NetplaySession, ResetReason,
 };
 
 #[derive(Default)]
@@ -34,7 +34,7 @@ impl ProtocolDriver for Driver {
     }
 }
 
-fn prepared(state: u32) -> NetplaySession {
+fn prepared(state: NetState) -> NetplaySession {
     let session = NetplaySession::with_net(LoopbackNet::default());
     assert!(session.open_player_network_connection(0, &mut |_| panic!("open failed")));
     {
@@ -86,7 +86,7 @@ fn exchange(sender: &NetplaySession, receiver: &NetplaySession) {
 }
 #[test]
 fn checksum_handler_decodes_and_discards_outside_its_frame_window() {
-    let session = prepared(NetState_NetState_inBattle);
+    let session = prepared(NetState::InBattle);
     session.set_battle_input_delay(3);
     session.set_frame(100);
     {
@@ -113,7 +113,7 @@ fn checksum_handler_decodes_and_discards_outside_its_frame_window() {
 }
 #[test]
 fn team_name_requires_room_for_its_terminator() {
-    let session = prepared(NetState_NetState_inSetup);
+    let session = prepared(NetState::InSetup);
     session.connection_mut(0).unwrap().flags.handshake.local = true;
     assert_eq!(
         Packet::decode(&[0, 6, 0, 5, 0, 0]),
@@ -125,8 +125,8 @@ fn team_name_requires_room_for_its_terminator() {
 }
 #[test]
 fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
-    let a = prepared(NetState_NetState_inSetup);
-    let b = prepared(NetState_NetState_inSetup);
+    let a = prepared(NetState::InSetup);
+    let b = prepared(NetState::InSetup);
     assert!(!a.connection_mut(0).unwrap().cancel_confirmation());
     assert!(a.connection_mut(0).unwrap().confirm());
     assert!(!a.connection_mut(0).unwrap().confirm());
@@ -142,20 +142,24 @@ fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
     exchange(&a, &b);
     assert!(b.connection_mut(0).unwrap().confirm());
     exchange(&b, &a);
-    assert_eq!(a.connection(0).unwrap().state, NetState_NetState_preBattle);
+    assert_eq!(a.connection(0).unwrap().state, NetState::PreBattle);
     exchange(&a, &b);
-    assert_eq!(b.connection(0).unwrap().state, NetState_NetState_preBattle);
+    assert_eq!(b.connection(0).unwrap().state, NetState::PreBattle);
     for remote_first in [false, true] {
-        a.connection_mut(0)
-            .unwrap()
-            .local_ready(ReadyAction::Transition(4), true, 0);
+        a.connection_mut(0).unwrap().local_ready(
+            ReadyAction::Transition(NetState::PreBattle),
+            true,
+            0,
+        );
         if remote_first {
             exchange(&a, &b);
         }
         let generation = b.connection(0).unwrap().ready_generation;
-        b.connection_mut(0)
-            .unwrap()
-            .local_ready(ReadyAction::Transition(4), true, 0);
+        b.connection_mut(0).unwrap().local_ready(
+            ReadyAction::Transition(NetState::PreBattle),
+            true,
+            0,
+        );
         assert_eq!(
             b.connection(0).unwrap().ready_generation != generation,
             remote_first
@@ -172,13 +176,17 @@ fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
     }
     assert_eq!(a.connection(0).unwrap().ready_generation, 2);
     assert_eq!(b.connection(0).unwrap().ready_generation, 2);
-    a.connection_mut(0).unwrap().state = 3;
-    b.connection_mut(0).unwrap().state = 3;
+    a.connection_mut(0).unwrap().state = NetState::InSetup;
+    b.connection_mut(0).unwrap().state = NetState::InSetup;
     for simultaneous in [false, true] {
-        a.connection_mut(0).unwrap().reset_next = Some(3);
-        a.connection_mut(0).unwrap().local_reset(2);
+        a.connection_mut(0).unwrap().reset_next = Some(NetState::InSetup);
+        a.connection_mut(0)
+            .unwrap()
+            .local_reset(ResetReason::ManualReset as u32);
         if simultaneous {
-            b.connection_mut(0).unwrap().local_reset(2);
+            b.connection_mut(0)
+                .unwrap()
+                .local_reset(ResetReason::ManualReset as u32);
         }
         exchange(&a, &b);
         assert_eq!(
@@ -187,7 +195,7 @@ fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
         );
         {
             let mut conn = b.connection_mut(0).unwrap();
-            conn.reset_next = Some(3);
+            conn.reset_next = Some(NetState::InSetup);
             conn.reset_complete();
             assert!(conn.reset_next.is_none());
             assert!(!conn.flags.reset.local && !conn.flags.reset.remote);
@@ -199,22 +207,22 @@ fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
 }
 #[test]
 fn handshake_order_cancel_and_reconfirmation() {
-    let a = prepared(3);
+    let a = prepared(NetState::InSetup);
     a.connection_mut(0).unwrap().flags.handshake.local = true;
     assert_eq!(dispatch(&a, Packet::Handshake0), 0);
     assert!(a.connection(0).unwrap().flags.handshake.remote);
     assert_eq!(queued_type(&a), 7);
     assert_eq!(dispatch(&a, Packet::Handshake1), 0);
-    assert_eq!(a.connection(0).unwrap().state, 4);
+    assert_eq!(a.connection(0).unwrap().state, NetState::PreBattle);
     assert!(!a.connection(0).unwrap().flags.handshake.local);
     assert!(!a.connection(0).unwrap().flags.handshake.remote);
-    let a = prepared(3);
+    let a = prepared(NetState::InSetup);
     a.connection_mut(0).unwrap().flags.handshake.local = true;
     assert_eq!(dispatch(&a, Packet::Handshake1), 0);
     assert_eq!(queued_type(&a), 7);
-    assert_eq!(a.connection(0).unwrap().state, 4);
+    assert_eq!(a.connection(0).unwrap().state, NetState::PreBattle);
     for remote in [false, true] {
-        let a = prepared(3);
+        let a = prepared(NetState::InSetup);
         {
             let mut conn = a.connection_mut(0).unwrap();
             conn.flags.handshake.canceling = true;
@@ -225,7 +233,7 @@ fn handshake_order_cancel_and_reconfirmation() {
         assert!(!a.connection(0).unwrap().flags.handshake.canceling);
         assert_eq!(queued_type(&a), if remote { 7 } else { 6 });
     }
-    let a = prepared(3);
+    let a = prepared(NetState::InSetup);
     a.connection_mut(0).unwrap().flags.handshake.remote = true;
     assert_eq!(dispatch(&a, Packet::HandshakeCancel), 0);
     assert!(!a.connection(0).unwrap().flags.handshake.remote);
@@ -233,7 +241,7 @@ fn handshake_order_cancel_and_reconfirmation() {
 }
 #[test]
 fn reset_gate_and_wrong_state_do_not_change_handshake() {
-    let a = prepared(7);
+    let a = prepared(NetState::InBattle);
     assert_eq!(dispatch(&a, Packet::Handshake0), -1);
     assert!(!a.connection(0).unwrap().flags.handshake.remote);
     a.connection_mut(0).unwrap().flags.reset.local = true;
@@ -249,7 +257,7 @@ fn reset_gate_and_wrong_state_do_not_change_handshake() {
 }
 #[test]
 fn input_delay_decodes_and_rejects_over_limit() {
-    let a = prepared(4);
+    let a = prepared(NetState::PreBattle);
     for delay in [0, 35] {
         assert_eq!(dispatch(&a, Packet::InputDelay(delay)), 0);
         assert_eq!(a.connection(0).unwrap().flags.input_delay, delay as usize);
@@ -262,7 +270,7 @@ fn stream_packets_decode_without_native_alignment() {
     for offset in 0..4 {
         let mut storage = [0u8; 16];
         let bytes = &mut storage[offset..offset + 8];
-        let a = prepared(4);
+        let a = prepared(NetState::PreBattle);
         bytes.copy_from_slice(&[0, 8, 0, 11, 0, 0, 0, 17]);
         assert_eq!(dispatch(&a, Packet::decode(bytes).unwrap().0), 0);
         assert_eq!(a.connection(0).unwrap().flags.input_delay, 17);
@@ -276,7 +284,7 @@ fn stream_packets_decode_without_native_alignment() {
 }
 #[test]
 fn notifications_visit_connected_peers_and_use_relative_sides() {
-    let a = prepared(3);
+    let a = prepared(NetState::InSetup);
     a.notify_ship(0, 4, 1);
     assert_eq!(
         a.connection(0).unwrap().queue.front(),
@@ -289,7 +297,7 @@ fn notifications_visit_connected_peers_and_use_relative_sides() {
     a.notify_ship(1, 3, 2);
     assert_eq!(a.connection(0).unwrap().queue.len(), 1);
     a.connection_mut(0).unwrap().flags.connected = true;
-    a.connection_mut(0).unwrap().state = 4;
+    a.connection_mut(0).unwrap().state = NetState::PreBattle;
     a.notify_seed(0, 123);
     assert!(a.connection(0).unwrap().flags.random_seed);
     assert_eq!(a.connection(0).unwrap().queue.len(), 2);
@@ -334,7 +342,7 @@ impl Net for ScriptNet {
         self.0.borrow_mut().closes += 1;
     }
 }
-fn scripted(state: u32, reads: Vec<Vec<u8>>) -> (NetplaySession, Rc<RefCell<Script>>) {
+fn scripted(state: NetState, reads: Vec<Vec<u8>>) -> (NetplaySession, Rc<RefCell<Script>>) {
     let script = Rc::new(RefCell::new(Script {
         reads: reads.into(),
         ..Script::default()
@@ -353,7 +361,7 @@ fn init_callbacks() {}
 #[serial_test::serial]
 fn battle_input_treats_a_removed_peer_as_a_disconnect() {
     init_callbacks();
-    let (session, script) = scripted(7, vec![]);
+    let (session, script) = scripted(NetState::InBattle, vec![]);
     session.init_battle_input_buffers();
     session.close_player_with(0, &mut |_| {});
     let world = uqm_rust::engine::World::new();
@@ -377,7 +385,7 @@ fn feedback_can_close_the_connection_before_the_next_packet_or_protocol_error() 
             ships.push((1, 254));
         }
         let (session, script) = scripted(
-            3,
+            NetState::InSetup,
             vec![[
                 Packet::Fleet { side: 0, ships }.encode(),
                 Packet::TeamName {
@@ -408,23 +416,24 @@ fn incomplete_first_packet_returns_before_another_read_and_ready_precedes_next_p
     init_callbacks();
     let ready = Packet::Ready.encode();
     let (session, script) = scripted(
-        6,
+        NetState::SelectShip,
         vec![
             ready[..3].to_vec(),
             [ready[3..].to_vec(), Packet::BattleInput(17).encode()].concat(),
         ],
     );
     session.init_battle_input_buffers();
-    session
-        .connection_mut(0)
-        .unwrap()
-        .local_ready(ReadyAction::Transition(7), false, 0);
+    session.connection_mut(0).unwrap().local_ready(
+        ReadyAction::Transition(NetState::InBattle),
+        false,
+        0,
+    );
     session.net_input_with(0, &mut |_| {});
     assert_eq!(script.borrow().recv_calls, 1);
     assert_eq!(session.connection(0).unwrap().read_buffer.len(), 3);
-    assert_eq!(session.connection(0).unwrap().state, 6);
+    assert_eq!(session.connection(0).unwrap().state, NetState::SelectShip);
     session.net_input_with(0, &mut |_| {});
-    assert_eq!(session.connection(0).unwrap().state, 7);
+    assert_eq!(session.connection(0).unwrap().state, NetState::InBattle);
     assert_eq!(session.connection(0).unwrap().packets_received, 2);
     assert_eq!(session.pop_input(0), Some(17));
     assert!(session.connection(0).unwrap().read_buffer.is_empty());
@@ -434,7 +443,7 @@ fn incomplete_first_packet_returns_before_another_read_and_ready_precedes_next_p
 fn setup_effects_are_synchronous_between_packets_and_borrows_end_before_feedback() {
     init_callbacks();
     let (session, _) = scripted(
-        3,
+        NetState::InSetup,
         vec![[
             Packet::Fleet {
                 side: 0,
@@ -484,7 +493,7 @@ fn setup_effects_are_synchronous_between_packets_and_borrows_end_before_feedback
 }
 #[test]
 fn valid_fleet_prefix_is_applied_even_when_a_later_slot_is_invalid() {
-    let session = prepared(3);
+    let session = prepared(NetState::InSetup);
     let mut observed = Vec::new();
     assert_eq!(
         session.dispatch(
@@ -508,7 +517,7 @@ fn valid_fleet_prefix_is_applied_even_when_a_later_slot_is_invalid() {
 }
 #[test]
 fn owned_selection_rejects_missing_dead_duplicate_and_out_of_range_choices() {
-    let session = prepared(6);
+    let session = prepared(NetState::SelectShip);
     let mut available = [[false; 14]; 2];
     available[0][3] = true;
     session.begin_selection(1, available);
@@ -528,31 +537,31 @@ fn owned_selection_rejects_missing_dead_duplicate_and_out_of_range_choices() {
 #[serial_test::serial]
 fn connection_lifecycle_retains_old_state_during_close_and_releases_socket_once() {
     init_callbacks();
-    let (session, script) = scripted(7, vec![Vec::new()]);
+    let (session, script) = scripted(NetState::InBattle, vec![Vec::new()]);
     let mut events = Vec::new();
     session.net_input_with(0, &mut |event| {
         if event.effect == Effect::Closed {
             let conn = session.connection(0).unwrap();
-            assert_eq!(conn.state, 7);
+            assert_eq!(conn.state, NetState::InBattle);
             assert!(!conn.flags.connected && conn.flags.disconnected);
         }
         events.push(event.effect);
     });
     assert_eq!(events, vec![Effect::Closed]);
     assert_eq!(script.borrow().closes, 1);
-    assert_eq!(session.connection(0).unwrap().state, 0);
+    assert_eq!(session.connection(0).unwrap().state, NetState::Unconnected);
     session.close_player_with(0, &mut |_| panic!("duplicate close"));
     assert!(session.connection(0).is_none());
     drop(session);
     assert_eq!(script.borrow().closes, 1);
-    let (session, script) = scripted(1, vec![]);
+    let (session, script) = scripted(NetState::Connecting, vec![]);
     session.close_player_with(0, &mut |event| {
         assert_eq!(event.effect, Effect::Closed);
-        assert_eq!(session.connection(0).unwrap().state, 1);
+        assert_eq!(session.connection(0).unwrap().state, NetState::Connecting);
     });
     assert!(session.connection(0).is_none());
     assert_eq!(script.borrow().closes, 1);
-    let (session, script) = scripted(7, vec![]);
+    let (session, script) = scripted(NetState::InBattle, vec![]);
     drop(session);
     assert_eq!(script.borrow().closes, 1);
 }
@@ -573,12 +582,12 @@ fn production_tcp_connections_confirm_and_disconnect() {
     assert!(session.open_player_network_connection(1, &mut |_| panic!("client error")));
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let mut events = Vec::new();
-    while (0..2).any(|side| session.connection(side).unwrap().state != 3) {
+    while (0..2).any(|side| session.connection(side).unwrap().state != NetState::InSetup) {
         assert!(std::time::Instant::now() < deadline);
         session.net_input_with(20, &mut |event| {
             if event.effect == Effect::ResetSentTeams {
                 let conn = session.connection(event.player).unwrap();
-                assert_eq!(conn.state, 2);
+                assert_eq!(conn.state, NetState::Init);
                 assert!(conn.queue.is_empty());
                 assert!(conn.ready_action.is_none());
             }
@@ -602,7 +611,7 @@ fn production_tcp_connections_confirm_and_disconnect() {
         );
     }
     session.confirm_connections();
-    while (0..2).any(|side| session.connection(side).unwrap().state != 4) {
+    while (0..2).any(|side| session.connection(side).unwrap().state != NetState::PreBattle) {
         assert!(std::time::Instant::now() < deadline);
         session.net_input_with(20, &mut |_| {});
     }
@@ -636,20 +645,20 @@ fn immediate_open_failure_does_not_retain_a_connection() {
 #[test]
 fn ready_and_reset_registration_is_cleared_before_a_following_exchange() {
     let mut conn = NetConnection::new(0, PeerOptions::default());
-    conn.state = 4;
+    conn.state = NetState::PreBattle;
     conn.flags.connected = true;
     for remote_first in [false, true] {
         if remote_first {
             conn.remote_ready(0);
         }
-        conn.local_ready(ReadyAction::Transition(4), false, 0);
+        conn.local_ready(ReadyAction::Transition(NetState::PreBattle), false, 0);
         if !remote_first {
             conn.remote_ready(0);
         }
         assert!(conn.ready_action.is_none());
         assert!(!conn.flags.ready.local && !conn.flags.ready.remote);
-        conn.reset_next = Some(4);
-        conn.local_reset(2);
+        conn.reset_next = Some(NetState::PreBattle);
+        conn.local_reset(ResetReason::ManualReset as u32);
         conn.remote_reset(2);
         assert!(conn.reset_next.is_none());
         assert!(!conn.flags.reset.local && !conn.flags.reset.remote);
@@ -662,7 +671,7 @@ fn ready_and_reset_registration_is_cleared_before_a_following_exchange() {
 #[serial_test::serial]
 fn battle_end_flushes_frame_count_before_the_second_ready_and_uses_the_borrowed_wait() {
     init_callbacks();
-    let (session, script) = scripted(7, vec![]);
+    let (session, script) = scripted(NetState::InBattle, vec![]);
     session.set_frame(10);
     assert!(!session.end_ready(0, &mut Driver::default()));
     assert!(
@@ -680,14 +689,17 @@ fn battle_end_flushes_frame_count_before_the_second_ready_and_uses_the_borrowed_
     );
     {
         let conn = session.connection(0).unwrap();
-        assert_eq!(conn.state, 8);
+        assert_eq!(conn.state, NetState::EndingBattle);
         assert_eq!(conn.end_frame_count, 11);
         assert_eq!(conn.ready_action, Some(ReadyAction::EndBattle2));
         assert!(conn.flags.ready.local);
     }
     assert!(!session.end_ready(0, &mut Driver::default()));
     assert_eq!(dispatch(&session, Packet::FrameCount(11)), 0);
-    assert_eq!(session.connection(0).unwrap().state, 9);
+    assert_eq!(
+        session.connection(0).unwrap().state,
+        NetState::EndingBattle2
+    );
     session.set_frame(11);
     script.borrow_mut().reads.push_back(Packet::Ready.encode());
     let mut driver = Driver {
@@ -696,14 +708,14 @@ fn battle_end_flushes_frame_count_before_the_second_ready_and_uses_the_borrowed_
     };
     assert!(session.end_ready(0, &mut driver));
     assert_eq!(driver.admissions, 1);
-    assert_eq!(session.connection(0).unwrap().state, 5);
+    assert_eq!(session.connection(0).unwrap().state, NetState::InterBattle);
     assert!(session.connection(0).unwrap().ready_action.is_none());
 }
 
 #[test]
 fn remote_reset_feedback_precedes_the_registered_transition() {
-    let session = prepared(NetState_NetState_inBattle);
-    session.connection_mut(0).unwrap().reset_next = Some(NetState_NetState_inSetup);
+    let session = prepared(NetState::InBattle);
+    session.connection_mut(0).unwrap().reset_next = Some(NetState::InSetup);
     let mut observed = false;
     assert_eq!(
         session.dispatch(0, &Packet::Reset(1), &mut |event| {
@@ -715,16 +727,16 @@ fn remote_reset_feedback_precedes_the_registered_transition() {
                 }
             ));
             let conn = session.connection(0).unwrap();
-            assert_eq!(conn.state, NetState_NetState_inBattle);
+            assert_eq!(conn.state, NetState::InBattle);
             assert!(conn.flags.reset.local && conn.flags.reset.remote);
-            assert_eq!(conn.reset_next, Some(NetState_NetState_inSetup));
+            assert_eq!(conn.reset_next, Some(NetState::InSetup));
             observed = true;
         }),
         0
     );
     assert!(observed);
     let conn = session.connection(0).unwrap();
-    assert_eq!(conn.state, NetState_NetState_inSetup);
+    assert_eq!(conn.state, NetState::InSetup);
     assert!(!conn.flags.reset.local && !conn.flags.reset.remote);
     assert_eq!(conn.reset_generation, 1);
     assert_eq!(conn.reset_next, None);
@@ -732,7 +744,7 @@ fn remote_reset_feedback_precedes_the_registered_transition() {
 
 #[test]
 fn seed_agreement_is_marked_after_synchronous_seed_feedback() {
-    let session = prepared(4);
+    let session = prepared(NetState::PreBattle);
     assert_eq!(
         session.dispatch(0, &Packet::SeedRandom(1729), &mut |event| {
             assert_eq!(event.effect, Effect::Seed(1729));

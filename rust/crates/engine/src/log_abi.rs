@@ -30,7 +30,7 @@ pub extern "C" fn log_exit(code: c_int) -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn log_showBox(show: bool, err: bool) {
+pub extern "C" fn log_show_box(show: bool, err: bool) {
     SHOW_BOX.store(show, Ordering::Relaxed);
     ERROR_BOX.store(err, Ordering::Relaxed);
 }

@@ -1,6 +1,11 @@
 //! Phase contracts use real borrowed records; engine execution is integration-tested.
 use super::*;
-fn frame_views(views: Frames) -> [FRAME; 3] {
+use crate::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use crate::engine::battle::record::{RaceDescriptor, ShipRecord};
+use crate::engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
+use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
+use crate::graphics::drawable::FrameId;
+fn frame_views(views: Frames) -> [FrameId; 3] {
     std::array::from_fn(|index| views.view(index).raw())
 }
 
@@ -21,7 +26,7 @@ fn world(
     states: &mut [ShipRecord; 2],
     races: &mut [RaceDescriptor; 2],
 ) -> World {
-    let mut world = World::new((SUPER_MELEE | IN_BATTLE) as u16, [2; 2], 0);
+    let mut world = World::new(SUPER_MELEE | IN_BATTLE, [2; 2], 0);
     for (side, ((element, state), race)) in elements.iter_mut().zip(states).zip(races).enumerate() {
         let id = ElementId::fixture(side as u8, 0);
         let owner = crate::engine::battle::ShipId::fixture(side as u8, 0, 0);
@@ -30,7 +35,7 @@ fn world(
         element.flags = ElementFlags::PLAYER_SHIP.bits();
         element.life = 1;
         element.hits = 10;
-        state.playerNr = side as i16;
+        state.player_nr = side as i16;
         world.order.push(id);
         world.elements.insert(id, element.clone());
         world.ship_order.push(owner);
@@ -251,7 +256,7 @@ fn cyborg_effect_uses_both_live_spawned_elements_and_descriptor_crew() {
 #[test]
 fn mutual_loss_captain_effect_comes_from_the_live_shofixti_descriptor() {
     let (mut elements, mut states, mut races) = records();
-    states[0].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+    states[0].species_id = SPECIES_ID_SHOFIXTI_ID;
     races[1].ship_info.crew_level = 6;
     let mut world = world(&mut elements, &mut states, &mut races);
     let mut run = run(&world, FixtureName::MixedCollision);
@@ -304,7 +309,7 @@ fn special_records() -> ([Element; 2], [ShipRecord; 2], [RaceDescriptor; 2]) {
 fn neutral_junk(world: &mut World, mass: u8) -> ElementId {
     let id = ElementId::fixture(2, 0);
     let mut junk = Element::new();
-    junk.player = crate::ships::native::abi::NEUTRAL_PLAYER_NUM as i16;
+    junk.player = crate::engine::battle::flags::NEUTRAL_PLAYER_NUM as i16;
     junk.mass = mass;
     junk.life = 1;
     world.order.push(id);

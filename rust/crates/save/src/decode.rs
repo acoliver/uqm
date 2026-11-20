@@ -225,12 +225,8 @@ fn read_summary<R: Read>(src: &mut Source<R>) -> Result<Summary> {
     let fixed = src.bytes(SUMMARY_FIXED_BYTES as usize, at)?;
     let name_len = u64::from(size - SUMMARY_FIXED_BYTES);
     let kept = name_len.min(SaveName::MAX_BYTES as u64);
-    let mut name = src.bytes(kept as usize, at)?;
+    let name = src.bytes(kept as usize, at)?;
     src.skip(name_len - kept, at)?;
-    // The game keeps the name as a C string, which ends at the first NUL.
-    if let Some(nul) = name.iter().position(|&b| b == 0) {
-        name.truncate(nul);
-    }
 
     let mut body = Body::new(SUMMARY_TAG, size, &fixed);
     let sis = SisState {
@@ -269,7 +265,7 @@ fn read_summary<R: Read>(src: &mut Source<R>) -> Result<Summary> {
         num_devices: body.u8()?,
         ship_list: body.array()?,
         device_list: body.array()?,
-        save_name: SaveName::new(name).expect("name cut to 63 bytes before the first NUL"),
+        save_name: SaveName::from_c_bytes(&name),
     };
     body.finish()?;
     Ok(summary)

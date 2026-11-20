@@ -486,7 +486,7 @@ pub fn mixer_source_queue_buffers(
     let mut src = source.lock();
 
     for &buf_handle in buffer_handles {
-        let buffer = mixer_get_buffer(buf_handle).unwrap();
+        let buffer = mixer_get_buffer(buf_handle).ok_or(MixerError::InvalidName)?;
         let mut buf = buffer.lock();
 
         // Mark buffer as queued
@@ -495,7 +495,7 @@ pub fn mixer_source_queue_buffers(
         // Add to source's queue
         if let Some(last) = src.last_queued {
             // Link previous last buffer to this one
-            let last_buf = mixer_get_buffer(last).unwrap();
+            let last_buf = mixer_get_buffer(last).ok_or(MixerError::InvalidName)?;
             let mut last_buf = last_buf.lock();
             last_buf.next = Some(buf_handle);
         }
@@ -526,14 +526,12 @@ pub fn mixer_source_unqueue_buffers(handle: usize, n: u32) -> Result<Vec<usize>,
     let mut unqueued = Vec::with_capacity(n as usize);
 
     for _ in 0..n {
-        if src.first_queued.is_none() {
+        let Some(buf_handle) = src.first_queued else {
             break;
-        }
-
-        let buf_handle = src.first_queued.unwrap();
+        };
 
         // Check if buffer is still playing
-        let buffer = mixer_get_buffer(buf_handle).unwrap();
+        let buffer = mixer_get_buffer(buf_handle).ok_or(MixerError::InvalidName)?;
         let buf = buffer.lock();
 
         if buf.state == (BufferState::Playing as u32) {
@@ -561,7 +559,7 @@ pub fn mixer_source_unqueue_buffers(handle: usize, n: u32) -> Result<Vec<usize>,
         src.queued_count -= 1;
 
         // Mark buffer as filled
-        let buffer = mixer_get_buffer(buf_handle).unwrap();
+        let buffer = mixer_get_buffer(buf_handle).ok_or(MixerError::InvalidName)?;
         let mut buf = buffer.lock();
 
         if buf.state == (BufferState::Processed as u32) {

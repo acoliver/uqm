@@ -1,12 +1,19 @@
 //! Race effects implemented by modes over the supplied owners.
 use crate::battle::battle_native::engine::rgb15;
 use crate::battle::tactrans_native::engine::*;
+use crate::engine::battle::ai_constants::{MAX_SHIP_MASS, PLAY_VICTORY_DITTY};
+use crate::engine::battle::flags::{
+    APPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, PRE_PROCESS,
+};
 use crate::engine::battle::race_services::{RaceServices, StarContact};
 use crate::engine::battle::views::BattleSoundBank;
+use crate::engine::battle::ElementHook;
 use crate::engine::battle::{Cx, ElementId, ShipId};
+use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
+use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
 use crate::navigation::hyper_transition::{element_universe, init_transition};
 use crate::planets::starmap::find_star_id;
-use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
+use crate::ships::native::{cosine, facing_to_angle, sine};
 
 impl RaceServices for super::services::ModeServices {
     fn play_battle_sound(
@@ -96,7 +103,7 @@ impl RaceServices for super::services::ModeServices {
         cx.element_mut(e).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
         cx.element_mut(e).set_thrust_wait(1);
         cx.element_mut(e).set_life_span(1);
-        cx.primitive_style_mut(e).kind = gfx_object_POINT_PRIM as u8;
+        cx.primitive_style_mut(e).kind = POINT_PRIMITIVE;
         cx.primitive_style_mut(e).color = rgb15(31, 21, 0);
         cx.element_mut(e).color_cycle = 0;
         cx.set_star_image(e);

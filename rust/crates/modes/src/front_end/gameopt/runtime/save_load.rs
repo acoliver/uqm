@@ -4,7 +4,7 @@ use crate::front_end::gameopt::{picker::PickerState, render::PickerDisplay};
 use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use crate::sound::heart_ffi::{fade_music, stop_sound};
 use crate::ui::settings::{pause_music, resume_music};
-use uqm_engine::time::counter_abi::GetTimeCounter;
+use uqm_engine::time::counter_abi::get_time_counter;
 
 struct RestoreInput<'a> {
     input: &'a InputSession,
@@ -56,7 +56,7 @@ fn picker_frame(
     state: &mut PickerState,
 ) -> bool {
     let activity = cx.world.activity();
-    let time_in = GetTimeCounter();
+    let time_in = get_time_counter();
     let action = state.action(
         activity & CHECK_ABORT != 0,
         key(input, KEY_MENU_CANCEL),

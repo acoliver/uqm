@@ -3453,10 +3453,10 @@ fn validate_linked_cargo_messages(
         })
         .filter_map(|message| message["package_id"].as_str().map(str::to_string))
         .collect();
-    if package_ids.len() != 1 {
+    let mut package_ids = package_ids.into_iter();
+    let (Some(package_id), None) = (package_ids.next(), package_ids.next()) else {
         return Err(NativeWindowProofError::Receipt);
-    }
-    let package_id = package_ids.into_iter().next().expect("length checked");
+    };
     let build_package = package_id.replace("#uqm@", "/crates/engine#uqm-engine@");
     let mut executables = BTreeSet::new();
     let mut rust_archives = BTreeSet::new();

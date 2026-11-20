@@ -12,37 +12,37 @@ fn run(
     f(&mut dialogue::Dialogue { api: &mut api });
 }
 
-fn combat(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn combat(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Combat, response as i32)
     });
 }
-fn normal(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn normal(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Normal, response as i32)
     });
 }
-fn hypno(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn hypno(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Hypno, response as i32)
     });
 }
-fn mention_compulsion(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn mention_compulsion(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::MentionCompulsion, response as i32)
     });
 }
-fn describe_pet(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn describe_pet(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::DescribePet, response as i32)
     });
 }
-fn describe_compulsion(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn describe_compulsion(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::DescribeCompulsion, response as i32)
     });
 }
-fn loser(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn loser(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Loser, response as i32)
     });

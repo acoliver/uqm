@@ -5,15 +5,25 @@
 use std::{ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
 use uqm_rust::battle::AiOps;
-use uqm_rust::{
-    engine::battle::{ElementId, RaceState, ShipId},
-    ships::native::abi::*,
-};
+use uqm_rust::engine::battle::flags::NORMAL_LIFE;
+use uqm_rust::engine::battle::flags::PLAYER_SHIP;
+use uqm_rust::engine::battle::record::ElementRecord;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::record::RaceDescriptor;
+use uqm_rust::engine::battle::record::ShipRecord;
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
+use uqm_rust::engine::battle::{ElementId, RaceState, ShipId};
+use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
+use uqm_rust::graphics::drawable::FrameId;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::VelocityDesc;
 
 unsafe fn invoke_intelligence(
     ship: ShipId,
     subject: &mut uqm_rust::engine::battle::Subject,
-    raw: &mut [EVALUATE_DESC],
+    raw: &mut [EvaluateRecord],
     count: u16,
 ) {
     {
@@ -23,21 +33,21 @@ unsafe fn invoke_intelligence(
                 .map(|item| uqm_rust::engine::battle::Concern {
                     object: cx
                         .elements()
-                        .id(std::ptr::NonNull::new(item.ObjectPtr.cast())),
+                        .id(std::ptr::NonNull::new(item.object_ptr.cast())),
                     facing: item.facing,
                     which_turn: item.which_turn,
-                    movement: item.MoveState,
+                    movement: item.move_state,
                 })
                 .collect::<Vec<_>>();
             cx.invoke_intelligence(ship, subject, &mut concerns, count);
             for (raw, item) in raw.iter_mut().zip(concerns) {
-                *raw = EVALUATE_DESC {
-                    ObjectPtr: item
+                *raw = EvaluateRecord {
+                    object_ptr: item
                         .object
                         .map_or(ptr::null_mut(), |id| cx.legacy_element(id)),
                     facing: item.facing,
                     which_turn: item.which_turn,
-                    MoveState: item.movement,
+                    move_state: item.movement,
                 };
             }
         });
@@ -132,7 +142,7 @@ pub struct Battle {
     graphics: u8,
 }
 impl Battle {
-    pub fn new(capacity: COUNT) -> Self {
+    pub fn new(capacity: u16) -> Self {
         {
             let graphics = uqm_rust::engine::test_support::native_probe::graphics_status();
             uqm_rust::engine::test_support::native_probe::set_graphics_status(graphics & !4);
@@ -190,7 +200,7 @@ pub struct Ship<'a> {
     queued: bool,
 }
 impl<'a> Ship<'a> {
-    pub fn bare(battle: &'a Battle, species: u32, player: SIZE) -> Self {
+    pub fn bare(battle: &'a Battle, species: u32, player: i16) -> Self {
         // SAFETY: construction runs inside the serialized, published test battle.
         unsafe {
             let desc = Box::new(descriptor(species));
@@ -202,22 +212,22 @@ impl<'a> Ship<'a> {
                 (ships.raw(link).cast::<ShipRecord>(), ships.ship_id(link))
             });
             (*raw_ship).descriptor = Some(desc);
-            (*raw_ship).playerNr = player;
-            (*raw_ship).SpeciesID = species;
+            (*raw_ship).player_nr = player;
+            (*raw_ship).species_id = species;
             let handle = crate::battle_context::with(|cx| {
                 cx.alloc_element()
                     .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
             });
             assert!(!handle.is_null());
             let el = element(handle);
-            (*el).playerNr = player;
+            (*el).player_nr = player;
             (*el).state_flags = PLAYER_SHIP as u16;
             let id = crate::battle_context::with(|cx| {
                 cx.elements()
                     .id(std::ptr::NonNull::new(handle))
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
-            (*raw_ship).hShip = Some(id);
+            (*raw_ship).ship_element = Some(id);
             (*el).parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
             Self {
                 battle,
@@ -234,7 +244,7 @@ impl<'a> Ship<'a> {
     pub fn native(
         battle: &'a Battle,
         race: &'static uqm_rust::engine::battle::Race,
-        player: SIZE,
+        player: i16,
     ) -> Self {
         let mut ship = Self::bare(battle, SPECIES_ID_VUX_ID, player);
         // SAFETY: construction runs in this fixture's serialized, published battle.
@@ -244,7 +254,7 @@ impl<'a> Ship<'a> {
         }
         ship
     }
-    pub unsafe fn new(battle: &'a Battle, species: u32, player: SIZE) -> Self {
+    pub unsafe fn new(battle: &'a Battle, species: u32, player: i16) -> Self {
         // SAFETY: the caller retains the serialized battle and its frame resources.
         unsafe { Self::with_frames(battle, species, player, [16; 3], [4, 4]) }
     }
@@ -253,7 +263,7 @@ impl<'a> Ship<'a> {
     pub unsafe fn with_frames(
         battle: &'a Battle,
         species: u32,
-        player: SIZE,
+        player: i16,
         counts: [u16; 3],
         bounds: [i16; 2],
     ) -> Self {
@@ -273,21 +283,21 @@ impl<'a> Ship<'a> {
             ship.element_mut().set_hit_points(crew);
             let mass = ship.descriptor_mut().characteristics.ship_mass;
             ship.element_mut().set_mass_points(mass);
-            ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
+            ship.element_mut().current.location = Point { x: 4000, y: 4000 };
             ship.element_mut().current.image.frames = ship.ship_frames();
             ship.element_mut().current.image.frame = frames[0].selection(0);
             ship.element_mut().next = ship.element_mut().current.clone();
-            ship.element_mut().IntersectControl.IntersectStamp.frame = frames[0].frame(0);
+            ship.element_mut().intersect_control.IntersectStamp.frame = frames[0].frame(0);
             // SAFETY: this slot owns its allocated display primitive.
 
-            (*prim(ship.ptr())).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            (*prim(ship.ptr())).kind = STAMP_PRIMITIVE;
 
             ship.frames = Some(frames);
             ship.queue();
             ship
         }
     }
-    pub fn raw_frame(&self, role: usize, index: usize) -> FRAME {
+    pub fn raw_frame(&self, role: usize, index: usize) -> FrameId {
         self.frames
             .as_ref()
             .unwrap_or_else(|| panic!("fixture frames"))[role]
@@ -305,7 +315,7 @@ impl<'a> Ship<'a> {
                 bounds[0], bounds[1],
             ));
     }
-    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<*mut std::ffi::c_void> {
+    pub fn weapon_handles(&mut self, expected: u16) -> Vec<*mut std::ffi::c_void> {
         {
             crate::battle_context::with(|cx| {
                 let origin = cx.weapon_origin(self.id);
@@ -322,7 +332,7 @@ impl<'a> Ship<'a> {
     pub unsafe fn think(
         &mut self,
         subject: *mut ElementRecord,
-        concerns: &mut [EVALUATE_DESC; 4],
+        concerns: &mut [EvaluateRecord; 4],
         count: u16,
     ) {
         // SAFETY: callers supply this fixture's live subject, without retaining a record borrow.
@@ -485,7 +495,7 @@ impl<'a> Ship<'a> {
             });
         }
     }
-    pub fn weapon(&mut self, expected: COUNT) -> Vec<Option<ElementId>> {
+    pub fn weapon(&mut self, expected: u16) -> Vec<Option<ElementId>> {
         {
             crate::battle_context::with(|cx| {
                 let origin = cx.weapon_origin(self.id);
@@ -513,7 +523,7 @@ impl<'a> Ship<'a> {
     pub unsafe fn intelligence(
         &mut self,
         subject: &mut ElementRecord,
-        concerns: &mut [EVALUATE_DESC],
+        concerns: &mut [EvaluateRecord],
         count: u16,
     ) {
         // SAFETY: subject is a live fixture slot and its concerns remain live during dispatch.
@@ -539,7 +549,7 @@ impl<'a> Ship<'a> {
     pub unsafe fn intelligence_subject(
         &mut self,
         subject: &mut uqm_rust::engine::battle::Subject,
-        concerns: &mut [EVALUATE_DESC],
+        concerns: &mut [EvaluateRecord],
         count: u16,
     ) {
         // SAFETY: the fixture retains the value's resources and concern operands during dispatch.
@@ -621,7 +631,7 @@ pub unsafe fn call_element(name: &str, id: ElementId) {
     }
 }
 
-pub fn call_collision(name: &str, a: ElementId, pa: &mut POINT, b: ElementId, pb: &mut POINT) {
+pub fn call_collision(name: &str, a: ElementId, pa: &mut Point, b: ElementId, pb: &mut Point) {
     let address = uqm_rust::battle::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
@@ -684,14 +694,14 @@ impl FrameSet {
             uqm_rust::engine::test_support::native_probe::make_opaque(self.0.frame(index));
         }
     }
-    pub fn frame(&self, index: usize) -> FRAME {
+    pub fn frame(&self, index: usize) -> FrameId {
         self.0.frame(index)
     }
 }
 pub unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
     unsafe {
-        crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
+        crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive((*e).prim_index)))
     }
 }
 pub unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
@@ -709,7 +719,7 @@ pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<*mut std::ffi::c_
     all
 }
 
-pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
+pub fn velocity(v: &VelocityDesc) -> [i32; 9] {
     [
         v.travel_angle.into(),
         v.vector.width.into(),
@@ -722,7 +732,7 @@ pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
         v.incr.height.into(),
     ]
 }
-pub fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
+pub fn toward(speed: i16, face: u16) -> [i32; 9] {
     let mut v = uqm_rust::battle::velocity::VelocityDesc::new();
     uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, face);
     velocity(&v)
@@ -730,14 +740,14 @@ pub fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
 pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
 
-    TFB_SeedRandom(seed);
+    seed_random(seed);
     for _ in 0..draws {
-        TFB_Random();
+        random();
     }
-    let expected = TFB_Random();
-    TFB_SeedRandom(seed);
+    let expected = random();
+    seed_random(seed);
     let result = run();
-    assert_eq!(TFB_Random(), expected, "RNG draws {draws}, seed {seed}");
+    assert_eq!(random(), expected, "RNG draws {draws}, seed {seed}");
     result
 }
 
@@ -881,7 +891,7 @@ impl NativeFrameSet {
     pub fn count(&self) -> usize {
         usize::from(self.0.first_frame().count())
     }
-    pub fn frame(&self, index: usize) -> FRAME {
+    pub fn frame(&self, index: usize) -> FrameId {
         assert!(index < self.count());
         self.0.first_frame().at(index as u16)
     }

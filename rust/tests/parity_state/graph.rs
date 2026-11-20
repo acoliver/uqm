@@ -1,5 +1,10 @@
 //! Real queue pools, element fields and the no-journal fighter path.
 use super::*;
+use uqm_rust::collections::observation;
+use uqm_rust::collections::observation::Event;
+use uqm_rust::engine::battle::record::RaceDescriptor;
+use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
 
 pub(super) unsafe fn clear_queues() {
     // SAFETY: the caller owns the idle global queues and detaches all test
@@ -33,15 +38,15 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
     let [first, second, neutral] = &mut pool;
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks.
     let mut owner = unsafe { battle::PoolShip::new(0) };
-    owner.SpeciesID = SPECIES_ID_EARTHLING_ID;
+    owner.species_id = SPECIES_ID_EARTHLING_ID;
     owner.ship_facing = 31;
-    first.playerNr = 0;
+    first.player_nr = 0;
     first.state_flags = ElementFlags::PLAYER_SHIP.bits();
     first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
     first.current.location.x = 17;
     first.hits = 11;
 
-    second.playerNr = 0;
+    second.player_nr = 0;
     second.state_flags = (ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT).bits();
     second.parent = first.parent;
     second.current.location.x = -91;
@@ -51,7 +56,7 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
         unregistered_hook,
     ));
 
-    neutral.playerNr = -1;
+    neutral.player_nr = -1;
     {
         crate::battle_context::with(|cx| {
             let source = cx
@@ -70,7 +75,7 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
         install_ship(&mut owner);
         crate::battle_context::with(|cx| {
             let world = &mut cx.world;
-            world.set_activity(IN_BATTLE as u16);
+            world.set_activity(IN_BATTLE);
             uqm_rust::engine::observe::CampaignView::from_world(world)
         })
     };
@@ -131,15 +136,15 @@ pub(super) fn element_mutations(
     first.mass = 3;
     first.turn = 4;
     first.thrust = 5;
-    first.colorCycleIndex = 6;
-    first.PrimIndex = 7;
+    first.color_cycle_index = 6;
+    first.prim_index = 7;
     first.next.location.x = -13;
     first.next.location.y = 29;
-    first.IntersectControl.last_time_val = 17;
-    first.IntersectControl.IntersectStamp.origin.x = -23;
-    first.IntersectControl.IntersectStamp.origin.y = 31;
-    first.IntersectControl.EndPoint.x = -37;
-    first.IntersectControl.EndPoint.y = 41;
+    first.intersect_control.last_time_val = 17;
+    first.intersect_control.IntersectStamp.origin.x = -23;
+    first.intersect_control.IntersectStamp.origin.y = 31;
+    first.intersect_control.EndPoint.x = -37;
+    first.intersect_control.EndPoint.y = 41;
     first.velocity.travel_angle = 43;
     first.velocity.vector.width = -47;
     first.velocity.vector.height = 53;
@@ -187,7 +192,7 @@ pub(super) fn frame_fields(
     observation::assign_set(&mut first.current.image.frames, set.clone(), None);
     observation::assign_frame(&mut first.next.image.frame, view.clone());
     observation::assign_set(&mut first.next.image.frames, set.clone(), None);
-    observation::assign_frame(&mut first.IntersectControl.IntersectStamp.frame, pointer);
+    observation::assign_frame(&mut first.intersect_control.IntersectStamp.frame, pointer);
     let (fields, _) = snapshot(observer, directory);
     for name in [
         "current.frame",
@@ -223,7 +228,7 @@ pub(super) fn frame_fields(
         None,
     );
     observation::assign_frame(
-        &mut first.IntersectControl.IntersectStamp.frame,
+        &mut first.intersect_control.IntersectStamp.frame,
         uqm_rust::graphics::drawable::FrameId::NULL,
     );
     // SAFETY: both fixture owners retain their slots throughout this read.
@@ -238,7 +243,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
     ship.ship_facing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP.bits();
-    element.playerNr = 0;
+    element.player_nr = 0;
     element.hits = 19;
     element.current.location.x = -9;
     element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
@@ -249,7 +254,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let campaign = unsafe {
         let campaign = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
-            world.set_activity(IN_BATTLE as u16);
+            world.set_activity(IN_BATTLE);
             uqm_rust::engine::observe::CampaignView::from_world(world)
         });
         install_ship(&mut ship);
@@ -271,7 +276,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     assert!(!directory.join("parity.fields").exists());
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
-        element.playerNr = side;
+        element.player_nr = side;
         element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
         let snapshot = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
         assert!(snapshot.player.is_none());
@@ -308,10 +313,10 @@ impl ElementRecord {
                     .elements()
                     .raw(id)
                     .cast::<uqm_rust::engine::battle::record::ElementRecord>();
-                let primitive = (*pointer).PrimIndex;
+                let primitive = (*pointer).prim_index;
                 pointer.write(uqm_rust::engine::battle::record::ElementRecord::default());
-                (*pointer).playerNr = -1;
-                (*pointer).PrimIndex = primitive;
+                (*pointer).player_nr = -1;
+                (*pointer).prim_index = primitive;
                 Self {
                     id,
                     pointer,
@@ -343,7 +348,7 @@ impl Drop for ElementRecord {
         unsafe {
             crate::battle_context::with(|cx| {
                 if cx.elements().contains(self.id) {
-                    (*self.pointer).PrimIndex = self.primitive;
+                    (*self.pointer).prim_index = self.primitive;
                     if cx.elements().linked(self.id) {
                         uqm_rust::battle::sounds::engine::unlink(cx, self.id);
                     }

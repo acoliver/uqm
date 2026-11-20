@@ -64,11 +64,10 @@ pub fn ship_cost(race_id: u8) -> Result<u16, StarbaseError> {
 /// order (`GetAvailableRaceFromIndex`).
 #[must_use]
 pub fn available_races(templates: &[RaceTemplate]) -> Vec<u8> {
-    templates
-        .iter()
-        .enumerate()
+    (0..=u8::MAX)
+        .zip(templates)
         .filter(|(_, template)| template.allied == AlliedState::GoodGuy)
-        .map(|(index, _)| u8::try_from(index).expect("the fleet queue has fewer than 256 races"))
+        .map(|(index, _)| index)
         .collect()
 }
 

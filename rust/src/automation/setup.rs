@@ -28,26 +28,6 @@ pub struct AutomationOptions {
     pub output_dir: Option<String>,
 }
 
-impl AutomationOptions {
-    /// Whether automation is active (both options supplied).
-    #[must_use]
-    pub fn is_active(&self) -> bool {
-        self.script_path.is_some() && self.output_dir.is_some()
-    }
-
-    /// Whether exactly one option is supplied (incomplete pair).
-    #[must_use]
-    pub fn is_incomplete(&self) -> bool {
-        self.script_path.is_some() != self.output_dir.is_some()
-    }
-
-    /// Whether automation is inactive (neither option supplied).
-    #[must_use]
-    pub fn is_inactive(&self) -> bool {
-        self.script_path.is_none() && self.output_dir.is_none()
-    }
-}
-
 // ===========================================================================
 //  Build capabilities (REQ-BUILD-001)
 // ===========================================================================
@@ -183,21 +163,21 @@ pub fn setup_automation(
     options: &AutomationOptions,
     caps: &BuildCapabilities,
 ) -> Result<Option<AutomationSetup>, AutomationError> {
-    // REQ-MODE-003: inactive → no setup.
-    if options.is_inactive() {
-        return Ok(None);
-    }
-
-    // REQ-MODE-002: incomplete pair → fail before game init.
-    if options.is_incomplete() {
-        return Err(AutomationError::InvalidValue {
-            path: "<cli>".into(),
-            field: "automation-options",
-            reason: "both --automation-script and --automation-output are required; \
-                     exactly one was supplied"
-                .into(),
-        });
-    }
+    let (script_path, output_dir) = match (&options.script_path, &options.output_dir) {
+        // REQ-MODE-003: inactive → no setup.
+        (None, None) => return Ok(None),
+        (Some(script_path), Some(output_dir)) => (script_path, output_dir),
+        // REQ-MODE-002: incomplete pair → fail before game init.
+        _ => {
+            return Err(AutomationError::InvalidValue {
+                path: "<cli>".into(),
+                field: "automation-options",
+                reason: "both --automation-script and --automation-output are required; \
+                         exactly one was supplied"
+                    .into(),
+            });
+        }
+    };
 
     // REQ-MODE-001: active → validate before run_uqm.
     // REQ-BUILD-001: check build capabilities.
@@ -210,7 +190,6 @@ pub fn setup_automation(
     }
 
     // Parse and validate the script.
-    let script_path = options.script_path.as_ref().unwrap();
     let script_bytes = std::fs::read(script_path).map_err(|e| AutomationError::InvalidValue {
         path: script_path.clone(),
         field: "script-path",
@@ -221,7 +200,6 @@ pub fn setup_automation(
     let script = validate_script(script, script_path)?;
 
     // Create output root exclusively.
-    let output_dir = options.output_dir.as_ref().unwrap();
     let output_root = PathBuf::from(output_dir);
     std::fs::create_dir_all(&output_root).map_err(|e| AutomationError::InvalidValue {
         path: output_dir.clone(),
@@ -309,9 +287,6 @@ mod tests {
     #[test]
     fn inactive_options_return_none() {
         let opts = AutomationOptions::default();
-        assert!(opts.is_inactive());
-        assert!(!opts.is_active());
-        assert!(!opts.is_incomplete());
         let result = setup_automation(&opts, &supported_caps()).unwrap();
         assert!(result.is_none());
     }
@@ -324,7 +299,6 @@ mod tests {
             script_path: Some("script.json".into()),
             output_dir: None,
         };
-        assert!(opts.is_incomplete());
         let err = setup_automation(&opts, &supported_caps()).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("both"));
@@ -336,7 +310,6 @@ mod tests {
             script_path: None,
             output_dir: Some("/tmp/out".into()),
         };
-        assert!(opts.is_incomplete());
         assert!(setup_automation(&opts, &supported_caps()).is_err());
     }
 

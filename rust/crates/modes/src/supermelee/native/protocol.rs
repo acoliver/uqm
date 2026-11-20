@@ -74,7 +74,7 @@ pub(crate) fn feedback(
     if let Some(index) = index {
         let message = cx
             .kernel
-            .game_text(crate::ships::native::abi::NETMELEE_STRING_BASE as usize + index)
+            .game_text(crate::starbase::ids::NETMELEE_STRING_BASE as usize + index)
             .to_owned();
         if notice.battle_active || matches!(notice.kind, Abort(_)) {
             crate::ui::confirm::do_popup_window(cx, io, &message);
@@ -86,8 +86,9 @@ pub(crate) fn feedback(
         crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
     }
     if matches!(notice.kind, Reset { .. }) {
-        cx.world
-            .set_activity(cx.world.activity() | crate::ships::native::abi::CHECK_ABORT as u16);
+        cx.world.set_activity(
+            cx.world.activity() | crate::engine::world::activity::activity_flags::CHECK_ABORT,
+        );
     }
 }
 

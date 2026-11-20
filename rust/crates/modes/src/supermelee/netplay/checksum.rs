@@ -1,16 +1,17 @@
-use super::abi::*;
 use super::checkbuf::*;
 use super::crc::*;
 use crate::battle::netplay::CrcState;
 use crate::engine::battle::views::{ElementState, Visual};
 use crate::graphics::{geometry::Extent, geometry::Point};
+use crate::math::velocity::VelocityDesc;
+use crate::supermelee::netplay::CHECKSUM_INTERVAL;
 
 pub fn crc_process_extent(state: &mut CrcState, value: &Extent) {
     crc_process_u16(state, value.width as u16);
     crc_process_u16(state, value.height as u16);
 }
 
-pub fn crc_process_velocity(state: &mut CrcState, value: &VELOCITY_DESC) {
+pub fn crc_process_velocity(state: &mut CrcState, value: &VelocityDesc) {
     crc_process_u16(state, value.travel_angle);
     crc_process_extent(state, &value.vector);
     crc_process_extent(state, &value.fract);
@@ -57,16 +58,12 @@ impl super::session::SessionCore {
     pub fn init_checksum_buffers(&self) {
         for side in 0..2 {
             if let Some(mut conn) = self.connection_mut(side) {
-                conn.checksums = ChecksumBuffer::new(
-                    self.get_battle_input_delay(),
-                    NETPLAY_CHECKSUM_INTERVAL as usize,
-                );
+                conn.checksums =
+                    ChecksumBuffer::new(self.get_battle_input_delay(), CHECKSUM_INTERVAL);
             }
         }
-        *self.checksums.borrow_mut() = ChecksumBuffer::new(
-            self.get_battle_input_delay(),
-            NETPLAY_CHECKSUM_INTERVAL as usize,
-        );
+        *self.checksums.borrow_mut() =
+            ChecksumBuffer::new(self.get_battle_input_delay(), CHECKSUM_INTERVAL);
     }
     pub fn uninit_checksum_buffers(&self) {
         for side in 0..2 {
@@ -98,6 +95,8 @@ impl super::session::SessionCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphics::geometry::Extent;
+    use crate::graphics::geometry::Point;
 
     #[test]
     #[serial_test::serial]

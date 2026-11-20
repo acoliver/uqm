@@ -12,17 +12,17 @@ fn run(
     f(&mut dialogue::Dialogue { api: &mut api });
 }
 
-fn combat(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn combat(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Combat, response as i32)
     });
 }
-fn menagerie(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn menagerie(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Menagerie, response as i32)
     });
 }
-fn normal(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn normal(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Normal, response as i32)
     });

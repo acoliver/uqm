@@ -107,7 +107,7 @@ fn capture(
             let (vx, vy) = element.velocity.get_current_components();
             ships[side] = Some(BattleShip {
                 identity: [u32::from(owner.slot()), owner.generation()],
-                species: cx.ship(owner).SpeciesID,
+                species: cx.ship(owner).species_id,
                 position: [element.current.location.x, element.current.location.y],
                 velocity: [vx, vy],
                 facing: state.facing,
@@ -210,8 +210,8 @@ mod tests {
             descriptor.ship_info.crew_level = 8 + side as u16;
             descriptor.ship_info.energy_level = 12 + side as u8;
             ship.descriptor = Some(Box::new(descriptor));
-            ship.SpeciesID = 13 + side as u32;
-            ship.hShip = Some(element);
+            ship.species_id = 13 + side as u32;
+            ship.ship_element = Some(element);
             ship.ship_facing = 3 + side as u16;
             ship.ship_input_state = 1 << side;
             ship.cur_status_flags = 17;

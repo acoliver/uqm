@@ -16,77 +16,32 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     comm.race_scratch.melnorm = Some(session);
 }
 
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExitConversation, r));
 }
-fn do_rescue(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoRescue,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_rescue(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoRescue, r));
 }
-fn do_buy(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoBuy,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_buy(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoBuy, r));
 }
-fn do_sell(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoSell,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_sell(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoSell, r));
 }
-fn nature_of_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NatureOfConversation,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn nature_of_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NatureOfConversation, r));
 }
-fn do_bluster(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoBluster,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_bluster(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoBluster, r));
 }
-fn do_first_meeting(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoFirstMeeting,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_first_meeting(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoFirstMeeting, r));
 }
-fn do_melnorme_miffed(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoMelnormeMiffed,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_melnorme_miffed(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoMelnormeMiffed, r));
 }
-fn do_melnorme_pissed(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DoMelnormePissed,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn do_melnorme_pissed(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DoMelnormePissed, r));
 }
 
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
@@ -169,7 +124,7 @@ mod api {
                 runtime.sleep(&mut self.cx.borrow_mut(), ticks);
             }
             fn now(&mut self) -> u32 {
-                crate::engine::time::counter_abi::GetTimeCounter()
+                crate::engine::time::counter_abi::get_time_counter()
             }
             fn skip_sale(&mut self) -> bool {
                 let runtime = self.cx.borrow().kernel.input_runtime();

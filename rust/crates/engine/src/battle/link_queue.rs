@@ -246,34 +246,34 @@ impl LinkQueue<'_, Starship> {
     }
     pub fn build(&mut self, species: u32) -> Option<LinkId<Starship>> {
         let id = self.alloc()?;
-        self.record_mut(id).SpeciesID = species;
+        self.record_mut(id).species_id = species;
         self.put(id);
         Some(id)
     }
     pub fn get(&self, id: LinkId<Starship>) -> PickShip {
         let s = self.record(id);
         PickShip {
-            species: s.SpeciesID,
+            species: s.species_id,
             captain: s.captains_name_index,
             crew: s.crew_level,
             max_crew: s.max_crew,
             cost: s.ship_cost,
             index: s.index,
             energy_counter: s.energy_counter,
-            player: s.playerNr,
+            player: s.player_nr,
             control: s.control,
         }
     }
     pub fn set(&mut self, id: LinkId<Starship>, value: PickShip) {
         let s = self.record_mut(id);
-        s.SpeciesID = value.species;
+        s.species_id = value.species;
         s.captains_name_index = value.captain;
         s.crew_level = value.crew;
         s.max_crew = value.max_crew;
         s.ship_cost = value.cost;
         s.index = value.index;
         s.energy_counter = value.energy_counter;
-        s.playerNr = value.player;
+        s.player_nr = value.player;
         s.control = value.control;
     }
     pub fn edit(&mut self, id: LinkId<Starship>, edit: impl FnOnce(&mut PickShip)) {
@@ -451,7 +451,7 @@ impl LinkQueue<'_, Starship> {
         &self,
         id: LinkId<Starship>,
     ) -> Option<super::super::super::battle::ElementId> {
-        self.record(id).hShip
+        self.record(id).ship_element
     }
 }
 

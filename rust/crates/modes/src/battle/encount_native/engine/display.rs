@@ -21,12 +21,12 @@ pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {
 mod tests {
     use crate::engine::battle::Battle;
     use crate::engine::battle::Cx;
+    use crate::engine::world::activity::activity_kinds::IN_INTERPLANETARY;
     use crate::engine::world::StarId;
+    use crate::engine::world::IN_HYPERSPACE;
     use crate::engine::world::{CStarDesc, CATALOG_LEN};
     use crate::engine::Game;
     use crate::graphics::geometry::Point;
-    use crate::ships::native::abi::IN_HYPERSPACE;
-    use crate::ships::native::abi::IN_INTERPLANETARY;
     use crate::ui;
     use uqm_engine::test_support::campaign_display;
 
@@ -83,7 +83,7 @@ mod tests {
         ui::sis::draw_hyper_coords(&game.kernel, 320, star);
         assert_ne!(title_pixels(&game), ship_pixels);
 
-        game.world.set_activity(IN_INTERPLANETARY as u16);
+        game.world.set_activity(IN_INTERPLANETARY);
         game.world.data.game.ip_planet = 0;
         game.world.set_catalog(std::borrow::Cow::Owned(catalog));
         game.world.current_star = Some(StarId(0));

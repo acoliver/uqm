@@ -1,10 +1,11 @@
 //! Bounded stream framing; effects run between packets without a connection borrow.
 use super::{
-    abi::*,
     netconnection::{Effect, Event, ReadyAction},
     packet::{DecodeError, Packet},
     session::SessionCore,
 };
+use crate::engine::battle::net::NetState;
+use crate::supermelee::netplay::READ_BUFFER_SIZE;
 use std::io;
 
 impl SessionCore {
@@ -75,7 +76,7 @@ impl SessionCore {
     fn connection_progress(&self) -> [(u32, usize); 2] {
         std::array::from_fn(|side| {
             self.connection(side)
-                .map_or((0, 0), |conn| (conn.state, conn.packets_received))
+                .map_or((0, 0), |conn| (conn.state as u32, conn.packets_received))
         })
     }
     fn error(&self, side: usize, error: i32, emit: &mut dyn FnMut(Event)) {
@@ -93,7 +94,7 @@ impl SessionCore {
         let socket = conn
             .socket
             .unwrap_or_else(|| panic!("connection without transport"));
-        let connecting = conn.state == NetState_NetState_connecting;
+        let connecting = conn.state == NetState::Connecting;
         drop(conn);
         if connecting {
             let result = self.transport.borrow_mut().poll(socket);
@@ -117,7 +118,7 @@ impl SessionCore {
                     .unwrap_or_else(|| panic!("connected connection"));
                 conn.flags.discriminant = conn.options.server;
                 conn.flags.connected = true;
-                conn.state = NetState_NetState_init;
+                conn.state = NetState::Init;
                 conn.event(Effect::ResetSentTeams)
             };
             emit(event);
@@ -126,15 +127,8 @@ impl SessionCore {
                     .connection_mut(side)
                     .unwrap_or_else(|| panic!("connected connection"));
                 conn.queue(Packet::Init {
-                    protocol: [
-                        NETPLAY_PROTOCOL_VERSION_MAJOR as u8,
-                        NETPLAY_PROTOCOL_VERSION_MINOR as u8,
-                    ],
-                    version: [
-                        UQM_MAJOR_VERSION as u8,
-                        UQM_MINOR_VERSION as u8,
-                        UQM_PATCH_VERSION as u8,
-                    ],
+                    protocol: super::PROTOCOL_VERSION,
+                    version: super::UQM_VERSION,
                 });
                 conn.local_ready(ReadyAction::EnterSetup, false, self.frame_count.get());
             }
@@ -155,7 +149,7 @@ impl SessionCore {
             .socket
             .unwrap_or_else(|| panic!("receive without transport"));
         loop {
-            let mut bytes = [0; NETPLAY_READBUFSIZE as usize];
+            let mut bytes = [0; READ_BUFFER_SIZE];
             let used = self
                 .connection(side)
                 .unwrap_or_else(|| panic!("receive buffer"))

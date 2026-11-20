@@ -120,8 +120,7 @@ pub fn generate_planets(
         generating_moons: false,
         types_defined: false,
     };
-    let drawn = orbits::fill_orbits(rng, request, planets)
-        .expect("FillOrbits draws the planet count when asked for ~0");
+    let drawn = orbits::fill_drawn_orbits(rng, request, planets);
     for planet in planets.iter_mut().take(usize::from(drawn)) {
         let byte_val = rng.next_random() as u8;
         let frame = &plan_data[usize::from(planet.data_index & !PLANET_SHIELDED)];

@@ -1,5 +1,5 @@
 //! Campaign initialization from retained resource metadata and prepared names.
-use super::super::battle::schema::GAME_STATE;
+use super::super::battle::schema::GameRecord;
 use super::{queues::FleetInfo, story::StoryState, SisState, World, WorldData, FUEL_TANK_SCALE};
 use crate::graphics::{drawable::FrameId, geometry::Point};
 use crate::strings::owned_table::EntryRef;
@@ -152,7 +152,7 @@ pub fn equipment(sis: &mut SisState) {
     sis.fuel_on_board = 10 * FUEL_TANK_SCALE;
 }
 
-pub fn prices(sis: &mut SisState, state: &mut GAME_STATE) {
+pub fn prices(sis: &mut SisState, state: &mut GameRecord) {
     sis.res_units = 0;
     state.crew_cost = 3;
     state.fuel_cost = 20;

@@ -223,11 +223,11 @@ impl UiObservation {
     }
 
     pub fn observe_ship_picker_cursor(&self, cursor: crate::pickship::Cursor) {
-        *self.ship_picker_cursor.lock().expect("picker cursor lock") = cursor;
+        *crate::engine::sync::lock(&self.ship_picker_cursor) = cursor;
     }
 
     pub fn ship_picker_cursor(&self) -> crate::pickship::Cursor {
-        *self.ship_picker_cursor.lock().expect("picker cursor lock")
+        *crate::engine::sync::lock(&self.ship_picker_cursor)
     }
 
     /// Record entry to or exit from the production battle ship picker.

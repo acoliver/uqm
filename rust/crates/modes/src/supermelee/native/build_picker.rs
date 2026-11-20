@@ -30,13 +30,21 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 
 pub(crate) mod live {
     use super::navigate;
-    use crate::engine::time::counter_abi::GetTimeCounter;
+
+    use crate::engine::input_port::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT,
+        KEY_MENU_SPECIAL, KEY_MENU_UP,
+    };
+    use crate::engine::time::counter_abi::get_time_counter;
+    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+    use crate::graphics::geometry::Extent;
+    use crate::graphics::geometry::Point;
+    use crate::graphics::geometry::Rect;
     use crate::graphics::{
         context::ContextLease, drawable::ContextFrame, drawable::DrawableLease,
         drawable::LoadedDrawable,
     };
     use crate::ships::master_native::ShipChoice;
-    use crate::ships::native::abi::*;
     use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
     use crate::supermelee::session::MeleeSession;
 
@@ -46,14 +54,14 @@ pub(crate) mod live {
     }
 
     impl BuildPicker {
-        pub fn rect(&self) -> RECT {
+        pub fn rect(&self) -> Rect {
             let bounds = self.drawable.lease().frame_rect(0);
-            RECT {
-                corner: POINT {
+            Rect {
+                corner: Point {
                     x: bounds.corner.x,
                     y: bounds.corner.y,
                 },
-                extent: EXTENT {
+                extent: Extent {
                     width: bounds.extent.width,
                     height: bounds.extent.height,
                 },
@@ -143,9 +151,9 @@ pub(crate) mod live {
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
     ) -> u32 {
-        let time = GetTimeCounter();
+        let time = get_time_counter();
         input.set_paused(false);
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT != 0 {
             state.build_pick_confirmed = 0;
             return 0;
         }

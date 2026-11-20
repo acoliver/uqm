@@ -10,8 +10,16 @@ use battle::*;
 mod special_hooks;
 use std::ffi::CStr;
 use uqm_rust::collections::observation;
+use uqm_rust::engine::battle::ai_constants::{
+    FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,
+};
+use uqm_rust::engine::battle::flags::{
+    APPEARING, CHANGING, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+};
+use uqm_rust::engine::battle::record::{CharacteristicRecord, ElementRecord, RaceDescriptor};
 use uqm_rust::engine::battle::RaceState;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
+use uqm_rust::graphics::geometry::Point;
 
 use battle::Battle as Battlefield;
 
@@ -59,7 +67,7 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
                 CStr::from_ptr(desc.ship_data.special_rsc[0]),
                 c"ship.mmrnmhrm.graphics.ywing.large"
             );
-            assert_eq!(desc.cyborg_control.WeaponRange, 200);
+            assert_eq!(desc.cyborg_control.weapon_range, 200);
             assert!(desc.callbacks()[1] != 0);
             assert!(desc.callbacks()[2] != 0);
             assert!(desc.callbacks()[3] != 0);
@@ -114,7 +122,7 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
-            (*ship).next.location = POINT { x: 1200, y: -900 };
+            (*ship).next.location = Point { x: 1200, y: -900 };
             (*ship).next.image.frames = fixture.frame_set(2);
             let slots = fixture.weapon(2);
             let handles = slots
@@ -191,7 +199,7 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                 20
             );
             assert_eq!(
-                first_fixture.descriptor_mut().cyborg_control.WeaponRange,
+                first_fixture.descriptor_mut().cyborg_control.weapon_range,
                 3999
             );
             assert_ne!(
@@ -228,7 +236,7 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
             assert_eq!(first_fixture.descriptor_mut().characteristics.turn_wait, 2);
             assert_eq!(alternate(first_fixture.descriptor_mut()).turn_wait, 17);
             assert_eq!(
-                first_fixture.descriptor_mut().cyborg_control.WeaponRange,
+                first_fixture.descriptor_mut().cyborg_control.weapon_range,
                 200
             );
             assert_eq!(
@@ -267,7 +275,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
             (*ship).next.image.frames = fixture.frame_set(0);
-            (*ship).next.location = POINT { x: 1000, y: 1000 };
+            (*ship).next.location = Point { x: 1000, y: 1000 };
             let slots = fixture.weapon(2);
             let handles = slots
                 .into_iter()
@@ -284,9 +292,9 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
             let mut target_fixture = Object::new(&_battle);
             let target = target_fixture.ptr();
             (*target).state_flags = PLAYER_SHIP as u16;
-            (*target).playerNr = (*first).playerNr;
+            (*target).player_nr = (*first).player_nr;
             (*target).hits = 20;
-            let mut point = POINT { x: 0, y: 0 };
+            let mut point = Point { x: 0, y: 0 };
             hooks::invoke_collision_pointer(
                 (*first).collision_func.unwrap(),
                 first,
@@ -305,7 +313,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
     })
 }
 
-fn alternate(desc: &RaceDescriptor) -> CHARACTERISTIC_STUFF {
+fn alternate(desc: &RaceDescriptor) -> CharacteristicRecord {
     let RaceState::Mmrnmhrm { alternate } = desc.race_state else {
         panic!("Mmrnmhrm alternate characteristics missing");
     };

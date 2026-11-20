@@ -12,7 +12,7 @@ use crate::graphics::{
 use crate::starbase::shipyard::SHIP_COST;
 use crate::ui::{
     rgb15,
-    shipyard_layout::{DMS_GetEscortShipRect, SHIP_WIN_WIDTH},
+    shipyard_layout::{escort_ship_rect, SHIP_WIN_WIDTH},
     sis::delta_sis_gauges,
 };
 
@@ -124,7 +124,7 @@ pub(super) fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -
     cx.world.built_ships().get_mut(id).crew_level += 1;
     cx.kernel.sis_highlight.pre_update_flash_rect();
     let slot = cx.world.built_ships().get(id).index;
-    let r = DMS_GetEscortShipRect(slot);
+    let r = escort_ship_rect(slot);
     show_ship_crew(cx.world, id, &r);
     cx.kernel.sis_highlight.post_update_flash_rect();
     1
@@ -153,7 +153,7 @@ pub(super) fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>
     }
     cx.kernel.sis_highlight.pre_update_flash_rect();
     let slot = cx.world.built_ships().get(id).index;
-    let r = DMS_GetEscortShipRect(slot);
+    let r = escort_ship_rect(slot);
     show_ship_crew(cx.world, id, &r);
     cx.kernel.sis_highlight.post_update_flash_rect();
     delta

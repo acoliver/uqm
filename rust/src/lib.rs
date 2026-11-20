@@ -11,7 +11,6 @@ pub use uqm_modes::supermelee;
 
 pub mod automation;
 pub use uqm_engine::bridge_log;
-pub mod c_bindings;
 pub mod cli;
 pub use uqm_engine::collections;
 pub use uqm_modes::comm;

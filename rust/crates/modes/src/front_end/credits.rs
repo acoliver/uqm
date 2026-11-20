@@ -25,7 +25,7 @@ pub(crate) mod runtime {
         cell::{Cell, RefCell},
         rc::Rc,
     };
-    use uqm_engine::{species::conv, time::counter_abi::GetTimeCounter};
+    use uqm_engine::{species::conv, time::counter_abi::get_time_counter};
 
     fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>, window: &Rc<Cell<CRect>>) {
         const CONVERSATIONS: [u32; 15] = [
@@ -123,7 +123,7 @@ pub(crate) mod runtime {
                 let keep = session.borrow_mut().controls.input(
                     CreditsKeys::read(input),
                     cx.world.activity() & CHECK_ABORT != 0,
-                    GetTimeCounter(),
+                    get_time_counter(),
                 );
                 if keep {
                     runtime.sleep(cx, ONE_SECOND / CREDITS_FRAME_RATE as u32);

@@ -8,8 +8,21 @@ pub mod engine {
         WeaponSpawn, World,
     };
 
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, LEFT,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, COLLISION, DISAPPEARING, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
+    };
     use crate::engine::battle::hooks::animation_preprocess;
-    use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::ONE_SHIFT;
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 42;
@@ -62,11 +75,11 @@ pub mod engine {
         d.resources.icons = Some(c"ship.melnorme.icons");
         d.resources.melee_icon = Some(c"ship.melnorme.meleeicons");
         d.fleet_strength = u16::MAX;
-        d.fleet_location = POINT {
+        d.fleet_location = Point {
             x: MAX_UNIVERSE >> 1,
             y: MAX_UNIVERSE >> 1,
         };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -125,7 +138,7 @@ pub mod engine {
 
     pub fn pump_up_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).flags & APPEARING as u16 != 0 {
-            cx.element_mut(e).velocity = crate::engine::battle::record::VELOCITY_DESC::default();
+            cx.element_mut(e).velocity = crate::engine::battle::record::VelocityDesc::default();
             return;
         }
         let ss = cx.owner(e);
@@ -155,8 +168,8 @@ pub mod engine {
         }
         // C computes damage from the old pulse, even on the growth tick.
         let damage = i32::from(PUMPUP_DAMAGE) << (cx.element(e).turn & !REVERSE_DIR);
-        cx.element_mut(p).hits = damage as COUNT;
-        cx.element_mut(p).mass = cx.element(p).hits as BYTE;
+        cx.element_mut(p).hits = damage as u16;
+        cx.element_mut(p).mass = cx.element(p).hits as u8;
         cx.set_parent(p, Some(ss));
         if cx.element(p).thrust & 1 != 0 {
             let mut idx = cx.frame_number(cx.element(p).current.image.frame.view());
@@ -182,7 +195,7 @@ pub mod engine {
             cx.element_mut(p).life = PUMPUP_LIFE;
             cx.element_mut(p).pre = Some(ElementHook::Native(pump_up_preprocess));
             cx.element_mut(p).post = None;
-            let a = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as COUNT;
+            let a = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as u16;
             cx.element_mut(p).velocity.set_components(
                 i32::from(cosine(
                     i32::from(a),
@@ -196,20 +209,20 @@ pub mod engine {
             cx.process_ship_sound(ss, 3, p);
         }
         cx.put(p);
-        cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+        cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
         cx.element_mut(e).flags |= NONSOLID as u16;
     }
 
     pub fn pump_up_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         let rect = cx.frame_rect(cx.element(a).next.image.frame.view());
         let wait = cx.element(a).thrust;
-        cx.element_mut(a).thrust = (i32::from(rect.extent.width) >> 1) as BYTE;
+        cx.element_mut(a).thrust = (i32::from(rect.extent.width) >> 1) as u8;
         let blast = cx.weapon_collision(a, pa, b, pb);
         cx.element_mut(a).thrust = wait;
         if let Some(p) = blast {
@@ -295,7 +308,7 @@ pub mod engine {
                     cx.copy_image_to_current(p, cx.element(e).next.image);
                     cx.copy_visual_to_next(p, cx.element(e).next);
                     cx.element_mut(p).pre = Some(ElementHook::Native(confuse_preprocess));
-                    cx.primitive_style_mut(p).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                    cx.primitive_style_mut(p).kind = STAMP_PRIMITIVE;
                     cx.set_parent(p, Some(cx.owner(e)));
                     cx.set_target(p, cx.target(e));
                     cx.put(p);
@@ -307,9 +320,9 @@ pub mod engine {
     pub fn confusion_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        _pa: &mut POINT,
+        _pa: &mut Point,
         b: ElementId,
-        _pb: &mut POINT,
+        _pb: &mut Point,
     ) {
         if cx.element(b).flags & PLAYER_SHIP as u16 == 0 {
             return;
@@ -344,7 +357,7 @@ pub mod engine {
                 cx.element_mut(p).player = cx.element(a).player;
                 cx.element_mut(p).flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
                 cx.element_mut(p).pre = Some(ElementHook::Native(confuse_preprocess));
-                cx.primitive_style_mut(p).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                cx.primitive_style_mut(p).kind = EMPTY_PRIMITIVE;
                 cx.set_parent(p, Some(ss));
                 let target_ss = cx.owner(b);
                 cx.set_target(p, Some(cx.ship_element(target_ss)));
@@ -444,7 +457,7 @@ pub mod engine {
             concerns.subject.turn = concerns.subject.turn.wrapping_add(1);
             concerns.subject.thrust = concerns.subject.thrust.wrapping_add(1);
             let count = concerns.count;
-            concerns.count = (ENEMY_SHIP_INDEX + 1) as COUNT;
+            concerns.count = (ENEMY_SHIP_INDEX + 1) as u16;
             cx.ship_intelligence(ss, concerns);
             concerns.count = count;
             concerns.subject.thrust = concerns.subject.thrust.wrapping_sub(1);

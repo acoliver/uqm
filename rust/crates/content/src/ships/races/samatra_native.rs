@@ -1,18 +1,33 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
 
 pub mod engine {
+    use crate::engine::battle::ai_constants::{
+        IGNORE_SIMILAR, IMMEDIATE_WEAPON, MAX_ENERGY_SIZE, MAX_SHIP_MASS,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, COLLISION, CREW_IMMUNE, DEFY_PHYSICS, DISAPPEARING, FINITE_LIFE,
+        NONSOLID, NORMAL_LIFE, NPC_PLAYER_NUM, PLAYER_SHIP, RPG_PLAYER_NUM, SHIP_AT_MAX_SPEED,
+        SHIP_BEYOND_MAX_SPEED, STAMPFILL_PRIMITIVE,
+    };
     use crate::engine::battle::race::SaMatraState;
     use crate::engine::battle::views::Missile;
+    use crate::engine::battle::STAMP_PRIMITIVE;
+    use crate::engine::battle::{CollisionHook, ElementHook};
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, RaceTemplate, ShipId, StoryKey,
     };
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, normalize_facing, sine, wrap_delta,
-    };
+    use crate::engine::world::activity::activity_flags::IN_BATTLE;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
+    use crate::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+    use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine, wrap_delta};
+    const COLLISION_THRUST_WAIT: u32 = 3;
+    const COLLISION_TURN_WAIT: u32 = 1;
 
     use crate::engine::battle::observation::samatra as observation;
-    const COMET_SPEED: SIZE = 12 << ONE_SHIFT;
-    const SENTINEL_SPEED: SIZE = 8 << ONE_SHIFT;
+    const COMET_SPEED: i16 = 12 << ONE_SHIFT;
+    const SENTINEL_SPEED: i16 = 8 << ONE_SHIFT;
     const RECOIL: i32 = (10 << ONE_SHIFT) << VELOCITY_SHIFT;
     const MAX_RECOIL: i32 = RECOIL * 4;
     const SHIP_MASS: u8 = (MAX_SHIP_MASS * 10) as u8;
@@ -89,7 +104,7 @@ pub mod engine {
                 let (dx, dy) = cx.element(e).velocity.get_current_components();
                 cx.element_mut(e)
                     .velocity
-                    .set_components(i32::from(dx as SIZE / 2), i32::from(dy as SIZE / 2));
+                    .set_components(i32::from(dx as i16 / 2), i32::from(dy as i16 / 2));
             }
             cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
         }
@@ -103,11 +118,11 @@ pub mod engine {
     pub fn comet_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
-        p: &mut POINT,
+        p: &mut Point,
         o: ElementId,
-        q: &mut POINT,
+        q: &mut Point,
     ) {
-        if cx.element(o).player == RPG_PLAYER_NUM as SIZE {
+        if cx.element(o).player == RPG_PLAYER_NUM as i16 {
             cx.element_mut(e).mass = if cx.element(o).flags & PLAYER_SHIP as u16 != 0 {
                 2
             } else {
@@ -164,14 +179,14 @@ pub mod engine {
             let mut facing;
             if cx.element(e).flags & PLAYER_SHIP as u16 != 0 {
                 cx.element_mut(c).turn = 0;
-                facing = cx.random() as COUNT;
+                facing = cx.random() as u16;
                 cx.element_mut(c)
                     .velocity
                     .set_vector(i32::from(COMET_SPEED), facing);
             } else {
                 cx.element_mut(c).velocity = cx.element(e).velocity;
                 cx.element_mut(c).hits = cx.element(e).hits;
-                facing = angle_to_facing(cx.element(c).velocity.travel_angle as i32) as COUNT;
+                facing = angle_to_facing(cx.element(c).velocity.travel_angle as i32) as u16;
             }
             if cx.element(c).turn != 0 {
                 cx.element_mut(c).turn -= 1;
@@ -206,22 +221,22 @@ pub mod engine {
     pub fn gate_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
-        p: &mut POINT,
+        p: &mut Point,
         o: ElementId,
-        q: &mut POINT,
+        q: &mut Point,
     ) {
-        if cx.element(o).player == RPG_PLAYER_NUM as SIZE {
+        if cx.element(o).player == RPG_PLAYER_NUM as i16 {
             let ss = cx.owner(e);
             if cx.race_stats(ss).characteristics.max_thrust == 0 {
                 if cx.element(o).flags & FINITE_LIFE as u16 == 0 {
                     cx.element_mut(e).flags |= COLLISION as u16;
                 }
                 if cx.element(o).flags & PLAYER_SHIP as u16 != 0
-                    && cx.primitive_style_mut(e).kind == gfx_object_STAMPFILL_PRIM as u8
+                    && cx.primitive_style_mut(e).kind == STAMPFILL_PRIMITIVE
                     && cx.story_state(StoryKey::BOMB_CARRIER) != 0
                 {
                     edit_state(cx, ss, |state| state.gate_entered = true);
-                    cx.set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+                    cx.set_activity(cx.world.activity() & !IN_BATTLE);
                 }
             } else {
                 cx.element_mut(e).mass = if cx.element(o).flags & PLAYER_SHIP as u16 != 0 {
@@ -232,7 +247,7 @@ pub mod engine {
                 cx.element_mut(e).hits = 100;
                 let blast = cx.weapon_collision(e, p, o, q);
                 cx.element_mut(e).flags &= !((DISAPPEARING | NONSOLID | COLLISION) as u16);
-                cx.element_mut(e).life = NORMAL_LIFE as COUNT;
+                cx.element_mut(e).life = NORMAL_LIFE as u16;
                 if let Some(blast) = blast {
                     cx.unlink_element(blast);
                     cx.dispose(blast);
@@ -245,7 +260,7 @@ pub mod engine {
         if cx.race_stats(ss).characteristics.max_thrust == 0 {
             cx.element_mut(e).mass = SHIP_MASS;
             cx.element_mut(e).flags &= !(FINITE_LIFE as u16);
-            cx.element_mut(e).life = (NORMAL_LIFE + 1) as COUNT;
+            cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
             cx.element_mut(e).pre = None;
             cx.primitive_style_mut(e).color = Color {
                 r: 0,
@@ -253,7 +268,7 @@ pub mod engine {
                 b: 0,
                 a: 255,
             };
-            cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive_style_mut(e).kind = STAMPFILL_PRIMITIVE;
         } else {
             cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
             cx.set_frame(
@@ -334,9 +349,9 @@ pub mod engine {
     pub fn generator_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
-        _p: &mut POINT,
+        _p: &mut Point,
         o: ElementId,
-        _q: &mut POINT,
+        _q: &mut Point,
     ) {
         if cx.element(o).flags & FINITE_LIFE as u16 == 0 {
             cx.element_mut(e).flags |= COLLISION as u16;
@@ -413,10 +428,10 @@ pub mod engine {
         } else {
             let mut facing;
             if cx.element(e).flags & NONSOLID as u16 == 0 {
-                facing = angle_to_facing(cx.element(e).velocity.travel_angle as i32) as COUNT;
+                facing = angle_to_facing(cx.element(e).velocity.travel_angle as i32) as u16;
             } else {
                 cx.element_mut(e).flags &= !(NONSOLID as u16);
-                facing = cx.random() as COUNT;
+                facing = cx.random() as u16;
                 cx.element_mut(e)
                     .velocity
                     .set_vector(i32::from(SENTINEL_SPEED), facing);
@@ -451,7 +466,7 @@ pub mod engine {
                     .max(1);
                 let mut v = cx.element(t).velocity;
                 let (vx, vy) = v.get_next_components(frames);
-                (dx, dy) = (vx as SIZE, vy as SIZE);
+                (dx, dy) = (vx as i16, vy as i16);
                 dx = wrap_delta(
                     cx.element(t)
                         .current
@@ -472,9 +487,9 @@ pub mod engine {
                 );
                 dx = normalize_facing(
                     angle_to_facing(crate::math::arctan(dx, dy) as i32) - i32::from(facing),
-                ) as SIZE;
+                ) as i16;
                 if dx > 0 {
-                    if dx <= angle_to_facing(HALF_CIRCLE as i32) as SIZE {
+                    if dx <= angle_to_facing(HALF_CIRCLE as i32) as i16 {
                         facing = facing.wrapping_add(1);
                     } else {
                         facing = facing.wrapping_sub(1);
@@ -493,7 +508,7 @@ pub mod engine {
             i32::from(sine(i32::from(angle), RECOIL)),
         );
         let (dx, dy) = cx.element(o).velocity.get_current_components();
-        let (dx, dy) = (dx as SIZE, dy as SIZE);
+        let (dx, dy) = (dx as i16, dy as i16);
         if i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)
             > i64::from(MAX_RECOIL) * i64::from(MAX_RECOIL)
         {
@@ -507,11 +522,11 @@ pub mod engine {
     pub fn sentinel_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
-        p: &mut POINT,
+        p: &mut Point,
         o: ElementId,
-        q: &mut POINT,
+        q: &mut Point,
     ) {
-        if cx.element(o).player == NPC_PLAYER_NUM as SIZE {
+        if cx.element(o).player == NPC_PLAYER_NUM as i16 {
             if cx.element(e).pre.map(|f| f.address()) == cx.element(o).pre.map(|f| f.address())
                 && cx.element(e).flags & DEFY_PHYSICS as u16 == 0
                 && (p.x != cx.weapon_origin(e).intersection().IntersectStamp.origin.x
@@ -556,7 +571,7 @@ pub mod engine {
                     cx.element_mut(o).thrust += COLLISION_THRUST_WAIT as u8;
                 }
                 apply_recoil(cx, o, cx.element(e).velocity.travel_angle);
-                cx.element_mut(e).velocity = VELOCITY_DESC::new();
+                cx.element_mut(e).velocity = VelocityDesc::new();
             }
             if cx.element(e).flags & DISAPPEARING as u16 != 0 {
                 let ss = cx.owner(e);
@@ -632,12 +647,12 @@ pub mod engine {
                 edit_state(cx, ss, |state| state.generators[slot] = Some(g));
                 cx.element_mut(g).hits = 15;
                 cx.element_mut(g).mass = SHIP_MASS;
-                cx.element_mut(g).life = NORMAL_LIFE as COUNT;
+                cx.element_mut(g).life = NORMAL_LIFE as u16;
                 cx.element_mut(g).player = cx.element(e).player;
                 cx.element_mut(g).flags = (APPEARING | IGNORE_SIMILAR) as u16;
-                cx.primitive_style_mut(g).kind = gfx_object_STAMP_PRIM as u8;
+                cx.primitive_style_mut(g).kind = STAMP_PRIMITIVE;
                 let (x, y) = offsets[cx.race_stats(ss).characteristics.max_thrust as usize];
-                cx.element_mut(g).current.location = POINT {
+                cx.element_mut(g).current.location = Point {
                     x: ((center_x + (x << ONE_SHIFT)) & !15) as i16,
                     y: ((center_y + (y << ONE_SHIFT)) & !15) as i16,
                 };
@@ -676,11 +691,11 @@ pub mod engine {
             if let Some(h) = h {
                 let t = h;
                 cx.element_mut(t).hits = 1;
-                cx.element_mut(t).life = NORMAL_LIFE as COUNT;
+                cx.element_mut(t).life = NORMAL_LIFE as u16;
                 cx.element_mut(t).player = cx.element(e).player;
                 cx.element_mut(t).flags = (APPEARING | IGNORE_SIMILAR | NONSOLID) as u16;
-                cx.primitive_style_mut(t).kind = gfx_object_STAMP_PRIM as u8;
-                cx.element_mut(t).current.location = POINT {
+                cx.primitive_style_mut(t).kind = STAMP_PRIMITIVE;
+                cx.element_mut(t).current.location = Point {
                     x: center_x as i16,
                     y: center_y as i16,
                 };
@@ -698,8 +713,8 @@ pub mod engine {
                 cx.element_mut(g).life = 2;
                 cx.element_mut(g).player = cx.element(e).player;
                 cx.element_mut(g).flags = (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16;
-                cx.primitive_style_mut(g).kind = gfx_object_STAMP_PRIM as u8;
-                cx.element_mut(g).current.location = POINT {
+                cx.primitive_style_mut(g).kind = STAMP_PRIMITIVE;
+                cx.element_mut(g).current.location = Point {
                     x: center_x as i16,
                     y: center_y as i16,
                 };

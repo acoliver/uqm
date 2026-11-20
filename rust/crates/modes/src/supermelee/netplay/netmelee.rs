@@ -1,9 +1,9 @@
 //! Session-owned connection orchestration and protocol waits.
 use super::{
-    abi::*,
     netconnection::{Effect, Event, NetConnection},
     packet::Packet,
 };
+use crate::engine::battle::net::NetState;
 use crate::engine::battle::net::ProtocolDriver;
 
 impl super::session::SessionCore {
@@ -27,7 +27,7 @@ impl super::session::SessionCore {
         let player = usize::from(player);
         assert!(self.connections[player].borrow().is_none());
         let mut conn = NetConnection::new(player, self.options.peer[player].clone());
-        conn.state = NetState_NetState_connecting;
+        conn.state = NetState::Connecting;
         let result = if conn.options.server {
             self.transport.borrow_mut().listen(&conn.options.port)
         } else {
@@ -94,7 +94,7 @@ impl super::session::SessionCore {
         emit(event);
         self.connection_mut(player)
             .unwrap_or_else(|| panic!("disconnected connection"))
-            .state = NetState_NetState_unconnected;
+            .state = NetState::Unconnected;
     }
     pub(super) fn flush_player(&self, player: usize) -> std::io::Result<()> {
         let Some(mut conn) = self.connection_mut(player) else {
@@ -219,7 +219,7 @@ impl super::session::SessionCore {
     }
     pub fn queue_all(&self, packet: Packet, setup_only: bool) {
         self.each(|conn| {
-            if !setup_only || conn.state == NetState_NetState_inSetup {
+            if !setup_only || conn.state == NetState::InSetup {
                 conn.queue(packet.clone());
             }
             true

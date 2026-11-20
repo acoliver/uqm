@@ -1,6 +1,16 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
 pub mod engine {
-    use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SHIELD_DEFENSE, SPECIAL,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, CREW_OBJECT, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
+    };
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::ONE_SHIFT;
+    use crate::ships::native::{cosine, facing_to_angle, sine};
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32 | SHIELD_DEFENSE as i32) as _;
@@ -13,7 +23,7 @@ pub mod engine {
         d.resources.icons = Some(c"ship.yehat.icons");
         d.resources.melee_icon = Some(c"ship.yehat.meleeicons");
         d.fleet_strength = (750 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet_location = POINT { x: 4970, y: 40 };
+        d.fleet_location = Point { x: 4970, y: 40 };
         d.characteristics.max_thrust = 30;
         d.characteristics.thrust_increment = 6;
         d.characteristics.energy_regeneration = 2;
@@ -91,7 +101,7 @@ pub mod engine {
         out
     }
     pub fn yehat_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
-        let mut shield: SIZE = -1;
+        let mut shield: i16 = -1;
         let weapon = &mut concerns.objects[ENEMY_WEAPON_INDEX as usize];
         if let Some(object) = weapon
             .object
@@ -204,7 +214,7 @@ pub mod engine {
                     cx.delta_energy(e, -3);
                 } else {
                     cx.observe_special(ss, special_hook);
-                    cx.element_mut(e).life = (10 + NORMAL_LIFE) as COUNT;
+                    cx.element_mut(e).life = (10 + NORMAL_LIFE) as u16;
                     cx.set_frames(e, true, cx.ship_frame_set(ss, 2));
                     cx.set_frame(
                         e,

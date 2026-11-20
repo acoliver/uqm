@@ -12,27 +12,27 @@ fn run(
     f(&mut dialogue::Dialogue { api: &mut api });
 }
 
-fn exit(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn exit(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Exit, response as i32)
     });
 }
-fn royalists(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn royalists(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Royalists, response as i32)
     });
 }
-fn start_revolt(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn start_revolt(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::StartRevolt, response as i32)
     });
 }
-fn home(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn home(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Home, response as i32)
     });
 }
-fn space(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn space(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Space, response as i32)
     });

@@ -14,7 +14,7 @@ pub mod statefiles;
 pub mod summary;
 pub mod summary_record;
 
-use super::battle::schema::GAME_STATE as CGameState;
+use super::battle::schema::GameRecord as CGameState;
 use super::world::story::GameStateOwnerError;
 use super::world::story::StoryState;
 pub use events::EventError;

@@ -8,7 +8,26 @@ mod special_hooks;
 use battle::*;
 use std::mem;
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
+use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_rust::engine::battle::ai_constants::POINT_DEFENSE;
+use uqm_rust::engine::battle::ai_constants::SHIELD_DEFENSE;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::ai_constants::WEAPON;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
+use uqm_rust::engine::species::species_id::SPECIES_ID_UTWIG_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::ONE_SHIFT;
+use uqm_rust::math::battle_types::QUADRANT;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::VELOCITY_SHIFT;
+use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
 
 #[test]
 fn descriptor_and_six_lance_order_and_coordinates() {
@@ -97,13 +116,13 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 9);
             assert_eq!(ship.ship_mut().special_counter, 12);
             assert_eq!((*e).life, 2);
-            assert_eq!((*e).colorCycleIndex, 1);
-            assert_eq!((*prim(e)).kind, gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*e).color_cycle_index, 1);
+            assert_eq!((*prim(e)).kind, STAMPFILL_PRIMITIVE);
             ship.ship_mut().weapon_counter = 1;
             let mut projectile_fixture = Object::new(&_battle);
             let projectile = projectile_fixture.ptr();
-            let mut pa = POINT { x: 0, y: 0 };
-            let mut pb = POINT { x: 0, y: 0 };
+            let mut pa = Point { x: 0, y: 0 };
+            let mut pb = Point { x: 0, y: 0 };
             (*projectile).state_flags = FINITE_LIFE as u16;
             (*projectile).mass = 6;
             with_rng(1, 0, || {
@@ -126,14 +145,14 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             assert_eq!((*e).life, 2);
             for index in [3, 4, 5, 6, 7, 1] {
                 ship.preprocess();
-                assert_eq!((*e).colorCycleIndex, index);
+                assert_eq!((*e).color_cycle_index, index);
             }
             ship.ship_mut().cur_status_flags = 0;
             ship.preprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!((*e).life, 1);
-            assert_eq!((*e).colorCycleIndex, 0);
-            assert_eq!((*prim(e)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*e).color_cycle_index, 0);
+            assert_eq!((*prim(e)).kind, STAMP_PRIMITIVE);
         }
     })
 }
@@ -177,21 +196,21 @@ fn ai_halves_finite_threat_turns_and_consumes_rng_only_at_shield_boundary() {
             (*projectile).mass = 1;
             for turn in [0, 1, 2, 4, 5, 6] {
                 for seed in 1..9 {
-                    let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                    concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
-                        ObjectPtr: projectile,
+                    let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                    concerns[ENEMY_WEAPON_INDEX as usize] = EvaluateRecord {
+                        object_ptr: projectile,
                         facing: 0,
                         which_turn: turn,
-                        MoveState: MOVEMENT_STATE_ENTICE,
+                        move_state: MOVEMENT_STATE_ENTICE,
                     };
-                    TFB_SeedRandom(seed);
-                    let shield = TFB_Random() & 3 != 0;
+                    seed_random(seed);
+                    let shield = random() & 3 != 0;
                     let transformed = (turn >> 1).max(1);
                     ship.ship_mut().ship_input_state = WEAPON as u8;
                     with_rng(seed, usize::from(transformed <= 2), || {
                         ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
                     });
-                    assert!(concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr.is_null());
+                    assert!(concerns[ENEMY_WEAPON_INDEX as usize].object_ptr.is_null());
                     assert_eq!(
                         concerns[ENEMY_WEAPON_INDEX as usize].which_turn,
                         transformed
@@ -207,7 +226,7 @@ fn ai_halves_finite_threat_turns_and_consumes_rng_only_at_shield_boundary() {
                 }
             }
             ship.descriptor_mut().ship_info.energy_level = 0;
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
             with_rng(2, 0, || {
                 ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
             });

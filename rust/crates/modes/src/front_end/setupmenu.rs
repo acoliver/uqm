@@ -6,7 +6,7 @@ use uqm_engine::{
     configuration::runtime::RuntimeSettings,
     input_port::{sdl_input, templates},
     resource::settings::Settings,
-    time::counter_abi::GetTimeCounter,
+    time::counter_abi::get_time_counter,
 };
 
 mod drawing;
@@ -182,7 +182,7 @@ impl SetupSession {
         input.set_menu_sounds(0, 1 << 4);
         let mut callbacks = SetupEditor {
             session: self,
-            next_time: GetTimeCounter().wrapping_add(FRAME),
+            next_time: get_time_counter().wrapping_add(FRAME),
         };
         let accepted = edit_text(cx, io, &input, 49, &mut buffer, cursor, &mut callbacks);
         self.entry = saved;
@@ -263,7 +263,7 @@ impl TextEntryCallbacks for SetupEditor<'_> {
     ) -> bool {
         self.session.draw();
         cx.kernel.input_runtime().sleep_until(cx, self.next_time);
-        self.next_time = GetTimeCounter().wrapping_add(FRAME);
+        self.next_time = get_time_counter().wrapping_add(FRAME);
         true
     }
 }
@@ -274,8 +274,8 @@ fn do_setup_menu(state: &mut SetupSession, cx: &mut Cx<'_>, io: &mut Io<'_>) -> 
         state
             .configuration
             .input
-            .configure_repeat(70, 420, 70, false, GetTimeCounter());
-        state.next_time = GetTimeCounter();
+            .configure_repeat(70, 420, 70, false, get_time_counter());
+        state.next_time = get_time_counter();
         state.initialized = true;
     }
     let context = &state.resources.context;
@@ -302,7 +302,7 @@ fn do_setup_menu(state: &mut SetupSession, cx: &mut Cx<'_>, io: &mut Io<'_>) -> 
     cx.kernel
         .input_runtime()
         .sleep_until(cx, state.next_time.wrapping_add(FRAME));
-    state.next_time = GetTimeCounter();
+    state.next_time = get_time_counter();
     !state.done && cx.world.activity() & 0x4000 == 0
 }
 

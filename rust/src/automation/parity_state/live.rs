@@ -74,7 +74,7 @@ pub(in crate::automation) fn fighters(
         while let Some(id) = next {
             next = cx.elements().succ(id);
             let e = cx.element(id);
-            if e.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
+            if e.flags & crate::engine::battle::flags::PLAYER_SHIP as u16 == 0 {
                 continue;
             }
             let side = match e.player {

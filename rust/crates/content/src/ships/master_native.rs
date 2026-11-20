@@ -46,19 +46,19 @@ pub mod engine {
     use super::*;
     use crate::engine::battle::{
         kernel::CatalogEntry,
-        record::{FLEET_STUFF, SHIP_INFO},
+        record::{FleetRecord, ShipInfoRecord},
     };
     use crate::engine::{Kernel, World};
 
     #[derive(Clone, Copy)]
     pub struct MasterShip {
         pub species: u32,
-        pub info: SHIP_INFO,
-        pub fleet: FLEET_STUFF,
+        pub info: ShipInfoRecord,
+        pub fleet: FleetRecord,
     }
 
     pub fn load_entry(world: &mut World, kernel: &mut Kernel, species: u32) {
-        if species == crate::ships::native::abi::SPECIES_ID_ARILOU_ID {
+        if species == crate::engine::species::species_id::SPECIES_ID_ARILOU_ID {
             assert_eq!(kernel.master_queue.count(), 0, "catalog already loaded");
         }
         let descriptor = crate::engine::battle::RaceDesc::load(world, species, false)

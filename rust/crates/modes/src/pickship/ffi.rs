@@ -184,7 +184,8 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
     let crew_area = crew_strip(name);
     context.fill_rectangle(color(Rgba::BLACK), rectangle(crew_area));
     if let Some(label) = crew_label(crew, max_crew) {
-        let text = std::ffi::CString::new(label).expect("a crew count has no NUL byte");
+        let text = std::ffi::CString::new(label)
+            .unwrap_or_else(|_| panic!("a crew count has no NUL byte"));
         context.draw_text(
             &state.font,
             &text,

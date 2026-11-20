@@ -23,7 +23,9 @@ fn locate_at(explicit: Option<&Path>, cwd: &Path, exe: &Path) -> anyhow::Result<
         );
         return Ok(path);
     } else {
-        let bin = exe.parent().expect("executable has a parent directory");
+        let bin = exe
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("executable '{}' has no directory", exe.display()))?;
         vec![
             bin.join("content"),
             bin.join("../Resources/content"),

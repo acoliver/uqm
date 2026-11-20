@@ -24,14 +24,14 @@ pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices 
             return None;
         }
         table
-            .phrase((reference - 1) as u16)?
+            .phrase(reference - 1)?
             .name
             .map(|name| name.to_string_lossy().into_owned())
     })
 }
 
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
-pub fn rust_execute_response(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>) -> c_uint {
+pub fn rust_execute_response(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
     let state = &*comm;
     let response = match state.responses().get_selected() {
         Some(r) => r,

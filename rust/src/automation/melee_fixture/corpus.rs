@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::collections::observation::{inspect_pending, Event};
+use crate::engine::species::species_id::SPECIES_ID_NO_ID;
 
 pub(super) struct Run {
     request: CorpusRequest,

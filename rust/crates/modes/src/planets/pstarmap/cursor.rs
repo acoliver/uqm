@@ -19,7 +19,7 @@ impl Frame for StarMap {
 
 impl StarMap {
     fn cursor_frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, input: &InputSession) -> bool {
-        let time_in = GetTimeCounter();
+        let time_in = get_time_counter();
         let activity = cx.world.activity();
         if !self.initialized {
             self.initialized = true;
@@ -69,7 +69,7 @@ impl StarMap {
             self.last_label = c"  <random garbage>  ".into();
             self.update_cursor_info(cx.kernel, cx.world);
             self.fuel(cx.kernel, cx.world);
-            input.configure_repeat(14, 105, 7, true, GetTimeCounter());
+            input.configure_repeat(14, 105, 7, true, get_time_counter());
             input.set_menu_sounds(0, 0);
         } else {
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);

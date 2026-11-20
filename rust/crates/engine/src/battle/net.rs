@@ -1,4 +1,21 @@
 //! The battle's protocol boundary, independent of the melee menu and transport.
+
+/// Where a peer connection stands in the setup and battle handshake. The
+/// variants follow protocol order, so a later state compares greater.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NetState {
+    Unconnected,
+    Connecting,
+    Init,
+    InSetup,
+    PreBattle,
+    InterBattle,
+    SelectShip,
+    InBattle,
+    EndingBattle,
+    EndingBattle2,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolNoticeKind {
     Connected,
@@ -50,9 +67,9 @@ pub trait BattleNet {
     fn record_checksum(&self, frame: u32, checksum: u32, driver: &mut dyn ProtocolDriver);
     fn verify_checksum(&self, frame: u32) -> bool;
     fn reset(&self, reason: u32, driver: &mut dyn ProtocolDriver);
-    fn negotiate(&self, notify: bool, state: u32, driver: &mut dyn ProtocolDriver) -> bool;
-    fn set_state(&self, state: u32);
-    fn wait_reset(&self, state: u32, driver: &mut dyn ProtocolDriver);
+    fn negotiate(&self, notify: bool, state: NetState, driver: &mut dyn ProtocolDriver) -> bool;
+    fn set_state(&self, state: NetState);
+    fn wait_reset(&self, state: NetState, driver: &mut dyn ProtocolDriver);
     fn init_end_frames(&self);
     fn end_ready(&self, side: usize, driver: &mut dyn ProtocolDriver) -> bool;
     fn ship_selected(&self, choice: u16);

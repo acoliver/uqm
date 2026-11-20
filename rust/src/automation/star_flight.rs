@@ -13,6 +13,7 @@ impl StarTarget {
     const ARILOU_HOME: Self = Self(518);
     const UMGAH_EXIT: Self = Self(515);
     const SOL_EXIT: Self = Self(507);
+    pub const SOL: Self = Self(82);
 
     pub fn is_portal(self) -> bool {
         self == Self::QUASISPACE_ENTRANCE || self == Self::ARILOU_HOME || self.is_exit()
@@ -58,7 +59,13 @@ impl StarTarget {
             include_str!("../../../sc2/content/base/gamestrings.txt")
                 .split("#(")
                 .skip(1)
-                .map(|entry| entry.lines().nth(1).expect("game string text").trim())
+                .map(|entry| {
+                    entry
+                        .lines()
+                        .nth(1)
+                        .unwrap_or_else(|| panic!("game string entry has no text: {entry:?}"))
+                        .trim()
+                })
                 .collect()
         });
         let suffix = strings[usize::from(star.postfix)];
@@ -177,6 +184,20 @@ impl StarFlight {
         self.phase = Phase::Open;
     }
 
+    /// Arrival text carries the fuel spent; arriving without a fuel reading is
+    /// a failed observation, not an arrival.
+    fn arrived(
+        &self,
+        obs: &Observation,
+        kind: &str,
+        describe: impl FnOnce(u32, u32) -> String,
+    ) -> Progress {
+        match (self.initial_fuel, obs.fuel) {
+            (Some(before), Some(after)) => Progress::Arrived(describe(before, after)),
+            _ => Progress::Failed(format!("{kind}_arrived_without_fuel:observed={obs:?}")),
+        }
+    }
+
     pub fn observe(&mut self, step: &FlyToStarStep, obs: Observation) -> Progress {
         let ticks = self.ticks;
         self.ticks += 1;
@@ -206,11 +227,11 @@ impl StarFlight {
                 obs.space_side == 3
             };
             if reached {
-                return Progress::Arrived(format!(
+                return self.arrived(&obs, "portal", |fuel_before, fuel_after| format!(
                     "portal_arrived:target={}:x={}:y={}:space_side={}:star={}:conversation={}:fuel_before={}:fuel_after={}",
                     step.target.index(), step.target.coordinates().0, step.target.coordinates().1,
                     obs.space_side, obs.current_star.map_or(-1, i32::from), u8::from(obs.conversation_active),
-                    self.initial_fuel.expect("live fuel"), obs.fuel.expect("live fuel")
+                    fuel_before, fuel_after
                 ));
             }
         }
@@ -221,16 +242,16 @@ impl StarFlight {
                     step.target.index()
                 ));
             }
-            return Progress::Arrived(format!(
-                "star_arrived:target={}:star={}:x={}:y={}:activity={}:fuel_before={}:fuel_after={}",
+            return self.arrived(&obs, "star", |fuel_before, fuel_after| {
+                format!(
+                "star_arrived:target={}:star={}:x={}:y={}:activity={}:fuel_before={fuel_before}:fuel_after={fuel_after}",
                 step.target.index(),
                 step.target.index(),
                 step.target.coordinates().0,
                 step.target.coordinates().1,
                 obs.activity,
-                self.initial_fuel.expect("live fuel"),
-                obs.fuel.expect("live fuel")
-            ));
+            )
+            });
         }
         if ticks >= step.max_ticks.saturating_sub(1) {
             return Progress::Failed(format!(

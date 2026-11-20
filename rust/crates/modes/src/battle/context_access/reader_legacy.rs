@@ -1,5 +1,5 @@
+use crate::engine::battle::flags::RPG_PLAYER_NUM;
 use crate::engine::battle::ShipId;
-use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM};
 
 /// Selects an identity from the fleets borrowed by this context.
 pub fn get_encounter_star_ship(
@@ -58,7 +58,7 @@ fn write_fragment_crew<const N: usize>(
 ) {
     if let Some(id) = queue.at(index) {
         let fragment = queue.get_mut(id);
-        assert_ne!(fragment.crew_level, COUNT::MAX);
+        assert_ne!(fragment.crew_level, u16::MAX);
         fragment.crew_level = crew;
     }
 }

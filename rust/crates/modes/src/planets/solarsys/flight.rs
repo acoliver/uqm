@@ -41,8 +41,8 @@ fn facing_to_angle(facing: u16) -> u16 {
 
 #[inline]
 fn sine(angle: u16, magnitude: i32) -> i16 {
-    ((i64::from(crate::math::sinetab[usize::from(angle & 63)]) * i64::from(magnitude)) >> SIN_SHIFT)
-        as i16
+    ((i64::from(crate::math::SINE_TABLE[usize::from(angle & 63)]) * i64::from(magnitude))
+        >> SIN_SHIFT) as i16
 }
 
 #[inline]
@@ -236,7 +236,7 @@ pub(super) fn flagship_inertial_thrust(
 
 pub(super) fn process_ship_controls(
     kernel: &Kernel,
-    game: &mut crate::engine::battle::schema::GAME_STATE,
+    game: &mut crate::engine::battle::schema::GameRecord,
     solar: &mut SolarSystem,
     input: &crate::engine::input::InputSession,
 ) {
@@ -462,14 +462,14 @@ pub(super) fn ip_frame(
             cx.kernel,
             cx.world,
             cx.screen_dimensions().0,
-            uqm_engine::time::counter_abi::GetTimeCounter,
+            uqm_engine::time::counter_abi::get_time_counter,
         );
         drop(batch);
     }
 }
 
 pub(super) fn check_zoom_level(
-    game: &mut crate::engine::battle::schema::GAME_STATE,
+    game: &mut crate::engine::battle::schema::GameRecord,
     solar: &mut SolarSystem,
 ) -> u32 {
     let inner_system = matches!(solar.location(), SystemLocation::Inner(_));

@@ -34,7 +34,7 @@ impl RaceResources {
 #[derive(Clone, Copy, Debug)]
 pub struct RaceTemplate {
     pub info: Info,
-    pub characteristics: CHARACTERISTIC_STUFF,
+    pub characteristics: CharacteristicRecord,
     pub intelligence: Intelligence,
     pub fleet_strength: u16,
     pub fleet_location: Point,

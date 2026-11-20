@@ -6,74 +6,32 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn friendly_exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::FriendlyExit,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn friendly_exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::FriendlyExit, i32::from(r)));
 }
-fn sex(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(Handler::Sex, i32::try_from(r).expect("invalid response"))
-    });
+fn sex(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Sex, i32::from(r)));
 }
-fn foreplay(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::Foreplay,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn foreplay(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Foreplay, i32::from(r)));
 }
-fn after_ambush(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AfterAmbush,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn after_ambush(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AfterAmbush, i32::from(r)));
 }
-fn ambush_ready(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AmbushReady,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn ambush_ready(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AmbushReady, i32::from(r)));
 }
-fn syreen_shuttle(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SyreenShuttle,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn syreen_shuttle(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SyreenShuttle, i32::from(r)));
 }
-fn normal_syreen(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NormalSyreen,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn normal_syreen(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NormalSyreen, i32::from(r)));
 }
-fn initial_syreen(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::InitialSyreen,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn initial_syreen(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::InitialSyreen, i32::from(r)));
 }
-fn syreen_vault(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SyreenVault,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn syreen_vault(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SyreenVault, i32::from(r)));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

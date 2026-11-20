@@ -588,7 +588,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             descriptor.ship_info.energy_level = 3;
                             descriptor.ship_info.ship_cost = 7;
                             record.descriptor = Some(descriptor);
-                            record.playerNr = 0;
+                            record.player_nr = 0;
                             queue.ship_id(link)
                         };
                         SetContext(previous);
@@ -673,7 +673,8 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             },
                         },
                     );
-                    let mut ship: uqm_rust::engine::battle::record::SHIP_INFO = std::mem::zeroed();
+                    let mut ship: uqm_rust::engine::battle::record::ShipInfoRecord =
+                        std::mem::zeroed();
                     ship.max_crew = 2;
                     ship.max_energy = 2;
                     ship.crew_level = 2;
@@ -759,19 +760,20 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
-            let mut stats: uqm_rust::engine::battle::record::SHIP_INFO = std::mem::zeroed();
+            let mut stats: uqm_rust::engine::battle::record::ShipInfoRecord = std::mem::zeroed();
             stats.ship_flags = 1 << 13;
-            let update = |stats: &mut uqm_rust::engine::battle::record::SHIP_INFO, crew, energy| {
-                uqm_rust::ui::shipstat::update_statistics(
-                    Some(&context_lease),
-                    false,
-                    false,
-                    None,
-                    stats,
-                    0,
-                    (crew, energy),
-                );
-            };
+            let update =
+                |stats: &mut uqm_rust::engine::battle::record::ShipInfoRecord, crew, energy| {
+                    uqm_rust::ui::shipstat::update_statistics(
+                        Some(&context_lease),
+                        false,
+                        false,
+                        None,
+                        stats,
+                        0,
+                        (crew, energy),
+                    );
+                };
             let assert_pixel = |x, y, expected| {
                 uqm_rust::graphics::state::flush();
                 let pixel = GetFramePixel(frame, Point { x, y });

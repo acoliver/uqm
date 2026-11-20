@@ -5,7 +5,32 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, angle_to_facing, normalize_facing};
+use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::IMMEDIATE_WEAPON;
+use uqm_rust::engine::battle::ai_constants::LEFT;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::COLLISION;
+use uqm_rust::engine::battle::flags::CREW_OBJECT;
+use uqm_rust::engine::battle::flags::DISAPPEARING;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::battle::LINE_PRIMITIVE;
+use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
+use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::arctan;
+use uqm_rust::math::battle_types::ONE_SHIFT;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::VELOCITY_SHIFT;
+use uqm_rust::ships::native::{angle_to_facing, normalize_facing};
 #[test]
 fn descriptor_laser_and_limpet_launch() {
     battle_context::run(|_| {
@@ -33,7 +58,7 @@ fn descriptor_laser_and_limpet_launch() {
             ship.ship_mut().ship_facing = 4;
             let h = with_rng(11, 0, || ship.weapon(1))[0];
             let laser = ship.weapon_record(h);
-            assert_eq!((*prim(laser)).kind, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(laser)).kind, LINE_PRIMITIVE);
             assert_eq!((*laser).mass, 1);
             assert_eq!((*laser).current.location.x, 4000 + 48);
             let (velocity_x, velocity_y) = ((*laser).velocity).get_current_components();
@@ -77,15 +102,15 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                 enemy.descriptor_mut().characteristics.thrust_wait = 254;
                 enemy.descriptor_mut().characteristics.thrust_increment = increment;
                 enemy.descriptor_mut().characteristics.max_thrust = max;
-                enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex = 99;
+                enemy.descriptor_mut().cyborg_control.maneuverability_index = 99;
                 // Null icons make ModifySilhouette return before its placement RNG.
                 with_rng(12, 1, || {
                     call_collision(
                         "ships::races::vux_native::limpet_collision",
                         id(e),
-                        &mut POINT { x: 0, y: 0 },
+                        &mut Point { x: 0, y: 0 },
                         id(enemy.ptr()),
-                        &mut POINT { x: 0, y: 0 },
+                        &mut Point { x: 0, y: 0 },
                     )
                 });
                 assert_eq!(enemy.descriptor_mut().characteristics.turn_wait, 255);
@@ -99,7 +124,7 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                     expected_max
                 );
                 assert_eq!(
-                    enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex,
+                    enemy.descriptor_mut().cyborg_control.maneuverability_index,
                     0
                 );
                 assert_eq!((*e).life, 0);
@@ -114,9 +139,9 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                 call_collision(
                     "ships::races::vux_native::limpet_collision",
                     id(e),
-                    &mut POINT { x: 0, y: 0 },
+                    &mut Point { x: 0, y: 0 },
                     id(object.ptr()),
-                    &mut POINT { x: 0, y: 0 },
+                    &mut Point { x: 0, y: 0 },
                 )
             });
         }
@@ -129,7 +154,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);
             let enemy = Ship::new(&_battle, SPECIES_ID_VUX_ID, 1);
-            (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
+            (*enemy.ptr()).current.location = Point { x: 5000, y: 5000 };
             (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             (*ship.ptr()).state_flags |= APPEARING as u16;
             let previous = crate::battle_context::with(|cx| cx.world.activity());
@@ -139,9 +164,9 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
             crate::battle_context::with(|cx| cx.world.set_activity(0));
-            TFB_SeedRandom(42);
-            let raw_x = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
-            let raw_y = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
+            seed_random(42);
+            let raw_x = 5000 - 832 + (random() as u16) % 1664;
+            let raw_y = 5000 - 832 + (random() as u16) % 1664;
             let x = raw_x & !3;
             let y = raw_y & !3;
             with_rng(42, 2, || ship.preprocess());
@@ -152,16 +177,16 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 ),
                 (x as i16, y as i16)
             );
-            let face = normalize_facing(angle_to_facing(i32::from(ARCTAN(
-                (5000 - i32::from(raw_x)) as SIZE,
-                (5000 - i32::from(raw_y)) as SIZE,
+            let face = normalize_facing(angle_to_facing(i32::from(arctan(
+                (5000 - i32::from(raw_x)) as i16,
+                (5000 - i32::from(raw_y)) as i16,
             ))));
             assert_eq!(ship.ship_mut().ship_facing, face);
             assert_eq!(((*ship.ptr()).current.image.frame.raw()).index(), face);
             assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(
-                (*ship.ptr()).IntersectControl.EndPoint.x,
+                (*ship.ptr()).intersect_control.EndPoint.x,
                 (x >> ONE_SHIFT) as i16
             );
             crate::battle_context::with(|cx| cx.world.set_activity(previous));
@@ -182,24 +207,24 @@ fn ai_changes_threat_state_and_uses_turning_energy_threshold() {
                     threat.element_mut().state_flags = flags as u16;
                     ship.descriptor_mut().ship_info.energy_level = energy;
                     ship.ship_mut().ship_input_state = LEFT as u8;
-                    let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                    concerns[ENEMY_SHIP_INDEX as usize] = EVALUATE_DESC {
-                        ObjectPtr: enemy.ptr(),
+                    let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                    concerns[ENEMY_SHIP_INDEX as usize] = EvaluateRecord {
+                        object_ptr: enemy.ptr(),
                         facing: 0,
                         which_turn: 12,
-                        MoveState: MOVEMENT_STATE_ENTICE,
+                        move_state: MOVEMENT_STATE_ENTICE,
                     };
-                    concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
-                        ObjectPtr: threat.ptr(),
+                    concerns[ENEMY_WEAPON_INDEX as usize] = EvaluateRecord {
+                        object_ptr: threat.ptr(),
                         facing: 0,
                         which_turn: 3,
-                        MoveState: MOVEMENT_STATE_ENTICE,
+                        move_state: MOVEMENT_STATE_ENTICE,
                     };
                     with_rng(8, 0, || {
                         ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
                     });
                     assert_eq!(
-                        concerns[ENEMY_WEAPON_INDEX as usize].MoveState,
+                        concerns[ENEMY_WEAPON_INDEX as usize].move_state,
                         if flags == FINITE_LIFE {
                             MOVEMENT_STATE_AVOID
                         } else {

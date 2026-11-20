@@ -248,7 +248,7 @@ pub mod live {
                     75,
                     Some(palette.view()),
                 )
-                .expect("render planet topography");
+                .unwrap_or_else(|error| panic!("render planet topography: {error:?}"));
                 state.images_mut().topography = Some(topography);
                 Some(palette)
             };
@@ -271,7 +271,7 @@ pub mod live {
                     300,
                     palette.as_ref().map(|palette| palette.view()),
                 )
-                .expect("render scaled planet topography");
+                .unwrap_or_else(|error| panic!("render scaled planet topography: {error:?}"));
             }
             state.topography().context_frame(0).read_colors(
                 &mut state.colors,

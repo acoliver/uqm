@@ -1,11 +1,12 @@
 use uqm_engine::test_support::campaign_display;
 
+use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_rust::engine::world::activity::activity_kinds::SUPER_MELEE;
 use uqm_rust::engine::{
     battle::{Battle, Cx},
     Game,
 };
 use uqm_rust::game_init::space_resources::{init_battle_ships, uninit_ships};
-use uqm_rust::ships::native::abi::{IN_BATTLE, SUPER_MELEE};
 
 #[test]
 fn battle_entry_has_no_application_lifecycle_dependency() {
@@ -29,10 +30,8 @@ fn battle_ship_lifecycle_uses_the_unpublished_owner_even_when_resources_fail() {
         });
     let mut first_battle = Battle::new();
     let mut second_battle = Battle::new();
-    first.world.set_activity(SUPER_MELEE as u16);
-    second
-        .world
-        .set_activity(SUPER_MELEE as u16 | IN_BATTLE as u16);
+    first.world.set_activity(SUPER_MELEE);
+    second.world.set_activity(SUPER_MELEE | IN_BATTLE);
     second.kernel.ships_initialized = true;
     {
         let mut first = Cx::new(
@@ -67,17 +66,12 @@ fn battle_ship_lifecycle_uses_the_unpublished_owner_even_when_resources_fail() {
 
         (ships.uninit)(&mut first);
         assert_eq!(first.elements().head(), Some(element));
-        first
-            .world
-            .set_activity(SUPER_MELEE as u16 | IN_BATTLE as u16);
+        first.world.set_activity(SUPER_MELEE | IN_BATTLE);
         first.kernel.ships_initialized = true;
         (ships.uninit)(&mut first);
         assert!(!first.kernel.ships_initialized);
-        assert_eq!(first.world.activity(), SUPER_MELEE as u16);
-        assert_eq!(
-            second.world.activity(),
-            SUPER_MELEE as u16 | IN_BATTLE as u16
-        );
+        assert_eq!(first.world.activity(), SUPER_MELEE);
+        assert_eq!(second.world.activity(), SUPER_MELEE | IN_BATTLE);
         assert!(second.kernel.ships_initialized);
         (ships.uninit)(&mut first);
         assert!(!first.kernel.ships_initialized);

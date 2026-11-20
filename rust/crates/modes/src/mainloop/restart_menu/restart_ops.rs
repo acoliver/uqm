@@ -11,7 +11,7 @@ use crate::graphics::{
     font::FontLease, geometry::Color, geometry::Point, geometry::TextAlign, highlight::Overlay,
 };
 use crate::sound::resource_types::LoadedMusic;
-use uqm_engine::time::counter_abi::{GetTimeCounter, ONE_SECOND};
+use uqm_engine::time::counter_abi::{get_time_counter, ONE_SECOND};
 
 pub fn seed_new_campaign(automation_seed: u32, clock_seed: impl FnOnce()) {
     if automation_seed != 0 {
@@ -180,7 +180,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         }
     }
     fn get_time_counter(&mut self) -> u32 {
-        GetTimeCounter()
+        get_time_counter()
     }
     fn get_utwig_bomb_on_ship(&mut self) -> u8 {
         self.cx.world.story_state(StoryKey::UTWIG_BOMB_ON_SHIP) as u8
@@ -332,7 +332,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
             ONE_SECOND / 2,
             ONE_SECOND / 12,
             false,
-            GetTimeCounter(),
+            get_time_counter(),
         );
     }
     fn set_transition_source_null(&mut self) {

@@ -21,7 +21,7 @@ impl Cx<'_> {
             "dispose requires an unlinked element"
         );
         let address = self.kernel.elements.raw(id) as usize;
-        let index = self.kernel.elements[id].PrimIndex;
+        let index = self.kernel.elements[id].prim_index;
         self.release_primitive(index);
         crate::collections::observation::record(crate::collections::observation::Event::Free(
             address,
@@ -74,7 +74,7 @@ impl Cx<'_> {
 
     #[inline]
     pub fn optional_ship_element(&self, ship: ShipId) -> Option<ElementId> {
-        let id = self.ship(ship).hShip?;
+        let id = self.ship(ship).ship_element?;
         assert!(self.elements().contains(id), "stale ship element {id:?}");
         Some(id)
     }
@@ -190,7 +190,7 @@ impl Cx<'_> {
     }
     pub fn set_intersect_frame(&mut self, id: ElementId, frame: FrameSelection) {
         use crate::collections::observation::image;
-        image!(frame;self.kernel.elements.record_mut(id).IntersectControl.IntersectStamp.frame,frame.raw());
+        image!(frame;self.kernel.elements.record_mut(id).intersect_control.IntersectStamp.frame,frame.raw());
         self.kernel.elements.record_mut(id).intersect_frame = frame;
     }
 }
@@ -314,15 +314,15 @@ impl Cx<'_> {
     #[inline]
     pub fn init_intersect_start(&mut self, id: ElementId) {
         let e = self.kernel.elements.record_mut(id);
-        e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> 2;
-        e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> 2;
+        e.intersect_control.IntersectStamp.origin.x = e.current.location.x >> 2;
+        e.intersect_control.IntersectStamp.origin.y = e.current.location.y >> 2;
     }
 
     #[inline]
     pub fn init_intersect_end(&mut self, id: ElementId) {
         let e = self.kernel.elements.record_mut(id);
-        e.IntersectControl.EndPoint.x = e.next.location.x >> 2;
-        e.IntersectControl.EndPoint.y = e.next.location.y >> 2;
+        e.intersect_control.EndPoint.x = e.next.location.x >> 2;
+        e.intersect_control.EndPoint.y = e.next.location.y >> 2;
     }
 }
 
@@ -414,7 +414,7 @@ impl Cx<'_> {
         self.desc_mut(ship).ship_data.captain_control.special = frame;
     }
     pub fn primitive_style(&self, id: ElementId) -> PrimitiveStyle {
-        let index = usize::from(self.kernel.elements[id].PrimIndex);
+        let index = usize::from(self.kernel.elements[id].prim_index);
         let record = self.kernel.display.get(index as u16);
         PrimitiveStyle {
             kind: record.kind,
@@ -428,8 +428,8 @@ impl Cx<'_> {
             !self.elements().linked(destination),
             "copy destination is linked"
         );
-        let index = self.kernel.elements[destination].PrimIndex;
-        let source_index = usize::from(self.kernel.elements[source].PrimIndex);
+        let index = self.kernel.elements[destination].prim_index;
+        let source_index = usize::from(self.kernel.elements[source].prim_index);
         let primitive = self.kernel.display.get(source_index as u16).clone();
         let value = self.kernel.elements[source].clone();
         let address = std::ptr::from_ref(&self.kernel.elements[source]) as usize;
@@ -438,7 +438,7 @@ impl Cx<'_> {
             value,
             address,
         );
-        self.kernel.elements.record_mut(destination).PrimIndex = index;
+        self.kernel.elements.record_mut(destination).prim_index = index;
         *self.primitive(destination) = primitive;
     }
 }
@@ -457,7 +457,7 @@ impl Cx<'_> {
 impl Cx<'_> {
     pub fn set_ship_identity(&mut self, id: ShipId, species: u32, index: u16) {
         let record = self.ship_mut(id);
-        record.SpeciesID = species;
+        record.species_id = species;
         record.index = index;
     }
 
@@ -507,7 +507,7 @@ impl Cx<'_> {
     }
 
     pub fn sound_point(&self, id: ElementId) -> crate::graphics::geometry::Point {
-        let index = usize::from(self.elements()[id].PrimIndex);
+        let index = usize::from(self.elements()[id].prim_index);
         let primitive = self.kernel.display.get(index as u16);
         primitive.point()
     }
@@ -526,7 +526,7 @@ impl Cx<'_> {
         let element = &self.kernel.elements[id];
         self.kernel
             .display
-            .get_mut(element.PrimIndex)
+            .get_mut(element.prim_index)
             .set_image(origin, element.next.image.frame.clone());
     }
 
@@ -585,8 +585,8 @@ impl Cx<'_> {
         assert_ne!(a, b, "collision operands alias");
         let (left, right) = self.kernel.elements.pair_mut(a, b);
         crate::graphics::intersection::drawables_intersect(
-            &mut left.IntersectControl,
-            &mut right.IntersectControl,
+            &mut left.intersect_control,
+            &mut right.intersect_control,
             time,
         )
     }
@@ -612,12 +612,12 @@ impl Cx<'_> {
         self.kernel.races[side].reinit();
     }
     pub fn set_ship_element(&mut self, ship: ShipId, element: Option<ElementId>) {
-        self.ship_mut(ship).hShip = element;
+        self.ship_mut(ship).ship_element = element;
     }
 }
 
 impl Cx<'_> {
-    pub fn captain_controls_mut(&mut self, ship: ShipId) -> &mut super::record::CAPTAIN_STUFF {
+    pub fn captain_controls_mut(&mut self, ship: ShipId) -> &mut super::record::CaptainRecord {
         &mut self.desc_mut(ship).ship_data.captain_control
     }
 }
@@ -627,7 +627,7 @@ impl Cx<'_> {
         let first = e.next.image.frames.view(0).to_owned();
         let raw = first.raw().equal_index(e.next.image.frame.raw());
         e.intersect_frame = first.with_raw(raw);
-        crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, raw);
+        crate::collections::observation::image!(frame; e.intersect_control.IntersectStamp.frame, raw);
     }
 }
 
@@ -642,7 +642,7 @@ impl Cx<'_> {
         self.kernel.winner = ship;
     }
     pub fn set_ship_species(&mut self, ship: ShipId, species: u32) {
-        self.ship_mut(ship).SpeciesID = species;
+        self.ship_mut(ship).species_id = species;
     }
 }
 
@@ -676,14 +676,14 @@ mod intersection_projection_tests {
             cx.init_intersect_start(id);
             cx.init_intersect_end(id);
             assert_eq!(
-                cx.elements()[id].IntersectControl.IntersectStamp.origin.x,
+                cx.elements()[id].intersect_control.IntersectStamp.origin.x,
                 11
             );
-            assert_eq!(cx.elements()[id].IntersectControl.EndPoint.y, 17);
+            assert_eq!(cx.elements()[id].intersect_control.EndPoint.y, 17);
             cx.element_mut(id).flags = 64;
             cx.refresh_intersect_frame(id);
             assert!(cx.elements()[id]
-                .IntersectControl
+                .intersect_control
                 .IntersectStamp
                 .frame
                 .is_null());
@@ -717,7 +717,7 @@ mod intersection_projection_tests {
 
 impl Cx<'_> {
     pub fn assign_primitive(&mut self, id: ElementId) {
-        self.kernel.elements.record_mut(id).PrimIndex = self
+        self.kernel.elements.record_mut(id).prim_index = self
             .kernel
             .display
             .alloc()

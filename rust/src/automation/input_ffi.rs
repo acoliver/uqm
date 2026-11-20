@@ -587,11 +587,12 @@ pub fn rust_automation_get_pulsed_menu_key(input: &InputControls, index: i32) ->
 // ===========================================================================
 
 /// Interstellar observations use copied map values from the admitted input boundary.
+/// `None` until the campaign story state exists.
 pub(crate) fn star_flight_observation(
     world: &CampaignView,
     target: super::star_flight::StarTarget,
     ui: &UiObservation,
-) -> super::star_flight::Observation {
+) -> Option<super::star_flight::Observation> {
     let map = ui.star_map();
     let cursor = map.map(|map| (map.cursor.x, map.cursor.y));
     let (tx, ty) = target.coordinates();
@@ -602,12 +603,10 @@ pub(crate) fn star_flight_observation(
         )
     });
     let autopilot = world.autopilot;
-    super::star_flight::Observation {
+    Some(super::star_flight::Observation {
         activity: world.activity,
         current_star: world.current_star.map(|id| id.0 as u16),
-        space_side: world
-            .story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
-            .expect("initialized state"),
+        space_side: world.story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)?,
         conversation_active: ui.conversation_snapshot().active,
         portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
         solar_active: departure_snapshot(world, ui.solar_snapshot()).active != 0,
@@ -617,6 +616,19 @@ pub(crate) fn star_flight_observation(
         position: hyperspace_position(world),
         fuel: ship_resources(world).map(|(fuel, _)| fuel),
         instant_move: world.instant_move,
+    })
+}
+
+/// One star-flight step; a campaign without story state fails the step.
+pub(crate) fn star_flight_progress(
+    world: &CampaignView,
+    flight: &super::star_flight::FlyToStarStep,
+    ui: &UiObservation,
+    state: &mut super::star_flight::StarFlight,
+) -> super::star_flight::Progress {
+    match star_flight_observation(world, flight.target, ui) {
+        Some(observation) => state.observe(flight, observation),
+        None => super::star_flight::Progress::Failed("fly_to_star_without_story_state".into()),
     }
 }
 

@@ -8,7 +8,13 @@ use battle::*;
 mod special_hooks;
 use std::{ffi::CStr, mem};
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::{
+    ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
+};
+use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::species::species_id::SPECIES_ID_DRUUGE_ID;
+use uqm_rust::graphics::geometry::Point;
 
 use battle::Battle as Battlefield;
 
@@ -58,7 +64,7 @@ fn descriptor_matches_druuge_c_data() {
                 ),
                 (4, 1, 10, 30, 5)
             );
-            assert_eq!(d.cyborg_control.WeaponRange, 2400);
+            assert_eq!(d.cyborg_control.weapon_range, 2400);
             assert!(d.callbacks()[1] != 0 && d.callbacks()[2] != 0);
             assert!(d.callbacks()[3] != 0 && d.callbacks()[4] != 0);
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
@@ -83,7 +89,7 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
             ship.ship_mut().ship_facing = 5;
-            ship.element_mut().next.location = POINT { x: 100, y: 200 };
+            ship.element_mut().next.location = Point { x: 100, y: 200 };
             let slots = ship.weapon(1);
             let out = [ship.weapon_record(slots[0]).cast()];
             let missile = battle::element(out[0]);
@@ -137,12 +143,12 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
             ship.descriptor_mut().ship_info.energy_level = 3;
             ship.element_mut().hits = 14;
             (*ship.el()).thrust = 0;
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.el();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+            concerns[ENEMY_SHIP_INDEX as usize].object_ptr = enemy.el();
             concerns[ENEMY_SHIP_INDEX as usize].which_turn = 10;
             ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
             assert_eq!(
-                concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                concerns[ENEMY_SHIP_INDEX as usize].move_state,
                 MOVEMENT_STATE_PURSUE
             );
             assert_eq!((*ship.el()).thrust, 11);

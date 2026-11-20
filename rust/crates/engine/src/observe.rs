@@ -155,7 +155,7 @@ mod tests {
         ships.put(link);
         let pool = kernel.races[0].fixture_pool();
         let key = pool.id_at(usize::from(owner.slot())).unwrap();
-        pool.get_mut(key).hShip = Some(element);
+        pool.get_mut(key).ship_element = Some(element);
         kernel.elements.fixture_record_mut(element).parent = crate::battle::Parent::Ship(owner);
         kernel.elements.put(element);
         for flags in [0, APPEARING, NONSOLID, DISAPPEARING] {
@@ -185,7 +185,7 @@ mod tests {
         ships.put(link);
         let pool = kernel.races[0].fixture_pool();
         let key = pool.id_at(usize::from(owner.slot())).unwrap();
-        pool.get_mut(key).hShip = Some(element);
+        pool.get_mut(key).ship_element = Some(element);
         let mut battle = crate::battle::Battle::new();
         crate::battle::Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random)
             .ship_state_mut(owner)
