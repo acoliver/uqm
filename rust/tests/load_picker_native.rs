@@ -7,9 +7,7 @@ use uqm_rust::{
     front_end::gameopt::{picker_action, PickerAction},
     graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
     input::ffi::*,
-    io::uio_bridge as uio,
     mainloop::{
-        dir_prep::saveDir,
         input_abi::{FlushInput, UpdateInputState},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
@@ -197,7 +195,6 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             );
 
             let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
-            saveDir = ptr::null_mut();
             assert!(!profile.path().join("save").exists());
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
@@ -205,26 +202,13 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
 
             let saves = profile.path().join("save");
             std::fs::create_dir(&saves).unwrap();
-            uio::uio_init();
-            let repo = uio::uio_openRepository(0);
-            let path = CString::new(saves.to_str().unwrap()).unwrap();
-            assert!(!uio::uio_mountDir(
-                repo,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                4,
-                ptr::null_mut()
-            )
-            .is_null());
-            let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-            saveDir = dir.cast();
+            let vfs = uqm_rust::io::Vfs::new();
+            vfs.mount_dir("/", &saves, uqm_rust::io::Placement::Top, false);
+            let files = vfs.open_dir(std::path::Path::new("/"));
+            vfs.set_save_dir(files.clone());
+            let previous = uqm_rust::io::install(vfs);
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
-            let files = uqm_rust::io::uio_owned::directory(saveDir.cast()).unwrap();
             let slots = SaveSlots::new(&files);
             let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
             for slot in 0..50 {
@@ -274,10 +258,14 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                 picker_action(false, false, true, true, false),
                 PickerAction::Select
             );
-            saveDir = ptr::null_mut();
-            uio::uio_closeDir(dir);
-            uio::uio_closeRepository(repo);
-            uio::uio_unInit();
+            match previous {
+                Some(previous) => {
+                    uqm_rust::io::install(previous);
+                }
+                None => {
+                    uqm_rust::io::uninstall();
+                }
+            }
             rust_v_control_uninit();
             Uninit_DrawCommandQueue();
         }

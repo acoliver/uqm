@@ -2,10 +2,9 @@
 #![allow(non_snake_case)]
 
 use super::ffi::*;
-use super::registry::*;
 
 use crate::memory::{rust_hcalloc, rust_hfree};
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
 
 static mut CURRENT_VIDEO: *mut TFB_VideoClip = ptr::null_mut();
@@ -13,34 +12,15 @@ static mut CURRENT_SPEECH: *mut c_void = ptr::null_mut();
 
 use crate::sound::heart_ffi::snd_stop_speech as snd_StopSpeech;
 
-use crate::threading::legacy_abi::CreateMutex_Core;
-
-use crate::threading::legacy_abi::DestroyMutex;
-
-use crate::io::handles::contentDir;
-
 extern "C" {
 
     static mut ScreenWidth: i32;
     static mut ScreenHeight: i32;
 }
-use crate::sound::heart_ffi::DestroyMusic;
 
 /// # Safety
 /// Must run on the graphics thread with graphics initialized.
 pub unsafe extern "C" fn InitVideoPlayer(_use_cdrom: c_int) -> c_int {
-    let mut format = std::mem::zeroed::<crate::graphics::native_abi::TFB_PixelFormat>();
-    crate::graphics::native_abi::TFB_DrawCanvas_GetScreenFormat(&mut format);
-    if !VideoDecoder_Init(
-        0,
-        format.BitsPerPixel as c_int,
-        format.Rmask,
-        format.Gmask,
-        format.Bmask,
-        0,
-    ) {
-        return 0;
-    }
     tfb_init_video_player() as c_int
 }
 
@@ -48,7 +28,6 @@ pub unsafe extern "C" fn InitVideoPlayer(_use_cdrom: c_int) -> c_int {
 /// Must run on the graphics thread, serialized with video operations.
 pub unsafe extern "C" fn UninitVideoPlayer() {
     tfb_uninit_video_player();
-    VideoDecoder_Uninit();
 }
 
 /// # Safety
@@ -117,9 +96,6 @@ pub unsafe extern "C" fn VidPlayEx(
         return 0;
     }
     if !audio.is_null() {
-        if !(*video).h_audio.is_null() {
-            DestroyMusic((*video).h_audio);
-        }
         (*video).h_audio = audio;
         (*(*video).decoder).audio_synced = false;
     }
@@ -147,20 +123,40 @@ pub unsafe extern "C" fn VidPlay(video: *mut TFB_VideoClip) -> c_int {
     VidPlayEx(video, ptr::null_mut(), ptr::null_mut(), u32::MAX)
 }
 
+/// Probe the movie named by `path`; only `.duk` movies have a decoder.
+fn load_clip_source(dir: crate::io::Dir, path: &CStr) -> Option<TFB_VideoDecoder> {
+    let name = path.to_str().ok()?;
+    let (_, extension) = name.rsplit_once('.')?;
+    if extension != "duk" {
+        return None;
+    }
+    let duk = super::files::open(&dir, name).ok()?;
+    Some(TFB_VideoDecoder {
+        w: duk.width(),
+        h: duk.height(),
+        length: duk.duration(),
+        audio_synced: false,
+        dir,
+        filename: CString::from(path),
+    })
+}
+
 /// # Safety
 /// `path` is a terminated content pathname; graphics and video are initialized.
 #[no_mangle]
 pub unsafe extern "C" fn _init_video_file(path: *const c_char) -> *mut TFB_VideoClip {
-    let decoder = VideoDecoder_Load(contentDir.cast(), path);
-    if decoder.is_null() {
+    let Some(content) = crate::io::content_dir() else {
         return ptr::null_mut();
-    }
+    };
+    let Some(decoder) = load_clip_source(content, CStr::from_ptr(path)) else {
+        return ptr::null_mut();
+    };
+    let decoder = Box::into_raw(Box::new(decoder));
     let video = rust_hcalloc(size_of::<TFB_VideoClip>()).cast::<TFB_VideoClip>();
     (*video).decoder = decoder;
     (*video).length = (*decoder).length;
     (*video).w = (*decoder).w;
     (*video).h = (*decoder).h;
-    (*video).guard = (CreateMutex_Core(c"video guard".as_ptr(), 1 << 2)).cast();
     video
 }
 
@@ -172,8 +168,7 @@ pub unsafe extern "C" fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int {
         return 0;
     }
     tfb_stop_video(video);
-    VideoDecoder_Free((*video).decoder);
-    DestroyMutex(((*video).guard).cast());
+    drop(Box::from_raw((*video).decoder));
     rust_hfree(video.cast());
     1
 }
@@ -195,7 +190,7 @@ mod tests {
             return;
         }
         crate::time::source::install(true);
-        let directory = crate::video::ffi_vtable_tests::logo_directory();
+        let directory = crate::video::ffi_tests::logo_directory().as_content();
         directory.write(
             "video.rmp",
             b"fixture.video = 3DOVID:logo.duk
@@ -210,7 +205,6 @@ fixture.absent = 3DOVID:missing.duk
             crate::graphics::sdl::lifecycle_abi::SDL_Screen = screen.cast();
             crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND =
                 ptr::addr_of_mut!(crate::graphics::sdl::lifecycle_abi::RUST_BACKEND);
-            contentDir = directory.handle();
             assert_eq!(InitVideoPlayer(0), 1);
             assert!(VidPlaying().is_null());
             assert_eq!(VidProcessFrame(), 0);
@@ -219,21 +213,8 @@ fixture.absent = 3DOVID:missing.duk
             assert_eq!(VidPlay(ptr::null_mut()), 0);
             assert_eq!(DestroyVideo(ptr::null_mut()), 0);
             assert!(_init_video_file(c"missing.duk".as_ptr()).is_null());
-            assert!(VideoDecoder_Load(contentDir.cast(), c"no-extension".as_ptr()).is_null());
-            assert!(VideoDecoder_Load(contentDir.cast(), c"movie.unknown".as_ptr()).is_null());
-            let decoder = VideoDecoder_Load(contentDir.cast(), c"logo.duk".as_ptr());
-            assert!(!decoder.is_null());
-            assert_ne!(
-                std::ffi::CStr::from_ptr(VideoDecoder_GetName(decoder)),
-                c"(Null)"
-            );
-            assert_eq!(VideoDecoder_Decode(decoder), 1);
-            assert_eq!((*decoder).error, 0);
-            assert!(VideoDecoder_Seek(decoder, 1.0) > 0.0);
-            assert_eq!(VideoDecoder_SeekFrame(decoder, 2), 2);
-            VideoDecoder_Rewind(decoder);
-            assert_eq!((*decoder).cur_frame, 0);
-            VideoDecoder_Free(decoder);
+            assert!(_init_video_file(c"no-extension".as_ptr()).is_null());
+            assert!(_init_video_file(c"movie.unknown".as_ptr()).is_null());
             let clip = _init_video_file(c"logo.duk".as_ptr());
             assert!(!clip.is_null());
             assert_eq!((*clip).w, (*(*clip).decoder).w);
@@ -247,7 +228,7 @@ fixture.absent = 3DOVID:missing.duk
             assert_eq!(DestroyVideo(clip), 1);
             crate::video::legacy::InstallVideoResType();
             crate::resource::ffi_bridge::LoadResourceIndex(
-                contentDir.cast(),
+                &directory.dir(),
                 c"video.rmp".as_ptr(),
                 ptr::null(),
             );
@@ -255,7 +236,6 @@ fixture.absent = 3DOVID:missing.duk
             assert!(VidPlaying().is_null());
             UninitVideoPlayer();
             crate::sound::rodio_audio::rust_audio_uninit();
-            contentDir = ptr::null_mut();
             crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND = ptr::null_mut();
             crate::graphics::sdl::lifecycle_abi::SDL_Screen = ptr::null_mut();
             sdl2_sys::SDL_FreeSurface(screen);

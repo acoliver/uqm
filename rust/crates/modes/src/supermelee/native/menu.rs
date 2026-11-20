@@ -263,8 +263,8 @@ pub mod live {
     pub fn melee(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
-        config: uqm_engine::io::uio_owned::Directory,
-        teams: uqm_engine::io::uio_owned::Directory,
+        config: uqm_engine::io::Dir,
+        teams: uqm_engine::io::Dir,
     ) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();

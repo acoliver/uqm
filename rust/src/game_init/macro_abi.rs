@@ -17,20 +17,6 @@ pub unsafe extern "C" fn LoadGraphic(key: *const c_char) -> *mut drawable_desc {
 /// # Safety
 /// Resource key must be a NUL-terminated string and the loader initialized.
 #[no_mangle]
-pub unsafe extern "C" fn LoadSound(key: *const c_char) -> *mut c_void {
-    crate::sound::resource_types::LoadSoundInstance(key)
-}
-
-/// # Safety
-/// Resource key must be a NUL-terminated string and the loader initialized.
-#[no_mangle]
-pub unsafe extern "C" fn LoadMusic(key: *const c_char) -> *mut c_void {
-    crate::sound::resource_types::LoadMusicInstance(key)
-}
-
-/// # Safety
-/// Resource key must be a NUL-terminated string and the loader initialized.
-#[no_mangle]
 pub unsafe extern "C" fn LoadStringTable(key: *const c_char) -> *mut StringTable {
     crate::strings::sresins::LoadStringTableInstance(key)
 }

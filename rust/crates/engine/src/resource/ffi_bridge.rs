@@ -36,7 +36,6 @@ use super::type_registry;
 
 #[cfg(not(test))]
 use crate::graphics::resgfx::InstallGraphicResTypes;
-use crate::io::handles::contentDir;
 #[cfg(not(test))]
 use crate::strings::sresins::install_resource_types;
 #[cfg(not(test))]
@@ -45,7 +44,9 @@ use crate::video::legacy::InstallVideoResType;
 // When audio_heart feature is enabled, register Rust audio resource callbacks
 // (the C resource loaders no longer exist).
 #[cfg(all(not(test), feature = "audio_heart"))]
-use crate::sound::heart_ffi::{DestroyMusic, DestroySound, LoadMusicFile, LoadSoundFile};
+use crate::sound::resource_types::{
+    free_music_handle, free_sound_bank_handle, music_handle, sound_bank_handle,
+};
 
 #[cfg(all(not(test), feature = "audio_heart"))]
 unsafe extern "C" fn rust_load_sound_bank(pathname: *const c_char, resdata: *mut ResourceData) {
@@ -57,7 +58,7 @@ unsafe extern "C" fn rust_load_sound_bank(pathname: *const c_char, resdata: *mut
             .unwrap_or("<bad utf8>")
     };
     eprintln!("[audio_heart] rust_load_sound_bank called: {}", name);
-    (*resdata).ptr = LoadSoundFile(pathname);
+    (*resdata).ptr = sound_bank_handle(name);
     eprintln!(
         "[audio_heart] rust_load_sound_bank result: {:?}",
         (*resdata).ptr
@@ -66,7 +67,7 @@ unsafe extern "C" fn rust_load_sound_bank(pathname: *const c_char, resdata: *mut
 
 #[cfg(all(not(test), feature = "audio_heart"))]
 unsafe extern "C" fn rust_free_sound_bank(data: *mut c_void) -> c_int {
-    DestroySound(data);
+    free_sound_bank_handle(data);
     1
 }
 
@@ -80,18 +81,18 @@ unsafe extern "C" fn rust_load_music(pathname: *const c_char, resdata: *mut Reso
             .unwrap_or("<bad utf8>")
     };
     eprintln!("[audio_heart] rust_load_music called: {}", name);
-    (*resdata).ptr = LoadMusicFile(pathname);
+    (*resdata).ptr = music_handle(name);
     eprintln!("[audio_heart] rust_load_music result: {:?}", (*resdata).ptr);
 }
 
 #[cfg(all(not(test), feature = "audio_heart"))]
 unsafe extern "C" fn rust_free_music(data: *mut c_void) -> c_int {
-    DestroyMusic(data);
+    free_music_handle(data);
     1
 }
 
 use crate::host::Files;
-use crate::io::uio_owned::directory;
+use crate::io::Dir;
 use std::path::Path;
 
 #[path = "file_stream.rs"]
@@ -290,20 +291,15 @@ pub unsafe extern "C" fn UninitResourceSystem() {
 // Index loading/saving
 // =============================================================================
 
-/// Load a resource index file via UIO, parsing entries with an optional prefix.
+/// Load a resource index file, parsing entries with an optional prefix.
 ///
-/// Opens `filename` in `dir` via UIO, reads the entire file, parses it as a
+/// Opens `filename` in `dir`, reads the entire file, parses it as a
 /// property file, and calls `process_resource_desc` for each entry.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn LoadResourceIndex(
-    dir: *mut c_void,
-    filename: *const c_char,
-    prefix: *const c_char,
-) {
+/// `filename` is null or terminated; `prefix` is null or terminated.
+pub unsafe fn LoadResourceIndex(dir: &Dir, filename: *const c_char, prefix: *const c_char) {
     if filename.is_null() {
         return;
     }
@@ -364,14 +360,13 @@ pub unsafe extern "C" fn LoadResourceIndex(
     );
 }
 
-/// Save resource index entries matching `root` prefix to a file via UIO.
+/// Save resource index entries matching `root` prefix to a file.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SaveResourceIndex(
-    dir: *mut c_void,
+/// `file` is null or terminated; `root` is null or terminated.
+pub unsafe fn SaveResourceIndex(
+    dir: &Dir,
     file: *const c_char,
     root: *const c_char,
     strip_root: c_int,
@@ -1050,10 +1045,9 @@ pub unsafe fn res_put_color(key: *const c_char, value: u32) {
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn res_OpenResFile(
-    dir: *mut c_void,
+/// `filename` and `mode` are null or terminated.
+pub unsafe fn res_OpenResFile(
+    dir: &Dir,
     filename: *const c_char,
     mode: *const c_char,
 ) -> *mut c_void {
@@ -1061,12 +1055,10 @@ pub unsafe extern "C" fn res_OpenResFile(
         return ptr::null_mut();
     }
 
-    if directory(dir.cast())
-        .and_then(|files| {
-            files.stat(Path::new(
-                CStr::from_ptr(filename).to_string_lossy().as_ref(),
-            ))
-        })
+    if dir
+        .stat(Path::new(
+            CStr::from_ptr(filename).to_string_lossy().as_ref(),
+        ))
         .is_ok_and(|stat| stat.is_dir)
     {
         return STREAM_SENTINEL;
@@ -1221,7 +1213,10 @@ pub unsafe extern "C" fn LoadResourceFromPath(
     };
 
     let mode = c"rb".as_ptr() as *const c_char;
-    let fp = res_OpenResFile(contentDir.cast(), pathname, mode);
+    let Some(content) = crate::io::content_dir() else {
+        return ptr::null_mut();
+    };
+    let fp = res_OpenResFile(&content, pathname, mode);
 
     // Reject null only. STREAM_SENTINEL means "directory" and must be
     // passed through to the load function (e.g. _GetFontData reads glyph

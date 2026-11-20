@@ -3,19 +3,13 @@
 
 use crate::graphics::native_abi as gfx;
 use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
-use crate::io::{handles::contentDir, uio_bridge as uio};
 use crate::ships::native::abi::*;
 use crate::strings::{
     sresins::LoadStringTableInstance,
     string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable},
 };
 use crate::{battle::status_native::init_status_offsets, engine::battle::access::lifecycle};
-use std::{
-    ffi::{c_char, CStr},
-    ptr,
-};
-
-pub use crate::io::handles::{repository, rootDir};
+use std::{ffi::CStr, ptr};
 
 use crate::mainloop::options_abi::{loadAddon, loadIndices, prepareAddons};
 
@@ -36,11 +30,8 @@ unsafe fn context(name: &CStr) -> CONTEXT {
 pub unsafe fn LoadKernel(
     kernel: &mut crate::engine::Kernel,
     world: &mut crate::engine::World,
-    argc: i32,
-    argv: *mut *mut c_char,
 ) -> u32 {
     {
-        crate::sound::heart_ffi::InitSound(argc, argv.cast());
         crate::video::control::InitVideoPlayer(1);
         kernel.screen_context = context(c"ScreenContext");
         if kernel.screen_context.is_null() {
@@ -62,25 +53,27 @@ pub unsafe fn LoadKernel(
         if kernel.h_res_index.is_null() {
             return 0;
         }
-        // SAFETY: the resource system was initialized above and registration runs once on the game thread.
-        if loadIndices(contentDir.cast()) == 0 {
+        let Some(content) = crate::io::content_dir() else {
+            return 0;
+        };
+        if loadIndices(&content) == 0 {
             return 0;
         }
         let preferences = kernel.configuration.preferences();
         if preferences.music_3do != 0 {
-            loadAddon(c"3domusic".as_ptr());
+            loadAddon(&content, "3domusic");
         }
         kernel.using_speech = preferences.speech;
-        if preferences.speech != 0 && loadAddon(c"3dovoice".as_ptr()) == 0 {
+        if preferences.speech != 0 && !loadAddon(&content, "3dovoice") {
             kernel.using_speech = 0;
         }
         if preferences.music_remix != 0 {
-            loadAddon(c"remix".as_ptr());
+            loadAddon(&content, "remix");
         }
         if preferences.intro == OPT_3DO as i32 {
-            loadAddon(c"3dovideo".as_ptr());
+            loadAddon(&content, "3dovideo");
         }
-        prepareAddons(&kernel.configuration.addons());
+        prepareAddons(&content, &kernel.configuration.addons());
         let map = CaptureStringTable(LoadStringTableInstance(c"colortable.main".as_ptr()));
         if map.is_null() {
             return 0;
@@ -189,26 +182,3 @@ pub unsafe fn InitGameKernel(kernel: &mut crate::engine::Kernel, activity: u16) 
 }
 
 pub fn UninitPlayerInput() {}
-
-/// # Safety
-/// Called once during startup on the IO owner thread.
-#[no_mangle]
-pub unsafe extern "C" fn initIO() -> i32 {
-    uio::uio_init();
-    repository = uio::uio_openRepository(0);
-    rootDir = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-    if rootDir.is_null() {
-        log::error!("Could not open '/' dir.");
-        -1
-    } else {
-        0
-    }
-}
-
-/// # Safety
-/// No directory users remain; root and repository are live.
-pub unsafe fn uninitIO() {
-    uio::uio_closeDir(rootDir);
-    uio::uio_closeRepository(repository);
-    uio::uio_unInit();
-}

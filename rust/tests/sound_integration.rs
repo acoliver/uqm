@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 // Import from the crate using the lib name
-use uqm_rust::sound::{AudioFormat, DecodeError, DecoderFormats, OggDecoder, SoundDecoder};
+use uqm_rust::sound::{AudioFormat, DecodeError, Decoder, DecoderFormats, OggDecoder};
 
 /// Get path to test audio file (if available)
 fn get_test_ogg_path() -> Option<PathBuf> {

@@ -1,7 +1,7 @@
 use super::*;
 use crate::sound::null::NullDecoder;
 
-fn silent() -> Box<dyn SoundDecoder> {
+fn silent() -> Box<dyn Decoder> {
     let mut decoder = NullDecoder::with_duration(2.0);
     assert!(decoder.init());
     Box::new(decoder)
@@ -17,7 +17,6 @@ fn limited_decoder_seeks_to_start_and_stops_at_the_requested_duration() {
     assert!(decoder.is_null());
     assert!(!decoder.needs_swap());
     assert_eq!(decoder.get_frame(), 0);
-    assert_eq!(decoder.get_error(), 0);
     let mut buffer = vec![0xff; 11025];
     let size = decoder.decode(&mut buffer).unwrap();
     assert_eq!(size, 2756 * 2);
@@ -29,22 +28,11 @@ fn limited_decoder_seeks_to_start_and_stops_at_the_requested_duration() {
 }
 
 #[test]
-fn limited_decoder_clamps_duration_and_preserves_inner_lifecycle() {
+fn limited_decoder_clamps_duration_and_reads_through_the_inner_decoder() {
     let mut decoder = LimitedDecoder::new(silent(), 500, 0);
     assert_eq!(decoder.length(), 1.5);
     assert_eq!(decoder.decode(&mut []), Err(DecodeError::EndOfFile));
-    assert!(decoder.init_module(0, &DecoderFormats::default()));
-    assert!(decoder.init());
-    decoder.open(Path::new("silent")).unwrap();
-    decoder.open_from_bytes(&[], "silent").unwrap();
     assert_eq!(decoder.decode(&mut [0xff; 4]), Ok(4));
-    decoder.close();
-    decoder.term();
-    assert_eq!(
-        decoder.decode(&mut [0; 4]),
-        Err(DecodeError::NotInitialized)
-    );
-    decoder.term_module();
     let mut beyond_end = LimitedDecoder::new(silent(), 3000, 500);
     assert_eq!(beyond_end.length(), 0.0);
     assert_eq!(beyond_end.decode(&mut [0; 4]), Err(DecodeError::EndOfFile));

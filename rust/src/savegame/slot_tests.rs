@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::engine::host::{FileStat, FileStream, Files};
-use crate::io::uio_bridge::Vfs;
+use crate::io::Vfs;
 use serial_test::serial;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

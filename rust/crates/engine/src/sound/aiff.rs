@@ -16,7 +16,7 @@
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 
-use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
+use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::formats::{AudioFormat, DecoderFormats};
 
 // AIFF format constants (big-endian IDs)
@@ -463,27 +463,23 @@ impl AiffDecoder {
     }
 }
 
-impl SoundDecoder for AiffDecoder {
-    fn name(&self) -> &'static str {
-        "AIFF"
-    }
-
-    fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
+impl AiffDecoder {
+    pub fn init_module(&mut self, _flags: i32, formats: &DecoderFormats) -> bool {
         self.formats = Some(*formats);
         true
     }
 
-    fn term_module(&mut self) {
+    pub fn term_module(&mut self) {
         self.formats = None;
     }
 
-    fn get_error(&mut self) -> i32 {
+    pub fn get_error(&mut self) -> i32 {
         let err = self.last_error;
         self.last_error = 0;
         err
     }
 
-    fn init(&mut self) -> bool {
+    pub fn init(&mut self) -> bool {
         let fmts = match self.formats.as_ref() {
             Some(f) => f,
             None => return false,
@@ -493,17 +489,17 @@ impl SoundDecoder for AiffDecoder {
         true
     }
 
-    fn term(&mut self) {
+    pub fn term(&mut self) {
         self.close();
     }
 
-    fn open(&mut self, path: &Path) -> DecodeResult<()> {
+    pub fn open(&mut self, path: &Path) -> DecodeResult<()> {
         let data = std::fs::read(path).map_err(|e| DecodeError::IoError(e.to_string()))?;
         let name = path.to_string_lossy();
         self.open_from_bytes(&data, &name)
     }
 
-    fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
+    pub fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
         // Reset state (REQ-LF-7)
         self.close();
         self.common = CommonChunk::default();
@@ -651,7 +647,7 @@ impl SoundDecoder for AiffDecoder {
         Ok(())
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         self.data = Vec::new();
         self.data_pos = 0;
         self.max_pcm = 0;
@@ -665,6 +661,12 @@ impl SoundDecoder for AiffDecoder {
         self.frequency = 0;
         self.format = AudioFormat::Stereo16;
         self.length = 0.0;
+    }
+}
+
+impl Decoder for AiffDecoder {
+    fn name(&self) -> &'static str {
+        "AIFF"
     }
 
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {

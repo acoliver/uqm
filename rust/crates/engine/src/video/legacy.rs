@@ -64,11 +64,11 @@ impl VideoPlayback {
         let audio = self
             .audio
             .as_ref()
-            .map_or(ptr::null_mut(), LoadedMusic::as_raw);
+            .map_or(ptr::null_mut(), LoadedMusic::identity);
         let speech = self
             .speech
             .as_ref()
-            .map_or(ptr::null_mut(), LoadedMusic::as_raw);
+            .map_or(ptr::null_mut(), LoadedMusic::identity);
         // SAFETY: this non-Send owner retains the clip and audio through each game-thread operation.
         unsafe {
             match operation {

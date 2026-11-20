@@ -1,6 +1,6 @@
 //! Typed resource settings and persistence through a retained directory.
 use super::ffi_bridge::{serialize_index, with_dispatch};
-use crate::io::uio_owned::Directory;
+use crate::io::Dir;
 use std::{
     ffi::CStr,
     io::{self, Write},
@@ -60,7 +60,7 @@ impl Settings {
         );
         with_dispatch(|dispatch| dispatch.process_resource_desc(key, &format!("{kind}:{value}")));
     }
-    pub fn save(&self, directory: &Directory, file: &CStr, prefix: &str) -> io::Result<()> {
+    pub fn save(&self, directory: &Dir, file: &CStr, prefix: &str) -> io::Result<()> {
         let lines = serialize_index(Some(prefix), true);
         let mut stream = directory.create(file)?;
         for line in lines {

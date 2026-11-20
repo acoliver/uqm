@@ -11,8 +11,6 @@ use uqm_rust::{
         native_abi::*,
         pixmap_abi::*,
     },
-    io::uio_bridge as uio,
-    mainloop::dir_prep::contentDir,
     planet_side::{
         assembly::{SurfaceAssembly, SurfaceVisualPort},
         collision_adapter::SurfaceMasks,
@@ -36,22 +34,7 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
         .collect();
     let _formats = OffscreenFormats::new().unwrap();
     unsafe {
-        uio::uio_init();
-        let repo = uio::uio_openRepository(0);
-        let host = CString::new(base.to_str().unwrap()).unwrap();
-        assert!(!uio::uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut()
-        )
-        .is_null());
-        contentDir = uio::uio_openDir(repo, c"/".as_ptr(), 0).cast();
+        let content = uqm_engine::test_support::native_session::ContentMount::new(&base);
         let drawable = LoadGraphicFile(c"ui/miscdata.ani".as_ptr());
         assert!(!drawable.is_null());
         let frames = CaptureDrawable(drawable);
@@ -224,10 +207,7 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
         DestroyDrawable(drawable);
         SetContext(previous_context);
         DestroyContext(context);
-        uio::uio_closeDir(contentDir.cast());
-        contentDir = ptr::null_mut();
-        uio::uio_closeRepository(repo);
-        uio::uio_unInit();
+        drop(content);
         UninitColorMaps();
     }
 }

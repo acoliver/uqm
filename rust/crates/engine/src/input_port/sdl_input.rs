@@ -10,10 +10,9 @@ use super::c_api::*;
 use super::ffi::{self, GestureUnion, VCONTROL_GESTURE, VCONTROL_NONE};
 use super::keynames::key_name;
 use super::vcontrol::Gesture;
-use crate::io::handles::{configDir as CONFIG_DIR, contentDir as CONTENT_DIR};
+use crate::io::Dir;
 use crate::resource::ffi_bridge::{
     res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove, LoadResourceIndex,
-    SaveResourceIndex,
 };
 
 const ALTERNATES: usize = 2;
@@ -300,21 +299,27 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
     }
     let count = state.num_templates * state.num_flight * ALTERNATES;
     state.controls = (0..count).map(|_| empty_gesture()).collect();
-    LoadResourceIndex(CONTENT_DIR.cast(), c"menu.key".as_ptr(), c"menu.".as_ptr());
-    LoadResourceIndex(
-        CONFIG_DIR.cast(),
-        c"override.cfg".as_ptr(),
-        c"menu.".as_ptr(),
-    );
+    let content = crate::io::content_dir();
+    let config = crate::io::config_dir();
+    load_index(content.as_ref(), c"menu.key", c"menu.");
+    load_index(config.as_ref(), c"override.cfg", c"menu.");
     state.register_controls();
-    LoadResourceIndex(CONFIG_DIR.cast(), c"flight.cfg".as_ptr(), c"keys.".as_ptr());
+    load_index(config.as_ref(), c"flight.cfg", c"keys.");
     if res_HasKey(c"keys.1.name".as_ptr()) == 0 {
-        LoadResourceIndex(CONTENT_DIR.cast(), c"uqm.key".as_ptr(), c"keys.".as_ptr());
+        load_index(content.as_ref(), c"uqm.key", c"keys.");
     }
     state.register_flight();
     ffi::rust_vcontrol_reset_input();
     state.initialized = true;
     0
+}
+
+/// Load a resource index from `dir`; an absent directory loads nothing.
+fn load_index(dir: Option<&Dir>, file: &CStr, prefix: &CStr) {
+    if let Some(dir) = dir {
+        // SAFETY: both names are terminated C string references.
+        unsafe { LoadResourceIndex(dir, file.as_ptr(), prefix.as_ptr()) };
+    }
 }
 
 #[no_mangle]
@@ -500,13 +505,6 @@ pub fn rebind_input_state(
         vcontrol_dump_gesture(value.as_mut_ptr(), 39, &mut state.controls[index]);
         res_PutString(key.as_ptr(), value.as_ptr());
     }
-}
-
-/// # Safety
-/// `path` must be a live UIO directory and `filename` a NUL-terminated string.
-#[no_mangle]
-pub unsafe extern "C" fn SaveKeyConfiguration(path: *mut c_void, filename: *const c_char) {
-    SaveResourceIndex(path, filename, c"keys.".as_ptr(), 1);
 }
 
 #[no_mangle]

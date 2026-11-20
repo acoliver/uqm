@@ -103,7 +103,7 @@ fn sample_with(
     buffers: u32,
     callbacks: Option<Recorder>,
 ) -> Arc<Mutex<SoundSample>> {
-    let decoder = decoder.map(|d| Box::new(d) as Box<dyn SoundDecoder>);
+    let decoder = decoder.map(|d| Box::new(d) as Box<dyn Decoder>);
     let callbacks = callbacks.map(|c| Box::new(c) as Box<dyn StreamCallbacks + Send>);
     Arc::new(Mutex::new(
         create_sound_sample(decoder, buffers, callbacks).unwrap(),

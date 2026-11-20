@@ -180,7 +180,7 @@ impl RaceDesc {
                 .raw
                 .loaded_victory
                 .as_ref()
-                .map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
+                .map_or(std::ptr::null_mut(), |music| music.identity().cast());
             if self.raw.loaded_victory.is_none() {
                 return false;
             }

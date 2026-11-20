@@ -1,6 +1,6 @@
 //! SDL_RWops over UQM streams, ported from sdluio.c (GPL-2.0-or-later).
 use crate::host::{FileStream, Files};
-use crate::io::uio_owned::directory;
+use crate::io::Dir;
 use crate::memory::{rust_hfree, rust_hmalloc};
 use sdl2_sys::*;
 use std::ffi::{c_char, c_int, c_void, CStr};
@@ -20,17 +20,11 @@ unsafe fn io_error(error: std::io::Error) {
 }
 
 /// # Safety
-/// Directory and filename must be valid UIO inputs.
-pub unsafe extern "C" fn sdluio_load_image(
-    dir: *mut c_void,
-    filename: *const c_char,
-) -> *mut SDL_Surface {
-    let files = directory(dir.cast());
-    let opened = files.and_then(|files| {
-        files.open_read(std::path::Path::new(
-            CStr::from_ptr(filename).to_string_lossy().as_ref(),
-        ))
-    });
+/// `filename` must be NUL-terminated.
+pub unsafe fn sdluio_load_image(dir: &Dir, filename: *const c_char) -> *mut SDL_Surface {
+    let opened = dir.open_read(std::path::Path::new(
+        CStr::from_ptr(filename).to_string_lossy().as_ref(),
+    ));
     let fp = match opened {
         Ok(file) => Box::into_raw(Box::new(file)),
         Err(error) => {
@@ -127,21 +121,21 @@ pub unsafe extern "C" fn sdluio_close(context: *mut SDL_RWops) -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sound::decoder_vtable_tests::Directory;
+    use crate::io::fixture::TempMount;
 
     #[test]
     #[serial_test::serial]
     fn stream_callbacks_write_seek_and_read_complete_items() {
-        let directory = Directory::new();
+        let mount = TempMount::new();
         // SAFETY: the repository owns the stream and the allocated RWops is consumed by close.
         unsafe {
-            assert!(sdluio_load_image(directory.handle().cast(), c"absent.png".as_ptr()).is_null());
+            assert!(sdluio_load_image(&mount.dir(), c"absent.png".as_ptr()).is_null());
             let root = concat!(env!("UQM_RUST_ROOT"), "/../tmp");
             std::fs::create_dir_all(root).unwrap();
             let read_write = tempfile::tempfile_in(root).unwrap();
-            let file = Box::into_raw(Box::new(FileStream::new(
-                crate::io::uio_bridge::FileData::File(read_write),
-            )));
+            let file = Box::into_raw(Box::new(FileStream::new(crate::io::vfs::FileData::File(
+                read_write,
+            ))));
             let rw: *mut SDL_RWops = rust_hmalloc(std::mem::size_of::<SDL_RWops>()).cast();
             (*rw).hidden.unknown.data1 = file.cast();
             assert_eq!(sdluio_write(rw, b"abcdef".as_ptr().cast(), 2, 3), 3);

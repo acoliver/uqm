@@ -16,7 +16,6 @@ pub unsafe fn free_kernel(kernel: &mut crate::engine::Kernel) {
         DestroyContext(kernel.screen_context.cast());
         kernel.screen_context = ptr::null_mut();
         crate::video::control::UninitVideoPlayer();
-        crate::sound::heart_ffi::uninit_sound();
     }
 }
 

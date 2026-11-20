@@ -1,17 +1,17 @@
 //! Animation and bitmap-font loaders, ported from gfxload.c (GPL-2.0-or-later).
 use super::native_abi::*;
 use crate::host::FileStream;
-use crate::io::uio_bridge as uio;
+use crate::io::{Match, Placement};
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
 use crate::strings::string_table as strings;
 use std::io::{Read, Seek, SeekFrom};
 
 use std::ffi::{c_char, c_void, CStr, CString};
+use std::path::Path;
 use std::ptr;
 
 use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
 
-use crate::io::handles::repository;
 #[derive(Clone, Copy)]
 struct AniData {
     transparent: i32,
@@ -125,30 +125,32 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
     let (parent, name, prefix) = path_parts(path);
     let mut header = [0u8; 4];
     let _ = (*fp).read(&mut header);
-    let mut mount = ptr::null_mut();
+    let mut mount = None;
     let (dir, file, prefix) = if !path.is_empty() && u32::from_le_bytes(header) == 0x04034b50 {
-        let parent = CString::new(parent).unwrap();
+        let vfs = crate::io::installed().unwrap_or_else(|| panic!("file system not installed"));
+        let parent_text = String::from_utf8_lossy(parent);
+        let dir = vfs.open_dir(Path::new(parent_text.as_ref()));
+        let archive = String::from_utf8_lossy(name);
+        mount = vfs
+            .mount_zip(
+                &parent_text,
+                &dir,
+                Path::new(archive.as_ref()),
+                Placement::Top,
+                true,
+            )
+            .ok()
+            .map(|id| (vfs, id));
         let name = CString::new(name).unwrap();
-        let dir = uio::uio_openDir(repository, parent.as_ptr(), 0);
-        let mut auto_mount = [ptr::null_mut()];
-        mount = uio::uio_mountDir(
-            repository,
-            parent.as_ptr(),
-            2,
-            dir,
-            name.as_ptr(),
-            c"/".as_ptr(),
-            auto_mount.as_mut_ptr(),
-            2 | 4,
-            ptr::null_mut(),
-        );
-        let file =
-            crate::resource::ffi_bridge::res_OpenResFile(dir.cast(), name.as_ptr(), c"r".as_ptr())
-                .cast::<FileStream>();
+        let file = crate::resource::ffi_bridge::res_OpenResFile(&dir, name.as_ptr(), c"r".as_ptr())
+            .cast::<FileStream>();
         position = 0;
         (dir, file, &b""[..])
     } else {
-        (contentDir.cast(), fp, prefix)
+        let Some(content) = crate::io::content_dir() else {
+            return ptr::null_mut();
+        };
+        (content, fp, prefix)
     };
     let _ = (*file).seek(SeekFrom::Start(position));
     let mut total = 0;
@@ -164,7 +166,7 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
             break;
         };
         let filename = CString::new([prefix, name.as_bytes()].concat()).unwrap();
-        let canvas = TFB_DrawCanvas_LoadFromFile(dir.cast(), filename.as_ptr());
+        let canvas = TFB_DrawCanvas_LoadFromFile(&dir, filename.as_ptr());
         if canvas.is_null() {
             log::warn!("get_cel_data: Unable to load image!");
         } else {
@@ -192,10 +194,9 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
     if drawable.is_null() {
         log::warn!("Couldn't get cel data");
     }
-    if !mount.is_null() {
+    if let Some((vfs, id)) = mount {
         crate::resource::ffi_bridge::res_CloseResFile(file.cast());
-        uio::uio_closeDir(dir);
-        uio::uio_unmountDir(mount);
+        vfs.unmount(id);
     }
     drawable.cast()
 }
@@ -242,48 +243,39 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
         return ptr::null_mut();
     }
     let path = CStr::from_ptr(_cur_resfile_name).to_bytes();
-    let mut mount = ptr::null_mut();
+    let Some(content) = crate::io::content_dir() else {
+        return ptr::null_mut();
+    };
+    let mut mount = None;
     if fp as usize != usize::MAX {
+        let vfs = crate::io::installed().unwrap_or_else(|| panic!("file system not installed"));
         let (parent, name, _) = path_parts(path);
-        let parent = CString::new(parent).unwrap();
-        let name = CString::new(name).unwrap();
-        let dir = uio::uio_openDir(repository, parent.as_ptr(), 0);
-        let mut auto_mount = [ptr::null_mut()];
-        mount = uio::uio_mountDir(
-            repository,
-            _cur_resfile_name,
-            2,
-            dir,
-            name.as_ptr(),
-            c"/".as_ptr(),
-            auto_mount.as_mut_ptr(),
-            2 | 4,
-            ptr::null_mut(),
-        );
-        uio::uio_closeDir(dir);
+        let parent = String::from_utf8_lossy(parent);
+        let name = String::from_utf8_lossy(name);
+        let dir = vfs.open_dir(Path::new(parent.as_ref()));
+        let point = CStr::from_ptr(_cur_resfile_name).to_string_lossy();
+        mount = vfs
+            .mount_zip(&point, &dir, Path::new(name.as_ref()), Placement::Top, true)
+            .ok()
+            .map(|id| (vfs, id));
     }
     let table = crate::resource::direct::LoadDirEntryTable(
-        contentDir.cast(),
+        &content,
         _cur_resfile_name,
         c".".as_ptr(),
-        3,
+        Match::Substring,
     );
     let entries = strings::CaptureStringTable(table);
     if entries.is_null() {
-        if !mount.is_null() {
-            uio::uio_unmountDir(mount);
+        if let Some((vfs, id)) = mount {
+            vfs.unmount(id);
         }
         return ptr::null_mut();
     }
     let count = strings::GetStringTableCount(entries);
-    let dir = uio::uio_openDirRelative(contentDir.cast(), _cur_resfile_name, 0);
-    if dir.is_null() {
-        strings::DestroyStringTable(strings::ReleaseStringTable(entries));
-        if !mount.is_null() {
-            uio::uio_unmountDir(mount);
-        }
-        return ptr::null_mut();
-    }
+    let dir = content.open_relative(Path::new(
+        CStr::from_ptr(_cur_resfile_name).to_string_lossy().as_ref(),
+    ));
     let mut chars = Vec::with_capacity(count as usize);
     for i in 0..count {
         let name = strings::GetStringAddress(strings::SetAbsStringTableIndex(entries, i));
@@ -291,7 +283,7 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
         if libc::sscanf(name, c"%x.".as_ptr(), &mut index) != 1 || index > 65535 {
             continue;
         }
-        let canvas = TFB_DrawCanvas_LoadFromFile(dir.cast(), name);
+        let canvas = TFB_DrawCanvas_LoadFromFile(&dir, name);
         if canvas.is_null() {
             continue;
         }
@@ -303,10 +295,9 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
         }
         chars.push(BuildChar { canvas, index });
     }
-    uio::uio_closeDir(dir);
     strings::DestroyStringTable(strings::ReleaseStringTable(entries));
-    if !mount.is_null() {
-        uio::uio_unmountDir(mount);
+    if let Some((vfs, id)) = mount {
+        vfs.unmount(id);
     }
     libc::qsort(
         chars.as_mut_ptr().cast(),

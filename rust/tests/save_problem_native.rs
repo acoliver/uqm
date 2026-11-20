@@ -120,7 +120,6 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             .unwrap();
     }
     std::fs::write(directory.path().join("font/0041.png"), png).unwrap();
-    let host = std::ffi::CString::new(directory.path().to_str().unwrap()).unwrap();
     // SAFETY: this process owns SDL, the game, and every native fixture handle.
     unsafe {
         let options = GraphicsOptions::default();
@@ -148,25 +147,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         });
         ClearDrawable();
         TFB_FlushGraphics();
-        use uqm_rust::io::uio_bridge as uio;
-        uio::uio_init();
-        let repository = uio::uio_openRepository(0);
-        assert!(!uio::uio_mountDir(
-            repository,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut()
-        )
-        .is_null());
-        let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-        assert!(!content.is_null());
-        let previous_content = uqm_rust::mainloop::dir_prep::contentDir;
-        uqm_rust::mainloop::dir_prep::contentDir = content.cast();
+        let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
         assert!(!font.is_null());
         assert!(
@@ -174,10 +155,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             "one-glyph font fixture did not load: {:?}",
             std::ffi::CStr::from_ptr(sdl2_sys::SDL_GetError())
         );
-        uqm_rust::mainloop::dir_prep::contentDir = previous_content;
-        uio::uio_closeDir(content);
-        uio::uio_closeRepository(repository);
-        uio::uio_unInit();
+        drop(content);
         (*font).Leading = 2;
         (*font).LeadingWidth = 2;
         let glyph = (*(*font).fontPages).charDesc;

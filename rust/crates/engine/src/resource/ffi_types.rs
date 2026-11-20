@@ -59,7 +59,7 @@ pub type ResourceStringFun = unsafe extern "C" fn(*mut ResourceData, *mut c_char
 /// C function pointer type for loading a resource from a file stream.
 ///
 /// ```c
-/// typedef void *(ResourceLoadFileFun)(uio_Stream *fp, DWORD len);
+/// typedef void *(ResourceLoadFileFun)(void *fp, DWORD len);
 /// ```
 pub type ResourceLoadFileFun = unsafe extern "C" fn(*mut c_void, u32) -> *mut c_void;
 
