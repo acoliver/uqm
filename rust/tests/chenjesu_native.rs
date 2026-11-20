@@ -67,7 +67,7 @@ fn doggy(ship: &mut Ship<'_>) -> ElementId {
         ship.postprocess();
         let tail = battle::tail();
         assert_ne!(tail, old_tail);
-        let dog = tail.unwrap();
+        let dog = tail.unwrap_or_else(|| panic!("queued dogi"));
         battle::get_mut(dog).next = battle::get(dog).current.clone();
         dog
     }

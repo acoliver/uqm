@@ -189,7 +189,10 @@ impl<'a> Ship<'a> {
         self.appearing();
         seed_random(odd_seed());
         self.preprocess();
-        let phoenix = self.data().phoenix.unwrap();
+        let phoenix = self
+            .data()
+            .phoenix
+            .unwrap_or_else(|| panic!("allocated phoenix"));
         self.inner.descriptor_mut().ship_info.crew_level = 0;
         hooks::invoke_element(battle::get(phoenix).death_func.unwrap(), phoenix);
         let explode = battle::get(self.id).death_func.unwrap();

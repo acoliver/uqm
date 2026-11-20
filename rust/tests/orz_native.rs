@@ -61,7 +61,7 @@ impl OrzFixture for Ship<'_> {
         battle::get_mut(self.id).state_flags |= APPEARING as u16;
         self.preprocess();
         battle::get_mut(self.id).state_flags &= !(APPEARING as u16);
-        let turret = battle::succ(self.id).unwrap();
+        let turret = battle::succ(self.id).unwrap_or_else(|| panic!("queued turret"));
         assert_eq!(
             battle::get(turret).parent,
             uqm_engine::battle::Parent::Ship(self.ship_id)
@@ -70,24 +70,24 @@ impl OrzFixture for Ship<'_> {
     }
 
     fn tick_turret(&mut self) -> ElementId {
-        let old = battle::succ(self.id).unwrap();
+        let old = battle::succ(self.id).unwrap_or_else(|| panic!("queued turret"));
         let e = old;
         battle::get_mut(e).life = 0;
         hooks::invoke_element(battle::get(e).postprocess_func.unwrap(), e);
         battle_context::unlink(old);
         battle_context::dispose(old);
-        battle::succ(self.id).unwrap()
+        battle::succ(self.id).unwrap_or_else(|| panic!("queued turret"))
     }
 
     fn launch(&mut self) -> ElementId {
         self.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
         self.ship_mut().special_counter = 0;
-        let tail = battle::tail().unwrap();
+        let tail = battle::tail().unwrap_or_else(|| panic!("queued element"));
         // Earlier objects have completed their appearing frame before this shot.
         battle::get_mut(tail).state_flags &= !(APPEARING as u16);
         self.tick_turret();
         assert_ne!(battle::tail(), Some(tail));
-        let marine = battle::tail().unwrap();
+        let marine = battle::tail().unwrap_or_else(|| panic!("queued marine"));
         assert_eq!(
             battle::get(marine).collision_func.unwrap().address(),
             marine_collision as *const () as usize
@@ -97,7 +97,7 @@ impl OrzFixture for Ship<'_> {
     }
 
     fn missile(&mut self) -> ElementId {
-        let out = self.weapon_handles(1)[0].unwrap();
+        let out = self.weapon_handles(1)[0].unwrap_or_else(|| panic!("allocated missile"));
         let e = out;
         assert!(battle::get(e).parent == uqm_engine::battle::Parent::None);
         battle::get_mut(e).parent = uqm_engine::battle::Parent::Ship(self.ship_id);

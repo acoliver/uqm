@@ -24,7 +24,7 @@ fn index_of(frame: FrameId) -> u16 {
     frame.index()
 }
 fn queue_tail() -> ElementId {
-    battle::tail().unwrap()
+    battle::tail().unwrap_or_else(|| panic!("queued element"))
 }
 #[test]
 fn eluder_descriptor_matches_the_c_template() {

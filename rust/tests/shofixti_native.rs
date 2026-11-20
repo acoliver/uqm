@@ -155,7 +155,7 @@ impl<'a> Ship<'a> {
         if old == battle::tail() {
             None
         } else {
-            battle::get(battle::tail().unwrap()).death_func
+            battle::get(battle::tail().unwrap_or_else(|| panic!("queued element"))).death_func
         }
     }
 }
@@ -928,7 +928,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         desc.ship_data.special = uqm_engine::battle::frames::FrameArray::EMPTY;
                         drop(desc);
                         crate::battle_context::with(|cx| {
-                            let outgoing = outgoing;
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {
                                 let activity = cx.world.activity_control();
                                 let runtime = cx.kernel_mut().input_runtime();

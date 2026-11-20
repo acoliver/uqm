@@ -60,7 +60,7 @@ fn trader(battle: &Battle, player: i16) -> Ship<'_> {
 }
 
 fn pump(ship: &mut Ship<'_>) -> ElementId {
-    let handle = ship.weapon_handles(1)[0].unwrap();
+    let handle = ship.weapon_handles(1)[0].unwrap_or_else(|| panic!("allocated weapon"));
     let e = handle;
     battle::get_mut(e).parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
     battle::get_mut(e).next = battle::get(e).current.clone();
@@ -75,7 +75,7 @@ fn confusion(ship: &mut Ship<'_>) -> ElementId {
     ship.postprocess();
     let handle = battle::tail();
     assert_ne!(handle, old_tail);
-    let e = handle.unwrap();
+    let e = handle.unwrap_or_else(|| panic!("allocated weapon"));
     battle::get_mut(e).next = battle::get(e).current.clone();
     e
 }

@@ -52,7 +52,7 @@ fn burn(ship: &mut Ship<'_>) -> ElementId {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
     let head = battle::head();
     ship.preprocess();
-    let trail = battle::head().unwrap();
+    let trail = battle::head().unwrap_or_else(|| panic!("queued trail"));
     assert_ne!(Some(trail), head);
     trail
 }

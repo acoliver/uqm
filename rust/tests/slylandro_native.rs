@@ -577,7 +577,7 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
                 rgba(battle::prim(child).color),
                 rgba(battle::prim(parent).color)
             );
-            parent = Some(child).unwrap();
+            parent = child;
         }
         let before = queue_len();
         with_rng(56, 0, || {

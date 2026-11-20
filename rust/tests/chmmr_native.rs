@@ -621,7 +621,7 @@ fn target(satellite: ElementId, dx: i16, dy: i16, hp: u16) -> PoolElement {
 
 fn defense(satellite: ElementId) -> ElementId {
     hooks::invoke_element(battle::get(satellite).postprocess_func.unwrap(), satellite);
-    let h = battle::tail().unwrap();
+    let h = battle::tail().unwrap_or_else(|| panic!("queued element"));
     assert_eq!(battle::get(h).target, Some(satellite));
     assert_eq!(battle::get(h).life, 0);
     h
@@ -1108,14 +1108,14 @@ fn laser(ship: &mut Ship<'_>) -> Option<ElementId> {
 }
 fn delayed_spawn(ship: &mut Ship<'_>) -> ElementId {
     ship.preprocess();
-    battle::tail().unwrap()
+    battle::tail().unwrap_or_else(|| panic!("queued element"))
 }
 fn satellites(ship: &mut Ship<'_>) -> Vec<ElementId> {
     let delay = delayed_spawn(ship);
     let death = battle::get(delay).death_func.unwrap();
     battle_context::unlink(delay);
     battle_context::dispose(delay);
-    let tail = battle::tail().unwrap();
+    let tail = battle::tail().unwrap_or_else(|| panic!("queued element"));
     hooks::invoke_element(death, ship.id);
     let mut cursor = battle::succ(tail);
     let mut out = Vec::new();
