@@ -83,6 +83,7 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
         game.kernel.tiny_font.unwrap(),
     ));
     let original_font = context.font_lease().unwrap();
+
     let driver = Rc::new(Driver::default());
     game.kernel.install_input_runtime(driver.clone());
     let mut battle = Battle::new();
@@ -101,7 +102,7 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
             c"DIMS 320 240".to_owned(),
             c"TC ff0000".to_owned(),
             c"BATCH".to_owned(),
-            c"Line 2 3 7 3".to_owned(),
+            c"LINE 2 3 7 3".to_owned(),
             c"UNBATCH".to_owned(),
             c"WAIT 20".to_owned(),
             c"CALL missing.txt".to_owned(),
@@ -248,7 +249,7 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                     c"CLS".to_owned(),
                     c"RESTBG".to_owned(),
                     c"FONT 9".to_owned(),
-                    c"Line 1".to_owned(),
+                    c"LINE 1".to_owned(),
                     c"MOVIE 0 2 1".to_owned(),
                     c"MOVIE 24 0 1".to_owned(),
                     c"SYNC 20".to_owned(),

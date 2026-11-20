@@ -252,6 +252,7 @@ impl ContextLease {
 
     /// C: `TFB_GetBatchDepth`.
     pub fn batch_depth(&self) -> i32 {
+        state::require_initialized("batch observation");
         state::batch_depth()
     }
 
@@ -264,6 +265,7 @@ impl ContextLease {
     /// Replay the queue without presenting, then present unconditionally
     /// (`TFB_FlushGraphicsEx(1)` then `TFB_SwapBuffers(TFB_REDRAW_FADING)`).
     pub fn present_retained(&self) {
+        state::require_initialized("presentation");
         state::flush_ex(true);
         super::present::swap_buffers(super::present::Redraw::Fading);
     }

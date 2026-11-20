@@ -174,10 +174,12 @@ impl GameThreadPacer {
         crate::time::counter_abi::GetTimeCounter()
     }
     pub fn sleep_for(&mut self, duration: u32) {
+        crate::graphics::state::require_initialized("pacing");
         linked::sleep_thread(duration);
     }
 
     pub fn sleep_until(&mut self, deadline: u32) {
+        crate::graphics::state::require_initialized("pacing");
         linked::sleep_thread_until(deadline);
     }
 }

@@ -267,10 +267,10 @@ mod tests {
         assert!(kernel.misc_data_frame.is_null());
         assert!(kernel.flag_stat_frame.is_null());
         assert!(kernel.assets.navigation.play.is_some());
-        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::graphics::context::ContextLease::retain(radar.context())
-        }))
-        .is_err());
+        // the projection's lease keeps the released radar context alive (#961)
+        drop(crate::graphics::context::ContextLease::retain(
+            radar.context(),
+        ));
         assert!(gradient.frame(0).is_some());
         assert!(misc.frame(0).is_some());
         assert!(status.frame(0).is_some());

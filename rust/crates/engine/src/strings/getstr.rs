@@ -573,6 +573,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn resource_files_load_through_the_content_directory() {
         let mount = crate::io::fixture::TempMount::new().as_content();
         mount.write("text.txt", b"#(A)\nalpha\n");

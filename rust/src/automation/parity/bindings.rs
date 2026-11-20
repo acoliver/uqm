@@ -96,7 +96,8 @@ impl Journal {
     // An in-place animation edit changes this resource generation, not references
     // to an earlier resource that occupied the same array storage.
     fn update_source_view(&mut self, slot: usize, frame: &Frame) -> bool {
-        let width = std::mem::size_of::<usize>();
+        // a source array holds one frame handle per view
+        let width = std::mem::size_of::<crate::graphics::drawable::FrameId>();
         let Some((&base, source)) = self.bindings.sources.range_mut(..=slot).next_back() else {
             return false;
         };

@@ -178,11 +178,11 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, module_slots), 22);
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
-        // the stamp's frame is a 16-byte handle, not a C pointer
-        assert_eq!(std::mem::size_of::<CGameState>(), 112);
-        assert_eq!(std::mem::offset_of!(CGameState, game_clock), 40);
-        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 56);
-        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 104);
+        // the retired display-array pointer no longer precedes the clock
+        assert_eq!(std::mem::size_of::<CGameState>(), 104);
+        assert_eq!(std::mem::offset_of!(CGameState, game_clock), 32);
+        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 48);
+        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 96);
     }
 
     #[test]

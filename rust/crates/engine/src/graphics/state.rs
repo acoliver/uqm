@@ -273,6 +273,11 @@ pub fn initialized() -> bool {
     with(|g| !g.screens.is_empty())
 }
 
+/// Fail fast when `what` runs before graphics are initialized on this thread.
+pub fn require_initialized(what: &str) {
+    assert!(initialized(), "{what} requires initialized graphics");
+}
+
 pub fn video_mode() -> VideoMode {
     with(|g| g.video)
 }
@@ -763,10 +768,11 @@ pub fn purge() {
 mod thread_tests {
     use super::super::{context::LoadedContext, drawable::LoadedDrawable};
 
-    /// #891: graphics state belongs to the thread that uses it, so fixtures
-    /// running on parallel test threads allocate and release without racing
-    /// each other or needing a shared lock.
+    /// #891: graphics state belongs to the thread that uses it, so threads
+    /// allocate and release without racing each other's registries. (The
+    /// observation log is process-wide, hence the serial guard.)
     #[test]
+    #[serial_test::serial]
     fn parallel_threads_allocate_and_release_independently() {
         let workers: Vec<_> = (0..4)
             .map(|worker| {

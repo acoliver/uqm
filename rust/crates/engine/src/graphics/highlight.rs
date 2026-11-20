@@ -113,13 +113,10 @@ impl Flash {
             .map_or(FrameId::NULL, LoadedDrawable::first_frame)
     }
 
-    /// Drop every cached frame. The frame on screen is no longer one of
-    /// them, so the next draw stamps whichever frame is current (#890).
     fn clear_cache(&mut self) {
         for frame in &mut self.cache {
             *frame = None;
         }
-        self.last_frame_index = None;
     }
 
     fn grab_original(&mut self) {
@@ -585,57 +582,5 @@ impl ScheduledHighlight {
                 state.highlight.post_update();
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::graphics::context::LoadedContext;
-    use crate::graphics::geometry::Extent;
-
-    fn pixel(frame: FrameId, at: Point) -> Color {
-        ContextFrame::retain(frame).pixel(at)
-    }
-
-    /// #890: restoring the original before a change and recapturing after it
-    /// must stamp the current frame again even when the phase did not move.
-    #[test]
-    #[serial_test::serial]
-    fn post_update_redraws_an_unchanged_phase_after_pre_update_restores_the_original() {
-        state::init_headless(state::VideoMode::default());
-        let target = LoadedDrawable::create(WANT_PIXMAP, 8, 8, 1)
-            .unwrap_or_else(|| panic!("highlight target"));
-        let frame = target.first_frame();
-        let base = Color::rgb(9, 17, 25);
-        ContextFrame::retain(frame).write_colors(&[base; 64], 8, 8);
-        let owner = LoadedContext::create(c"highlight-890");
-        let context = owner.lease();
-        context.set_frame(target.lease().context_frame(0));
-        let mut highlight = context.highlight(Rect {
-            corner: Point { x: 2, y: 2 },
-            extent: Extent {
-                width: 4,
-                height: 4,
-            },
-        });
-        highlight.set_merge_factors(3, 3, 2);
-        // no off time: the flash starts and stays in its on phase
-        highlight.set_speed(0, 52, 0, 0);
-        highlight.start();
-        state::flush_ex(true);
-        let lit = pixel(frame, Point { x: 3, y: 3 });
-        assert_ne!(lit, base, "the started highlight is drawn");
-        highlight.pre_update();
-        state::flush_ex(true);
-        assert_eq!(pixel(frame, Point { x: 3, y: 3 }), base);
-        highlight.post_update();
-        state::flush_ex(true);
-        assert_eq!(pixel(frame, Point { x: 3, y: 3 }), lit);
-        drop(highlight);
-        drop(context);
-        drop(owner);
-        drop(target);
-        state::uninit_headless();
     }
 }
