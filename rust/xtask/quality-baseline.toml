@@ -9,10 +9,7 @@ coverage_capture = ["uqm::comm::races"]
 "crates/engine/src/graphics/sdl/pure_abi.rs" = "U7-01"
 "crates/engine/src/graphics/sdl/sdl2.rs" = "native"
 "crates/engine/src/graphics/widgets_abi.rs" = "U7-02"
-"crates/engine/src/io/ffi.rs" = "U7-03"
-"crates/engine/src/sound/ffi.rs" = "U7-04"
 "crates/engine/src/threading/legacy_abi.rs" = "U7-05"
-
 [lint.linux]
 "clippy::expect_used|uqm-content::comm::races::blackur::api::@file" = 1
 "clippy::expect_used|uqm-content::comm::races::script::@file" = 2
