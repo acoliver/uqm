@@ -7,7 +7,9 @@ use super::system::{OsDisk, OsSystem};
 use crate::callback::Dispatch;
 use crate::graphics::sdl::{input, SdlDisplay};
 use crate::host::clock::{Clock, RealClock, ReplayClock};
-use crate::host::{AudioPort, Display, Files, HostEvent, Net, Platform, System};
+use crate::host::{
+    AudioOutput, AudioPort, Display, FillAudio, Files, HostEvent, Net, Platform, System,
+};
 use crate::sound::rodio_audio::{ReplayAudioPort, RODIO};
 
 fn open_display(
@@ -40,6 +42,9 @@ impl Platform for OsPlatform {
     }
     fn set_text_input(&self, on: bool) {
         input::set_text_input(on);
+    }
+    fn audio_output(&self, fill: FillAudio) -> Option<Box<dyn AudioOutput>> {
+        super::audio_output::start(fill)
     }
     fn init_joysticks(&self) -> Result<Vec<String>, String> {
         input::init_joysticks()
@@ -86,6 +91,10 @@ impl Platform for ReplayPlatform {
         Vec::new()
     }
     fn set_text_input(&self, _on: bool) {}
+    /// The replay mixes for its trace; nothing plays.
+    fn audio_output(&self, _fill: FillAudio) -> Option<Box<dyn AudioOutput>> {
+        None
+    }
     fn init_joysticks(&self) -> Result<Vec<String>, String> {
         input::init_joysticks()
     }

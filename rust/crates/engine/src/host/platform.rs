@@ -12,6 +12,15 @@ use super::{Display, Files, Net, System};
 use crate::callback::Dispatch;
 use crate::sound::rodio_audio::AudioCommand;
 
+/// A running output stream; `stop` ends it.
+pub trait AudioOutput: Send {
+    fn stop(self: Box<Self>);
+}
+
+/// What an output device calls to fill its next buffer of interleaved
+/// 44.1 kHz stereo samples.
+pub type FillAudio = Box<dyn FnMut(&mut [f32]) + Send>;
+
 /// A running audio device, or its replay stand-in.
 pub trait AudioPort: Send + Sync {
     /// Bring the device up; `true` when it is running afterwards.
@@ -38,6 +47,9 @@ pub trait Platform: Send + Sync {
     fn net(&self) -> Box<dyn Net>;
     /// Host paths, which the virtual file system mounts.
     fn disk(&self) -> Arc<dyn Files + Send + Sync>;
+    /// Start the default output device pulling samples from `fill`; `None`
+    /// when no device can play.
+    fn audio_output(&self, fill: FillAudio) -> Option<Box<dyn AudioOutput>>;
     /// Open the game window at `width` x `height`; `position` places a
     /// borderless window on the desktop.
     fn open_display(

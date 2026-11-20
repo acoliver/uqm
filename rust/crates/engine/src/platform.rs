@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+pub mod audio_output;
 pub mod host;
 #[cfg(target_os = "macos")]
 pub mod macos;

@@ -39,7 +39,7 @@ pub use event::HostEvent;
 pub use platform::install_test;
 pub use platform::{
     advance_to, async_wait_ms, dispatch, install, install_platform, is_replay, now_ms, now_ticks,
-    platform, process_async, steps, AudioPort, Platform,
+    platform, process_async, steps, AudioOutput, AudioPort, FillAudio, Platform,
 };
 pub use system::{
     at_exit, elapsed, exit, sleep, spawn, thread_number, unix_millis, yield_now, Deadline, System,

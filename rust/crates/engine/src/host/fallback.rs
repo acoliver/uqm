@@ -62,6 +62,10 @@ impl Platform for TestPlatform {
         Vec::new()
     }
     fn set_text_input(&self, _on: bool) {}
+    /// Tests drive the mixer directly; nothing pulls from it.
+    fn audio_output(&self, _fill: super::FillAudio) -> Option<Box<dyn super::AudioOutput>> {
+        None
+    }
     fn init_joysticks(&self) -> Result<Vec<String>, String> {
         Ok(Vec::new())
     }
