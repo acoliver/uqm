@@ -23,7 +23,7 @@ const AUDIO_QUALITY_LOW: c_int = 0;
 const AUDIO_QUALITY_MEDIUM: c_int = 1;
 const AUDIO_QUALITY_HIGH: c_int = 2;
 // TFB_SCALE_* (gfx_common.h)
-use crate::graphics::{
+use uqm_engine::graphics::{
     canvas::scale::TFB_SCALE_BILINEAR, canvas::scale::TFB_SCALE_STEP,
     canvas::scale::TFB_SCALE_TRILINEAR,
 };

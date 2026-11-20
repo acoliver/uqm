@@ -8,15 +8,13 @@ mod battle_context;
 use battle::*;
 
 use std::ffi::CStr;
-use uqm_rust::engine::battle::ai_constants::{
-    ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, SPECIAL,
-};
-use uqm_rust::engine::battle::flags::{APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP};
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SYREEN_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::velocity::VelocityDesc;
+use uqm_engine::battle::ai_constants::{ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, SPECIAL};
+use uqm_engine::battle::flags::{APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP};
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::species::species_id::SPECIES_ID_SYREEN_ID;
 
 /// The queue holds exactly the elements a test creates, so a test can also
 /// exhaust the allocator.
@@ -41,7 +39,7 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
 fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
     {
         let mut v: VelocityDesc = VelocityDesc::new();
-        uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+        uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
 }
@@ -217,7 +215,7 @@ fn enter_battle(ship: &mut Ship<'_>, location: Point, crew: u16) {
 }
 
 /// The scan the song queues, ready to be run as the element's death function.
-fn queued_scan(ship: &mut Ship) -> (ElementId, uqm_rust::engine::battle::ElementHook) {
+fn queued_scan(ship: &mut Ship) -> (ElementId, uqm_engine::battle::ElementHook) {
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
     let scan = battle::tail().unwrap();

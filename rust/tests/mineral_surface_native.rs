@@ -1,25 +1,25 @@
 //! All mineral surface frames through the production visual and stamp path.
 #![forbid(unsafe_code)]
-use uqm_rust::engine::test_support::native_probe::{set_color_map, DrawQueue};
-use uqm_rust::graphics::context::{ContextLease, LoadedContext};
-use uqm_rust::graphics::drawable::{ContextFrame, LoadedDrawable};
-use uqm_rust::graphics::{
+use uqm_engine::graphics::context::{ContextLease, LoadedContext};
+use uqm_engine::graphics::drawable::{ContextFrame, LoadedDrawable};
+use uqm_engine::graphics::{
     geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, menu,
 };
-use uqm_rust::planet_side::assembly::SurfaceAssembly;
-use uqm_rust::planet_side::assembly::SurfaceVisualPort;
-use uqm_rust::planet_side::collision_adapter::SurfaceMasks;
-use uqm_rust::planet_side::entities::SurfaceEntity;
-use uqm_rust::planet_side::entities::SurfaceEntityKind;
-use uqm_rust::planet_side::entities::SurfaceWorld;
-use uqm_rust::planet_side::generation::GeneratedEntity;
-use uqm_rust::planet_side::generation::ScanNodeId;
-use uqm_rust::planet_side::generation::ScanType;
-use uqm_rust::planet_side::graphics_adapter::draw_surface_entities;
-use uqm_rust::planet_side::graphics_adapter::SurfaceFrameRegistry;
-use uqm_rust::planet_side::mask_adapter::extract_frame_mask;
-use uqm_rust::planet_side::model::SurfacePoint;
-use uqm_rust::planet_side::visual_adapter::CffiSurfaceVisuals;
+use uqm_engine::test_support::native_probe::{set_color_map, DrawQueue};
+use uqm_modes::planet_side::assembly::SurfaceAssembly;
+use uqm_modes::planet_side::assembly::SurfaceVisualPort;
+use uqm_modes::planet_side::collision_adapter::SurfaceMasks;
+use uqm_modes::planet_side::entities::SurfaceEntity;
+use uqm_modes::planet_side::entities::SurfaceEntityKind;
+use uqm_modes::planet_side::entities::SurfaceWorld;
+use uqm_modes::planet_side::generation::GeneratedEntity;
+use uqm_modes::planet_side::generation::ScanNodeId;
+use uqm_modes::planet_side::generation::ScanType;
+use uqm_modes::planet_side::graphics_adapter::draw_surface_entities;
+use uqm_modes::planet_side::graphics_adapter::SurfaceFrameRegistry;
+use uqm_modes::planet_side::mask_adapter::extract_frame_mask;
+use uqm_modes::planet_side::model::SurfacePoint;
+use uqm_modes::planet_side::visual_adapter::CffiSurfaceVisuals;
 
 #[test]
 #[serial_test::serial]

@@ -1,9 +1,9 @@
 use super::{args::Arguments, records::PresentationState, *};
-use crate::graphics::{
+use crate::starbase::ids::{DRIVE_TOP, JET_TOP, MODULE_TOP, NUM_MODULES, SHIP_PIECE_OFFSET};
+use uqm_engine::graphics::{
     canvas::scale::TFB_SCALE_BILINEAR, canvas::scale::TFB_SCALE_NEAREST, geometry::Point,
     state::GSCALE_IDENTITY,
 };
-use crate::starbase::ids::{DRIVE_TOP, JET_TOP, MODULE_TOP, NUM_MODULES, SHIP_PIECE_OFFSET};
 
 pub(super) fn text(
     state: &PresentationState,
@@ -20,7 +20,7 @@ pub(super) fn text(
             &font,
             string,
             baseline,
-            crate::graphics::geometry::TextAlign::Center,
+            uqm_engine::graphics::geometry::TextAlign::Center,
             fore,
             back,
         );
@@ -29,7 +29,7 @@ pub(super) fn text(
             &font,
             string,
             baseline,
-            crate::graphics::geometry::TextAlign::Center,
+            uqm_engine::graphics::geometry::TextAlign::Center,
             fore,
         );
     }

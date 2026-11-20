@@ -1,13 +1,13 @@
 //! Slot storage through an isolated Vfs on an owned scratch directory.
 
 use super::*;
-use crate::engine::host::{FileStat, FileStream, Files};
-use crate::io::Vfs;
 use serial_test::serial;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+use uqm_engine::host::{FileStat, FileStream, Files};
+use uqm_engine::io::Vfs;
 
 /// The save game the C game wrote (epic 20 load/save evidence).
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/legacy-save.00");
@@ -376,7 +376,7 @@ impl std::io::Seek for FailingFile {
         std::io::Seek::seek(&mut self.inner, position)
     }
 }
-impl crate::engine::host::File for FailingFile {
+impl uqm_engine::host::File for FailingFile {
     fn len(&self) -> std::io::Result<u64> {
         self.inner.len()
     }

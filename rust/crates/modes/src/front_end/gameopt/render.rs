@@ -1,10 +1,5 @@
 //! Retained save-picker drawing over prepared summary values.
 use super::{layout::BLACK_COLOR, picker::PickerState, preview};
-use crate::engine::{save::summary_record::SummaryDesc, Kernel, World};
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
-    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
-};
 use crate::starbase::ids::{
     NAVIGATION_STRING_BASE, PLANET_NUMBER_BASE, SAFE_X, SAFE_Y, SAVEGAME_STRING_BASE, SIS_ORG_X,
     SIS_ORG_Y, STARBASE_STRING_BASE, STATUS_WIDTH,
@@ -14,6 +9,11 @@ use crate::ui::{
     sis::{clear_sis_rect, draw_status_message},
 };
 use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
+};
+use uqm_engine::{save::summary_record::SummaryDesc, Kernel, World};
 
 const SUMMARY_X_OFFS: i16 = 14;
 const SUMMARY_SIDE_OFFS: i16 = 7;
@@ -82,7 +82,7 @@ impl PickerDisplay {
         });
     }
 
-    fn cargo(&self, sis: &crate::engine::world::SisState) {
+    fn cargo(&self, sis: &uqm_engine::world::SisState) {
         const COLORS: [Color; 9] = [
             rgb15(2, 14, 19),
             rgb15(25, 0, 0),

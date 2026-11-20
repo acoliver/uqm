@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::mycon::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.mycon.take().unwrap_or_default();
     {
@@ -62,7 +62,7 @@ mod api {
 
     impl MyconApi for crate::comm::host::Host<'_, '_, Handler> {
         fn random(&mut self) -> u32 {
-            crate::math::random()
+            uqm_engine::math::random()
         }
     }
 }

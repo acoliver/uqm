@@ -1,9 +1,9 @@
 //! Input-driven contact decisions and exact first-save persistence receipts.
 
 use super::*;
-use crate::engine::battle::ai_constants::THRUST;
-use crate::engine::world::IN_HYPERSPACE;
-use crate::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::world::IN_HYPERSPACE;
 
 pub(super) fn witness(
     proof: &mut FixtureRun,

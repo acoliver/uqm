@@ -25,20 +25,20 @@ pub(crate) mod runtime {
     mod save_load;
 
     use super::{PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
-    use crate::engine::world::{
-        activity::activity_flags::{CHECK_ABORT, CHECK_LOAD},
-        SOUND_DISABLED,
-    };
-    use crate::engine::world::{generation::SolarSnapshot, MUSIC_DISABLED};
-    use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
-    use crate::graphics::context::ContextLease;
-    use crate::input::frames::*;
     use crate::starbase::ids::{NAMING_STRING_BASE, OPTION_STRING_BASE, SAFE_X};
     use crate::ui::menu_state::{PM_SAVE_GAME, PM_SOUND_ON};
     use crate::ui::settings::{play_menu_sound, OPT_PC};
     use crate::ui::sis::{draw_status_message, set_flash_rect, set_menu_flash};
     use save_load::pick_game;
+    use uqm_engine::graphics::context::ContextLease;
+    use uqm_engine::input_port::frames::*;
     use uqm_engine::time::counter_abi::ONE_SECOND;
+    use uqm_engine::world::{
+        activity::activity_flags::{CHECK_ABORT, CHECK_LOAD},
+        SOUND_DISABLED,
+    };
+    use uqm_engine::world::{generation::SolarSnapshot, MUSIC_DISABLED};
+    use uqm_engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
 
     const SIS_NAME_SIZE: usize = 16;
     const SAVE_NAME_SIZE: usize = uqm_save::types::SAVE_NAME_SIZE;
@@ -274,12 +274,12 @@ pub(crate) mod runtime {
         set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         input.set_menu_sounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         io.observer
-            .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true));
+            .checkpoint(&uqm_engine::observe::CheckpointView::GameOptions(true));
         cx.run_input(io, true, |cx, io| {
             do_game_options(cx, io, solar, &mut state)
         });
         io.observer
-            .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(false));
+            .checkpoint(&uqm_engine::observe::CheckpointView::GameOptions(false));
         cx.kernel.sis_highlight.context.borrow_mut().take();
         u32::from(cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0)
     }

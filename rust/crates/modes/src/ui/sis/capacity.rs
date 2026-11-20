@@ -1,11 +1,11 @@
 //! Flagship capacities and physical crew, mineral and fuel positions.
-use crate::engine::world::SisState;
-use crate::graphics::{
-    context::ContextLease, geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
-};
 use crate::starbase::sis_modules as equipment;
 use crate::ui::rgb15;
 use equipment::{fuel_bar_at, ModuleType};
+use uqm_engine::graphics::{
+    context::ContextLease, geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
+};
+use uqm_engine::world::SisState;
 
 const CREW_PER_ROW: i32 = 5;
 const SBAY_MASS_PER_ROW: i32 = 50;
@@ -223,7 +223,7 @@ mod tests {
     use super::*;
 
     fn flagship() -> SisState {
-        let mut state = crate::engine::World::new().data.flagship;
+        let mut state = uqm_engine::World::new().data.flagship;
         state.module_slots.fill(equipment::EMPTY_MODULE_SLOT);
         state
     }
@@ -237,8 +237,8 @@ mod tests {
         )) {
             return;
         }
-        use crate::graphics::{context::ContextLease, drawable::ContextFrame};
-        let mut game = crate::engine::Game::new();
+        use uqm_engine::graphics::{context::ContextLease, drawable::ContextFrame};
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap_or_else(|error| panic!("capacity fixture: {error}"));

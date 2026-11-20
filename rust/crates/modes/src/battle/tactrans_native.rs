@@ -38,9 +38,9 @@ pub const fn explosion_step(tick: u8) -> ExplosionStep {
 
 fn explosion_position_random(random: u32) -> (u16, u16) {
     let angle = (random >> 16) as u8 as u16;
-    let mut distance = ((random as u8 % 8) as u16) << crate::math::battle_types::ONE_SHIFT;
+    let mut distance = ((random as u8 % 8) as u16) << uqm_engine::math::battle_types::ONE_SHIFT;
     if ((random >> 8) as u8) < (256 / 3) as u8 {
-        distance += 8 << crate::math::battle_types::ONE_SHIFT;
+        distance += 8 << uqm_engine::math::battle_types::ONE_SHIFT;
     }
     (angle, distance)
 }
@@ -49,7 +49,8 @@ fn explosion_velocity_random(random: u32) -> (u16, u16) {
     (
         random as u8 as u16,
         (((random >> 8) as u8 % 5) as u16)
-            << (crate::math::battle_types::ONE_SHIFT + crate::math::velocity::VELOCITY_SHIFT),
+            << (uqm_engine::math::battle_types::ONE_SHIFT
+                + uqm_engine::math::velocity::VELOCITY_SHIFT),
     )
 }
 
@@ -129,28 +130,28 @@ pub mod engine {
     use crate::battle::battle_native::engine::battle_song;
     use crate::battle::battle_native::engine::rgb15;
     use crate::battle::encount_native::fleet_is_infinite;
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         LEFT, MAX_SHIP_MASS, PLAY_VICTORY_DITTY, RIGHT, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, HYPERJUMP_LIFE,
         NEUTRAL_PLAYER_NUM, NONSOLID, NORMAL_LIFE, NUM_EXPLOSION_FRAMES, PLAYER_SHIP,
         STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::net::NetState;
+    use uqm_engine::battle::net::NetState;
 
-    use crate::engine::battle::views::SharedFrames;
-    use crate::engine::battle::ElementHook;
-    use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::engine::species::species_id::SPECIES_ID_NO_ID;
-    use crate::engine::time::counter_abi::ONE_SECOND;
-    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
-    use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
-    use crate::ships::native::{cosine, facing_to_angle, sine};
     use crate::ui::settings::GAME_SOUND_PRIORITY;
+    use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+    use uqm_engine::battle::views::SharedFrames;
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::battle::{Cx, ElementFn, ElementId, Parent};
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
+    use uqm_engine::species::species_id::SPECIES_ID_NO_ID;
+    use uqm_engine::time::counter_abi::ONE_SECOND;
+    use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
 
-    use crate::engine::battle::world_elements::crew_preprocess;
+    use uqm_engine::battle::world_elements::crew_preprocess;
 
     use crate::battle::ship_native::engine::animation_preprocess;
 
@@ -160,11 +161,11 @@ pub mod engine {
 
     use crate::battle::ship_native::engine::ship_postprocess;
 
-    fn same_callback(a: Option<crate::engine::battle::ElementHook>, b: ElementFn) -> bool {
+    fn same_callback(a: Option<uqm_engine::battle::ElementHook>, b: ElementFn) -> bool {
         a.map(|f| f.address()) == Some(b as usize)
     }
 
-    pub(crate) fn opponent_alive(cx: &Cx<'_>, test: crate::engine::battle::ShipId) -> bool {
+    pub(crate) fn opponent_alive(cx: &Cx<'_>, test: uqm_engine::battle::ShipId) -> bool {
         let mut next = cx.elements().head();
         while let Some(e) = next {
             next = cx.elements().succ(e);
@@ -177,19 +178,19 @@ pub mod engine {
         true
     }
 
-    pub(crate) fn play_ditty(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
+    pub(crate) fn play_ditty(cx: &mut Cx<'_>, ship: uqm_engine::battle::ShipId) {
         crate::ui::settings::play_loaded_music(cx.world, cx.desc(ship).victory_music(), 0, 3);
         cx.kernel.ditty_playing = 1;
     }
 
-    pub fn stop_ditty(kernel: &mut crate::engine::Kernel) {
+    pub fn stop_ditty(kernel: &mut uqm_engine::Kernel) {
         if kernel.ditty_playing != 0 {
             crate::ui::settings::stop_battle_music();
         }
         kernel.ditty_playing = 0;
     }
 
-    pub fn reset_winner(kernel: &mut crate::engine::Kernel) {
+    pub fn reset_winner(kernel: &mut uqm_engine::Kernel) {
         kernel.winner = None;
     }
 
@@ -197,12 +198,12 @@ pub mod engine {
         let inputs = cx.kernel.player_input.clone();
         let runtime = cx.kernel.input_runtime();
         let mut observer = runtime.observer();
-        let mut io = crate::engine::observe::Io {
+        let mut io = uqm_engine::observe::Io {
             observer: observer.as_mut(),
         };
-        if crate::engine::observe::battle::replacement_gate(
+        if uqm_engine::observe::battle::replacement_gate(
             &mut cx.kernel.ditty_playing,
-            crate::sound::music::plr_playing_current,
+            uqm_engine::sound::music::plr_playing_current,
             &mut io,
         ) {
             return false;
@@ -313,7 +314,7 @@ pub mod engine {
     pub fn new_ship_with_picker(
         cx: &mut Cx<'_>,
         dead: ElementId,
-        pick: impl FnOnce(&mut Cx<'_>, crate::engine::battle::ShipId, u16) -> u32,
+        pick: impl FnOnce(&mut Cx<'_>, uqm_engine::battle::ShipId, u16) -> u32,
     ) {
         let net = cx.b.net.clone();
         let ship = cx.owner(dead);
@@ -326,7 +327,7 @@ pub mod engine {
         cx.set_winner_slot(None);
         stop_ditty(cx.kernel);
         crate::ui::settings::stop_battle_music();
-        crate::sound::heart_ffi::stop_sound();
+        uqm_engine::sound::heart_ffi::stop_sound();
         cx.set_parent(dead, None);
         let restart = opponent_alive(cx, ship);
         let descriptor = cx
@@ -334,10 +335,9 @@ pub mod engine {
             .unwrap_or_else(|| panic!("dead ship descriptor"));
         descriptor.unload(cx.world, true);
 
-        let _pause = cx
-            .kernel
-            .space_context
-            .map(|context| crate::graphics::context::ContextLease::retain(context).pause_batch());
+        let _pause = cx.kernel.space_context.map(|context| {
+            uqm_engine::graphics::context::ContextLease::retain(context).pause_batch()
+        });
         if let Some(net) = &net {
             net.init_end_frames();
         }
@@ -409,12 +409,12 @@ pub mod engine {
         }
     }
 
-    pub fn stop_all_battle_music(kernel: &mut crate::engine::Kernel) {
+    pub fn stop_all_battle_music(kernel: &mut uqm_engine::Kernel) {
         stop_ditty(kernel);
         crate::ui::settings::stop_battle_music();
     }
 
-    pub fn find_alive_ship(cx: &Cx<'_>, dead: ElementId) -> Option<crate::engine::battle::ShipId> {
+    pub fn find_alive_ship(cx: &Cx<'_>, dead: ElementId) -> Option<uqm_engine::battle::ShipId> {
         let mut next = cx.elements().head();
         while let Some(e) = next {
             let state = cx.element(e);
@@ -435,7 +435,7 @@ pub mod engine {
         None
     }
 
-    pub fn set_winner_ship(cx: &mut Cx<'_>, winner: Option<crate::engine::battle::ShipId>) {
+    pub fn set_winner_ship(cx: &mut Cx<'_>, winner: Option<uqm_engine::battle::ShipId>) {
         let Some(winner) = winner else {
             return;
         };
@@ -458,7 +458,7 @@ pub mod engine {
         cx.set_target(ship, None);
         if play_sound {
             cx.play_battle_sound(
-                crate::engine::battle::views::BattleSoundBank::Game,
+                uqm_engine::battle::views::BattleSoundBank::Game,
                 1,
                 ship,
                 GAME_SOUND_PRIORITY + 1,

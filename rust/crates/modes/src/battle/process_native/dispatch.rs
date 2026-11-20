@@ -1,13 +1,15 @@
 //! Observation precedes invocation without retaining a borrow across a game hook.
 
-pub use crate::engine::battle::access::invoke;
+pub use uqm_engine::battle::access::invoke;
 
 pub(crate) fn record_spawn(address: usize, side: i16, species: u32) {
-    crate::collections::observation::record(crate::collections::observation::Event::Spawn {
-        address,
-        side,
-        species,
-    });
+    uqm_engine::collections::observation::record(
+        uqm_engine::collections::observation::Event::Spawn {
+            address,
+            side,
+            species,
+        },
+    );
 }
 
 pub(crate) fn collision_order(test_is_player: bool) -> [usize; 2] {
@@ -21,7 +23,7 @@ pub(crate) fn collision_order(test_is_player: bool) -> [usize; 2] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::observation::{self, Event};
+    use uqm_engine::collections::observation::{self, Event};
 
     #[test]
     #[serial_test::serial]

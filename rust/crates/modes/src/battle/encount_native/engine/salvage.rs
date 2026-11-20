@@ -1,22 +1,22 @@
 //! Retained salvage panel resources and the ordered post-battle reward display.
 use super::*;
-use crate::engine::time::counter_abi::ONE_SECOND;
-use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-use crate::engine::world::queues::ShipFragment as SHIP_FRAGMENT;
-use crate::engine::{battle::Cx, observe::Io};
-use crate::graphics::{
+use crate::starbase::ids::STATUS_STRING_BASE;
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
     geometry::Rect, geometry::TextAlign,
 };
-use crate::starbase::ids::STATUS_STRING_BASE;
+use uqm_engine::time::counter_abi::ONE_SECOND;
+use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
+use uqm_engine::world::queues::ShipFragment as SHIP_FRAGMENT;
+use uqm_engine::{battle::Cx, observe::Io};
 
 fn draw_salvage_line(
-    kernel: &crate::engine::Kernel,
+    kernel: &uqm_engine::Kernel,
     string: &std::ffi::CStr,
     baseline: Point,
     style: SalvageText,
 ) {
-    let context = crate::graphics::context::ContextLease::retain(
+    let context = uqm_engine::graphics::context::ContextLease::retain(
         kernel
             .space_context
             .unwrap_or_else(|| panic!("salvage requires a space context")),
@@ -34,11 +34,7 @@ fn draw_salvage_line(
     context.draw_text(&font, string, baseline, align, color);
 }
 
-fn draw_salvage_captions(
-    kernel: &crate::engine::Kernel,
-    name: &[std::ffi::c_char; 80],
-    rect: &Rect,
-) {
+fn draw_salvage_captions(kernel: &uqm_engine::Kernel, name: &[std::ffi::c_char; 80], rect: &Rect) {
     let baseline = Point {
         x: rect.corner.x.wrapping_add(100),
         y: rect.corner.y.wrapping_add(68),
@@ -59,14 +55,14 @@ fn draw_salvage_captions(
 }
 
 fn draw_fade_text(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    input: &crate::engine::input::InputSession,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    input: &uqm_engine::input::InputSession,
     str1: &std::ffi::CStr,
     str2: &std::ffi::CStr,
     fade_in: u32,
     rect: &Rect,
 ) {
-    let context = crate::graphics::context::ContextLease::retain(
+    let context = uqm_engine::graphics::context::ContextLease::retain(
         cx.kernel
             .space_context
             .unwrap_or_else(|| panic!("salvage requires a space context")),
@@ -139,7 +135,7 @@ pub(super) struct Salvage {
     sleepy: bool,
 }
 impl Salvage {
-    pub(super) fn new(kernel: &crate::engine::Kernel, victory: i16) -> Self {
+    pub(super) fn new(kernel: &uqm_engine::Kernel, victory: i16) -> Self {
         let rect = Rect {
             corner: Point { x: 0, y: 0 },
             extent: Extent {
@@ -165,8 +161,8 @@ impl Salvage {
         &mut self,
         cx: &mut Cx<'_>,
         draw_armada: impl FnOnce(
-            &crate::engine::Kernel,
-            &crate::engine::World,
+            &uqm_engine::Kernel,
+            &uqm_engine::World,
             i32,
             &mut crate::comm::locdata::CRect,
         ),
@@ -182,7 +178,7 @@ impl Salvage {
             DSME_NONE as u16,
         );
         display::draw_title(cx);
-        crate::graphics::context::ContextLease::require(cx.kernel.space_context).select();
+        uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context).select();
         if self.victory != 0 {
             let mut panel = crate::comm::locdata::CRect {
                 corner: crate::comm::locdata::CPoint { x: 0, y: 0 },
@@ -205,7 +201,7 @@ impl Salvage {
     pub(super) fn start(
         &mut self,
         cx: &mut Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        input: &uqm_engine::input::InputSession,
         frag: &SHIP_FRAGMENT,
     ) {
         self.recycle = 0;
@@ -214,11 +210,12 @@ impl Salvage {
         self.stamp_origin.x = self.salvage_rect.corner.x.wrapping_add(32);
         self.stamp_origin.y = self.salvage_rect.corner.y.wrapping_add(56);
         let resources = cx.world.fleet_resources(frag.species_id);
-        self.stamp_frame = crate::graphics::drawable::ContextFrame::retain(resources.icon().raw());
+        self.stamp_frame =
+            uqm_engine::graphics::drawable::ContextFrame::retain(resources.icon().raw());
         self.context
             .draw_stamp(&self.stamp_frame.next_frame(), self.stamp_origin);
         let (name, _) = resources.label(0);
-        crate::ships::native::copy_display_name(&mut self.buf, name.to_bytes());
+        uqm_content::ships::native::copy_display_name(&mut self.buf, name.to_bytes());
         for byte in &mut self.buf {
             *byte = (*byte as u8).to_ascii_uppercase() as std::ffi::c_char;
         }
@@ -232,7 +229,7 @@ impl Salvage {
             .to_owned();
         draw_fade_text(cx, input, &self.str1, &self.str2, 1, &self.salvage_rect);
     }
-    pub(super) fn reward(&mut self, cx: &mut Cx<'_>, input: &crate::engine::input::InputSession) {
+    pub(super) fn reward(&mut self, cx: &mut Cx<'_>, input: &uqm_engine::input::InputSession) {
         self.rect.corner.y = self.salvage_rect.corner.y.wrapping_add(9);
         self.rect.extent.height = 22;
         self.rect.extent.width = 34;
@@ -267,7 +264,7 @@ impl Salvage {
         }
         self.animate(cx, input);
     }
-    fn animate(&mut self, cx: &mut Cx<'_>, input: &crate::engine::input::InputSession) {
+    fn animate(&mut self, cx: &mut Cx<'_>, input: &uqm_engine::input::InputSession) {
         let runtime = cx.kernel.input_runtime();
         if self.sleepy {
             let mut time = get_time_counter();
@@ -294,7 +291,7 @@ impl Salvage {
         &mut self,
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        input: &crate::engine::input::InputSession,
+        input: &uqm_engine::input::InputSession,
         mut wait: impl FnMut(&mut Cx<'_>, &mut Io<'_>, u32),
     ) {
         if self.victory != 0 {
@@ -346,7 +343,10 @@ impl Salvage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
+    use crate::starbase::ids::NUM_MODULES;
+    use crate::starbase::ids::{MONTHS_STRING_BASE, NAVIGATION_STRING_BASE};
+    use std::{cell::Cell, rc::Rc};
+    use uqm_engine::{
         battle::{
             frames::FrameSelection, input::InputContext, link_queue::ShipPickerResources, Battle,
         },
@@ -354,9 +354,6 @@ mod tests {
         observe::{Observer, Unobserved},
         Game,
     };
-    use crate::starbase::ids::NUM_MODULES;
-    use crate::starbase::ids::{MONTHS_STRING_BASE, NAVIGATION_STRING_BASE};
-    use std::{cell::Cell, rc::Rc};
 
     #[derive(Default)]
     struct Pacing {
@@ -401,8 +398,8 @@ mod tests {
     #[serial_test::serial]
     fn owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order() {
         if !uqm_engine::test_support::native_process::own_graphics_process("battle::encount_native::engine::salvage::tests::owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order") { return; }
-        use crate::graphics::drawable::LoadedDrawable;
-        use crate::strings::owned_table::LoadedTextTable;
+        use uqm_engine::graphics::drawable::LoadedDrawable;
+        use uqm_engine::strings::owned_table::LoadedTextTable;
         use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
@@ -492,7 +489,7 @@ mod tests {
         });
         assert_eq!(waits, [ONE_SECOND * 3, ONE_SECOND * 2]);
         assert_eq!(pacing.sleeps.get(), 48);
-        let mut pressed = crate::engine::input::frames::InputState::default();
+        let mut pressed = uqm_engine::input::frames::InputState::default();
         pressed.menu[KEY_MENU_SELECT as usize] = 1;
         pacing.input.advance(pressed, pressed, 0);
         salvage.reward(&mut cx, &pacing.input);
@@ -508,8 +505,8 @@ mod tests {
         salvage.context.flush();
         drop(salvage);
         game.world.clear_fleet_resources();
-        game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
-        game.kernel.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.flag_stat_frame = uqm_engine::graphics::drawable::FrameId::NULL;
+        game.kernel.font_grad_frame = uqm_engine::graphics::drawable::FrameId::NULL;
         drop(frames);
         display.finish(game);
     }

@@ -6,8 +6,8 @@ use super::model::{LanderUpgrades, ShieldSet, SurfacePoint};
 use super::runtime::{AdapterError, ShipStatusPort};
 use super::session::{dispatch_crew, PlanetSideSession};
 use super::simulation::LanderState;
-use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
+use uqm_engine::StoryKey;
+use uqm_engine::World as WorldOwner;
 
 /// Production-independent session inputs captured at the dispatch boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +69,7 @@ pub fn create_production_session(
 }
 
 fn production_upgrades(world: &WorldOwner) -> LanderUpgrades {
-    use crate::state::game_state_keys::get_game_state;
+    use uqm_engine::state::game_state_keys::get_game_state;
 
     LanderUpgrades {
         improved_speed: get_game_state(world, StoryKey::IMPROVED_LANDER_SPEED) != 0,

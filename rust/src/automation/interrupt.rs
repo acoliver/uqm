@@ -57,7 +57,7 @@ pub fn install() -> Result<(), InterruptError> {
 }
 
 fn install_one(signal: libc::c_int) -> Result<(), InterruptError> {
-    crate::platform::os::signal::install_handler(signal, record_signal)
+    uqm_platform::os::signal::install_handler(signal, record_signal)
         .map_err(|error| InterruptError { signal, error })
 }
 
@@ -98,7 +98,7 @@ mod tests {
 
         // Without a handler this terminates the test process outright.
         let own_pid = libc::pid_t::try_from(std::process::id()).unwrap();
-        crate::platform::os::process::send_signal(own_pid, libc::SIGTERM).unwrap();
+        uqm_platform::os::process::send_signal(own_pid, libc::SIGTERM).unwrap();
 
         // Delivery to a process-directed signal may land on another thread, so
         // wait for the handler to have recorded it.

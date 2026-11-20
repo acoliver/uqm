@@ -9,17 +9,17 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,
 };
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
 };
-use uqm_rust::engine::battle::record::{CharacteristicRecord, RaceDescriptor};
-use uqm_rust::engine::battle::RaceState;
-use uqm_rust::engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::record::{CharacteristicRecord, RaceDescriptor};
+use uqm_engine::battle::RaceState;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
 
 use battle::Battle as Battlefield;
 

@@ -1,7 +1,7 @@
 use super::*;
-use crate::engine::world::planet::NodeInfo;
-use crate::engine::StoryKey;
 use std::collections::BTreeMap;
+use uqm_engine::world::planet::NodeInfo;
+use uqm_engine::StoryKey;
 
 #[test]
 fn special_pickups_reject_retrieved_nodes_and_nonzero_indices_before_effects() {

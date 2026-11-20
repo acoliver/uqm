@@ -8,7 +8,7 @@
 
 use super::response::ResponseSystem;
 use super::state::Comm;
-use crate::engine::{battle::Cx, observe::Io};
+use uqm_engine::{battle::Cx, observe::Io};
 
 /// Visible range for the response list, with scroll indicators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

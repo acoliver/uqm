@@ -31,7 +31,7 @@ mod tests {
     fn checkpoint_records_the_supplied_context_once() {
         let directory = super::test_directory();
         let mut journal = crate::automation::parity::Journal::create(directory.path()).unwrap();
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         game.world.set_activity(0x0203);
         game.with_context(|cx| super::checkpoint(cx, &mut journal, "supplied"))
             .unwrap();

@@ -220,7 +220,7 @@ fn frame_index(d: &AnimationDescriptor, from: u16, random: &mut impl FnMut() -> 
 
 pub(crate) mod runtime {
     use super::*;
-    use crate::graphics::{geometry::Point, palette_cycle::PaletteCycle};
+    use uqm_engine::graphics::{geometry::Point, palette_cycle::PaletteCycle};
     use uqm_engine::time::counter_abi::get_time_counter;
 
     const EMPTY_DESC: AnimationDescriptor = AnimationDescriptor {
@@ -255,7 +255,7 @@ pub(crate) mod runtime {
         }
     }
     fn random() -> u32 {
-        crate::math::random()
+        uqm_engine::math::random()
     }
 
     pub fn init_comm_animations(comm: &mut Comm) {

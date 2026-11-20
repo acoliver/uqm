@@ -5,16 +5,16 @@
 //! `generateEnergy`, `pickupEnergy`. Story flags: `BURVIXESE_BROADCASTERS`,
 //! `BURV_BROADCASTERS_ON_SHIP`.
 
-use crate::engine::math::battle_types::normalize_angle;
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::generate::special::{
     self, Body, Story, MIN_MOON_RADIUS, REDUX_WORLD, SELENIC_WORLD,
 };
+use uqm_engine::math::battle_types::normalize_angle;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 const HOME: Body = Body::Planet(0);
 const BROADCASTERS_MOON: Body = Body::Moon { planet: 0, moon: 0 };
@@ -22,11 +22,11 @@ const BROADCASTERS_MOON: Body = Body::Moon { planet: 0, moon: 0 };
 /// The two scenes `generateOrbital` can load before the planet display.
 pub trait BurvScenes {
     /// `LoadStdLanderFont`, the ruins mask and the Burvixese ruins strings.
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>);
     /// `LoadStdLanderFont`, the broadcasters mask and report strings.
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     );
 }
 
@@ -124,7 +124,7 @@ pub fn pickup_energy(
     if body == HOME {
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
         return false;
     }
@@ -135,7 +135,7 @@ pub fn pickup_energy(
         );
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::BURVIXESE_BROADCASTERS, 1);
@@ -147,7 +147,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

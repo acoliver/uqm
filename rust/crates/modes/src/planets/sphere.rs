@@ -42,8 +42,8 @@ pub struct SphereState {
     pub(crate) width: usize,
     pub(crate) shielded: bool,
     pub(crate) elevation: Vec<i8>,
-    pub(crate) colors: Vec<crate::engine::graphics::geometry::Color>,
-    pub(crate) scratch: Vec<crate::engine::graphics::geometry::Color>,
+    pub(crate) colors: Vec<uqm_engine::graphics::geometry::Color>,
+    pub(crate) scratch: Vec<uqm_engine::graphics::geometry::Color>,
 }
 
 impl Default for SphereState {
@@ -76,15 +76,15 @@ impl SphereState {
             .unwrap_or_else(|| panic!("orbit images are not initialized"))
     }
 
-    pub fn topography(&self) -> crate::engine::graphics::drawable::DrawableLease {
+    pub fn topography(&self) -> uqm_engine::graphics::drawable::DrawableLease {
         self.images().topography()
     }
 
-    pub fn zoomed_topography(&self) -> crate::engine::graphics::drawable::DrawableLease {
+    pub fn zoomed_topography(&self) -> uqm_engine::graphics::drawable::DrawableLease {
         self.images().zoom.lease()
     }
 
-    pub fn sphere_frame(&self) -> crate::engine::graphics::drawable::ContextFrame {
+    pub fn sphere_frame(&self) -> uqm_engine::graphics::drawable::ContextFrame {
         self.images()
             .sphere
             .lease()
@@ -101,8 +101,8 @@ impl SphereState {
     }
 
     pub(crate) fn render_pixels(&mut self, offset: i32, throb: bool) {
-        use crate::engine::graphics::{geometry::Color, geometry::Color as NativeColor};
         use crate::planets::render::sphere_geometry as sphere;
+        use uqm_engine::graphics::{geometry::Color, geometry::Color as NativeColor};
         let width = self.width;
         let pixels = &self.colors[offset as usize..];
         let elev = &self.elevation;
@@ -179,12 +179,12 @@ impl SphereState {
         &self.elevation
     }
 
-    pub fn colors(&self) -> &[crate::engine::graphics::geometry::Color] {
+    pub fn colors(&self) -> &[uqm_engine::graphics::geometry::Color] {
         &self.colors
     }
 
     pub(crate) fn allocate_pixels(&mut self, width: usize, shielded: bool) {
-        let transparent = crate::engine::graphics::geometry::Color {
+        let transparent = uqm_engine::graphics::geometry::Color {
             r: 0,
             g: 0,
             b: 0,
@@ -197,7 +197,7 @@ impl SphereState {
         self.scratch = vec![transparent; 89 * 89];
     }
 
-    pub fn generate(&mut self, location: crate::engine::graphics::geometry::Point, tilt: i32) {
+    pub fn generate(&mut self, location: uqm_engine::graphics::geometry::Point, tilt: i32) {
         use crate::planets::render::sphere_geometry;
         sphere_geometry::generate_sphere_mask(location, &mut self.light);
         sphere_geometry::create_sphere_tilt_map(tilt, &mut self.mapping);
@@ -215,13 +215,15 @@ fn zoom_scale(frame: i32, frame_count: i32) -> f64 {
 pub(crate) mod live {
     use super::{zoom_scale, SphereState};
     use crate::comm::locdata::{CColor, CRect};
-    use crate::engine::graphics::context::ContextLease;
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::graphics::{geometry::Color, geometry::DrawMode, geometry::Point, menu as draw};
     use crate::planets::plangen::live::render_sphere;
     use crate::planets::plangen::live::set_shield_throb_effect;
     use crate::planets::scan::repair_back_rect;
     use std::cell::RefCell;
+    use uqm_engine::graphics::context::ContextLease;
+    use uqm_engine::graphics::{
+        geometry::Color, geometry::DrawMode, geometry::Point, menu as draw,
+    };
+    use uqm_engine::time::counter_abi::get_time_counter;
 
     fn draw_planet_sphere(state: &SphereState, x: i32, y: i32) {
         let images = state.images();
@@ -319,8 +321,8 @@ pub(crate) mod live {
         let width = screen_width - 78;
         let scan_height = screen_height - 13 - 75 - 5;
         let frame_count = (840 * 6 / 5) / (840 / 24);
-        let mut pacer = crate::engine::threading::pacing::GameThreadPacer::new(planet.clone());
-        let corner = crate::math::random() as i32;
+        let mut pacer = uqm_engine::threading::pacing::GameThreadPacer::new(planet.clone());
+        let corner = uqm_engine::math::random() as i32;
         let dx = 1 - (corner & 1) * 2;
         let dy = 1 - (corner & 2);
         let frame_rect = {
@@ -372,7 +374,7 @@ pub(crate) mod live {
     pub fn rotate_planet_sphere(
         planet: &ContextLease,
         state: &RefCell<SphereState>,
-        animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+        animation: &uqm_engine::kernel::planet_animation::PlanetAnimation,
         keep_rate: bool,
     ) {
         if !animation.rotation_due(
@@ -465,8 +467,8 @@ pub(crate) mod live {
             }
             if tint_y >= 0 {
                 let old = draw::clip();
-                draw::set_clip(crate::graphics::geometry::Rect {
-                    extent: crate::graphics::geometry::Extent {
+                draw::set_clip(uqm_engine::graphics::geometry::Rect {
+                    extent: uqm_engine::graphics::geometry::Extent {
                         height: (tint_y + 1) as i16,
                         ..old.extent
                     },
@@ -496,7 +498,7 @@ mod tests {
     }
     #[test]
     fn rasterizes_owned_pixels_with_elevation_interpolation_and_shield_throb() {
-        use crate::engine::graphics::{geometry::Color, geometry::Point};
+        use uqm_engine::graphics::{geometry::Color, geometry::Point};
         let mut state = SphereState::default();
         state.allocate_pixels(242, false);
         let points = [
@@ -570,10 +572,10 @@ mod tests {
     fn separate_orbits_keep_their_lookup_maps_and_rotation_state() {
         let mut first = SphereState::default();
         let mut second = SphereState::default();
-        first.generate(crate::engine::graphics::geometry::Point::new(100, 0), 0);
+        first.generate(uqm_engine::graphics::geometry::Point::new(100, 0), 0);
         let first_light = first.light.clone();
         let first_mapping = first.mapping.clone();
-        second.generate(crate::engine::graphics::geometry::Point::new(0, 100), 23);
+        second.generate(uqm_engine::graphics::geometry::Point::new(0, 100), 23);
         assert_eq!(first.light, first_light);
         assert_eq!(first.mapping, first_mapping);
         assert_ne!(first.light, second.light);

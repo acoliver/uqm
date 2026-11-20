@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::render::topo_gen::{
+use uqm_engine::math::RandomContext;
+use uqm_modes::planets::render::topo_gen::{
     dither_map, generate_light_map, validate_map, MAP_HEIGHT,
 };
 

@@ -78,7 +78,7 @@ fn install(
     let a = run.a();
     let exists = phoenix_exists(world, hooks.intercept);
     if !exists {
-        crate::math::seed_random(1);
+        uqm_engine::math::seed_random(1);
         world
             .elements
             .get_mut(&a)

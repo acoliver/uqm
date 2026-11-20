@@ -10,23 +10,23 @@
 //! panics with "fixture context is already lent".
 use std::cell::RefMut;
 use std::rc::Rc;
-use uqm_rust::battle::process_native::init_display_list;
-use uqm_rust::battle::AiOps;
-use uqm_rust::engine::battle::flags::NORMAL_LIFE;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::record::ElementRecord;
-use uqm_rust::engine::battle::record::RaceDescriptor;
-use uqm_rust::engine::battle::record::ShipRecord;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::DisplayPrimitive;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::battle::{ElementId, RaceState, ShipId};
-use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
-use uqm_rust::graphics::drawable::FrameId;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
+use uqm_engine::battle::flags::NORMAL_LIFE;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::record::ElementRecord;
+use uqm_engine::battle::record::RaceDescriptor;
+use uqm_engine::battle::record::ShipRecord;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::DisplayPrimitive;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::battle::{ElementId, RaceState, ShipId};
+use uqm_engine::graphics::drawable::FrameId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::species::species_id::SPECIES_ID_VUX_ID;
+use uqm_modes::battle::process_native::init_display_list;
+use uqm_modes::battle::AiOps;
 
 /// A copy of a fixture record. It cannot be written, so a write meant for the
 /// live record fails to compile instead of being lost.
@@ -101,8 +101,8 @@ pub struct Battle {
 }
 impl Battle {
     pub fn new(capacity: u16) -> Self {
-        let graphics = uqm_rust::engine::test_support::native_probe::graphics_status();
-        uqm_rust::engine::test_support::native_probe::set_graphics_status(graphics & !4);
+        let graphics = uqm_engine::test_support::native_probe::graphics_status();
+        uqm_engine::test_support::native_probe::set_graphics_status(graphics & !4);
         crate::battle_context::with(|cx| {
             cx.kernel_mut()
                 .reset_element_capacity(usize::from(capacity));
@@ -127,7 +127,7 @@ impl Drop for Battle {
                 cx.kernel_mut().reset_ship_capacity(side, 0);
             }
         });
-        uqm_rust::engine::test_support::native_probe::set_graphics_status(self.graphics);
+        uqm_engine::test_support::native_probe::set_graphics_status(self.graphics);
     }
 }
 
@@ -140,7 +140,7 @@ fn release_element(id: ElementId) {
     crate::battle_context::with(|cx| {
         if cx.elements().contains(id) {
             if cx.elements().linked(id) {
-                uqm_rust::battle::sounds::engine::unlink(cx, id);
+                uqm_modes::battle::sounds::engine::unlink(cx, id);
             }
             cx.dispose(id);
         }
@@ -175,7 +175,7 @@ impl<'a> Ship<'a> {
             let mut element = get_mut(id);
             element.player_nr = player;
             element.state_flags = PLAYER_SHIP as u16;
-            element.parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
+            element.parent = uqm_engine::battle::Parent::Ship(ship_id);
         }
         ship_record(ship_id).ship_element = Some(id);
         Self {
@@ -188,7 +188,7 @@ impl<'a> Ship<'a> {
     }
     pub fn native(
         battle: &'a Battle,
-        race: &'static uqm_rust::engine::battle::Race,
+        race: &'static uqm_engine::battle::Race,
         player: i16,
     ) -> Self {
         let mut ship = Self::bare(battle, SPECIES_ID_VUX_ID, player);
@@ -222,8 +222,8 @@ impl<'a> Ship<'a> {
         let ship_frames = ship.ship_frames();
         {
             let mut element = ship.element_mut();
-            element.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
-                uqm_rust::engine::battle::motion::collision,
+            element.collision_func = Some(uqm_engine::battle::CollisionHook::Native(
+                uqm_engine::battle::motion::collision,
             ));
             element.set_life_span(NORMAL_LIFE as u16);
             element.set_hit_points(crew);
@@ -253,7 +253,7 @@ impl<'a> Ship<'a> {
     }
     pub fn set_frame_bounds(&mut self, role: usize, index: usize, bounds: [i16; 2]) {
         self.raw_frame(role, index)
-            .set_bounds(uqm_rust::graphics::geometry::Extent::new(
+            .set_bounds(uqm_engine::graphics::geometry::Extent::new(
                 bounds[0], bounds[1],
             ));
     }
@@ -269,7 +269,7 @@ impl<'a> Ship<'a> {
     }
     pub fn set_hot_spot(&mut self, role: usize, index: usize, hot_spot: [i16; 2]) {
         self.raw_frame(role, index)
-            .set_hot_spot(uqm_rust::graphics::geometry::Point {
+            .set_hot_spot(uqm_engine::graphics::geometry::Point {
                 x: hot_spot[0],
                 y: hot_spot[1],
             });
@@ -283,17 +283,13 @@ impl<'a> Ship<'a> {
             out
         })
     }
-    pub fn frame(
-        &self,
-        role: usize,
-        index: u16,
-    ) -> uqm_rust::engine::battle::views::FrameSelection {
+    pub fn frame(&self, role: usize, index: u16) -> uqm_engine::battle::views::FrameSelection {
         self.assert_live();
         crate::battle_context::with(|cx| {
             cx.absolute_frame(cx.ship_frame(self.ship_id, role), index)
         })
     }
-    pub fn frame_set(&self, role: usize) -> uqm_rust::engine::battle::views::Frames {
+    pub fn frame_set(&self, role: usize) -> uqm_engine::battle::views::Frames {
         self.assert_live();
         crate::battle_context::with(|cx| cx.ship_frame_set(self.ship_id, role))
     }
@@ -330,13 +326,13 @@ impl<'a> Ship<'a> {
                 .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"))
         })
     }
-    pub fn snapshot(&self) -> uqm_rust::engine::battle::views::ElementState {
+    pub fn snapshot(&self) -> uqm_engine::battle::views::ElementState {
         crate::battle_context::with(|cx| cx.element(self.id))
     }
-    pub fn ship_frames(&self) -> uqm_rust::engine::battle::views::Frames {
+    pub fn ship_frames(&self) -> uqm_engine::battle::views::Frames {
         self.frame_set(0)
     }
-    pub fn special_frames(&self) -> uqm_rust::engine::battle::views::Frames {
+    pub fn special_frames(&self) -> uqm_engine::battle::views::Frames {
         self.frame_set(2)
     }
     pub fn guardian_form(mut self) -> Self {
@@ -357,14 +353,14 @@ impl<'a> Ship<'a> {
     }
     fn process(&mut self, post: bool) {
         crate::battle_context::with(|cx| {
-            uqm_rust::engine::battle::Cx::invoke_ship_process(cx, self.ship_id, post);
+            uqm_engine::battle::Cx::invoke_ship_process(cx, self.ship_id, post);
         });
     }
     /// Spawn this ship's weapons and adopt them as its own.
     pub fn weapon(&mut self, expected: u16) -> Vec<Option<ElementId>> {
         crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(self.id);
-            let out = uqm_rust::engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
+            let out = uqm_engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
             assert_eq!(out.len(), usize::from(expected));
             for &id in out.iter().flatten() {
                 cx.set_parent(id, Some(self.ship_id));
@@ -375,13 +371,13 @@ impl<'a> Ship<'a> {
             out
         })
     }
-    pub fn subject(&self) -> uqm_rust::engine::battle::Subject {
+    pub fn subject(&self) -> uqm_engine::battle::Subject {
         self.assert_live();
         crate::battle_context::with(|cx| cx.weapon_origin(self.id))
     }
     pub fn intelligence_subject(
         &mut self,
-        subject: &mut uqm_rust::engine::battle::Subject,
+        subject: &mut uqm_engine::battle::Subject,
         concerns: &mut [Concern],
         count: u16,
     ) {
@@ -403,7 +399,7 @@ impl<'a> Ship<'a> {
             });
         }
     }
-    pub fn saved_collision(&self) -> Option<uqm_rust::engine::battle::CollisionHook> {
+    pub fn saved_collision(&self) -> Option<uqm_engine::battle::CollisionHook> {
         let ship = ship_record(self.ship_id);
         let descriptor = ship
             .descriptor
@@ -431,12 +427,12 @@ impl Drop for Ship<'_> {
 }
 pub fn descriptor(species: u32) -> RaceDescriptor {
     crate::battle_context::with(|cx| {
-        uqm_rust::ships::races::descriptor(cx.world, species).into_legacy()
+        uqm_content::ships::races::descriptor(cx.world, species).into_legacy()
     })
 }
 
 pub fn call_element(name: &str, id: ElementId) {
-    let address = uqm_rust::battle::hook_registry::hooks()
+    let address = uqm_modes::battle::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
         .unwrap_or_else(|| panic!("{}", "registered element hook"));
@@ -447,12 +443,12 @@ pub fn call_element(name: &str, id: ElementId) {
             .flatten()
             .find(|h| h.address() == address)
             .unwrap_or_else(|| panic!("{}", "named hook installed on element"));
-        uqm_rust::battle::process_native::invoke_element::invoke_element(cx, callback, id);
+        uqm_modes::battle::process_native::invoke_element::invoke_element(cx, callback, id);
     });
 }
 
 pub fn call_collision(name: &str, a: ElementId, pa: &mut Point, b: ElementId, pb: &mut Point) {
-    let address = uqm_rust::battle::hook_registry::hooks()
+    let address = uqm_modes::battle::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
         .unwrap_or_else(|| panic!("{}", "registered collision hook"));
@@ -466,7 +462,7 @@ pub fn call_collision(name: &str, a: ElementId, pa: &mut Point, b: ElementId, pb
             address,
             "named collision installed on element"
         );
-        uqm_rust::battle::process_native::invoke_collision::invoke_collision(
+        uqm_modes::battle::process_native::invoke_collision::invoke_collision(
             cx, hook, a, pa, b, pb,
         );
     })
@@ -483,22 +479,22 @@ impl FrameSet {
         for index in 0..usize::from(count) {
             native
                 .frame(index)
-                .set_bounds(uqm_rust::graphics::geometry::Extent::new(
+                .set_bounds(uqm_engine::graphics::geometry::Extent::new(
                     bounds[0], bounds[1],
                 ));
         }
         Self(Rc::new(native))
     }
-    pub fn selection(&self, index: usize) -> uqm_rust::engine::battle::frames::FrameSelection {
+    pub fn selection(&self, index: usize) -> uqm_engine::battle::frames::FrameSelection {
         self.0.selection(index)
     }
 
-    pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
+    pub fn array(&self) -> uqm_engine::battle::frames::FrameArray {
         self.0.array()
     }
     pub fn make_opaque(&mut self) {
         for index in 0..self.0.count() {
-            uqm_rust::engine::test_support::native_probe::make_opaque(self.0.frame(index));
+            uqm_engine::test_support::native_probe::make_opaque(self.0.frame(index));
         }
     }
     pub fn frame(&self, index: usize) -> FrameId {
@@ -509,7 +505,7 @@ impl FrameSet {
 pub fn queued() -> Vec<ElementId> {
     crate::battle_context::with(|cx| queued_in(cx))
 }
-pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<ElementId> {
+pub fn queued_in(cx: &uqm_engine::battle::Cx<'_>) -> Vec<ElementId> {
     let mut all = Vec::new();
     let mut next = cx.elements().head();
     while let Some(id) = next {
@@ -533,8 +529,8 @@ pub fn velocity(v: &VelocityDesc) -> [i32; 9] {
     ]
 }
 pub fn toward(speed: i16, face: u16) -> [i32; 9] {
-    let mut v = uqm_rust::battle::velocity::VelocityDesc::new();
-    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, face);
+    let mut v = uqm_modes::battle::velocity::VelocityDesc::new();
+    uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, face);
     velocity(&v)
 }
 pub fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
@@ -598,11 +594,11 @@ pub fn put(id: ElementId) {
     crate::battle_context::with(|cx| cx.put(id));
 }
 
-pub struct NativeFrameSet(uqm_rust::graphics::drawable::LoadedDrawable);
+pub struct NativeFrameSet(uqm_engine::graphics::drawable::LoadedDrawable);
 impl NativeFrameSet {
     pub fn new(count: u16) -> Self {
         Self(
-            uqm_rust::graphics::drawable::LoadedDrawable::create(0, 4, 4, count)
+            uqm_engine::graphics::drawable::LoadedDrawable::create(0, 4, 4, count)
                 .unwrap_or_else(|| panic!("fixture drawable")),
         )
     }
@@ -613,12 +609,12 @@ impl NativeFrameSet {
         assert!(index < self.count());
         self.0.first_frame().at(index as u16)
     }
-    pub fn selection(&self, index: usize) -> uqm_rust::engine::battle::frames::FrameSelection {
-        uqm_rust::engine::battle::frames::FrameSelection::retain(self.frame(index))
+    pub fn selection(&self, index: usize) -> uqm_engine::battle::frames::FrameSelection {
+        uqm_engine::battle::frames::FrameSelection::retain(self.frame(index))
     }
 
-    pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
+    pub fn array(&self) -> uqm_engine::battle::frames::FrameArray {
         let frame = self.frame(0);
-        uqm_rust::engine::battle::frames::FrameArray::from_native([frame; 3])
+        uqm_engine::battle::frames::FrameArray::from_native([frame; 3])
     }
 }

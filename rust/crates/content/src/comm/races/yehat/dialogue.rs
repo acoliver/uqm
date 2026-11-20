@@ -1,8 +1,8 @@
 use super::api::YehatApi;
 use super::phrases::{space_info, visit_phrase};
 use super::*;
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::StoryKey;
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::StoryKey;
 
 pub struct Dialogue<'a, A> {
     pub api: &'a mut A,

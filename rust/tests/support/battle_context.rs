@@ -8,7 +8,7 @@
 
 use std::cell::{RefCell, RefMut};
 use std::sync::Mutex;
-use uqm_rust::engine::{battle::record::Kernel, battle::Battle, battle::Cx, Game};
+use uqm_engine::{battle::record::Kernel, battle::Battle, battle::Cx, Game};
 
 static SERIAL: Mutex<()> = Mutex::new(());
 
@@ -33,9 +33,9 @@ impl Drop for Installed {
 
 fn game() -> Game {
     let mut game = Game::new();
-    uqm_rust::battle::services::install(&mut game.kernel);
+    uqm_modes::battle::services::install(&mut game.kernel);
     game.world.set_catalog(std::borrow::Cow::Borrowed(
-        &uqm_rust::planets::tables::STARMAP_ARRAY,
+        &uqm_modes::planets::tables::STARMAP_ARRAY,
     ));
     let configuration = game.kernel.configuration.clone();
     game.kernel.install_input_runtime(std::rc::Rc::new(
@@ -49,7 +49,7 @@ fn game() -> Game {
 }
 
 /// Run a test body against a fresh fixture game, serialized with every other body.
-pub fn run<R>(body: impl FnOnce(&uqm_rust::engine::input::InputSession) -> R) -> R {
+pub fn run<R>(body: impl FnOnce(&uqm_engine::input::InputSession) -> R) -> R {
     let _guard = SERIAL
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -82,7 +82,7 @@ pub fn with<R>(operation: impl FnOnce(&mut Cx<'_>) -> R) -> R {
         battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     ))
 }
 
@@ -92,10 +92,10 @@ pub fn kernel() -> RefMut<'static, Kernel> {
     RefMut::map(lend(), |(game, _)| &mut game.kernel)
 }
 
-pub fn dispose(id: uqm_rust::engine::battle::ElementId) {
+pub fn dispose(id: uqm_engine::battle::ElementId) {
     with(|cx| cx.dispose(id));
 }
 
-pub fn unlink(id: uqm_rust::engine::battle::ElementId) {
-    with(|cx| uqm_rust::battle::sounds::engine::unlink(cx, id));
+pub fn unlink(id: uqm_engine::battle::ElementId) {
+    with(|cx| uqm_modes::battle::sounds::engine::unlink(cx, id));
 }

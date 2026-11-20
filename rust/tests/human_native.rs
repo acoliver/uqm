@@ -7,11 +7,11 @@ mod battle;
 mod battle_context;
 
 use battle::*;
-use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, POINT_DEFENSE, SEEKING_WEAPON, SPECIAL};
-use uqm_rust::engine::battle::flags::{APPEARING, FINITE_LIFE, NONSOLID};
-use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::velocity::VelocityDesc;
+use uqm_engine::battle::ai_constants::{FIRES_FORE, POINT_DEFENSE, SEEKING_WEAPON, SPECIAL};
+use uqm_engine::battle::flags::{APPEARING, FINITE_LIFE, NONSOLID};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::species::species_id::SPECIES_ID_EARTHLING_ID;
 
 #[test]
 fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
@@ -62,7 +62,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             battle::get_mut(nuke).life = 50;
             call_element("ships::races::human_native::nuke_preprocess", nuke);
             let mut expected: VelocityDesc = VelocityDesc::new();
-            uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 80, 0);
+            uqm_modes::battle::velocity::set_velocity_vector(&mut expected, 80, 0);
             assert_eq!(
                 battle::get(nuke).velocity.vector.width,
                 expected.vector.width

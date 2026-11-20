@@ -1,15 +1,15 @@
 #![forbid(unsafe_code)]
+use uqm_engine as engine;
+use uqm_engine::battle::Battle;
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics;
 use uqm_engine::test_support::campaign_display as campaign_display_test;
 use uqm_engine::test_support::native_process;
-use uqm_rust::comm::dispatch::race_descriptor;
-use uqm_rust::comm::locdata::SessionData;
-use uqm_rust::comm::Comm;
-use uqm_rust::engine;
-use uqm_rust::engine::battle::Battle;
-use uqm_rust::engine::battle::Cx;
-use uqm_rust::engine::Game;
-use uqm_rust::engine::StoryKey;
-use uqm_rust::graphics;
+use uqm_engine::Game;
+use uqm_engine::StoryKey;
+use uqm_modes::comm::dispatch::race_descriptor;
+use uqm_modes::comm::locdata::SessionData;
+use uqm_modes::comm::Comm;
 
 #[test]
 #[serial_test::serial]
@@ -25,7 +25,7 @@ fn missing_player_font_aborts_resource_admission() -> Result<(), Box<dyn std::er
     let before = space.selected_context().unwrap().context();
     let mut comm = Comm::new();
     assert_eq!(
-        uqm_rust::comm::hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)),
+        uqm_modes::comm::hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)),
         Err("font.player failed to load".into())
     );
     assert!(comm.comm_data().is_none());
@@ -40,13 +40,13 @@ fn missing_player_font_aborts_resource_admission() -> Result<(), Box<dyn std::er
 #[serial_test::serial]
 fn descriptor_factories_return_independent_values_and_reselect_variants() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let mut battle = Battle::new();
     let mut cx = Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
     let mut comm = Comm::new();
     comm.init().unwrap();
@@ -91,13 +91,13 @@ fn descriptor_factories_return_independent_values_and_reselect_variants() {
 #[serial_test::serial]
 fn all_descriptor_factories_initialize_without_loaded_resources() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let mut battle = Battle::new();
     let mut cx = Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
     let mut comm = Comm::new();
     comm.init().unwrap();
@@ -176,7 +176,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                         engine::battle::frames::FrameSelection::retain(game.kernel.flag_stat_frame),
                     ),
                 );
-                game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+                game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
                 assert_eq!(
                     uqm_rust::time::clock_bridge::rust_clock_init(&mut game.world),
                     1
@@ -192,7 +192,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                     &mut battle,
                     &mut game.world,
                     &mut game.kernel,
-                    uqm_rust::math::random,
+                    uqm_engine::math::random,
                 );
                 for variant in [0, 1] {
                     cx.world
@@ -217,13 +217,13 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                         cx.world.data.game.module_cost[10] = 0;
                         if (conversation, variant) == (13, 1) {
                             cx.world.data.flagship.module_slots[..4]
-                                .fill(uqm_rust::starbase::sis_modules::ModuleType::CrewPod as u8);
+                                .fill(uqm_modes::starbase::sis_modules::ModuleType::CrewPod as u8);
                             cx.world.data.flagship.crew_enlisted = 200;
                             cx.world.data.game.crew_cost = 5;
                             cx.world
                                 .set_story_state(StoryKey::CREW_SOLD_TO_DRUUGE0, 100);
                         }
-                        let mut comm = Comm::with_options(uqm_rust::comm::CommOptions {
+                        let mut comm = Comm::with_options(uqm_modes::comm::CommOptions {
                             oscilloscope: false,
                             slider: false,
                             ..Default::default()
@@ -236,7 +236,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                         descriptor.definition.alien_alt_song_res = None;
                         descriptor.definition.conversation_phrases_res = None;
                         let phrases =
-                            uqm_rust::strings::owned_table::LoadedTextTable::fixture(vec![
+                            uqm_engine::strings::owned_table::LoadedTextTable::fixture(vec![
                                 b"A\0"
                                     .to_vec(
                                     );
@@ -250,7 +250,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                         );
                         let definition = descriptor.definition.clone();
                         comm.install_descriptor(descriptor);
-                        uqm_rust::comm::hail::prepare(&mut comm, cx.world, cx.kernel, (320, 240))?;
+                        uqm_modes::comm::hail::prepare(&mut comm, cx.world, cx.kernel, (320, 240))?;
                         comm.set_conversation_phrases(Some(phrases.into()));
                         intro(&mut comm, &mut cx);
                         // References below are the actual scripts' offered phrase indices.
@@ -302,7 +302,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                             admitted_text
                         );
                         comm.install_descriptor(SessionData::new(definition));
-                        uqm_rust::comm::hail::finish(&mut comm, &mut cx);
+                        uqm_modes::comm::hail::finish(&mut comm, &mut cx);
                         comm.uninit();
                     }
                 }

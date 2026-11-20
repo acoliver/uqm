@@ -1,21 +1,21 @@
 //! Save-compatible battle-group records and encounter group construction.
 
-use crate::engine::graphics::geometry::Point;
-use crate::engine::math::battle_types::CIRCLE_SHIFT;
-use crate::engine::math::battle_types::FACING_SHIFT;
-use crate::engine::save::groups::MAX_BATTLE_GROUPS;
-use crate::engine::species::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
-use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-use crate::engine::world::queues::FleetInfo as FLEET_INFO;
-use crate::engine::world::queues::MAX_REVOLUTIONS;
-use crate::engine::world::queues::STATION_RADIUS;
-use crate::engine::world::queues::{IpGroup as IP_GROUP, ShipFragment as SHIP_FRAGMENT};
-use crate::engine::world::state_file::{FileMode, SeekWhence, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
-use crate::engine::StoryKey;
-use crate::engine::World;
-use crate::math::{random as TFB_Random, square_root};
 use crate::navigation::get;
 use crate::planets::generate::identities::*;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::CIRCLE_SHIFT;
+use uqm_engine::math::battle_types::FACING_SHIFT;
+use uqm_engine::math::{random as TFB_Random, square_root};
+use uqm_engine::save::groups::MAX_BATTLE_GROUPS;
+use uqm_engine::species::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
+use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+use uqm_engine::world::queues::FleetInfo as FLEET_INFO;
+use uqm_engine::world::queues::MAX_REVOLUTIONS;
+use uqm_engine::world::queues::STATION_RADIUS;
+use uqm_engine::world::queues::{IpGroup as IP_GROUP, ShipFragment as SHIP_FRAGMENT};
+use uqm_engine::world::state_file::{FileMode, SeekWhence, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
+use uqm_engine::StoryKey;
+use uqm_engine::World;
 use uqm_save::statefiles::GroupHeader;
 
 fn read<const N: usize>(world: &mut World, file: usize) -> [u8; N] {
@@ -159,7 +159,7 @@ fn encode_group(group: &IP_GROUP) -> [u8; 16] {
 }
 
 fn sine(angle: u32, magnitude: i32) -> i32 {
-    (crate::math::SINE_TABLE[(angle & 63) as usize] as i32 * magnitude) >> 14
+    (uqm_engine::math::SINE_TABLE[(angle & 63) as usize] as i32 * magnitude) >> 14
 }
 fn cosine(angle: u32, magnitude: i32) -> i32 {
     sine(angle + 16, magnitude)
@@ -236,7 +236,7 @@ fn validate_date(
         u16::from(clock.month_index),
         u16::from(clock.day_index),
     );
-    let date = crate::time::clock_abi::event_date(now, relative, (*year, *month, *day));
+    let date = uqm_engine::time::clock_abi::event_date(now, relative, (*year, *month, *day));
     if relative {
         (*year, *month, *day) = date;
     }
@@ -265,7 +265,7 @@ pub fn init_group_info(world: &mut World, first: u32) {
             .unwrap_or_else(|error| panic!("defined groups file close: {error}"));
     }
 }
-pub fn uninit_group_info(world: &mut crate::engine::World) {
+pub fn uninit_group_info(world: &mut uqm_engine::World) {
     world
         .files
         .delete(DEFGRPINFO_FILE)
@@ -279,7 +279,7 @@ pub fn uninit_group_info(world: &mut crate::engine::World) {
 pub fn build_group(
     world: &mut World,
     race: u8,
-) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>> {
+) -> Option<uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>> {
     let fleets = world.avail_races_ref();
     let icon = fleets.get(fleets.at(usize::from(race))?).melee_icon;
     let mut groups = world.ip_groups();
@@ -292,7 +292,7 @@ pub fn build_group(
 fn clone_npc(
     world: &mut World,
     race: u8,
-) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>> {
+) -> Option<uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Fragment>> {
     let fleets = world.avail_races_ref();
     let template = *fleets.get(fleets.at(usize::from(race))?);
     world.npc_built_ships().clone_fragment(
@@ -374,7 +374,7 @@ fn select_encounter(world: &World, home: &[u8; 23], percent: &[u8; 24]) -> (usiz
     (best_index, best_percent)
 }
 
-pub fn build_groups(world: &mut World, solar: &crate::engine::world::generation::SolarSnapshot) {
+pub fn build_groups(world: &mut World, solar: &uqm_engine::world::generation::SolarSnapshot) {
     let mut home = HOME_SYSTEMS;
     let mut percent = ENCOUNTER_PERCENT;
     percent[SLYLANDRO_SHIP as usize] =
@@ -419,7 +419,7 @@ pub fn build_groups(world: &mut World, solar: &crate::engine::world::generation:
 fn initialize_group(
     group: &mut IP_GROUP,
     which: u8,
-    solar: &crate::engine::world::generation::SolarSnapshot,
+    solar: &uqm_engine::world::generation::SolarSnapshot,
 ) {
     group.group_id = which;
     group.in_system = 1;
@@ -529,7 +529,7 @@ fn initialize_saved_groups(
     file: usize,
     offset: u32,
     header: &GroupHeader,
-    solar: &crate::engine::world::generation::SolarSnapshot,
+    solar: &uqm_engine::world::generation::SolarSnapshot,
 ) -> u32 {
     world.ip_groups().reinit();
     let mut day = header.day_index as u16;
@@ -579,7 +579,7 @@ fn initialize_saved_groups(
 pub fn initialize_solar_groups(
     world: &mut World,
     offset: u32,
-    solar: &crate::engine::world::generation::SolarSnapshot,
+    solar: &uqm_engine::world::generation::SolarSnapshot,
 ) -> u32 {
     let file = open(world, offset, u8::MAX);
     seek(world, file, offset);
@@ -699,7 +699,7 @@ pub fn put_group_info(world: &mut World, mut offset: u32, mut which: u8) -> u32 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::world::state_file::{FileMode, SeekWhence, RANDGRPINFO_FILE};
+    use uqm_engine::world::state_file::{FileMode, SeekWhence, RANDGRPINFO_FILE};
 
     #[test]
     fn on_station_positions_use_the_full_rust_sine_table() {
@@ -812,7 +812,7 @@ mod record_tests {
 
     #[test]
     fn campaign_group_lifecycle_uses_the_actual_safe_module() {
-        use crate::engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
+        use uqm_engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
         let initialize: fn(&mut World, u32) = super::init_group_info;
         let uninitialize: fn(&mut World) = super::uninit_group_info;
         let mut world = World::new();
@@ -879,7 +879,7 @@ mod record_tests {
         let mut fleets = world.avail_races();
         let fleet = fleets.alloc().unwrap();
         fleets.put(fleet);
-        let icon = crate::graphics::drawable::FrameId::from_bits(0x200usize);
+        let icon = uqm_engine::graphics::drawable::FrameId::from_bits(0x200usize);
         fleets.get_mut(fleet).melee_icon = icon;
         assert!(super::build_group(&mut world, 1).is_none());
         assert_eq!(world.ip_groups_ref().count(), 0);
@@ -893,7 +893,7 @@ mod record_tests {
 
     #[test]
     fn record_io_uses_safe_world_owned_file_indices() {
-        use crate::engine::world::state_file::{FileMode, SeekWhence, RANDGRPINFO_FILE};
+        use uqm_engine::world::state_file::{FileMode, SeekWhence, RANDGRPINFO_FILE};
         let mut first = World::new();
         let second = World::new();
         first.files.open(RANDGRPINFO_FILE, FileMode::Write).unwrap();
@@ -941,7 +941,7 @@ mod record_tests {
 
     #[test]
     fn fragment_bytes_keep_truncation_and_do_not_replace_link_or_resources() {
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         let mut queue = world.built_ships();
         let first = queue.alloc().unwrap();
         let middle = queue.alloc().unwrap();
@@ -957,14 +957,14 @@ mod record_tests {
         fragment.max_crew = 511;
         fragment.energy_level = 6;
         fragment.max_energy = 7;
-        fragment.race_strings = Some(crate::strings::owned_table::EntryRef::new(0x100, 0));
-        fragment.icons = crate::graphics::drawable::FrameId::from_bits(0x200 << 16);
+        fragment.race_strings = Some(uqm_engine::strings::owned_table::EntryRef::new(0x100, 0));
+        fragment.icons = uqm_engine::graphics::drawable::FrameId::from_bits(0x200 << 16);
         let bytes = encode_fragment(fragment);
         assert_eq!(bytes, [0, 0, 3, 0, 0, 0, 4, 5, 44, 255, 6, 7, 0, 0, 0, 0]);
         decode_fragment(&bytes, fragment);
         assert_eq!(
             fragment.race_strings,
-            Some(crate::strings::owned_table::EntryRef::new(0x100, 0))
+            Some(uqm_engine::strings::owned_table::EntryRef::new(0x100, 0))
         );
         assert_eq!(fragment.icons.bits(), 0x200 << 16);
         assert_eq!(fragment.crew_level, 44);

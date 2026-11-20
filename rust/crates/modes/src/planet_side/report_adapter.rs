@@ -1,12 +1,12 @@
 //! Discovery-report ownership at the PlanetSide runtime boundary.
 
 use super::runtime::AdapterError;
-use crate::engine::observe::{CheckpointView, Io};
-use crate::engine::strings::owned_table::TextEntry;
-use crate::engine::world::generation::ReportSlot;
 use std::cell::RefCell;
+use uqm_engine::observe::{CheckpointView, Io};
+use uqm_engine::strings::owned_table::TextEntry;
+use uqm_engine::world::generation::ReportSlot;
 
-pub use crate::engine::world::generation::ReportDisposition;
+pub use uqm_engine::world::generation::ReportDisposition;
 
 pub trait DiscoveryReportPort {
     fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError>;
@@ -64,16 +64,16 @@ impl<Present: FnMut(&TextEntry)> DiscoveryReportPort for DiscoveryReport<'_, '_,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
-    use crate::engine::strings::owned_table::LoadedTextTable;
     use std::{cell::RefCell, rc::Rc};
+    use uqm_engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
+    use uqm_engine::strings::owned_table::LoadedTextTable;
 
     struct Recording(Rc<RefCell<Vec<bool>>>);
     impl Observer for Recording {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &mut crate::engine::battle::Cx<'_>,
+            _: &mut uqm_engine::battle::Cx<'_>,
         ) -> Injected {
             Default::default()
         }

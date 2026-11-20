@@ -9,25 +9,25 @@ mod battle_context;
 mod special_hooks;
 use battle::FrameSet;
 use battle::{Battle, Ship};
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, IMMEDIATE_WEAPON, LEFT,
     MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SEEKING_SPECIAL, SEEKING_WEAPON, SPECIAL,
     THRUST, WEAPON,
 };
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, CREW_OBJECT, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
     SHIP_AT_MAX_SPEED,
 };
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::LINE_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_ARILOU_ID;
-use uqm_rust::graphics::drawable::FrameId;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::drawable::FrameId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::species::species_id::SPECIES_ID_ARILOU_ID;
 
 fn index_of(frame: FrameId) -> u16 {
     frame.index()
@@ -548,11 +548,11 @@ impl<'a> Skiff<'a> {
         self.fleet.fixture.preprocess();
     }
 
-    fn warp_array(&mut self) -> uqm_rust::engine::battle::views::Frames {
+    fn warp_array(&mut self) -> uqm_engine::battle::views::Frames {
         self.fleet.fixture.frame_set(2)
     }
 
-    fn ship_array(&mut self) -> uqm_rust::engine::battle::views::Frames {
+    fn ship_array(&mut self) -> uqm_engine::battle::views::Frames {
         self.fleet.fixture.frame_set(0)
     }
 }

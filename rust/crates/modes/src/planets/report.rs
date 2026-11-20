@@ -26,7 +26,8 @@ fn needs_page_marker(row: i32, rows: i32, remaining: u16, columns: i32, lf_remai
 }
 
 fn take_character(text: &mut &std::ffi::CStr) -> u32 {
-    let Some((character, bytes)) = crate::strings::unicode::utf8_character(text.to_bytes()) else {
+    let Some((character, bytes)) = uqm_engine::strings::unicode::utf8_character(text.to_bytes())
+    else {
         return 0;
     };
     *text = &text[bytes..];
@@ -35,7 +36,7 @@ fn take_character(text: &mut &std::ffi::CStr) -> u32 {
 
 fn word_character_count(mut text: &std::ffi::CStr) -> usize {
     let mut count = 0;
-    while crate::strings::unicode::uni_char_is_graph(take_character(&mut text)) != 0 {
+    while uqm_engine::strings::unicode::uni_char_is_graph(take_character(&mut text)) != 0 {
         count += 1;
     }
     count
@@ -43,17 +44,17 @@ fn word_character_count(mut text: &std::ffi::CStr) -> usize {
 
 pub(crate) mod live {
     use super::{character_delay, needs_page_marker, take_character, word_character_count};
-    use crate::engine::{battle::Cx, observe::Io, strings::owned_table::TextEntry};
-    use crate::graphics::{
-        context::BatchGuard, context::ContextLease, drawable::ContextFrame, font::FontLease,
-        geometry::Color, geometry::Point,
-    };
     use crate::planets::scan::state::create_context;
     use crate::ui::util::{
         wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SavedContext,
     };
     use std::ffi::{CStr, CString};
+    use uqm_engine::graphics::{
+        context::BatchGuard, context::ContextLease, drawable::ContextFrame, font::FontLease,
+        geometry::Color, geometry::Point,
+    };
     use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::{battle::Cx, observe::Io, strings::owned_table::TextEntry};
 
     const GREEN: Color = Color {
         r: 0,
@@ -68,7 +69,7 @@ pub(crate) mod live {
         a: 255,
     };
 
-    fn clear(printer: &ReportPrinter, input: &crate::engine::input::InputSession) {
+    fn clear(printer: &ReportPrinter, input: &uqm_engine::input::InputSession) {
         let frame = printer
             .junk
             .wrapped_frame(if input.preferences().fonts == 2 {
@@ -117,7 +118,7 @@ pub(crate) mod live {
         junk: ContextFrame,
         width: i32,
         batch: Option<BatchGuard>,
-        sound: Option<crate::sound::owned_bank::SoundClip>,
+        sound: Option<uqm_engine::sound::owned_bank::SoundClip>,
         advance: i16,
         sleepy: bool,
     }
@@ -138,11 +139,11 @@ pub(crate) mod live {
                 self.context.draw_text_bounded(
                     &self.font,
                     t.string,
-                    crate::graphics::geometry::Point {
+                    uqm_engine::graphics::geometry::Point {
                         x: t.baseline.x,
                         y: t.baseline.y,
                     },
-                    crate::graphics::geometry::TextAlign::Left,
+                    uqm_engine::graphics::geometry::TextAlign::Left,
                     GREEN,
                     1,
                 );
@@ -152,7 +153,7 @@ pub(crate) mod live {
                             cx.world,
                             &mut cx.kernel.channels.borrow_mut(),
                             sound,
-                            crate::sound::types::SoundPosition::non_positional(),
+                            uqm_engine::sound::types::SoundPosition::non_positional(),
                             None,
                             2,
                         );
@@ -181,7 +182,7 @@ pub(crate) mod live {
         let end_page = CString::new(format!("{}\n", cx.kernel.game_text(308).to_string_lossy()))
             .unwrap_or_else(|error| panic!("report page marker contains NUL: {error}"));
         let r = printer.junk.wrapped_frame(18).rect();
-        let end_len = crate::strings::unicode::count_utf8_bytes(end_page.as_bytes()) as u16;
+        let end_len = uqm_engine::strings::unicode::count_utf8_bytes(end_page.as_bytes()) as u16;
         let columns = (printer.width - 78) / 6;
         let rows = 75 / 6;
         let mut t = ReportText {
@@ -306,7 +307,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn retained_report_batch_releases_on_return_and_panic() {
-        use crate::graphics::context::LoadedContext;
+        use uqm_engine::graphics::context::LoadedContext;
         let _queue = uqm_engine::test_support::native_probe::DrawQueue::init();
         let owner = LoadedContext::create(c"report-batch-test");
         let context = owner.lease();

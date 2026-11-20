@@ -1,15 +1,15 @@
 //! Scoped navigation projections into the retained game-thread authorities.
-use crate::engine::battle::Cx;
-use crate::engine::battle::{ElementId, Parent};
-use crate::engine::graphics::geometry::Point;
-use crate::engine::save::{START_ENCOUNTER, START_INTERPLANETARY};
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
 use crate::navigation::hyper_units::Geometry;
 use crate::navigation::hyper_units::{
     ARILOU_HOME_X, ARILOU_HOME_Y, ARILOU_SPACE_X, ARILOU_SPACE_Y, QUASI_SPACE_X, QUASI_SPACE_Y,
 };
 use crate::planets::starmap::find_star_id;
+use uqm_engine::battle::Cx;
+use uqm_engine::battle::{ElementId, Parent};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::save::{START_ENCOUNTER, START_INTERPLANETARY};
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
 
 const PORTALS: [(i16, i16); 15] = [
     (4091, 7748),
@@ -29,10 +29,10 @@ const PORTALS: [(i16, i16); 15] = [
     (5850, 6213),
 ];
 pub(crate) fn interplanetary(
-    world: &mut crate::engine::World,
+    world: &mut uqm_engine::World,
     point: Point,
     geometry: Geometry,
-    catalog: &[crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN],
+    catalog: &[uqm_engine::world::CStarDesc; uqm_engine::world::CATALOG_LEN],
 ) {
     world.data.game.ip_planet = 0;
     world.data.game.in_orbit = 0;
@@ -59,7 +59,7 @@ pub(crate) fn interplanetary(
         }
     }
 }
-pub(crate) fn arilou(world: &mut crate::engine::World, geometry: Geometry) {
+pub(crate) fn arilou(world: &mut uqm_engine::World, geometry: Geometry) {
     world.data.game.ship_facing = 0;
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     world.data.game.autopilot = Point { x: -1, y: -1 };
@@ -80,12 +80,12 @@ pub(crate) fn arilou(world: &mut crate::engine::World, geometry: Geometry) {
 }
 
 pub trait NavigationOps {
-    fn navigation(&self) -> &crate::engine::WorldData;
-    fn navigation_mut(&mut self) -> &mut crate::engine::WorldData;
+    fn navigation(&self) -> &uqm_engine::WorldData;
+    fn navigation_mut(&mut self) -> &mut uqm_engine::WorldData;
     fn ip_group_id(
         &self,
         element: ElementId,
-    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>;
+    ) -> uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>;
     fn ip_group(&self, element: ElementId) -> &IP_GROUP;
     fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP;
     fn planet_outer_location(&self, planet: u16) -> Point;
@@ -93,36 +93,36 @@ pub trait NavigationOps {
     fn flagship_location(&self) -> u8;
     fn group_record(
         &self,
-        id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+        id: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
     ) -> &IP_GROUP;
     fn set_encounter_group(&mut self, group: u8);
-    fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection;
+    fn navigation_stars(&self) -> uqm_engine::battle::views::FrameSelection;
     fn group_icon(
         &self,
-        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
-    ) -> crate::engine::battle::views::FrameSelection;
+        group: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
+    ) -> uqm_engine::battle::views::FrameSelection;
     fn set_group_image(
         &mut self,
         id: ElementId,
-        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+        group: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
     );
-    fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection;
+    fn flagship_stamp_frame(&self) -> uqm_engine::battle::views::FrameSelection;
     fn set_flagship_image(&mut self, id: ElementId);
 }
 
 impl NavigationOps for Cx<'_> {
-    fn navigation(&self) -> &crate::engine::WorldData {
+    fn navigation(&self) -> &uqm_engine::WorldData {
         &self.world.data
     }
 
-    fn navigation_mut(&mut self) -> &mut crate::engine::WorldData {
+    fn navigation_mut(&mut self) -> &mut uqm_engine::WorldData {
         &mut self.world.data
     }
 
     fn ip_group_id(
         &self,
         element: ElementId,
-    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group> {
+    ) -> uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group> {
         let Parent::IpGroup(id) = self.parent(element) else {
             panic!("navigation element has no IP-group parent");
         };
@@ -161,50 +161,50 @@ impl NavigationOps for Cx<'_> {
     }
     fn group_record(
         &self,
-        id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+        id: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
     ) -> &IP_GROUP {
         self.world.ip_groups_ref().into_record(id)
     }
     fn set_encounter_group(&mut self, group: u8) {
         self.world.encounter_group = group;
     }
-    fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
+    fn navigation_stars(&self) -> uqm_engine::battle::views::FrameSelection {
         // SAFETY: the loaded navigation resource is retained throughout the context borrow.
         {
-            crate::engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space)
+            uqm_engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space)
         }
     }
     fn group_icon(
         &self,
-        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
-    ) -> crate::engine::battle::views::FrameSelection {
+        group: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
+    ) -> uqm_engine::battle::views::FrameSelection {
         let icon = self.group_record(group).melee_icon;
-        crate::engine::battle::views::FrameSelection::retain(icon)
+        uqm_engine::battle::views::FrameSelection::retain(icon)
     }
     fn set_group_image(
         &mut self,
         id: ElementId,
-        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+        group: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
     ) {
         let record = self.group_record(group);
-        let role = crate::engine::battle::views::SharedFrames::GroupIcon(
+        let role = uqm_engine::battle::views::SharedFrames::GroupIcon(
             self.world.ip_groups_ref().raw(group) as usize,
         );
-        let frame = crate::engine::battle::views::FrameSelection::retain(record.melee_icon);
-        let frames = crate::engine::battle::views::Frames::retain_shared(
+        let frame = uqm_engine::battle::views::FrameSelection::retain(record.melee_icon);
+        let frames = uqm_engine::battle::views::Frames::retain_shared(
             role,
             std::slice::from_ref(&record.melee_icon),
         );
         self.set_single_frames(id, frames, frame);
     }
-    fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
+    fn flagship_stamp_frame(&self) -> uqm_engine::battle::views::FrameSelection {
         let frame = self.navigation().game.ship_stamp.frame;
-        crate::engine::battle::views::FrameSelection::retain(frame)
+        uqm_engine::battle::views::FrameSelection::retain(frame)
     }
     fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
-        let role = crate::engine::battle::views::SharedFrames::Flagship;
-        let frames = crate::engine::battle::views::Frames::retain_shared(
+        let role = uqm_engine::battle::views::SharedFrames::Flagship;
+        let frames = uqm_engine::battle::views::Frames::retain_shared(
             role,
             std::slice::from_ref(&self.navigation().game.ship_stamp.frame),
         );

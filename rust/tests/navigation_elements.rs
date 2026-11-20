@@ -5,20 +5,20 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, NativeFrameSet as NativeFrames, Object};
-use uqm_rust::engine::battle::flags::{CHANGING, DISAPPEARING, NONSOLID};
-use uqm_rust::engine::battle::{ElementHook, ElementId};
-use uqm_rust::engine::world::queues::IpGroup;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::navigation::interplanetary;
+use uqm_engine::battle::flags::{CHANGING, DISAPPEARING, NONSOLID};
+use uqm_engine::battle::{ElementHook, ElementId};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::world::queues::IpGroup;
+use uqm_modes::navigation::interplanetary;
 
 fn transition_hook() -> ElementHook {
-    ElementHook::Native(uqm_rust::navigation::hyper_encounters::transition)
+    ElementHook::Native(uqm_modes::navigation::hyper_encounters::transition)
 }
 
 fn call_transition(id: ElementId) {
     {
         crate::battle_context::with(|cx| {
-            uqm_rust::battle::process_native::invoke_element::invoke_element(
+            uqm_modes::battle::process_native::invoke_element::invoke_element(
                 cx,
                 transition_hook(),
                 id,
@@ -37,8 +37,8 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
         {
             let mut record = element.element_mut();
             record.state_flags = DISAPPEARING as u16;
-            record.current.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
-                uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+            record.current.image.frames = uqm_engine::battle::frames::Frames::shared(
+                uqm_engine::battle::frames::SharedFrames::Fixture(0),
                 frames.array(),
             );
             record.current.image.frame = frames.selection(10);
@@ -88,10 +88,7 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
         let frames = NativeFrames::new(16);
         {
             let mut solar = crate::battle_context::with(|cx| {
-                uqm_rust::planets::solar_system::SolarSystem::new(
-                    cx.world,
-                    uqm_rust::engine::StarId(0),
-                )
+                uqm_modes::planets::solar_system::SolarSystem::new(cx.world, uqm_engine::StarId(0))
             });
             solar.sys.sun.radius = 128 << 6;
             let old_race = crate::battle_context::with(|cx| cx.world.encounter_race);
@@ -119,9 +116,9 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
                 };
                 assert!(matches!(
                     state.collide,
-                    Some(uqm_rust::engine::battle::CollisionHook::Native(_))
+                    Some(uqm_engine::battle::CollisionHook::Native(_))
                 ));
-                uqm_rust::battle::process_native::invoke_element::invoke_element(
+                uqm_modes::battle::process_native::invoke_element::invoke_element(
                     cx,
                     ElementHook::Native(pre),
                     flagship,
@@ -147,20 +144,14 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
         let frames = NativeFrames::new(16);
         {
             let mut solar = crate::battle_context::with(|cx| {
-                uqm_rust::planets::solar_system::SolarSystem::new(
-                    cx.world,
-                    uqm_rust::engine::StarId(0),
-                )
+                uqm_modes::planets::solar_system::SolarSystem::new(cx.world, uqm_engine::StarId(0))
             });
             solar.sys.sun.radius = 128 << 6;
             solar.sys.sun.num_planets = 1;
             solar.sys.planets[0].image.origin = Point { x: 80, y: 60 };
             solar.sys.planets[0].num_planets = 1;
             solar.enter_inner(0);
-            solar.select_body(uqm_rust::engine::world::generation::Body::Moon {
-                planet: 0,
-                moon: 0,
-            });
+            solar.select_body(uqm_engine::world::generation::Body::Moon { planet: 0, moon: 0 });
             let old_race = crate::battle_context::with(|cx| cx.world.encounter_race);
             let old_stamp = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp);
             let old_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
@@ -193,21 +184,15 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 let flagship = cx.elements().head().expect("spawned flagship");
                 assert_eq!(cx.element(flagship).turn, 1);
                 let id = cx.elements().succ(flagship).expect("spawned group");
-                assert_eq!(
-                    cx.parent(id),
-                    uqm_rust::engine::battle::Parent::IpGroup(group_id)
-                );
+                assert_eq!(cx.parent(id), uqm_engine::battle::Parent::IpGroup(group_id));
                 let state = cx.element(id);
                 assert_eq!(cx.frame_number(state.current.image.frame.view()), 1);
                 let hook = state.death.expect("group movement hook");
                 assert!(matches!(hook, ElementHook::Native(_)));
-                uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
+                uqm_modes::battle::process_native::invoke_element::invoke_element(cx, hook, id);
                 assert_eq!(cx.element(id).flags & CHANGING as u16, CHANGING as u16);
                 assert_eq!(cx.element(id).flags & NONSOLID as u16, NONSOLID as u16);
-                assert_eq!(
-                    cx.parent(id),
-                    uqm_rust::engine::battle::Parent::IpGroup(group_id)
-                );
+                assert_eq!(cx.parent(id), uqm_engine::battle::Parent::IpGroup(group_id));
             });
             assert_ne!((group().loc.x, group().loc.y), (300, 400));
             assert_eq!(group().sys_loc, 0);
@@ -219,7 +204,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 let id = cx.elements().succ(flagship).expect("spawned group");
                 let hook = cx.element(id).death.expect("group movement hook");
                 cx.world.ip_groups().get_mut(group_id).sys_loc = 1;
-                uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
+                uqm_modes::battle::process_native::invoke_element::invoke_element(cx, hook, id);
                 assert_eq!(
                     cx.element(id).flags & (DISAPPEARING | NONSOLID) as u16,
                     0,
@@ -240,8 +225,8 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
 
 #[test]
 fn notifications_change_only_the_supplied_unpublished_campaign() {
-    use uqm_rust::engine::{battle::Cx, world::queues::IpGroup, Game, World};
-    use uqm_rust::navigation::interplanetary::notify_others;
+    use uqm_engine::{battle::Cx, world::queues::IpGroup, Game, World};
+    use uqm_modes::navigation::interplanetary::notify_others;
 
     let mut game = Game::new();
     let mut other = World::new();
@@ -259,7 +244,7 @@ fn notifications_change_only_the_supplied_unpublished_campaign() {
         };
         groups.put(id);
     }
-    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("targeted notifications must not draw RNG")
     });
@@ -289,8 +274,8 @@ fn notifications_change_only_the_supplied_unpublished_campaign() {
 
 #[test]
 fn all_clear_uses_the_supplied_rng_and_preserves_reforming_groups() {
-    use uqm_rust::engine::{battle::Cx, world::queues::IpGroup, Game};
-    use uqm_rust::navigation::interplanetary::notify_others;
+    use uqm_engine::{battle::Cx, world::queues::IpGroup, Game};
+    use uqm_modes::navigation::interplanetary::notify_others;
 
     let mut game = Game::new();
     for (race, task, dest, orbit, counter) in [
@@ -312,7 +297,7 @@ fn all_clear_uses_the_supplied_rng_and_preserves_reforming_groups() {
         };
         groups.put(id);
     }
-    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
     notify_others(&mut cx, 4, u8::MAX);
     let groups = cx.world.ip_groups_ref();

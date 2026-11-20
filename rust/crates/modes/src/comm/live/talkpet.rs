@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::talkpet::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
@@ -83,9 +83,9 @@ mod api {
                 .is_some()
         }
         fn umgah_alive(&mut self) -> bool {
-            crate::engine::world::fleet::start_sphere_tracking(
+            uqm_engine::world::fleet::start_sphere_tracking(
                 self.cx.borrow_mut().world,
-                crate::engine::species::ship::UMGAH_SHIP as u16,
+                uqm_engine::species::ship::UMGAH_SHIP as u16,
             ) != 0
         }
         fn strobe(&mut self) {

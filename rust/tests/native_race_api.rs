@@ -5,13 +5,13 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Ship};
-use uqm_rust::collections::observation::{self, Event};
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
-use uqm_rust::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_VUX_ID};
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
-use uqm_rust::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
+use uqm_engine::collections::observation::{self, Event};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_VUX_ID};
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
 
 #[test]
 fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
@@ -26,7 +26,7 @@ fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.elements().head(), Some(element));
                 assert_eq!(cx.world.activity(), SUPER_MELEE);
-                uqm_rust::battle::sounds::engine::unlink(cx, element);
+                uqm_modes::battle::sounds::engine::unlink(cx, element);
                 cx.dispose(element);
 
                 cx.world.set_activity(IN_ENCOUNTER | IN_BATTLE);
@@ -55,7 +55,7 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
         let view = original.view(0).to_owned();
         drop(original);
         drop(resource);
-        let retained = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
+        let retained = uqm_engine::battle::frames::FrameArray::retain([view.view(); 3]);
         let raw = view.raw();
         drop(view);
         {
@@ -65,7 +65,7 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
         }
         drop(retained);
         assert!(std::panic::catch_unwind(|| {
-            uqm_rust::graphics::drawable::retain_frames(&[raw]);
+            uqm_engine::graphics::drawable::retain_frames(&[raw]);
         })
         .is_err());
     });
@@ -131,7 +131,7 @@ fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
                 assert_eq!(cx.elements().pred(a), Some(c));
                 assert_eq!(cx.elements().pred(c), Some(b));
                 for id in [b, c, a] {
-                    uqm_rust::battle::sounds::engine::unlink(cx, id);
+                    uqm_modes::battle::sounds::engine::unlink(cx, id);
                     cx.dispose(id);
                     assert!(!cx.elements().contains(id));
                 }

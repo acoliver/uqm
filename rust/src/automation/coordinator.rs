@@ -16,7 +16,7 @@
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
 use super::input_ffi::{contact_snapshot, navigation_snapshot};
-use crate::engine::{battle::Cx, StoryKey};
+use uqm_engine::{battle::Cx, StoryKey};
 mod device;
 mod fixtures;
 mod initialization;
@@ -58,7 +58,6 @@ use crate::automation::{
     },
 };
 
-use crate::graphics::presented_frame::PresentedFrame;
 use parking_lot::Mutex;
 use std::{
     path::PathBuf,
@@ -68,6 +67,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use uqm_engine::graphics::presented_frame::PresentedFrame;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct PendingPlayerInput {
@@ -136,7 +136,7 @@ struct PendingAcceptedPlayerInput {
 /// being observed, it must have settled, and its terminal code must match.
 fn planet_side_wait_satisfied(
     awaited: Option<u64>,
-    observation: &crate::engine::observe_port::planet_side::PlanetSideObservation,
+    observation: &uqm_engine::observe_port::planet_side::PlanetSideObservation,
     outcome: crate::automation::script::PlanetSideOutcomeName,
 ) -> bool {
     awaited == Some(observation.generation)
@@ -148,7 +148,7 @@ fn planet_side_wait_satisfied(
 /// it exhausted its ticks.
 fn planet_side_wait_mismatch_label(
     awaited: Option<u64>,
-    observation: &crate::engine::observe_port::planet_side::PlanetSideObservation,
+    observation: &uqm_engine::observe_port::planet_side::PlanetSideObservation,
     outcome: crate::automation::script::PlanetSideOutcomeName,
 ) -> String {
     format!(
@@ -158,7 +158,7 @@ fn planet_side_wait_mismatch_label(
         observation.generation,
         observation.active,
         observation.terminal,
-        crate::engine::observe_port::planet_side::phase_name(observation.phase),
+        uqm_engine::observe_port::planet_side::phase_name(observation.phase),
         observation.current_crew
     )
 }
@@ -311,15 +311,16 @@ pub struct AutomationObserver {
     pub(crate) ui: super::ui_observation::UiObservation,
     pub(crate) scene: Mutex<scenario::SceneObservation>,
     pub(crate) ending: Mutex<super::ending::Ending>,
-    pub(crate) planet_side: Mutex<crate::engine::observe_port::planet_side::PlanetSideSnapshot>,
-    pub(crate) planet_side_fixtures: Mutex<crate::planet_side::automation_fixture::FixtureRequests>,
+    pub(crate) planet_side: Mutex<uqm_engine::observe_port::planet_side::PlanetSideSnapshot>,
+    pub(crate) planet_side_fixtures:
+        Mutex<uqm_modes::planet_side::automation_fixture::FixtureRequests>,
     pub(crate) planet_side_sequence: Mutex<u64>,
     pub(crate) planet_side_report: Mutex<bool>,
     #[cfg(feature = "debug-process")]
     pub(crate) pending_native_presentation:
         Mutex<Option<super::native_window::NativeWindowChildState>>,
-    pub(crate) activity: crate::engine::world::activity::ActivityControl,
-    pub(crate) input: crate::engine::input::InputControls,
+    pub(crate) activity: uqm_engine::world::activity::ActivityControl,
+    pub(crate) input: uqm_engine::input::InputControls,
     _configuration: uqm_engine::configuration::Configuration,
     /// Validated seed returned at each automation-owned RNG initialization.
     seed: u32,
@@ -358,7 +359,7 @@ impl AutomationObserver {
     fn read_player_input_state(&self, index: i32) -> Option<(i32, i32)> {
         let index = usize::try_from(index)
             .ok()
-            .filter(|index| *index < crate::engine::input::frames::FLIGHT_KEYS)?;
+            .filter(|index| *index < uqm_engine::input::frames::FLIGHT_KEYS)?;
         let template = self.input.player_controls()[0] as usize;
         Some((
             self.input.current().key[template][index],
@@ -377,8 +378,8 @@ impl AutomationObserver {
     pub fn new(
         script: ValidatedScript,
         output_root: PathBuf,
-        activity: crate::engine::world::activity::ActivityControl,
-        input: crate::engine::input::InputControls,
+        activity: uqm_engine::world::activity::ActivityControl,
+        input: uqm_engine::input::InputControls,
         configuration: uqm_engine::configuration::Configuration,
     ) -> Arc<Self> {
         #[cfg(feature = "debug-process")]
@@ -400,8 +401,8 @@ impl AutomationObserver {
         script: ValidatedScript,
         output_root: PathBuf,
         native_limit: Option<u64>,
-        activity: crate::engine::world::activity::ActivityControl,
-        input: crate::engine::input::InputControls,
+        activity: uqm_engine::world::activity::ActivityControl,
+        input: uqm_engine::input::InputControls,
         configuration: uqm_engine::configuration::Configuration,
     ) -> Arc<Self> {
         let native_trace = native_limit
@@ -489,8 +490,8 @@ impl AutomationObserver {
     }
 
     fn elapsed_ms(&self) -> u64 {
-        if crate::engine::host::is_replay() {
-            u64::from(crate::engine::host::now_ms())
+        if uqm_engine::host::is_replay() {
+            u64::from(uqm_engine::host::now_ms())
         } else {
             self.started_at.elapsed().as_millis() as u64
         }
@@ -505,7 +506,7 @@ impl AutomationObserver {
         let summary = serde_json::json!({
             "completed": inner.terminal_class == Some(TerminalClass::Success),
             "inputs_admitted": inner.input_seen,
-            "steps": crate::engine::host::steps(),
+            "steps": uqm_engine::host::steps(),
             "presents": inner.present_seen,
             "final_activity": inner.replay_final_activity,
         });
@@ -762,7 +763,7 @@ impl AutomationObserver {
 
     fn evaluate_state(
         &self,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         predicate: &campaign_state::StatePredicate,
         world: &campaign_state::CampaignView,
     ) -> campaign_state::Evaluation {
@@ -782,7 +783,7 @@ impl AutomationObserver {
     /// condition was reached; injected input never satisfies a wait.
     fn service_semantic_waits(
         &self,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         released_semantic_select: bool,
@@ -889,7 +890,7 @@ impl AutomationObserver {
                             format!("response_selected:generation={generation}:count={count}:index={index}:phrase={}", select.phrase));
                     }
                     Ok(_) => {
-                        let _ = crate::sound::trackplayer::jump_track(0);
+                        let _ = uqm_engine::sound::trackplayer::jump_track(0);
                     }
                     Err(error) => {
                         self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
@@ -924,7 +925,7 @@ impl AutomationObserver {
                         ),
                     );
                 } else {
-                    let _ = crate::sound::trackplayer::jump_track(0);
+                    let _ = uqm_engine::sound::trackplayer::jump_track(0);
                 }
             }
         } else if let Some(Action::SelectPlanetMenu(select)) =
@@ -1082,7 +1083,7 @@ impl AutomationObserver {
     /// would press.
     fn service_battle_fight(
         &self,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         fight: crate::automation::script::FightBattleStep,
@@ -1191,7 +1192,7 @@ impl AutomationObserver {
 
     fn service_samatra(
         &self,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         step: crate::automation::samatra::FightSamatraStep,
@@ -1331,7 +1332,7 @@ impl AutomationObserver {
                     return event;
                 }
             }
-            let _ = crate::sound::trackplayer::jump_track(0);
+            let _ = uqm_engine::sound::trackplayer::jump_track(0);
             return event;
         }
         let (key, escape) = match &progress {
@@ -1509,7 +1510,7 @@ impl AutomationObserver {
                     );
                 }
                 Ok(_) => {
-                    let _ = crate::sound::trackplayer::jump_track(0);
+                    let _ = uqm_engine::sound::trackplayer::jump_track(0);
                 }
                 Err(error) => {
                     self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
@@ -1517,7 +1518,7 @@ impl AutomationObserver {
                 }
             }
         } else if active {
-            let _ = crate::sound::trackplayer::jump_track(0);
+            let _ = uqm_engine::sound::trackplayer::jump_track(0);
         }
         if !self.inject_menu_key(i32::from(MenuKey::Select.index()), i32::from(select)) {
             self.reject_input(inner, "patrol_hail", -1, -1);
@@ -1529,7 +1530,7 @@ impl AutomationObserver {
     /// is running, and report arrival.
     fn service_navigation(
         &self,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
@@ -1834,7 +1835,7 @@ impl AutomationObserver {
 
     fn verify_runtime_assertions(
         &self,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
     ) -> bool {
@@ -3001,20 +3002,20 @@ mod tests {
         )
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
-        let game = crate::engine::Game::new();
+        let game = uqm_engine::Game::new();
         let observer = AutomationObserver::new(
             script,
             directory.path().into(),
             game.world.activity_control(),
-            crate::engine::input::InputControls::default(),
+            uqm_engine::input::InputControls::default(),
             Default::default(),
         );
         let application = crate::app::Application::new(game, Some(observer.clone()));
         assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
-        use crate::engine::observe::Observer;
+        use uqm_engine::observe::Observer;
         let mut handle =
             crate::automation::observer::Handle(application.observer().unwrap().clone());
-        handle.checkpoint(&crate::engine::observe::CheckpointView::FlagshipDestroyed);
+        handle.checkpoint(&uqm_engine::observe::CheckpointView::FlagshipDestroyed);
         drop(handle);
         assert!(observer.flagship_destroyed.load(Ordering::SeqCst));
         drop(application);
@@ -3033,18 +3034,18 @@ mod tests {
         let observer = crate::automation::AutomationObserver::new(
             script,
             output.path().into(),
-            crate::engine::World::new().activity_control(),
-            crate::engine::input::InputControls::default(),
+            uqm_engine::World::new().activity_control(),
+            uqm_engine::input::InputControls::default(),
             Default::default(),
         );
         let before = observer.runtime.commit.next_sequence();
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let mut cx = crate::engine::battle::Cx::new(
+        let mut game = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let mut cx = uqm_engine::battle::Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         assert!(observer.prepare_start_scene(&mut cx).is_none());
         assert_eq!(observer.runtime.commit.next_sequence(), before);
@@ -3210,12 +3211,12 @@ mod tests {
         )
         .unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 script,
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3275,12 +3276,12 @@ mod tests {
         )
         .unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 script,
                 temp.path().into(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3340,13 +3341,13 @@ mod tests {
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3429,13 +3430,13 @@ mod tests {
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3490,13 +3491,13 @@ mod tests {
         )
         .unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3580,13 +3581,13 @@ mod tests {
         )
         .unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3648,13 +3649,13 @@ mod tests {
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3749,14 +3750,14 @@ mod tests {
         doc.seed = Some(u64::from(seed));
         let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
         for domain in [SeedDomain::NEW_GAME_ID, SeedDomain::CAMPAIGN_BATTLE_ID] {
-            let mut unobserved = crate::engine::observe::Unobserved;
-            let io = crate::engine::observe::Io {
+            let mut unobserved = uqm_engine::observe::Unobserved;
+            let io = uqm_engine::observe::Io {
                 observer: &mut unobserved,
             };
-            let seed = crate::engine::Game::new().with_context(|cx| {
+            let seed = uqm_engine::Game::new().with_context(|cx| {
                 io.observer
                     .input_admitted(
-                        &crate::engine::observe::InputView::Seed {
+                        &uqm_engine::observe::InputView::Seed {
                             domain,
                             fallback: 999,
                         },
@@ -3767,12 +3768,12 @@ mod tests {
             assert_eq!(seed.unwrap_or(999), 999);
         }
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 script,
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3851,12 +3852,12 @@ mod tests {
         assert!(clock_used, "inactive automation must keep the clock seed");
 
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 script,
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3865,11 +3866,11 @@ mod tests {
             _app.observer().unwrap().seed_value(3, 0),
             || panic!("the clock seed must not run while automation supplies a seed"),
         );
-        let after_restart = crate::math::random();
-        crate::math::seed_random(1437213463);
+        let after_restart = uqm_engine::math::random();
+        uqm_engine::math::seed_random(1437213463);
         assert_eq!(
             after_restart,
-            crate::math::random(),
+            uqm_engine::math::random(),
             "the generator must be seeded from the scenario seed"
         );
 
@@ -3918,12 +3919,12 @@ mod tests {
             "receipt.json",
         ).unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)
@@ -3975,11 +3976,9 @@ mod tests {
 
     #[test]
     fn application_without_automation_has_no_observer() {
-        assert!(
-            crate::app::Application::new(crate::engine::Game::new(), None)
-                .observer()
-                .is_none()
-        );
+        assert!(crate::app::Application::new(uqm_engine::Game::new(), None)
+            .observer()
+            .is_none());
     }
 
     #[test]
@@ -4079,8 +4078,8 @@ mod tests {
     fn settled(
         generation: u64,
         terminal: u32,
-    ) -> crate::engine::observe_port::planet_side::PlanetSideObservation {
-        crate::engine::observe_port::planet_side::PlanetSideObservation {
+    ) -> uqm_engine::observe_port::planet_side::PlanetSideObservation {
+        uqm_engine::observe_port::planet_side::PlanetSideObservation {
             generation,
             active: false,
             terminal,
@@ -4104,7 +4103,7 @@ mod tests {
         let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
         let mut observation = settled(
             1,
-            crate::engine::observe_port::planet_side::terminal::DESTROYED,
+            uqm_engine::observe_port::planet_side::terminal::DESTROYED,
         );
         observation.active = true;
         observation.phase = 8;

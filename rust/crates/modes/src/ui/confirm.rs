@@ -1,17 +1,17 @@
 //! Confirmation and popup windows using retained graphics and the supplied input owner.
 use super::{palette::*, util::SavedContext};
-use crate::engine::{
+use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
+    context::ContextLease, font::FontLease, geometry::Extent, geometry::Point, geometry::Rect,
+    geometry::TextAlign,
+};
+use uqm_engine::time::counter_abi::ONE_SECOND;
+use uqm_engine::{
     battle::Cx,
     input::{frames::*, InputSession},
     observe::Io,
     Kernel,
 };
-use crate::graphics::{
-    context::ContextLease, font::FontLease, geometry::Extent, geometry::Point, geometry::Rect,
-    geometry::TextAlign,
-};
-use std::ffi::{CStr, CString};
-use uqm_engine::time::counter_abi::ONE_SECOND;
 
 const CONFIRM_WIN_WIDTH: i16 = 80;
 const CONFIRM_WIN_HEIGHT: i16 = 22;
@@ -116,8 +116,8 @@ fn poll_confirmation(
 
 pub fn do_confirm_exit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
     let highlight = cx.kernel.sis_highlight.clone();
-    if crate::sound::heart_ffi::playing_track() != 0 {
-        crate::sound::heart_ffi::pause_track();
+    if uqm_engine::sound::heart_ffi::playing_track() != 0 {
+        uqm_engine::sound::heart_ffi::pause_track();
     }
     highlight.pause_flash();
     let context = ContextLease::require(cx.kernel.screen_context);
@@ -160,8 +160,8 @@ pub fn do_confirm_exit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
         })
     });
     highlight.continue_flash();
-    if crate::sound::heart_ffi::playing_track() != 0 {
-        crate::sound::heart_ffi::resume_track();
+    if uqm_engine::sound::heart_ffi::playing_track() != 0 {
+        uqm_engine::sound::heart_ffi::resume_track();
     }
     result
 }
@@ -170,7 +170,7 @@ fn draw_popup(context: &ContextLease, font: &FontLease, lines: &[CString]) -> Re
     let (width, height) = context.screen_dimensions();
     let window_width = lines
         .iter()
-        .map(|line| crate::strings::unicode::count_utf8_bytes(line.to_bytes()))
+        .map(|line| uqm_engine::strings::unicode::count_utf8_bytes(line.to_bytes()))
         .max()
         .unwrap_or(0) as i32
         * 6

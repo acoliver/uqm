@@ -4,9 +4,9 @@
 mod tests {
     use std::io;
     use uqm_engine::io::{Dir, Placement, Vfs};
-    use uqm_rust::supermelee::setup::browser::*;
-    use uqm_rust::supermelee::setup::team::MeleeTeam;
-    use uqm_rust::supermelee::types::MeleeShip;
+    use uqm_modes::supermelee::setup::browser::*;
+    use uqm_modes::supermelee::setup::team::MeleeTeam;
+    use uqm_modes::supermelee::types::MeleeShip;
 
     fn directory(scratch: &tempfile::TempDir) -> Dir {
         let vfs = Vfs::new();
@@ -52,7 +52,7 @@ mod tests {
     fn browser_owns_independent_view_values_and_matches_filenames_without_case() {
         let scratch = scratch();
         let directory = directory(&scratch);
-        let mut browser = TeamBrowser::new(uqm_rust::supermelee::setup::builtin::builtin_teams());
+        let mut browser = TeamBrowser::new(uqm_modes::supermelee::setup::builtin::builtin_teams());
         write_team(&directory, c"Fleet.mle", &browser.builtins[1]).unwrap();
         browser.refresh(&directory);
         assert_eq!(browser.count(), 16);

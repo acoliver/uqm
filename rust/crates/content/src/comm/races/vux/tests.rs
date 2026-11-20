@@ -1,8 +1,8 @@
 use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::StoryKey;
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::StoryKey;
 
 fn run(api: &mut Fake<Handler>, action: impl FnOnce(&mut dialogue::Dialogue<'_, Fake<Handler>>)) {
     action(&mut dialogue::Dialogue { api });
@@ -174,7 +174,7 @@ fn required_vux_game_state_keys_are_present() {
         "ZEX_IS_DEAD",
     ] {
         assert!(
-            crate::engine::StoryKey::from_name(key).is_some(),
+            uqm_engine::StoryKey::from_name(key).is_some(),
             "missing game state key: {key}"
         );
     }

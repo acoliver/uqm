@@ -74,10 +74,10 @@ fn transfer_crew(crew: &mut u16, maximum: u16, delta: i16) -> bool {
 }
 
 fn update_crew(
-    world: &mut crate::engine::World,
+    world: &mut uqm_engine::World,
     point: (i16, i16),
     delta: i16,
-) -> Option<(Option<crate::graphics::drawable::ContextFrame>, String)> {
+) -> Option<(Option<uqm_engine::graphics::drawable::ContextFrame>, String)> {
     let index = SHIP_POS.iter().position(|candidate| *candidate == point)?;
     let id = world.built_ships_ref().at(index)?;
     let record = world.built_ships_ref();
@@ -85,7 +85,7 @@ fn update_crew(
     let frame = if delta == 0 {
         ship.icons
             .non_null()
-            .map(crate::graphics::drawable::ContextFrame::retain)
+            .map(uqm_engine::graphics::drawable::ContextFrame::retain)
     } else {
         None
     };
@@ -112,18 +112,18 @@ fn update_crew(
 
 pub(crate) mod live {
     use super::{navigate, update_crew, SHIP_POS};
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::engine::{battle::Cx, observe::Io};
-    use crate::input::frames::*;
     use crate::ui::sis::capacity::crew_capacity;
     use std::ffi::CString;
+    use uqm_engine::input_port::frames::*;
+    use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::{battle::Cx, observe::Io};
 
     struct Menu {
         selected: usize,
         positions: Vec<(i16, i16)>,
         point: (i16, i16),
-        frame: Option<crate::graphics::drawable::ContextFrame>,
-        context: crate::graphics::context::ContextLease,
+        frame: Option<uqm_engine::graphics::drawable::ContextFrame>,
+        context: uqm_engine::graphics::context::ContextLease,
         modifying: bool,
     }
 
@@ -131,7 +131,7 @@ pub(crate) mod live {
         let Some(frame) = &menu.frame else {
             return;
         };
-        let origin = crate::graphics::geometry::Point {
+        let origin = uqm_engine::graphics::geometry::Point {
             x: menu.point.0,
             y: menu.point.1,
         };
@@ -143,8 +143,8 @@ pub(crate) mod live {
         }
     }
 
-    fn flash_crew(kernel: &crate::engine::Kernel) {
-        crate::graphics::context::ContextLease::require(kernel.status_context).select();
+    fn flash_crew(kernel: &uqm_engine::Kernel) {
+        uqm_engine::graphics::context::ContextLease::require(kernel.status_context).select();
         crate::ui::sis::highlight_rect(kernel, crate::ui::sis::status_message_rect());
     }
 
@@ -173,7 +173,7 @@ pub(crate) mod live {
         delta_crew(cx, menu, 0);
     }
 
-    fn flash_ship(flash: &mut crate::engine::kernel::roster_flash::RosterFlash, menu: &Menu) {
+    fn flash_ship(flash: &mut uqm_engine::kernel::roster_flash::RosterFlash, menu: &Menu) {
         if let Some(color) = flash.advance(get_time_counter) {
             menu.context.set_foreground(color);
             draw(menu, true);
@@ -192,7 +192,7 @@ pub(crate) mod live {
         });
     }
 
-    fn modify(cx: &mut Cx<'_>, input: &crate::engine::input::InputSession, menu: &mut Menu) -> i32 {
+    fn modify(cx: &mut Cx<'_>, input: &uqm_engine::input::InputSession, menu: &mut Menu) -> i32 {
         if cx.world.activity() & (1 << 14) != 0 {
             return 0;
         }
@@ -266,7 +266,9 @@ pub(crate) mod live {
                 positions,
                 point: (0, 0),
                 frame: None,
-                context: crate::graphics::context::ContextLease::require(cx.kernel.status_context),
+                context: uqm_engine::graphics::context::ContextLease::require(
+                    cx.kernel.status_context,
+                ),
                 modifying: false,
             };
             menu.context.select();
@@ -287,8 +289,8 @@ mod tests {
     use super::*;
     #[test]
     fn crew_updates_only_the_supplied_world_and_selected_escort() {
-        fn world(crew: u16, maximum: u16) -> crate::engine::World {
-            let mut world = crate::engine::World::new();
+        fn world(crew: u16, maximum: u16) -> uqm_engine::World {
+            let mut world = uqm_engine::World::new();
             let mut fleets = world.avail_races();
             let id = fleets.alloc().unwrap();
             fleets.get_mut(id).crew_level = maximum;

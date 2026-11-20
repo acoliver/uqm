@@ -1,9 +1,9 @@
 //! Hyperspace menu sequencing over the retained game and input owners.
-use crate::engine::world::activity::activity_flags::{
+use uqm_engine::input_port::frames::KEY_MENU_SELECT;
+use uqm_engine::world::activity::activity_flags::{
     CHECK_ABORT, CHECK_LOAD, IN_BATTLE, START_ENCOUNTER,
 };
-use crate::engine::{battle::Cx, observe::Io, StoryKey};
-use crate::input::frames::KEY_MENU_SELECT;
+use uqm_engine::{battle::Cx, observe::Io, StoryKey};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Display {
@@ -102,14 +102,14 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::input::frames::InputState;
-    use crate::engine::{
+    use std::rc::Rc;
+    use uqm_engine::input::frames::InputState;
+    use uqm_engine::{
         battle::{input::InputContext, Battle},
         input::{Frame, InputControls, InputRuntime, InputSession},
         observe::{Observer, Unobserved},
         Game,
     };
-    use std::rc::Rc;
 
     struct Driver(InputSession);
     impl InputRuntime for Driver {
@@ -145,7 +145,7 @@ mod tests {
     }
     fn fixture(test: impl FnOnce(&mut Cx<'_>, &mut Io<'_>)) {
         let mut game = Game::new();
-        game.world.story = Some(crate::engine::world::story::StoryState::new());
+        game.world.story = Some(uqm_engine::world::story::StoryState::new());
         let controls = InputControls::default();
         let mut pressed = InputState::default();
         pressed.menu[KEY_MENU_SELECT as usize] = 1;

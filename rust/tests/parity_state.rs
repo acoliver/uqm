@@ -10,28 +10,28 @@ const TRACKING_SYSTEM: u32 = 12;
 
 use std::cell::RefMut;
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
+use uqm_engine::battle::frames::FrameArray;
+use uqm_engine::battle::record::CaptainRecord;
+use uqm_engine::battle::record::CharacteristicRecord;
+use uqm_engine::battle::record::RaceDescriptor;
+use uqm_engine::battle::views::FrameSelection;
+use uqm_engine::collections::observation;
+use uqm_engine::collections::observation::Event;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
+use uqm_engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
+use uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID;
+use uqm_engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use uqm_engine::species::species_id::SPECIES_ID_UMGAH_ID;
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_modes::battle::element::Element;
+use uqm_modes::battle::element::ElementFlags;
+use uqm_modes::battle::netplay::CrcState;
 use uqm_rust::automation::battle_fight::BattleSnapshot;
 use uqm_rust::automation::script::parse_script;
 use uqm_rust::automation::script::validate_script;
 use uqm_rust::automation::AutomationObserver;
-use uqm_rust::battle::element::Element;
-use uqm_rust::battle::element::ElementFlags;
-use uqm_rust::battle::netplay::CrcState;
-use uqm_rust::collections::observation;
-use uqm_rust::collections::observation::Event;
-use uqm_rust::engine::battle::frames::FrameArray;
-use uqm_rust::engine::battle::record::CaptainRecord;
-use uqm_rust::engine::battle::record::CharacteristicRecord;
-use uqm_rust::engine::battle::record::RaceDescriptor;
-use uqm_rust::engine::battle::views::FrameSelection;
-use uqm_rust::engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_PKUNK_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_UMGAH_ID;
-use uqm_rust::engine::world::activity::activity_kinds::SUPER_MELEE;
-use uqm_rust::graphics::geometry::Point;
 
 #[path = "parity_state/graph.rs"]
 mod graph;
@@ -124,7 +124,7 @@ fn live_state_is_complete_stable_and_read_only() {
 fn exercise_live_callers(directory: &Path) {
     clear_queues();
     fighters_without_journal(directory);
-    uqm_rust::platform::install(true);
+    uqm_platform::install(true);
     std::env::set_var("UQM_PARITY", "1");
     let document = parse_script(
         br#"{"version":2,"name":"state-test","seed":42,"fixture":"state-test","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":30},"steps":[{"action":"finish"}]}"#,
@@ -132,8 +132,8 @@ fn exercise_live_callers(directory: &Path) {
     )
     .unwrap_or_else(|error| panic!("parse state test script: {error}"));
     let _application = {
-        let game = uqm_rust::engine::Game::new();
-        let input = uqm_rust::engine::input::InputControls::default();
+        let game = uqm_engine::Game::new();
+        let input = uqm_engine::input::InputControls::default();
         let observer = Some(AutomationObserver::new(
             validate_script(document, "state-test.json")
                 .unwrap_or_else(|error| panic!("validate state test script: {error}")),
@@ -150,7 +150,7 @@ fn exercise_live_callers(directory: &Path) {
         .observer()
         .unwrap_or_else(|| panic!("state test application has no observer"))
         .as_ref();
-    crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+    crate::battle_context::with(|cx| uqm_engine::state::ffi::rust_init_game_state(cx.world));
     observation::record(Event::SpaceActive(true));
     descriptor_fields(observer, directory);
     elements_and_fighters(observer, directory);
@@ -165,10 +165,10 @@ fn exercise_live_callers(directory: &Path) {
 }
 
 fn snapshot(observer: &AutomationObserver, directory: &Path) -> (Fields, String) {
-    uqm_rust::math::seed_random(123456);
+    uqm_engine::math::seed_random(123456);
     crate::battle_context::with(|cx| observer.parity_checkpoint(cx, "integration"));
     assert_eq!(
-        uqm_rust::math::seed_random(123456),
+        uqm_engine::math::seed_random(123456),
         123456,
         "checkpoint changed RNG"
     );
@@ -345,8 +345,8 @@ fn install_ship(ship: &mut battle::PoolShip) {
 fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
     // match the races' repr(C) saved-data records and outlive the snapshots.
     {
-        let human = Some(uqm_rust::engine::battle::ElementHook::Native(
-            uqm_rust::ships::races::human_native::engine::nuke_preprocess,
+        let human = Some(uqm_engine::battle::ElementHook::Native(
+            uqm_content::ships::races::human_native::engine::nuke_preprocess,
         ));
         let descriptor: RaceDescriptor = RaceDescriptor::EMPTY;
         {
@@ -355,7 +355,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
             let phoenix = std::ptr::from_ref(&*phoenix_object.element_mut()) as usize;
             observation::record(Event::Allocate(phoenix));
             let mut owner = battle::Ship::bare(&pool, SPECIES_ID_PKUNK_ID, 0);
-            owner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
+            owner.descriptor_mut().race_state = uqm_engine::battle::RaceState::Pkunk {
                 phoenix: Some(phoenix_object.id),
                 saved_pre: human,
                 saved_post: human,
@@ -380,7 +380,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
             );
             assert_eq!(fields["race.pkunk.last_sound"], "0");
             crate::battle_context::with(|cx| {
-                uqm_rust::battle::sounds::engine::unlink(cx, phoenix_object.id);
+                uqm_modes::battle::sounds::engine::unlink(cx, phoenix_object.id);
                 cx.dispose(phoenix_object.id);
             });
             let (retired, _) = snapshot(observer, directory);
@@ -405,7 +405,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
                 fields["ships.0.0.custom.phoenix"]
             );
             crate::battle_context::with(|cx| {
-                uqm_rust::battle::sounds::engine::unlink(cx, reused.id)
+                uqm_modes::battle::sounds::engine::unlink(cx, reused.id)
             });
             crate::battle_context::with(|cx| {
                 let mut ships = cx.kernel_mut().ships(0);
@@ -430,27 +430,25 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
         ship.record().species_id = SPECIES_ID_UMGAH_ID;
         install_ship(&mut ship);
         ship.record().species_id = SPECIES_ID_UMGAH_ID;
-        descriptor_mut(&mut ship).race_state = uqm_rust::engine::battle::RaceState::Umgah {
+        descriptor_mut(&mut ship).race_state = uqm_engine::battle::RaceState::Umgah {
             previous_facing: Some(27),
         };
         let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
         ship.record().species_id = SPECIES_ID_ANDROSYNTH_ID;
-        descriptor_mut(&mut ship).race_state = uqm_rust::engine::battle::RaceState::Androsynth {
-            collision: Some(uqm_rust::engine::battle::CollisionHook::Native(
-                known_collision(),
-            )),
+        descriptor_mut(&mut ship).race_state = uqm_engine::battle::RaceState::Androsynth {
+            collision: Some(uqm_engine::battle::CollisionHook::Native(known_collision())),
         };
         let (fields, _) = snapshot(observer, directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.record().species_id = SPECIES_ID_MMRNMHRM_ID;
         let mut mmrnmhrm = Box::new(
             crate::battle_context::with(|cx| {
-                uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_MMRNMHRM_ID)
+                uqm_content::ships::races::descriptor(cx.world, SPECIES_ID_MMRNMHRM_ID)
             })
             .into_legacy(),
         );
-        mmrnmhrm.race_state = uqm_rust::engine::battle::RaceState::Mmrnmhrm {
+        mmrnmhrm.race_state = uqm_engine::battle::RaceState::Mmrnmhrm {
             alternate: sample_characteristics(),
         };
         release_descriptor(&mut ship);
@@ -463,28 +461,28 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
     }
 }
 
-fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
-    uqm_rust::engine::battle::motion::collision
+fn known_collision() -> uqm_engine::battle::CollisionFn {
+    uqm_engine::battle::motion::collision
 }
 
 fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut battle::PoolShip) {
     crate::battle_context::with(|cx| {
         let sis = &mut cx.world.data.flagship;
         sis.module_slots
-            .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
+            .fill(uqm_modes::starbase::sis_modules::EMPTY_SLOT);
         sis.module_slots[15] = GUN_WEAPON as u8;
         sis.module_slots[14] = CANNON_WEAPON as u8;
         sis.module_slots[4] = TRACKING_SYSTEM as u8;
         sis.drive_slots
-            .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
+            .fill(uqm_modes::starbase::sis_modules::EMPTY_SLOT);
         sis.jet_slots
-            .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
+            .fill(uqm_modes::starbase::sis_modules::EMPTY_SLOT);
         cx.world.set_activity(SUPER_MELEE);
     });
     ship.record().species_id = SPECIES_ID_SIS_SHIP_ID;
     let descriptor = {
         crate::battle_context::with(|cx| {
-            uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_SIS_SHIP_ID)
+            uqm_content::ships::races::descriptor(cx.world, SPECIES_ID_SIS_SHIP_ID)
         })
         .into_legacy()
     };
@@ -525,8 +523,8 @@ fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut battle
         let race = descriptor
             .race
             .unwrap_or_else(|| panic!("Native SIS descriptor"));
-        let stats = uqm_rust::engine::battle::views::RaceStats {
-            ship_info: uqm_rust::engine::battle::views::Info {
+        let stats = uqm_engine::battle::views::RaceStats {
+            ship_info: uqm_engine::battle::views::Info {
                 ship_flags: descriptor.ship_info.ship_flags,
                 ship_cost: descriptor.ship_info.ship_cost,
                 crew_level: descriptor.ship_info.crew_level,
@@ -535,7 +533,7 @@ fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut battle
                 max_energy: descriptor.ship_info.max_energy,
             },
             characteristics: descriptor.characteristics,
-            intelligence: uqm_rust::engine::battle::views::Intelligence::default(),
+            intelligence: uqm_engine::battle::views::Intelligence::default(),
             state: descriptor.race_state,
         };
         (race, stats)
@@ -556,7 +554,7 @@ fn campaign_fields(observer: &AutomationObserver, directory: &Path) {
         crate::battle_context::with(|cx| cx.world.data.game.battle_group_ref = 123);
         crate::battle_context::with(|cx| {
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 1)
+                .set_story_state(uqm_engine::StoryKey::BOMB_CARRIER, 1)
         });
     }
     let (after, _) = snapshot(observer, directory);
@@ -575,7 +573,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     let mut descriptor: RaceDescriptor = RaceDescriptor::EMPTY;
     let mut ship = battle::PoolShip::new(0);
     let native = battle::NativeFrameSet::new(16);
-    let strings = Some(uqm_rust::strings::owned_table::EntryRef::new(0x5000, 3));
+    let strings = Some(uqm_engine::strings::owned_table::EntryRef::new(0x5000, 3));
     let mut music = ptr::null_mut();
     let frame_pointer = native.frame(9);
     descriptor.ship_info.race_strings_rsc = Some(c"test.strings");
@@ -603,15 +601,13 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     descriptor.ship_data.ship_sounds_rsc = Some(c"test.sounds");
     descriptor.ship_data.ship_sounds = strings;
     descriptor.ship_data.victory_ditty = &mut music;
-    descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
+    descriptor.race = uqm_content::ships::races::race(SPECIES_ID_EARTHLING_ID);
     ship.record().species_id = SPECIES_ID_EARTHLING_ID;
     install_descriptor(&mut ship, descriptor);
-    ship.set_picker_resources(
-        uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
-            uqm_rust::strings::owned_table::LoadedTextTable::fixture(vec![Vec::new(); 4]).entry(3),
-            view.clone(),
-        ),
-    );
+    ship.set_picker_resources(uqm_engine::battle::link_queue::ShipPickerResources::new(
+        uqm_engine::strings::owned_table::LoadedTextTable::fixture(vec![Vec::new(); 4]).entry(3),
+        view.clone(),
+    ));
     {
         install_ship(&mut ship);
     }
@@ -736,7 +732,7 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     let mut element = graph::ElementRecord::new();
     ship.record().species_id = SPECIES_ID_EARTHLING_ID;
     install_descriptor(&mut ship, descriptor);
-    element.record().parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
+    element.record().parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
     {
         attach_elements(std::slice::from_mut(&mut element));
         install_ship(&mut ship);
@@ -754,8 +750,8 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     observe_test_frames(&ship_frames, "test-ship");
     observation::assign_set(
         &mut element.record().current.image.frames,
-        uqm_rust::engine::battle::frames::Frames::shared(
-            uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+        uqm_engine::battle::frames::Frames::shared(
+            uqm_engine::battle::frames::SharedFrames::Fixture(0),
             ship_frames.clone(),
         ),
         None,
@@ -780,8 +776,8 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     observe_test_frames(&replacement_frames, "replacement-ship");
     observation::assign_set(
         &mut element.record().next.image.frames,
-        uqm_rust::engine::battle::frames::Frames::shared(
-            uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+        uqm_engine::battle::frames::Frames::shared(
+            uqm_engine::battle::frames::SharedFrames::Fixture(0),
             replacement_frames,
         ),
         None,
@@ -808,7 +804,7 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
 }
 
 fn media_identity(observer: &AutomationObserver, directory: &Path, ship: &mut battle::PoolShip) {
-    use uqm_rust::strings::owned_table::EntryRef;
+    use uqm_engine::strings::owned_table::EntryRef;
     let mut music_a = ptr::null_mut();
     let mut music_b = ptr::null_mut();
     descriptor_mut(ship).ship_info.race_strings = Some(EntryRef::new(0xa000, 3));
@@ -843,7 +839,7 @@ fn retired_space_does_not_borrow_released_frames(observer: &AutomationObserver, 
     element.record().current.image.frame = frame.clone();
     element.record().next.image.frame = frame;
     drop(native);
-    element.record().current.image.frames = uqm_rust::engine::battle::frames::Frames::ABSENT;
+    element.record().current.image.frames = uqm_engine::battle::frames::Frames::ABSENT;
     // The retired journal graph must not be traversed by the observer.
     {
         attach_elements(std::slice::from_mut(&mut element));

@@ -6,17 +6,17 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{Battle, FrameSet, Ship};
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     DONT_CHASE, ENEMY_SHIP_INDEX, FIRES_AFT, FIRES_FORE, IGNORE_SIMILAR, SEEKING_SPECIAL, SPECIAL,
 };
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, FINITE_LIFE, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
 };
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SPATHI_ID;
-use uqm_rust::graphics::drawable::FrameId;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::drawable::FrameId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_SPATHI_ID;
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
@@ -188,7 +188,7 @@ fn butt_leaves_the_tail_not_the_nose() {
             assert_ne!(butt, ship);
             assert_eq!(
                 battle::get(butt).parent,
-                uqm_rust::engine::battle::Parent::Ship(fleet.ship_id)
+                uqm_engine::battle::Parent::Ship(fleet.ship_id)
             );
             assert_eq!(index_of(battle::get(butt).current.image.frame.raw()), 12);
             assert_eq!(battle::get(butt).velocity.travel_angle, 48);

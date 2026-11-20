@@ -146,7 +146,7 @@ mod tests {
             "PROBE_MESSAGE_DELIVERED",
         ] {
             assert!(
-                crate::engine::StoryKey::from_name(key).is_some(),
+                uqm_engine::StoryKey::from_name(key).is_some(),
                 "missing game state key: {key}"
             );
         }

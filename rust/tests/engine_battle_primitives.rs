@@ -319,7 +319,7 @@ fn primitive_effects_require_explicit_installation_on_the_supplied_owner() {
                 Some(&"battle primitive services were not installed")
             );
             assert_eq!(cx.race_stats(ship).ship_info.crew_level, 10);
-            uqm_rust::battle::services::install(cx.kernel);
+            uqm_modes::battle::services::install(cx.kernel);
             cx.draw_statistics(ship, -1, 0);
             assert_eq!(cx.race_stats(ship).ship_info.crew_level, 9);
         },
@@ -332,7 +332,7 @@ fn installed_primitives_run_real_crew_and_energy_updates_without_publication() {
     with_context(
         || panic!("status must not draw RNG"),
         |cx| {
-            uqm_rust::battle::services::install(cx.kernel);
+            uqm_modes::battle::services::install(cx.kernel);
             let (ship, element) = owner(cx, 0, Point { x: 0, y: 0 });
             cx.element_mut(element).hits = 10;
             cx.race_stats_mut(ship).ship_info.max_energy = 20;

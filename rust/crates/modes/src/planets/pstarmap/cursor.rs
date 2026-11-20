@@ -3,7 +3,7 @@ use super::*;
 impl Frame for StarMap {
     fn admit(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, view: InputView) -> Injected {
         self.observe(io);
-        crate::engine::input::admit_observer(cx, io, view)
+        uqm_engine::input::admit_observer(cx, io, view)
     }
 
     fn frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {

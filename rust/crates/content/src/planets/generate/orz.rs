@@ -7,16 +7,14 @@
 //! `pickupEnergy`. Story flags: `TAALO_PROTECTOR`, `TAALO_PROTECTOR_ON_SHIP`,
 //! `TAALO_UNPROTECTED`.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
 use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WORLD: Body = Body::Planet(0);
 /// `matchWorld (solarSys, world, 1, 2)`: the moon the device lies on.
@@ -40,7 +38,7 @@ pub trait OrzSite: HomeContactSite {
     /// `LoadStdLanderFont`, the Taalo device mask and report strings.
     fn load_taalo_device_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     );
 }
 
@@ -176,7 +174,7 @@ pub fn pickup_energy(
         );
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::TAALO_PROTECTOR, 1);
@@ -186,7 +184,7 @@ pub fn pickup_energy(
     if star_index == ORZ_DEFINED && body == WORLD {
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
         return false;
     }
@@ -195,7 +193,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

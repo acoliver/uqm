@@ -1,7 +1,7 @@
 //! Melnorme dialogue and trading, ported from melnorm.c.
 
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::engine::{world::SisState as CSisState, StoryKey};
+pub(crate) use uqm_engine::{world::SisState as CSisState, StoryKey};
 pub mod api;
 pub mod numbers;
 mod phrases;

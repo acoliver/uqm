@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::vux::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 
 fn run(
     comm: &mut Comm,

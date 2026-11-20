@@ -1,12 +1,12 @@
 #![cfg(test)]
 use super::*;
-use crate::graphics::{
-    context::LoadedContext, drawable::LoadedDrawable, font::LoadedFont, geometry::Point,
-};
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,
     rc::Rc,
+};
+use uqm_engine::graphics::{
+    context::LoadedContext, drawable::LoadedDrawable, font::LoadedFont, geometry::Point,
 };
 
 struct Fixture {
@@ -108,12 +108,12 @@ struct Driver {
     keys: RefCell<VecDeque<usize>>,
     sleeps: Cell<usize>,
 }
-impl crate::engine::input::InputRuntime for Driver {
+impl uqm_engine::input::InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn crate::engine::observe::Observer> {
-        Box::new(crate::engine::observe::Unobserved)
+    fn observer(&self) -> Box<dyn uqm_engine::observe::Observer> {
+        Box::new(uqm_engine::observe::Unobserved)
     }
     fn sleep(&self, _: &mut Cx<'_>, _: u32) {
         panic!("unexpected sleep")
@@ -133,7 +133,7 @@ impl crate::engine::input::InputRuntime for Driver {
     fn update(&self, _: &mut Cx<'_>) {
         panic!("unexpected update")
     }
-    fn battle_input(&self, _: &crate::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, _: &uqm_engine::battle::input::InputContext) -> u8 {
         panic!("unexpected battle")
     }
     fn run(
@@ -141,7 +141,7 @@ impl crate::engine::input::InputRuntime for Driver {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         reset: bool,
-        frame: &mut dyn crate::engine::input::Frame,
+        frame: &mut dyn uqm_engine::input::Frame,
     ) {
         assert!(reset);
         loop {
@@ -151,7 +151,7 @@ impl crate::engine::input::InputRuntime for Driver {
                 .pop_front()
                 .expect("setup script exhausted");
             self.input.clear_menu_state();
-            let mut pulse = crate::engine::input::frames::InputState::default();
+            let mut pulse = uqm_engine::input::frames::InputState::default();
             if key == usize::MAX {
                 uqm_engine::test_support::native_session::text_input("é");
             } else {
@@ -174,9 +174,9 @@ fn root_cancel_applies_and_persists_on_the_actual_input_loop() {
         keys: RefCell::new([10].into()),
         sleeps: Cell::new(0),
     });
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.kernel.install_input_runtime(driver.clone());
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -199,13 +199,13 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
     let mut fixture = Fixture::new();
     let mut session = SetupSession::new(fixture.configuration(), fixture.resources());
     drop(fixture.font.take());
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.kernel.install_input_runtime(Rc::new(Driver {
         input: fixture.input.clone(),
         keys: RefCell::default(),
         sleeps: Cell::new(0),
     }));
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -238,7 +238,7 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
 #[test]
 #[serial_test::serial]
 fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
-    use crate::engine::input::frames::{KEY_MENU_EDIT_CANCEL, KEY_MENU_SELECT};
+    use uqm_engine::input::frames::{KEY_MENU_EDIT_CANCEL, KEY_MENU_SELECT};
     let fixture = Fixture::new();
     let mut session = SetupSession::new(fixture.configuration(), fixture.resources());
     session.populate_keys();
@@ -248,9 +248,9 @@ fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
         keys: RefCell::new([usize::MAX, KEY_MENU_SELECT as usize].into()),
         sleeps: Cell::new(0),
     });
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.kernel.install_input_runtime(driver.clone());
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -293,12 +293,12 @@ fn scripted_audio_changes_apply_on_return_and_abort_clears_the_activity_bit() {
             keys: RefCell::new(keys.into()),
             sleeps: Cell::new(0),
         });
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         game.kernel.install_input_runtime(driver.clone());
         if abort {
             game.world.set_activity(0x4000);
         }
-        let mut observer = crate::engine::observe::Unobserved;
+        let mut observer = uqm_engine::observe::Unobserved;
         let mut io = Io {
             observer: &mut observer,
         };

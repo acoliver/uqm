@@ -1,17 +1,17 @@
 //! Full-field Mycon layout and scan records, shared by pure and linked tests.
 
 use std::fmt::Write as _;
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use uqm_rust::engine::StoryKey;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 use super::{fresh_node, scan_seeds};
-use uqm_rust::battle::gendef::{
+use uqm_engine::math::RandomContext;
+use uqm_modes::battle::gendef::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::generate::myc;
-use uqm_rust::planets::generate::special::{Body, Story};
-use uqm_rust::planets::generate::surface::ENERGY_SCAN;
+use uqm_modes::planets::generate::myc;
+use uqm_modes::planets::generate::special::{Body, Story};
+use uqm_modes::planets::generate::surface::ENERGY_SCAN;
 
 const STARS: [u8; 5] = [
     MYCON_DEFINED,

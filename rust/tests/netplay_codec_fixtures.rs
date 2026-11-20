@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use uqm_rust::supermelee::netplay::packet::{DecodeError, Packet};
+use uqm_modes::supermelee::netplay::packet::{DecodeError, Packet};
 
 #[test]
 fn codec_roundtrips_frozen_original_layouts_for_every_packet_type() {

@@ -10,13 +10,13 @@
 //! read is reported as unavailable and never compares as zero, so
 //! `story:X eq 0` cannot pass before the game state exists.
 
-#[cfg(test)]
-use crate::engine::World;
 use std::fmt;
+#[cfg(test)]
+use uqm_engine::World;
 
 use serde::{Deserialize, Serialize};
 
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 /// A value a script can observe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -397,11 +397,11 @@ pub struct LiveCampaign<'a> {
     pub flagship_destroyed: bool,
 }
 
-pub use crate::engine::observe::CampaignView;
+pub use uqm_engine::observe::CampaignView;
 
 pub type BossObservation = (
-    crate::engine::battle::observation::samatra::Events,
-    Option<crate::engine::battle::observation::samatra::Snapshot>,
+    uqm_engine::battle::observation::samatra::Events,
+    Option<uqm_engine::battle::observation::samatra::Snapshot>,
 );
 
 fn read_star_state(
@@ -612,12 +612,12 @@ mod tests {
     #[test]
     fn each_boundary_copies_current_typed_campaign_values() {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world.data.flagship.fuel_on_board = 100;
-        world.set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, 1);
+        world.set_story_state(uqm_engine::StoryKey::STARBASE_AVAILABLE, 1);
         let first = CampaignView::from_world(&world);
         world.data.flagship.fuel_on_board = 200;
-        world.set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, 0);
+        world.set_story_state(uqm_engine::StoryKey::STARBASE_AVAILABLE, 0);
         let second = CampaignView::from_world(&world);
         assert_eq!(first.flagship.fuel_on_board, 100);
         assert_eq!(first.story_value(StoryKey::STARBASE_AVAILABLE), Some(1));

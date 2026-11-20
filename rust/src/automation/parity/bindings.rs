@@ -1,8 +1,8 @@
 //! Image assignments and copies retain the identity observed at the write boundary.
 use super::{Fields, Journal};
-use crate::engine::battle::record::{ElementImage, ElementRecord as Element, ElementVisual};
-use crate::graphics::{intersection::IntersectControl, intersection::Stamp};
 use std::collections::BTreeMap;
+use uqm_engine::battle::record::{ElementImage, ElementRecord as Element, ElementVisual};
+use uqm_engine::graphics::{intersection::IntersectControl, intersection::Stamp};
 
 type Frame = (String, u16);
 
@@ -39,8 +39,11 @@ impl Bindings {
 }
 
 impl Journal {
-    pub(super) fn observe_image_event(&mut self, event: crate::collections::observation::Event) {
-        use crate::collections::observation::Event;
+    pub(super) fn observe_image_event(
+        &mut self,
+        event: uqm_engine::collections::observation::Event,
+    ) {
+        use uqm_engine::collections::observation::Event;
         match event {
             Event::FrameSet {
                 address,
@@ -97,7 +100,7 @@ impl Journal {
     // to an earlier resource that occupied the same array storage.
     fn update_source_view(&mut self, slot: usize, frame: &Frame) -> bool {
         // a source array holds one frame handle per view
-        let width = std::mem::size_of::<crate::graphics::drawable::FrameId>();
+        let width = std::mem::size_of::<uqm_engine::graphics::drawable::FrameId>();
         let Some((&base, source)) = self.bindings.sources.range_mut(..=slot).next_back() else {
             return false;
         };

@@ -1,7 +1,7 @@
 //! Input-only device invocation and surface artifact collection.
 
-use crate::engine::StoryKey;
 use serde::{Deserialize, Serialize};
+use uqm_engine::StoryKey;
 
 use super::navigation::NavigationControl;
 use super::script::MenuKey;
@@ -60,7 +60,7 @@ pub struct CollectEnergyNodeStep {
     pub max_ticks: u64,
 }
 
-pub use crate::engine::observe::DeviceObservation;
+pub use uqm_engine::observe::DeviceObservation;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum DeviceProgress {
@@ -269,7 +269,7 @@ impl EnergyTracker {
     }
 }
 
-use crate::planets::device_effects::{device_effect_holds, DEVICE_STORY_KEYS};
+use uqm_modes::planets::device_effects::{device_effect_holds, DEVICE_STORY_KEYS};
 
 pub fn device_evidence_holds(device: Device, state: &str) -> bool {
     let mut before = std::collections::BTreeMap::new();
@@ -317,7 +317,7 @@ pub fn device_evidence_holds(device: Device, state: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planet_side::model::SurfacePoint;
+    use uqm_modes::planet_side::model::SurfacePoint;
 
     #[test]
     fn device_menu_opens_with_normal_flight_and_orbit_inputs() {

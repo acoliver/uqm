@@ -6,45 +6,45 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{Battle as PoolBattle, PoolElement, Ship};
-use uqm_rust::engine::battle::ai_constants::FIRST_EMPTY_INDEX;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SEEKING_WEAPON;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::CREW_IMMUNE;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::battle::LINE_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SLYLANDRO_ID;
-use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::ONE_SHIFT;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::battle::ai_constants::FIRST_EMPTY_INDEX;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SEEKING_WEAPON;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::CREW_IMMUNE;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_IN_GRAVITY_WELL;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_SLYLANDRO_ID;
+use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{cosine, facing_to_angle, normalize_facing, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, normalize_facing, sine};
+use uqm_engine::collections::observation;
 
 struct Battle {
     _pool: PoolBattle,
@@ -85,7 +85,7 @@ fn velocity(v: &VelocityDesc) -> [i32; 9] {
 }
 fn vector(speed: i16, facing: u16) -> [i32; 9] {
     let mut v = VelocityDesc::new();
-    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+    uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
     velocity(&v)
 }
 fn with_rng<T>(seed: u32, draws: usize, action: impl FnOnce() -> T) -> T {
@@ -1022,7 +1022,7 @@ fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresse
 #[test]
 fn native_ai_preserves_fifth_concern_and_expands_active_count() {
     battle_context::run(|_| {
-        use uqm_rust::engine::battle::{Concern, Concerns};
+        use uqm_engine::battle::{Concern, Concerns};
         let battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -1089,7 +1089,7 @@ fn at(ship: &mut Ship<'_>, x: i16, y: i16) {
     ship.element_mut().next.location = Point { x, y };
 }
 fn fire_from(source: ElementId) -> Option<ElementId> {
-    crate::battle_context::with(|cx| uqm_rust::ships::races::lightning_segment(cx, source))
+    crate::battle_context::with(|cx| uqm_content::ships::races::lightning_segment(cx, source))
 }
 fn think(ship: &mut Ship<'_>, concerns: &mut [Concern; 5], count: u16) {
     ship.think(ship.id, concerns, count);

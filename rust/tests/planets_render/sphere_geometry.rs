@@ -1,7 +1,7 @@
 //! Called only from planets_parity's existing serialized global-state owner.
-use uqm_rust::graphics::{geometry::Color, geometry::Point};
-use uqm_rust::math::{self, RandomContext};
-use uqm_rust::planets::render::sphere_geometry as geometry;
+use uqm_engine::graphics::{geometry::Color, geometry::Point};
+use uqm_engine::math::{self, RandomContext};
+use uqm_modes::planets::render::sphere_geometry as geometry;
 #[path = "sphere_cases.rs"]
 mod cases;
 

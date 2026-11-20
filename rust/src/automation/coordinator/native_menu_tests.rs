@@ -23,7 +23,7 @@ fn committed_uniform_menu_fixture_cannot_release_the_native_checkpoint() {
         script,
         root.path().into(),
         Some(65536),
-        crate::engine::World::new().activity_control(),
+        uqm_engine::World::new().activity_control(),
         Default::default(),
         Default::default(),
     );

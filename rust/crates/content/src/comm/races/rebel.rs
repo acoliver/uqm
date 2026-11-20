@@ -1,7 +1,7 @@
 //! Yehat Rebel dialogue, ported from rebel.c.
 pub(crate) use crate::comm::races::descriptor::Point;
-use crate::engine::world::activity::ActivityKind;
-pub(crate) use crate::engine::StoryKey;
+use uqm_engine::world::activity::ActivityKind;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;
@@ -88,7 +88,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
             } else {
                 let n = self
                     .api
-                    .escort_feasibility(crate::engine::species::ship::YEHAT_SHIP as u16)
+                    .escort_feasibility(uqm_engine::species::ship::YEHAT_SHIP as u16)
                     as i8;
                 if n == 0 {
                     self.api.npc(NO_ROOM)
@@ -100,10 +100,8 @@ impl<A: RebelApi> Dialogue<'_, A> {
                         HAVE_ALL_SHIPS
                     });
                     self.api.talk_segue(u16::MAX);
-                    self.api.add_escorts(
-                        crate::engine::species::ship::YEHAT_SHIP as u16,
-                        count as i16,
-                    );
+                    self.api
+                        .add_escorts(uqm_engine::species::ship::YEHAT_SHIP as u16, count as i16);
                     self.api.prepare_ship()
                 }
             }
@@ -146,15 +144,15 @@ impl<A: RebelApi> Dialogue<'_, A> {
             self.api.talk_segue(u16::MAX);
             let n = (self
                 .api
-                .escort_feasibility(crate::engine::species::ship::YEHAT_REBEL_SHIP as u16)
+                .escort_feasibility(uqm_engine::species::ship::YEHAT_REBEL_SHIP as u16)
                 as u8)
                 .min(8);
             self.api.add_escorts(
-                crate::engine::species::ship::YEHAT_REBEL_SHIP as u16,
+                uqm_engine::species::ship::YEHAT_REBEL_SHIP as u16,
                 (n - (n >> 1)) as i16,
             );
             self.api.add_escorts(
-                crate::engine::species::ship::PKUNK_SHIP as u16,
+                uqm_engine::species::ship::PKUNK_SHIP as u16,
                 (n >> 1) as i16,
             )
         } else {

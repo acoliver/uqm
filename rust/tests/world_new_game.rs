@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use std::cell::RefCell;
-use uqm_rust::engine::{
+use uqm_engine::{
     world::{
         new_game::{FleetRoster, FleetTemplate, NewGameInputs},
         story::StoryState,

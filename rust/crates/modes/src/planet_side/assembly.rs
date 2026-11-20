@@ -242,7 +242,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 7,
                 },
                 mask: solid(),
@@ -346,7 +346,7 @@ mod tests {
             .unwrap();
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask,
@@ -381,7 +381,7 @@ mod tests {
             },
             EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),

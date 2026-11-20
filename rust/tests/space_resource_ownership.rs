@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use std::panic::AssertUnwindSafe;
-use uqm_rust::engine::battle::frames::free_image;
-use uqm_rust::graphics::drawable::{retain_frames, FrameId, LoadedDrawable};
+use uqm_engine::battle::frames::free_image;
+use uqm_engine::graphics::drawable::{retain_frames, FrameId, LoadedDrawable};
 
 #[test]
 #[serial_test::serial]

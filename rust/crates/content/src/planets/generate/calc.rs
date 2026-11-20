@@ -4,13 +4,13 @@
 //! Every RNG draw happens in the same order and count as the C original, so
 //! the generated universe is unchanged.
 
-use crate::engine::world::generation::{Body, OrbitalData, SolarSys};
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
-use crate::math::RandomContext;
 use crate::planets::generate::consts::{
     atmosphere_range, density_class, planet_size, star_color, star_type, EARTH_RADIUS,
     PLANET_SHIELDED,
 };
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::generation::{Body, OrbitalData, SolarSys};
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 
 const MAX_TECTONICS: u16 = 255;
 
@@ -177,13 +177,13 @@ fn calc_temp(
     const PLANET_TEMP_CONSTANT: i64 = 277;
 
     let alb = 100 - GENERIC_ALBEDO;
-    let root = i64::from(crate::math::square_root(alb * 100 * 10000));
-    let root = i64::from(crate::math::square_root(root as u32));
+    let root = i64::from(uqm_engine::math::square_root(alb * 100 * 10000));
+    let root = i64::from(uqm_engine::math::square_root(root as u32));
     let alb = (root * PLANET_TEMP_CONSTANT * i64::from(sys_info.star_energy)
         / i64::from(YELLOW_SUN_INTENSITY + 1)) as u32; // DWARF_ENERGY is 1
 
     let scaled = (i64::from(radius) * 10000 / i64::from(EARTH_RADIUS)) as u32;
-    let centigrade = ((alb / u32::from(crate::math::square_root(scaled))) as i16 as i32
+    let centigrade = ((alb / u32::from(uqm_engine::math::square_root(scaled))) as i16 as i32
         - ADJUST_FOR_KELVIN) as i16;
 
     let mut bonus: i16 = 0;
@@ -343,9 +343,9 @@ pub fn do_planetary_analysis(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::world::generation::Body;
     use crate::planets::generate::{special::Orbit, testing};
     use crate::planets::tables::PLANET_ARRAY;
+    use uqm_engine::world::generation::Body;
 
     fn check_supplied_analysis(body: Body, preview: bool) {
         let mut rng = RandomContext::with_seed(7919);

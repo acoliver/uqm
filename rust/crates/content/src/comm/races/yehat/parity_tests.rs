@@ -3,8 +3,8 @@ use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{DialogueHost, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::StoryKey;
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::StoryKey;
 
 type Api = Fake<Handler, api::World>;
 

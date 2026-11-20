@@ -2,27 +2,27 @@
 //! Expressions preserve the C promotions, truncations, traversal and RNG order.
 
 pub mod engine {
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, Selection, ShipId, WeaponOrigin,
         WeaponSpawn, World,
     };
 
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{cosine, facing_to_angle, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, LEFT,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, COLLISION, DISAPPEARING, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
     };
-    use crate::engine::battle::hooks::animation_preprocess;
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::ONE_SHIFT;
-    use crate::math::velocity::VELOCITY_SHIFT;
-    use crate::ships::native::{cosine, facing_to_angle, sine};
+    use uqm_engine::battle::hooks::animation_preprocess;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 42;
@@ -138,7 +138,7 @@ pub mod engine {
 
     pub fn pump_up_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).flags & APPEARING as u16 != 0 {
-            cx.element_mut(e).velocity = crate::engine::battle::record::VelocityDesc::default();
+            cx.element_mut(e).velocity = uqm_engine::battle::record::VelocityDesc::default();
             return;
         }
         let ss = cx.owner(e);

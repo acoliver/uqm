@@ -1,13 +1,13 @@
 #![forbid(unsafe_code)]
-use uqm_rust::engine::{save, world::queues::FleetInfo, World};
+use uqm_engine::{save, world::queues::FleetInfo, World};
 
 #[test]
 fn snapshot_derives_summary_from_owned_story_clock_and_escort_order() {
     let saved = uqm_save::decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
     let mut world = World::new();
-    world.story = Some(uqm_rust::engine::world::story::StoryState::new());
+    world.story = Some(uqm_engine::world::story::StoryState::new());
     world.set_activity(3);
-    world.set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
+    world.set_story_state(uqm_engine::StoryKey::ARILOU_SPACE_SIDE, 2);
     world.data.game.game_clock.month_index = 11;
     world.data.game.game_clock.day_index = 5;
     world.data.game.game_clock.year_index = 2155;
@@ -28,7 +28,7 @@ fn snapshot_derives_summary_from_owned_story_clock_and_escort_order() {
         save::SessionView {
             solar: save::summary::SessionSummary::None,
             star: saved.star,
-            ip_location: uqm_rust::graphics::geometry::Point { x: 0, y: 0 },
+            ip_location: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
         },
         &[b'x'; 80],
     )
@@ -121,7 +121,7 @@ fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
         save_name: saved.summary.save_name,
     };
     let mut world = World::new();
-    world.story = Some(uqm_rust::engine::world::story::StoryState::new());
+    world.story = Some(uqm_engine::world::story::StoryState::new());
     world.data.flagship = (&summary.sis).into();
     world.data.game.ip_location.x = 21;
     world.data.game.ip_location.y = 31;
@@ -129,7 +129,7 @@ fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
     let view = save::SessionView {
         solar: save::summary::SessionSummary::None,
         star: saved.star,
-        ip_location: uqm_rust::graphics::geometry::Point { x: 91, y: 92 },
+        ip_location: uqm_engine::graphics::geometry::Point { x: 91, y: 92 },
     };
     let captured = save::snapshot(&mut world, view, summary.save_name.as_bytes()).unwrap();
     assert_eq!(
@@ -147,13 +147,13 @@ fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
 
 #[test]
 fn solar_scan_save_uses_unpublished_story_and_files_and_clears_the_flag_after_writing() {
-    use uqm_rust::engine::{
+    use uqm_engine::{
         save::location::{apply_solar_location, OrbitLocation, SolarLocation},
         world::planet_info::ScanRetrieveMask,
         StoryKey,
     };
     let mut world = World::new();
-    world.story = Some(uqm_rust::engine::world::story::StoryState::new());
+    world.story = Some(uqm_engine::world::story::StoryState::new());
     world.data.game.ip_planet = 2;
     world.data.game.ship_facing = 9;
     world.set_story_state(StoryKey::PLANETARY_CHANGE, 1);
@@ -184,7 +184,7 @@ fn solar_scan_save_uses_unpublished_story_and_files_and_clears_the_flag_after_wr
 
 #[test]
 fn hyper_save_uses_unpublished_owners_and_leaves_absent_flagship_state_unchanged() {
-    let mut game = uqm_rust::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.world.data.game.ship_facing = 42;
     game.world.data.game.ip_location.x = 91;
     game.world.data.game.in_orbit = 3;

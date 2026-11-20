@@ -7,21 +7,21 @@ mod battle;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 use battle::*;
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::SHIELD_DEFENSE;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CREW_OBJECT;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::species::species_id::SPECIES_ID_YEHAT_ID;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
+use uqm_engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::SHIELD_DEFENSE;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CREW_OBJECT;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::collections::observation;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::species::species_id::SPECIES_ID_YEHAT_ID;
 #[test]
 fn descriptor_and_twin_missile_launch() {
     battle_context::run(|_| {

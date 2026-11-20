@@ -9,37 +9,39 @@ use battle::{
     queued, toward as velocity_toward, velocity as velocity_fields, with_rng, Battle, Object,
     PoolElement, Ship,
 };
-use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
-use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
-use uqm_rust::engine::battle::ai_constants::SEEKING_WEAPON;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::DEFY_PHYSICS;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_CHENJESU_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::arctan;
-use uqm_rust::math::battle_types::HALF_CIRCLE;
-use uqm_rust::math::battle_types::ONE_SHIFT;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
-use uqm_rust::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+use uqm_content::ships::native::{
+    angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+};
+use uqm_engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_engine::battle::ai_constants::SEEKING_WEAPON;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::DEFY_PHYSICS;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::arctan;
+use uqm_engine::math::battle_types::HALF_CIRCLE;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_CHENJESU_ID;
 
 fn crystal(ship: &mut Ship<'_>) -> ElementId {
     {
@@ -48,7 +50,7 @@ fn crystal(ship: &mut Ship<'_>) -> ElementId {
             let out = cx.spawn_weapons(ship.ship_id, origin);
             assert_eq!(out.len(), 1);
             let id = out[0].unwrap_or_else(|| panic!("crystal allocation"));
-            assert_eq!(cx.parent(id), uqm_rust::engine::battle::Parent::None);
+            assert_eq!(cx.parent(id), uqm_engine::battle::Parent::None);
             cx.set_parent(id, Some(ship.ship_id));
             cx.copy_visual_to_next(id, cx.element(id).current);
             cx.set_intersect_frame(id, cx.element(id).current.image.frame);
@@ -82,7 +84,7 @@ fn intelligence(ship: &mut Ship<'_>, concerns: &mut [Concern; 4]) {
     }
 }
 
-fn sentinel(_: &mut uqm_rust::engine::battle::Cx<'_>, _: uqm_rust::engine::battle::ElementId) {}
+fn sentinel(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {}
 
 #[test]
 fn descriptor_matches_every_c_initializer_field() {
@@ -277,7 +279,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                 let face = i as u16 * 2;
                 assert_eq!(
                     battle::get(fragment).parent,
-                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    uqm_engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert_eq!(battle::get(fragment).player_nr, 1);
                 assert_eq!(
@@ -457,7 +459,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 );
                 assert_eq!(
                     battle::get(dog).parent,
-                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    uqm_engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert!(battle::get(dog).target.is_none());
                 assert!(battle::get(dog).preprocess_func.is_some());
@@ -633,7 +635,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             let dog = doggy(&mut ship);
             battle::get_mut(dog).state_flags |= (DISAPPEARING | COLLISION | DEFY_PHYSICS) as u16;
             battle::get_mut(dog).postprocess_func =
-                Some(uqm_rust::engine::battle::ElementHook::Native(sentinel));
+                Some(uqm_engine::battle::ElementHook::Native(sentinel));
             battle::get_mut(dog).target = Some(ship.id);
             battle::get_mut(dog).turn = 9;
             battle::get_mut(dog).thrust = 7;
@@ -664,7 +666,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             assert_eq!(battle::get(dog).target, Some(ship.id));
             assert_eq!(
                 battle::get(dog).parent,
-                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                uqm_engine::battle::Parent::Ship(ship.ship_id)
             );
             assert_eq!(battle::get(dog).hits, 3);
             assert_eq!(battle::get(dog).mass, 4);
@@ -692,7 +694,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             let dog = doggy(&mut ship);
             let preprocess = battle::get(dog).preprocess_func.unwrap();
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(dog).velocity,
                 11,
                 3,
@@ -705,7 +707,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
             assert_eq!(battle::get(dog).thrust, 0);
             assert_eq!(velocity_fields(&battle::get(dog).velocity), original);
             for seed in 1..33 {
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(dog).velocity,
                     11,
                     3,
@@ -743,7 +745,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             for (delta, expected) in [(6, 0), (7, 4), (8, 12), (9, 12), (10, 0)] {
                 battle::get_mut(enemy.id).current.image.frame = enemy.frame(0, (16 - delta) as u16);
                 battle::get_mut(dog).target = None;
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(dog).velocity,
                     11,
                     4,
@@ -765,7 +767,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             // its heading afterward, so the random tie-break does not choose it.
             battle::get_mut(enemy.id).current.image.frame = enemy.frame(0, 0);
             for seed in 1..17 {
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(dog).velocity,
                     32,
                     8,
@@ -802,7 +804,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
                 battle::get_mut(enemy.id).current.image.frame =
                     enemy.frame(0, (expected as usize) as u16);
                 battle::get_mut(dog).target = Some(enemy.id);
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(dog).velocity,
                     32,
                     0,
@@ -841,7 +843,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
             at(&mut near, 4100, 4000);
             at(&mut far, 4000, 3500);
             let preprocess = battle::get(dog).preprocess_func.unwrap();
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(dog).velocity,
                 32,
                 0,
@@ -853,7 +855,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
                 velocity_toward(32, 4)
             );
             battle::prim_mut(near.id).kind = EMPTY_PRIMITIVE;
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(dog).velocity,
                 32,
                 0,
@@ -865,7 +867,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
                 "TrackShip retains a live prior target even when cloaked"
             );
             battle::get_mut(dog).target = None;
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(dog).velocity,
                 32,
                 0,
@@ -1036,7 +1038,7 @@ fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
             let crystal = h;
             battle::put(h);
             battle::get_mut(crystal).current.location = Point { x: 4000, y: 4000 };
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(crystal).velocity,
                 64,
                 0,
@@ -1086,7 +1088,7 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
             let miss_h = crystal(&mut ship);
             let miss = miss_h;
             battle::get_mut(miss).current.location = Point { x: 1000, y: 4000 };
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(miss).velocity,
                 64,
                 0,
@@ -1095,7 +1097,7 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
             let hit_h = crystal(&mut ship);
             let hit = hit_h;
             battle::get_mut(hit).current.location = Point { x: 4000, y: 4000 };
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(hit).velocity,
                 64,
                 0,

@@ -1,25 +1,23 @@
 //! Read-only boss observations over the game thread's published battle context.
 
-use crate::engine::battle::observation::samatra as observation;
+use uqm_engine::battle::observation::samatra as observation;
 
 use super::{Events, Snapshot};
-use crate::engine::battle::flags::{
+use uqm_content::ships::races::samatra::engine;
+use uqm_engine::battle::flags::{
     DISAPPEARING, FINITE_LIFE, IN_LAST_BATTLE, NONSOLID, PLAYER_SHIP, RPG_PLAYER_NUM,
     STAMPFILL_PRIMITIVE,
 };
-use crate::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
-use crate::engine::world::activity::activity_flags::IN_BATTLE;
-use crate::math::battle_types::ONE_SHIFT;
-use crate::{
-    engine::battle::{Cx, ElementId, RaceState, ShipId},
-    ships::races::samatra::engine,
-};
+use uqm_engine::battle::{Cx, ElementId, RaceState, ShipId};
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
 
 pub fn observe(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
     snapshot(cx)
 }
 
-fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
+fn project_events(state: &uqm_engine::battle::race::SaMatraState) -> Events {
     Events {
         generation: state.generation,
         destroyed: state.destroyed,
@@ -108,9 +106,9 @@ fn project_player(cx: &Cx<'_>, id: ElementId, owner: ShipId, result: &mut Snapsh
     let (vx, vy) = e.velocity.preview_next_components(1);
     result.selected_species = Some(species);
     result.bomb_carrier = species == SPECIES_ID_SIS_SHIP_ID
-        && cx.story_state(crate::engine::battle::StoryKey::BOMB_CARRIER) != 0;
+        && cx.story_state(uqm_engine::battle::StoryKey::BOMB_CARRIER) != 0;
     result.velocity = (i32::from(vx as i16), i32::from(vy as i16));
-    result.player = Some(crate::engine::battle::observation::ShipState {
+    result.player = Some(uqm_engine::battle::observation::ShipState {
         x: i32::from(e.current.location.x),
         y: i32::from(e.current.location.y),
         facing: (cx.ship_state(owner).facing % 16) as u8,

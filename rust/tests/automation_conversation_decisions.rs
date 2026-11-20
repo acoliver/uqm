@@ -37,8 +37,8 @@ fn application_started() -> uqm_rust::app::Application {
     let output_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("conversation-decisions");
     std::fs::create_dir_all(&output_root).expect("evidence root");
     {
-        let game = uqm_rust::engine::Game::new();
-        let input = uqm_rust::engine::input::InputControls::default();
+        let game = uqm_engine::Game::new();
+        let input = uqm_engine::input::InputControls::default();
         let observer = Some(AutomationObserver::new(
             script,
             output_root,

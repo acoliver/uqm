@@ -1,17 +1,17 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{cosine, facing_to_angle, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SHIELD_DEFENSE, SPECIAL,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, CREW_OBJECT, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
     };
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::ONE_SHIFT;
-    use crate::ships::native::{cosine, facing_to_angle, sine};
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32 | SHIELD_DEFENSE as i32) as _;
         d.info.ship_cost = 23;
@@ -56,10 +56,8 @@ pub mod engine {
         d.intelligence.weapon_range = (((20) << ONE_SHIFT as i32) * (10) / 3) as u16;
         d.descriptor(&YEHAT)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
-        Concerns, Cx, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
-    };
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{Concerns, Cx, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn};
     pub static YEHAT: Race = Race {
         descriptor,
         preprocess: Some(yehat_preprocess),

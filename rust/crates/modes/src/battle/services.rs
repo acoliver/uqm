@@ -1,11 +1,11 @@
 //! Battle-mode presentation supplied explicitly by application composition.
-use crate::engine::battle::services::PrimitiveServices;
-use crate::engine::battle::views::FrameSelection;
-use crate::engine::battle::{Cx, ElementId, ShipId};
-use crate::graphics::{geometry::Point, geometry::Rect};
 use crate::ui::settings::OPT_PC;
+use uqm_engine::battle::services::PrimitiveServices;
+use uqm_engine::battle::views::FrameSelection;
+use uqm_engine::battle::{Cx, ElementId, ShipId};
+use uqm_engine::graphics::{geometry::Point, geometry::Rect};
 
-pub fn install(kernel: &mut crate::engine::Kernel) {
+pub fn install(kernel: &mut uqm_engine::Kernel) {
     kernel.install_primitive_services(&ModeServices);
     kernel.install_race_services(&ModeServices);
 }
@@ -19,7 +19,7 @@ impl PrimitiveServices for ModeServices {
         let context = cx
             .kernel
             .status_context
-            .map(crate::graphics::context::ContextLease::retain)
+            .map(uqm_engine::graphics::context::ContextLease::retain)
             .and_then(|context| context.selected_context());
         let font = cx.kernel.battle_font();
         let mut info = cx.desc(ship).ship_info;
@@ -42,7 +42,7 @@ impl PrimitiveServices for ModeServices {
             let context = cx
                 .kernel
                 .status_context
-                .map(crate::graphics::context::ContextLease::retain);
+                .map(uqm_engine::graphics::context::ContextLease::retain);
             let height = (cx.screen_dimensions().1 >> 1) as i16;
             let pc_menu = cx.kernel.configuration.preferences().menu == OPT_PC;
             crate::battle::status_native::draw_captains_window(

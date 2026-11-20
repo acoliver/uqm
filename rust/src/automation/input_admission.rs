@@ -1,6 +1,6 @@
 //! Synchronous effects supplied by the current input frame.
-use crate::engine::battle::Cx;
-use crate::engine::observe::{InputSetup, Observer, PeerSetup};
+use uqm_engine::battle::Cx;
+use uqm_engine::observe::{InputSetup, Observer, PeerSetup};
 
 pub(crate) type Target<'a> = dyn InputSetup + 'a;
 
@@ -56,7 +56,7 @@ pub(crate) fn with_context<R>(
 /// Lend a fresh game's context, as an admitted frame does, to an automation test.
 #[cfg(test)]
 pub(crate) fn with_supplied<R>(body: impl FnOnce(&mut Supplied<'_, '_>) -> R) -> R {
-    crate::engine::Game::new().with_context(|cx| body(&mut Supplied { cx }))
+    uqm_engine::Game::new().with_context(|cx| body(&mut Supplied { cx }))
 }
 
 #[cfg(test)]
@@ -71,7 +71,7 @@ mod tests {
                 Err("configure_parity_melee requires the live Super Melee menu".into())
             );
             assert_eq!(
-                target.connect_peer(0, true, 0, &mut crate::engine::observe::Unobserved),
+                target.connect_peer(0, true, 0, &mut uqm_engine::observe::Unobserved),
                 Err("netplay fixture requires the melee menu".into())
             );
             assert!(target.peer_setup(0).is_none());
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "peer polling without a live setup frame")]
     fn supplied_context_rejects_polling() {
-        with_supplied(|target| target.poll_peer(&mut crate::engine::observe::Unobserved));
+        with_supplied(|target| target.poll_peer(&mut uqm_engine::observe::Unobserved));
     }
 
     #[test]

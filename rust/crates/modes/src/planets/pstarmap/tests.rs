@@ -1,4 +1,4 @@
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 #[test]
 fn map_sessions_keep_cursor_zoom_and_origin_independent() {
     let mut first = MapState::new((320, 240), Point { x: 1752, y: 1450 });

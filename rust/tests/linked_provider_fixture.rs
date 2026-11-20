@@ -2,12 +2,12 @@
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "debug-process")]
-use uqm_rust::front_end::uqmdebug::uqm_debug_creature_bio_value;
+use uqm_modes::front_end::uqmdebug::uqm_debug_creature_bio_value;
 
 #[test]
 #[cfg(feature = "debug-process")]
 fn debug_consumer_observes_the_rust_creature_catalog() {
-    use uqm_rust::planet_side::creatures::{CreatureCatalog, CreatureKind};
+    use uqm_modes::planet_side::creatures::{CreatureCatalog, CreatureKind};
     for creature_type in 0..=u8::MAX {
         let expected = CreatureKind::new(creature_type)
             .map(|kind| i32::from(CreatureCatalog::raw_lifedata(kind).1 & 0x0f))
@@ -17,7 +17,7 @@ fn debug_consumer_observes_the_rust_creature_catalog() {
     }
 }
 
-use uqm_rust::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 /// Starting another game must not inherit the previous game's story flags.
 ///
@@ -29,7 +29,7 @@ fn a_second_new_game_starts_from_zero_state() {
     let moonbase = StoryKey::MOONBASE_DESTROYED;
     let on_ship = StoryKey::MOONBASE_ON_SHIP;
 
-    let mut world = uqm_rust::engine::World::new();
+    let mut world = uqm_engine::World::new();
     world.reset_game_data();
     world.set_story_state(moonbase, 1);
     world.set_story_state(on_ship, 1);

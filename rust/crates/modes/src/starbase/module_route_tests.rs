@@ -15,7 +15,7 @@ use super::platform::{ResUnitsUpdate, SisView, StarbaseError, StateKey, UiStyle,
 use super::screen::{run_outfit, run_starbase_menu};
 use super::sis_modules::ModuleType;
 use super::test_support::{cancel, down, idle, left, right, select, up, Event, RecordingPlatform};
-use crate::engine::world::activity::{activity_flags, ActivityValue};
+use uqm_engine::world::activity::{activity_flags, ActivityValue};
 
 /// Where the radar strip draws (the same point the Outfit menu art uses).
 const STRIP: Point = Point { x: 10, y: 184 };

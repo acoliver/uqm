@@ -1,19 +1,19 @@
 //! Race effects implemented by modes over the supplied owners.
 use crate::battle::battle_native::engine::rgb15;
 use crate::battle::tactrans_native::engine::*;
-use crate::engine::battle::ai_constants::{MAX_SHIP_MASS, PLAY_VICTORY_DITTY};
-use crate::engine::battle::flags::{
-    APPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, PRE_PROCESS,
-};
-use crate::engine::battle::race_services::{RaceServices, StarContact};
-use crate::engine::battle::views::BattleSoundBank;
-use crate::engine::battle::ElementHook;
-use crate::engine::battle::{Cx, ElementId, ShipId};
-use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
-use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
 use crate::navigation::hyper_transition::{element_universe, init_transition};
 use crate::planets::starmap::find_star_id;
-use crate::ships::native::{cosine, facing_to_angle, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+use uqm_engine::battle::ai_constants::{MAX_SHIP_MASS, PLAY_VICTORY_DITTY};
+use uqm_engine::battle::flags::{
+    APPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, PRE_PROCESS,
+};
+use uqm_engine::battle::race_services::{RaceServices, StarContact};
+use uqm_engine::battle::views::BattleSoundBank;
+use uqm_engine::battle::ElementHook;
+use uqm_engine::battle::{Cx, ElementId, ShipId};
+use uqm_engine::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
 
 impl RaceServices for super::services::ModeServices {
     fn play_battle_sound(
@@ -26,10 +26,10 @@ impl RaceServices for super::services::ModeServices {
     ) {
         use crate::battle::sounds::engine::{play_sound, position};
         let sound = match bank {
-            crate::engine::battle::views::BattleSoundBank::Ship(ship) => {
+            uqm_engine::battle::views::BattleSoundBank::Ship(ship) => {
                 cx.desc(ship).sound_bank().map(|bank| bank.clip(index))
             }
-            crate::engine::battle::views::BattleSoundBank::Game => {
+            uqm_engine::battle::views::BattleSoundBank::Game => {
                 cx.kernel.game_sounds.as_ref().map(|bank| bank.clip(index))
             }
         };
@@ -62,14 +62,10 @@ impl RaceServices for super::services::ModeServices {
 
     fn hyperspace_menu(&self, cx: &mut Cx<'_>) {
         let mut observer = cx.kernel.input_runtime().observer();
-        let mut io = crate::engine::observe::Io {
+        let mut io = uqm_engine::observe::Io {
             observer: &mut *observer,
         };
-        fn submenu(
-            cx: &mut Cx<'_>,
-            io: &mut crate::engine::observe::Io<'_>,
-            selection: u8,
-        ) -> bool {
+        fn submenu(cx: &mut Cx<'_>, io: &mut uqm_engine::observe::Io<'_>, selection: u8) -> bool {
             // SAFETY: the suspended Cx retains the campaign throughout each synchronous mode.
             match selection {
                 1 => {

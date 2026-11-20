@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use uqm_rust::engine::battle::{CollisionHook, ElementHook, ElementId};
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::{CollisionHook, ElementHook, ElementId};
+use uqm_engine::graphics::geometry::Point;
 
 pub fn invoke_element(hook: ElementHook, element: ElementId) {
     crate::battle_context::with(|cx| {
-        uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, element);
+        uqm_modes::battle::process_native::invoke_element::invoke_element(cx, hook, element);
     });
 }
 
@@ -16,7 +16,7 @@ pub fn invoke_collision(
     pb: &mut Point,
 ) {
     crate::battle_context::with(|cx| {
-        uqm_rust::battle::process_native::invoke_collision::invoke_collision(
+        uqm_modes::battle::process_native::invoke_collision::invoke_collision(
             cx, hook, a, pa, b, pb,
         );
     });

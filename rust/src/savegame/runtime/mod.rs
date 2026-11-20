@@ -4,25 +4,25 @@
 //! Location preparation runs before capture. The menu ABI coordinates these
 //! owners on the game thread and installs the saved activity after loading.
 
-pub use crate::engine::save::events;
-pub use crate::engine::save::global;
-pub use crate::engine::save::groups;
-pub use crate::engine::save::hyper_save;
-pub use crate::engine::save::ip_group_save;
+pub use uqm_engine::save::events;
+pub use uqm_engine::save::global;
+pub use uqm_engine::save::groups;
+pub use uqm_engine::save::hyper_save;
+pub use uqm_engine::save::ip_group_save;
 pub mod live;
 pub mod location;
-pub use crate::engine::save::queues;
+pub use uqm_engine::save::queues;
 pub mod solar;
 pub mod star;
-pub use crate::engine::save::statefiles;
-pub use crate::engine::save::summary;
+pub use uqm_engine::save::statefiles;
+pub use uqm_engine::save::summary;
 
 use super::types::Summary;
-#[cfg(test)]
-use crate::comm::locdata::CGameState;
-pub use crate::engine::save::{
+pub use uqm_engine::save::{
     capture_runtime, restore_runtime, EventError, Restored, RuntimeError, RuntimeSections,
 };
+#[cfg(test)]
+use uqm_modes::comm::locdata::CGameState;
 
 /// Preserve the live writer's historical `write_a16` element-amount layout.
 /// The general codec must retain distinct amounts when re-encoding a save.

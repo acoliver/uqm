@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::yehat::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 
 fn run(
     comm: &mut Comm,
@@ -72,13 +72,13 @@ mod api {
 
     impl YehatApi for Host<'_, '_, Handler> {
         fn have_shofixti_escort(&self) -> bool {
-            crate::engine::world::fleet::count_escort_ships(
+            uqm_engine::world::fleet::count_escort_ships(
                 self.cx.borrow().world,
-                u16::from(crate::engine::species::ship::SHOFIXTI_SHIP),
+                u16::from(uqm_engine::species::ship::SHOFIXTI_SHIP),
             ) != 0
         }
         fn random_bit(&mut self) -> u8 {
-            (crate::math::random() & 1) as u8
+            (uqm_engine::math::random() & 1) as u8
         }
         fn schedule_rebel_event(&mut self) {
             crate::navigation::events::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 15);

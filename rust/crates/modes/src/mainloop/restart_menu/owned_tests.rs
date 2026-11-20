@@ -1,5 +1,5 @@
 use super::restart_ops::{RestartHost, RestartMenu, RestartMenuOps};
-use crate::engine::{
+use uqm_engine::{
     battle::{Battle, Cx},
     observe::{
         CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved,
@@ -24,8 +24,8 @@ impl RestartHost for NoLifecycle {
 fn production_menu_borrows_unpublished_story_and_activity_owners_independently() {
     let mut first = Game::new();
     let mut second = Game::new();
-    first.world.story = Some(crate::engine::world::story::StoryState::new());
-    second.world.story = Some(crate::engine::world::story::StoryState::new());
+    first.world.story = Some(uqm_engine::world::story::StoryState::new());
+    second.world.story = Some(uqm_engine::world::story::StoryState::new());
     first.world.set_story_state(StoryKey::UTWIG_BOMB, 1);
     first.world.set_story_state(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
     second
@@ -48,7 +48,7 @@ fn production_menu_borrows_unpublished_story_and_activity_owners_independently()
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         let mut ops = menu.operations(&mut cx, &mut io, &mut host);
         assert_eq!(ops.get_utwig_bomb(), bomb);
@@ -87,7 +87,7 @@ fn production_menu_controls_keep_owner_isolation_and_original_byte_narrowing() {
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         menu.operations(&mut cx, &mut io, &mut host)
             .set_player_control(player, value);
@@ -120,7 +120,7 @@ fn production_menu_admits_the_supplied_observer_without_requiring_display_resour
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
     let mut observer = Admissions::default();
     let mut io = Io {
@@ -145,7 +145,7 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
     if !uqm_engine::test_support::native_process::own_graphics_process("mainloop::restart_menu::owned_tests::retained_production_menu_draws_centered_pixels_after_campaign_resources_are_dropped") {
         return;
     }
-    use crate::graphics::{
+    use uqm_engine::graphics::{
         context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Extent,
         geometry::Point, geometry::Rect,
     };
@@ -176,7 +176,7 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
                     &mut battle,
                     &mut game.world,
                     &mut game.kernel,
-                    crate::math::random,
+                    uqm_engine::math::random,
                 );
                 let mut ops = menu.operations(&mut cx, &mut io, &mut host);
                 ops.set_screen_context();
@@ -210,7 +210,7 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
                 &mut battle,
                 &mut game.world,
                 &mut game.kernel,
-                crate::math::random,
+                uqm_engine::math::random,
             );
             let mut ops = menu.operations(&mut cx, &mut io, &mut host);
             ops.batch_graphics();

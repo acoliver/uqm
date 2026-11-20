@@ -1,5 +1,5 @@
 use super::*;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
 
 struct Body {
     state_flags: u16,

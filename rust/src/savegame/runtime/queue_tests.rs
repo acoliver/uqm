@@ -9,12 +9,12 @@
 //! from the encoder.
 
 use super::queues::*;
-use crate::comm::dispatch::{CPoint, INFINITE_FLEET};
-use crate::engine::clock::NUM_EVENTS;
-use crate::engine::world::queues::{FleetInfo as CFleetInfo, ShipFragment as CShipFragment};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
 use std::ops::{Deref, DerefMut};
+use uqm_engine::clock::NUM_EVENTS;
+use uqm_engine::world::queues::{FleetInfo as CFleetInfo, ShipFragment as CShipFragment};
+use uqm_modes::comm::dispatch::{CPoint, INFINITE_FLEET};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 pub(super) const C_WRITTEN_SAVE: &[u8] =
@@ -34,11 +34,11 @@ const HUMAN_SHIP: u16 = 2;
 // ---------------------------------------------------------------------------
 
 /// An owned campaign with a template for every race.
-pub(super) struct LiveGame(crate::engine::World);
+pub(super) struct LiveGame(uqm_engine::World);
 
 /// A distinct string-table identity for fixture ships; only identity is compared.
-pub(super) fn strings(race: usize) -> Option<crate::strings::owned_table::EntryRef> {
-    Some(crate::strings::owned_table::EntryRef::new(
+pub(super) fn strings(race: usize) -> Option<uqm_engine::strings::owned_table::EntryRef> {
+    Some(uqm_engine::strings::owned_table::EntryRef::new(
         handle(race, 1) as usize,
         0,
     ))
@@ -49,8 +49,8 @@ pub(super) fn handle(race: usize, which: usize) -> *mut std::ffi::c_void {
 }
 
 /// A distinct frame identity for fixture icons; only identity is compared.
-pub(super) fn frame_handle(race: usize, which: usize) -> crate::graphics::drawable::FrameId {
-    crate::graphics::drawable::FrameId::from_bits((0x100 + race * 0x10 + which) << 16)
+pub(super) fn frame_handle(race: usize, which: usize) -> uqm_engine::graphics::drawable::FrameId {
+    uqm_engine::graphics::drawable::FrameId::from_bits((0x100 + race * 0x10 + which) << 16)
 }
 impl LiveGame {
     pub(super) fn new() -> Self {
@@ -58,7 +58,7 @@ impl LiveGame {
         for race in 0..RACES {
             let mut queue = game.avail_races();
             let id = queue.alloc().unwrap();
-            *queue.get_mut(id) = crate::engine::world::queues::FleetInfo {
+            *queue.get_mut(id) = uqm_engine::world::queues::FleetInfo {
                 species_id: race as u32 + 1,
                 allied_state: 2,
                 days_left: 0xa1,
@@ -83,7 +83,7 @@ impl LiveGame {
         game
     }
     pub(super) fn bare() -> Self {
-        Self(crate::engine::World::new())
+        Self(uqm_engine::World::new())
     }
     pub(super) fn template(&self, race: usize) -> CFleetInfo {
         let view = self.avail_races_ref();
@@ -104,16 +104,16 @@ impl LiveGame {
     }
 }
 fn push_fragment<const N: usize>(
-    mut queue: crate::engine::battle::link_queue::LinkQueue<
+    mut queue: uqm_engine::battle::link_queue::LinkQueue<
         '_,
-        crate::engine::world::queues::Fragment,
+        uqm_engine::world::queues::Fragment,
         N,
     >,
     race: u8,
     captain: u8,
 ) {
     let id = queue.alloc().unwrap();
-    *queue.get_mut(id) = crate::engine::world::queues::ShipFragment {
+    *queue.get_mut(id) = uqm_engine::world::queues::ShipFragment {
         race_id: race,
         captains_name_index: captain,
         crew_level: 1,
@@ -123,7 +123,7 @@ fn push_fragment<const N: usize>(
     queue.put(id);
 }
 impl Deref for LiveGame {
-    type Target = crate::engine::World;
+    type Target = uqm_engine::World;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -138,8 +138,8 @@ pub(super) trait FixturePool {
     fn remaining(&self) -> usize;
     fn identity(&self) -> String;
 }
-impl<T: crate::engine::battle::link_queue::QueueRecord + std::fmt::Debug, const N: usize>
-    FixturePool for crate::engine::battle::link_queue::LinkQueue<'_, T, N>
+impl<T: uqm_engine::battle::link_queue::QueueRecord + std::fmt::Debug, const N: usize> FixturePool
+    for uqm_engine::battle::link_queue::LinkQueue<'_, T, N>
 {
     fn remaining(&self) -> usize {
         N - self.count()
@@ -154,8 +154,8 @@ impl<T: crate::engine::battle::link_queue::QueueRecord + std::fmt::Debug, const 
         format!("{ids:?}")
     }
 }
-pub(super) fn records<T: crate::engine::battle::link_queue::QueueRecord, const N: usize>(
-    queue: &crate::engine::battle::link_queue::LinkQueue<'_, T, N>,
+pub(super) fn records<T: uqm_engine::battle::link_queue::QueueRecord, const N: usize>(
+    queue: &uqm_engine::battle::link_queue::LinkQueue<'_, T, N>,
 ) -> Vec<T::Record>
 where
     T::Record: Copy,
@@ -335,7 +335,7 @@ fn capture_follows_queue_order_not_pool_order() {
 
 #[test]
 fn fragment_ids_are_pool_specific_and_reset_invalidates_them() {
-    let mut world = crate::engine::World::new();
+    let mut world = uqm_engine::World::new();
     let id = world.built_ships().alloc().unwrap();
     world.built_ships().put(id);
     assert!(!world.npc_built_ships_ref().contains(id));

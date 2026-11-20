@@ -4,7 +4,7 @@ mod ships;
 pub fn hooks() -> Vec<(usize, &'static str)> {
     ships::hooks()
         .into_iter()
-        .chain(crate::ships::hook_registry::hooks())
+        .chain(uqm_content::ships::hook_registry::hooks())
         .collect()
 }
 

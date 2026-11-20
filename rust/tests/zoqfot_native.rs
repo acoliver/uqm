@@ -5,23 +5,23 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::species::species_id::SPECIES_ID_ZOQFOTPIK_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::ONE_SHIFT;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
-use uqm_rust::ships::native::{cosine, sine};
+use uqm_content::ships::native::{cosine, sine};
+use uqm_engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_ZOQFOTPIK_ID;
 #[test]
 fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
     battle_context::run(|_| {

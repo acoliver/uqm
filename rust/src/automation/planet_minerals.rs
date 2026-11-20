@@ -11,11 +11,11 @@
 
 use crate::automation::navigation::NavigationControl;
 use crate::automation::script::CollectPlanetMineralsStep;
-use crate::battle::battle_types::{angle_to_facing, arctan, shortest_path_delta};
-use crate::engine::observe_port::planet_side::{phase_name, MineralDeposit, PlanetSideObservation};
-use crate::planet_side::cargo::{ElementCategory, NUM_ELEMENT_CATEGORIES};
-use crate::planet_side::model::SurfacePoint;
-use crate::planet_side::world::WORLD_WIDTH;
+use uqm_engine::observe_port::planet_side::{phase_name, MineralDeposit, PlanetSideObservation};
+use uqm_modes::battle::battle_types::{angle_to_facing, arctan, shortest_path_delta};
+use uqm_modes::planet_side::cargo::{ElementCategory, NUM_ELEMENT_CATEGORIES};
+use uqm_modes::planet_side::model::SurfacePoint;
+use uqm_modes::planet_side::world::WORLD_WIDTH;
 
 /// `SessionPhase::Active`, the only phase in which the lander answers input.
 const ACTIVE_PHASE: u32 = 4;

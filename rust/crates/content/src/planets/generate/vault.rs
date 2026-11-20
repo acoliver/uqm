@@ -4,11 +4,11 @@
 //! flags: `SHIP_VAULT_UNLOCKED`, `SYREEN_SHUTTLE_ON_SHIP`, `SYREEN_HOME_VISITS`,
 //! `KNOW_SYREEN_VAULT`.
 
-use crate::engine::world::planet::{NodeInfo, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{Body, Story};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, SystemInfo};
+use uqm_engine::StoryKey;
 
 const VAULT: Body = Body::Moon { planet: 0, moon: 0 };
 
@@ -18,7 +18,7 @@ pub trait VaultSite {
     /// the report started at `first_report`.
     fn load_vault_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         first_report: u16,
     );
     /// `set_lander_takeoff ()`.
@@ -74,12 +74,12 @@ pub fn pickup_energy(
     if site.flag(StoryKey::SHIP_VAULT_UNLOCKED) != 0 {
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
     } else if site.flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP) != 0 {
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
         site.lander_takeoff();
         site.set_flag(StoryKey::SHIP_VAULT_UNLOCKED, 1);
@@ -88,7 +88,7 @@ pub fn pickup_energy(
     } else {
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         if site.flag(StoryKey::KNOW_SYREEN_VAULT) == 0 {
             site.set_flag(StoryKey::KNOW_SYREEN_VAULT, 1);
@@ -99,7 +99,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

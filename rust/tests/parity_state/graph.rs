@@ -1,10 +1,10 @@
 //! Real queue pools, element fields and the no-journal fighter path.
 use super::*;
-use uqm_rust::collections::observation;
-use uqm_rust::collections::observation::Event;
-use uqm_rust::engine::battle::record::RaceDescriptor;
-use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::battle::record::RaceDescriptor;
+use uqm_engine::collections::observation;
+use uqm_engine::collections::observation::Event;
+use uqm_engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
 
 pub(super) fn clear_queues() {
     // records before releasing their stack storage; there are no active readers.
@@ -17,14 +17,14 @@ pub(super) fn clear_queues() {
         });
         crate::battle_context::with(|cx| {
             let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
-            uqm_rust::battle::process_native::init_display_list(cx, scaled);
+            uqm_modes::battle::process_native::init_display_list(cx, scaled);
         });
     }
 }
 
 pub(super) fn unregistered_hook(
-    _: &mut uqm_rust::engine::battle::Cx<'_>,
-    _: uqm_rust::engine::battle::ElementId,
+    _: &mut uqm_engine::battle::Cx<'_>,
+    _: uqm_engine::battle::ElementId,
 ) {
 }
 
@@ -39,7 +39,7 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
     owner.record().ship_facing = 31;
     first.record().player_nr = 0;
     first.record().state_flags = ElementFlags::PLAYER_SHIP.bits();
-    first.record().parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
+    first.record().parent = uqm_engine::battle::Parent::Ship(owner.ship_id);
     first.record().current.location.x = 17;
     first.record().hits = 11;
 
@@ -50,9 +50,8 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
     second.record().current.location.x = -91;
     second.record().current.location.y = 43;
     second.record().hits = 7;
-    second.record().preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-        unregistered_hook,
-    ));
+    second.record().preprocess_func =
+        Some(uqm_engine::battle::ElementHook::Native(unregistered_hook));
 
     neutral.record().player_nr = -1;
     crate::battle_context::with(|cx| cx.set_target(neutral.id, Some(first.id)));
@@ -61,12 +60,12 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
         crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_activity(IN_BATTLE);
-            uqm_rust::engine::observe::CampaignView::from_world(world)
+            uqm_engine::observe::CampaignView::from_world(world)
         })
     };
-    uqm_rust::math::seed_random(654321);
+    uqm_engine::math::seed_random(654321);
     let fighters = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
-    assert_eq!(uqm_rust::math::seed_random(654321), 654321);
+    assert_eq!(uqm_engine::math::seed_random(654321), 654321);
     let player = fighters
         .player
         .unwrap_or_else(|| panic!("missing live player ship"));
@@ -155,10 +154,10 @@ pub(super) fn frame_fields(
     let native = battle::NativeFrameSet::new(8);
     let pointer = native.frame(7);
     let drawable = pointer.drawable().map_or(0, |drawable| drawable.bits());
-    let view = uqm_rust::engine::battle::views::FrameSelection::retain(pointer);
-    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
-    let set = uqm_rust::engine::battle::frames::Frames::shared(
-        uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+    let view = uqm_engine::battle::views::FrameSelection::retain(pointer);
+    let array = uqm_engine::battle::frames::FrameArray::retain([view.view(); 3]);
+    let set = uqm_engine::battle::frames::Frames::shared(
+        uqm_engine::battle::frames::SharedFrames::Fixture(0),
         array.clone(),
     );
     observation::record(Event::Drawable(drawable));
@@ -198,25 +197,25 @@ pub(super) fn frame_fields(
     assert_eq!(fields["elements.2.current.farray.index"], "0");
     observation::assign_frame(
         &mut first.record().current.image.frame,
-        uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+        uqm_engine::battle::frames::FrameSelection::ABSENT,
     );
     observation::assign_set(
         &mut first.record().current.image.frames,
-        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        uqm_engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(
         &mut first.record().next.image.frame,
-        uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+        uqm_engine::battle::frames::FrameSelection::ABSENT,
     );
     observation::assign_set(
         &mut first.record().next.image.frames,
-        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        uqm_engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(
         &mut first.record().intersect_control.intersect_stamp.frame,
-        uqm_rust::graphics::drawable::FrameId::NULL,
+        uqm_engine::graphics::drawable::FrameId::NULL,
     );
     assert_eq!(battle::succ(second.id), Some(neutral.id));
 }
@@ -230,21 +229,20 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     element.record().player_nr = 0;
     element.record().hits = 19;
     element.record().current.location.x = -9;
-    element.record().parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-    element.record().preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-        unregistered_hook,
-    ));
+    element.record().parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
+    element.record().preprocess_func =
+        Some(uqm_engine::battle::ElementHook::Native(unregistered_hook));
     let campaign = {
         let campaign = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_activity(IN_BATTLE);
-            uqm_rust::engine::observe::CampaignView::from_world(world)
+            uqm_engine::observe::CampaignView::from_world(world)
         });
         install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
         campaign
     };
-    uqm_rust::math::seed_random(56789);
+    uqm_engine::math::seed_random(56789);
     let snapshot = crate::battle_context::with(|cx| {
         uqm_rust::automation::battle_fight::BattleSnapshot::live(cx, &campaign)
     });
@@ -255,12 +253,12 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     assert_eq!(player.crew, 19);
     assert_eq!(player.x, -9);
     assert!(snapshot.enemy.is_none());
-    assert_eq!(uqm_rust::math::seed_random(56789), 56789);
+    assert_eq!(uqm_engine::math::seed_random(56789), 56789);
     assert!(!directory.join("parity.fields").exists());
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
         element.record().player_nr = side;
-        element.record().parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
+        element.record().parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
         let snapshot = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());
@@ -280,7 +278,7 @@ pub(super) fn attach_elements(elements: &mut [ElementRecord]) {
 
 /// An element slot this test resets to an empty record and links by hand.
 pub(super) struct ElementRecord {
-    pub(super) id: uqm_rust::engine::battle::ElementId,
+    pub(super) id: uqm_engine::battle::ElementId,
     primitive: u16,
 }
 impl ElementRecord {
@@ -289,7 +287,7 @@ impl ElementRecord {
             .unwrap_or_else(|| panic!("fixture capacity"));
         let mut record = battle::get_mut(id);
         let primitive = record.prim_index;
-        *record = uqm_rust::engine::battle::record::ElementRecord::default();
+        *record = uqm_engine::battle::record::ElementRecord::default();
         record.player_nr = -1;
         record.prim_index = primitive;
         Self { id, primitive }
@@ -297,10 +295,10 @@ impl ElementRecord {
     /// Lend the live record until the guard drops.
     pub(super) fn record(
         &mut self,
-    ) -> std::cell::RefMut<'static, uqm_rust::engine::battle::record::ElementRecord> {
+    ) -> std::cell::RefMut<'static, uqm_engine::battle::record::ElementRecord> {
         battle::get_mut(self.id)
     }
-    pub(super) fn get(&self) -> battle::Snapshot<uqm_rust::engine::battle::record::ElementRecord> {
+    pub(super) fn get(&self) -> battle::Snapshot<uqm_engine::battle::record::ElementRecord> {
         battle::get(self.id)
     }
     /// The pool address the parity observer identifies this element by.
@@ -315,7 +313,7 @@ impl Drop for ElementRecord {
             battle::get_mut(self.id).prim_index = self.primitive;
             crate::battle_context::with(|cx| {
                 if cx.elements().linked(self.id) {
-                    uqm_rust::battle::sounds::engine::unlink(cx, self.id);
+                    uqm_modes::battle::sounds::engine::unlink(cx, self.id);
                 }
                 cx.dispose(self.id);
             });
@@ -375,10 +373,10 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
             queue.put(id);
             (id, queue.raw(id))
         });
-        element.record().parent = uqm_rust::engine::battle::Parent::IpGroup(group_id);
+        element.record().parent = uqm_engine::battle::Parent::IpGroup(group_id);
         attach_elements(std::slice::from_mut(&mut element));
         observation::record(Event::Allocate(element.address()));
-        let callback = uqm_rust::battle::hook_registry::hooks()
+        let callback = uqm_modes::battle::hook_registry::hooks()
             .into_iter()
             .find(|(_, name)| *name == "battle::ship_native::collision")
             .unwrap_or_else(|| panic!("collision callback is absent from the registry"))

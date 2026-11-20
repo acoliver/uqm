@@ -1,24 +1,24 @@
 //! Umgah callbacks and descriptor translated from `umgah.c`.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_angle, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, GRAVITY_MASS_INDEX, IGNORE_SIMILAR,
         IMMEDIATE_WEAPON, LEFT, MOVEMENT_STATE_AVOID, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
         RIGHT, SLOW_SHIP, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::CollisionHook;
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT};
-    use crate::math::velocity::VELOCITY_SHIFT;
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_angle, sine};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::CollisionHook;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT};
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static UMGAH: Race = Race {
@@ -37,7 +37,7 @@ pub mod engine {
     const CLOSE_RANGE_WEAPON: u16 = 50 << ONE_SHIFT;
     const LONG_RANGE_WEAPON: u32 = 1000 << ONE_SHIFT;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
         d.info.ship_cost = 7;
@@ -181,8 +181,8 @@ pub mod engine {
     }
 
     pub fn uninit_umgah(
-        _world: &mut crate::engine::battle::World,
-        stats: &mut crate::engine::battle::views::RaceStats,
+        _world: &mut uqm_engine::battle::World,
+        stats: &mut uqm_engine::battle::views::RaceStats,
     ) {
         stats.state = RaceState::Umgah {
             previous_facing: None,
@@ -232,7 +232,7 @@ pub mod engine {
             let dx = location.x.wrapping_sub(concerns.subject.next.location.x);
             let dy = location.y.wrapping_sub(concerns.subject.next.location.y);
             let behind = normalize_angle(
-                crate::math::arctan(dx, dy) as i32
+                uqm_engine::math::arctan(dx, dy) as i32
                     - (facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32)
                     + OCTANT as i32
                     + (OCTANT >> 2) as i32,

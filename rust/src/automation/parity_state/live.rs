@@ -2,21 +2,22 @@
 use super::Fields;
 use super::{custom, elements, ships::Ship, value};
 use crate::automation::parity::Journal;
-use crate::engine::battle::access::observe::ElementObservation;
-use crate::{battle::netplay::CrcState, engine::battle::observation::ShipState};
+use uqm_engine::battle::access::observe::ElementObservation;
+use uqm_engine::battle::observation::ShipState;
+use uqm_modes::battle::netplay::CrcState;
 
 pub fn checkpoint(
-    cx: &crate::engine::battle::Cx<'_>,
+    cx: &uqm_engine::battle::Cx<'_>,
     journal: &mut Journal,
     boundary: &str,
 ) -> std::io::Result<()> {
-    let mut hooks = crate::battle::hook_registry::hooks();
+    let mut hooks = uqm_modes::battle::hook_registry::hooks();
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
     value(&mut fields, "mode", "boundary", boundary);
     let (queues, elements) = (
         std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
-        crate::battle::context_access::observe::elements(cx.elements(), |id| {
+        uqm_modes::battle::context_access::observe::elements(cx.elements(), |id| {
             cx.element_parent_address(id) as usize
         }),
     );
@@ -46,8 +47,8 @@ pub fn checkpoint(
         }
     }
     custom::pkunk_sound(&mut fields);
-    let seed = crate::math::seed_random(0);
-    crate::math::seed_random(seed);
+    let seed = uqm_engine::math::seed_random(0);
+    uqm_engine::math::seed_random(seed);
     value(&mut fields, "mode", "rng", seed);
     let mut crc = CrcState::new();
     crc.process_u32(seed);
@@ -55,13 +56,13 @@ pub fn checkpoint(
         let prefix = format!("elements.{index}");
         elements::element(&mut fields, &prefix, element, journal, &hooks);
         visuals(&mut fields, &prefix, element, journal);
-        crate::supermelee::netplay::checksum::crc_process_element(&mut crc, &element.state);
+        uqm_modes::supermelee::netplay::checksum::crc_process_element(&mut crc, &element.state);
     }
     journal.checkpoint(cx.world.activity(), crc.finish(), &fields)
 }
 
 pub(in crate::automation) fn fighters(
-    cx: &crate::engine::battle::Cx<'_>,
+    cx: &uqm_engine::battle::Cx<'_>,
 ) -> ([Option<ShipState>; 2], [u8; 2]) {
     {
         let mut fighters = [None, None];
@@ -69,7 +70,7 @@ pub(in crate::automation) fn fighters(
         while let Some(id) = next {
             next = cx.elements().succ(id);
             let e = cx.element(id);
-            if e.flags & crate::engine::battle::flags::PLAYER_SHIP as u16 == 0 {
+            if e.flags & uqm_engine::battle::flags::PLAYER_SHIP as u16 == 0 {
                 continue;
             }
             let side = match e.player {
@@ -77,7 +78,7 @@ pub(in crate::automation) fn fighters(
                 1 => 1,
                 _ => continue,
             };
-            if let crate::engine::battle::Parent::Ship(owner) = cx.parent(id) {
+            if let uqm_engine::battle::Parent::Ship(owner) = cx.parent(id) {
                 fighters[side] = Some(ShipState {
                     x: i32::from(e.current.location.x),
                     y: i32::from(e.current.location.y),
@@ -133,12 +134,12 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::record::ElementRecord as Element;
+    use uqm_engine::battle::record::ElementRecord as Element;
 
     fn observed_set(
-        views: &[crate::graphics::drawable::FrameId],
-    ) -> crate::engine::battle::frames::Frames {
-        use crate::engine::battle::frames::{FrameArray, Frames, SharedFrames};
+        views: &[uqm_engine::graphics::drawable::FrameId],
+    ) -> uqm_engine::battle::frames::Frames {
+        use uqm_engine::battle::frames::{FrameArray, Frames, SharedFrames};
         Frames::shared(
             SharedFrames::Fixture(0),
             FrameArray::fixture_source(
@@ -155,9 +156,9 @@ mod tests {
     }
 
     fn observed_frame(
-        raw: crate::graphics::drawable::FrameId,
-    ) -> crate::engine::battle::frames::FrameSelection {
-        crate::engine::battle::frames::FrameArray::fixture([raw; 3], ())
+        raw: uqm_engine::graphics::drawable::FrameId,
+    ) -> uqm_engine::battle::frames::FrameSelection {
+        uqm_engine::battle::frames::FrameArray::fixture([raw; 3], ())
             .view(0)
             .to_owned()
     }
@@ -167,7 +168,7 @@ mod tests {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create visual test journal: {error}"));
-        let views = [crate::graphics::drawable::FrameId::from_bits(7 << 16)];
+        let views = [uqm_engine::graphics::drawable::FrameId::from_bits(7 << 16)];
         let mut element = Element::default();
         element.current.image.frame = observed_frame(views[0]);
         element.current.image.frames = observed_set(&views);
@@ -184,7 +185,7 @@ mod tests {
     fn linked_element_keeps_retired_frame_binding_when_allocator_reuses_address() {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path()).expect("journal");
-        let pointer = crate::graphics::drawable::FrameId::from_bits(9 << 16);
+        let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(9 << 16);
         let views = [pointer];
         let mut element = Element::default();
         element.current.image.frame = observed_frame(pointer);
@@ -223,14 +224,14 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn space_arrays_reload_all_views_with_fresh_and_reused_storage() {
-        use crate::collections::observation::observe_views;
-        use crate::collections::observation::{self, Event};
+        use uqm_engine::collections::observation::observe_views;
+        use uqm_engine::collections::observation::{self, Event};
         observation::enable();
         observation::drain();
         for reuse in [false, true] {
             let directory = super::super::test_directory();
             let mut journal = Journal::create(directory.path()).expect("journal");
-            let mut views = [crate::graphics::drawable::FrameId::NULL; 3];
+            let mut views = [uqm_engine::graphics::drawable::FrameId::NULL; 3];
             let mut element = Element::default();
             journal.allocate(std::ptr::from_ref(&element) as usize);
             let generation = journal.identity(std::ptr::from_ref(&element) as usize);
@@ -245,7 +246,7 @@ mod tests {
                         owner,
                         index: 0,
                     });
-                    *frame = crate::graphics::drawable::FrameId::from_bits(address);
+                    *frame = uqm_engine::graphics::drawable::FrameId::from_bits(address);
                     owners.push(owner);
                 }
                 observe_views(&views, "engine-global:test-animation", |frame| frame.bits());
@@ -278,7 +279,7 @@ mod tests {
                     );
                     observation::record(Event::DrawableFree(owner));
                 }
-                views.fill(crate::graphics::drawable::FrameId::NULL);
+                views.fill(uqm_engine::graphics::drawable::FrameId::NULL);
                 observe_views(&views, "engine-global:test-animation", |frame| frame.bits());
                 journal.drain_events(&[]);
                 visuals(&mut fields, "element", &element, &mut journal);
@@ -299,22 +300,23 @@ mod tests {
 
     #[test]
     fn checked_display_pool_preserves_link_order() {
-        let mut elements = crate::engine::battle::ElementTable::with_capacity(3);
+        let mut elements = uqm_engine::battle::ElementTable::with_capacity(3);
         let ids = std::array::from_fn::<_, 3, _>(|_| elements.alloc().unwrap());
         for id in ids {
             elements.put(id);
         }
-        let addresses: Vec<_> = crate::battle::context_access::observe::elements(&elements, |_| 0)
-            .into_iter()
-            .map(|e| e.address)
-            .collect();
+        let addresses: Vec<_> =
+            uqm_modes::battle::context_access::observe::elements(&elements, |_| 0)
+                .into_iter()
+                .map(|e| e.address)
+                .collect();
         assert_eq!(addresses, ids.map(|id| elements.raw(id) as usize));
     }
 
     #[test]
     #[should_panic(expected = "already linked")]
     fn duplicate_display_insertion_fails_before_modifying_links() {
-        let mut elements = crate::engine::battle::ElementTable::with_capacity(2);
+        let mut elements = uqm_engine::battle::ElementTable::with_capacity(2);
         let id = elements.alloc().unwrap();
         elements.put(id);
         elements.put(id);
@@ -323,7 +325,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "element address is not allocated")]
     fn pointer_outside_display_pool_fails_before_dereference() {
-        let elements = crate::engine::battle::ElementTable::with_capacity(2);
+        let elements = uqm_engine::battle::ElementTable::with_capacity(2);
         elements.id(std::ptr::NonNull::new(std::ptr::dangling_mut()));
     }
 }

@@ -1,13 +1,13 @@
 use super::*;
-use crate::engine::species::ship::BLACK_URQUAN_SHIP;
 use crate::planets::generate::{
     orbits::FIRST_GAS_GIANT, sam::SA_MATRA, special::HIERARCHY_STARBASE,
 };
 use crate::starbase::ids::{GAMESTR_COUNT, SCAN_STRING_BASE};
+use uqm_engine::species::ship::BLACK_URQUAN_SHIP;
 
 const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
 const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
-use crate::engine::{
+use uqm_engine::{
     clock::{CEvent, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK},
     world::story::StoryState,
     StoryKey, World,
@@ -81,7 +81,7 @@ fn diagnostic_text_preserves_raw_bytes_truncation_and_category_output() {
     strings[SCAN_STRING_BASE as usize + 4] = [vec![b'x'; 38], vec![0xff, 0]].concat();
     strings[SCAN_STRING_BASE as usize + 54] = b"world\0".to_vec();
     strings[SCAN_STRING_BASE as usize + 55] = b"gas\0".to_vec();
-    kernel.install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+    kernel.install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
         strings,
     ));
     let first = planet_type_string(&kernel, 0);
@@ -117,14 +117,14 @@ fn diagnostic_text_preserves_raw_bytes_truncation_and_category_output() {
 
 #[test]
 fn empty_battle_resets_do_not_acquire_a_context_or_apply_an_effect() {
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.world.story = Some(StoryState::new());
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
     for activity in [0, IN_BATTLE, IN_HYPERSPACE | IN_BATTLE] {
         cx.world.set_activity(activity);
@@ -139,7 +139,7 @@ fn event_dump_walks_the_supplied_fifo_without_mutating_it() {
     first.clock.init();
     let second = World::new();
     for selector in [ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT] {
-        crate::time::clock_abi::insert_event(&mut first.clock, (2155, 2, 7), selector as u8)
+        uqm_engine::time::clock_abi::insert_event(&mut first.clock, (2155, 2, 7), selector as u8)
             .unwrap();
     }
     let head = first.clock.events_ref().head();
@@ -158,9 +158,9 @@ fn event_dump_walks_the_supplied_fifo_without_mutating_it() {
 #[test]
 #[serial_test::serial]
 fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
-    use crate::engine::battle::{Race, RaceTemplate};
-    use crate::graphics::context::LoadedContext;
-    fn descriptor(_: &mut World) -> crate::engine::battle::RaceDesc {
+    use uqm_engine::battle::{Race, RaceTemplate};
+    use uqm_engine::graphics::context::LoadedContext;
+    fn descriptor(_: &mut World) -> uqm_engine::battle::RaceDesc {
         RaceTemplate::default().descriptor(&RACE)
     }
     static RACE: Race = Race {
@@ -171,7 +171,7 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
         intelligence: None,
         uninit: None,
     };
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_BATTLE);
     game.kernel.reset_ship_capacity(RPG_PLAYER_NUM as usize, 1);
@@ -185,7 +185,7 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
         let id = ships.build(1).unwrap();
         ships.ship_id(id)
     };
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
     let element = cx.alloc_element().unwrap();
     {
@@ -248,9 +248,9 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     ) {
         return;
     }
-    use crate::engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
-    use crate::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
-    let mut game = crate::engine::Game::new();
+    use uqm_engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
+    use uqm_engine::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
+    let mut game = uqm_engine::Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_INTERPLANETARY);
     let display =
@@ -258,7 +258,7 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     game.kernel.screen_context = game.kernel.status_context;
     game.kernel.space_context = game.kernel.status_context;
     game.kernel
-        .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+        .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             vec![b"A\0".to_vec(); GAMESTR_COUNT as usize],
         ));
     let art = LoadedDrawable::create(8, 64, 140, 100).unwrap();
@@ -277,15 +277,15 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
             ShipPickerResources::new(None, FrameSelection::retain(frame)),
         );
     }
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 11);
-    let global_rng_before = crate::math::random_state();
+    let global_rng_before = uqm_engine::math::random_state();
     debug_key_pressed_synchronous(
         &mut cx,
         |_, _, _| panic!("no battle crew effect"),
         |_, _, _| panic!("no battle energy effect"),
     );
-    assert_eq!(crate::math::random_state(), global_rng_before);
+    assert_eq!(uqm_engine::math::random_state(), global_rng_before);
     let ships = cx.world.built_ships_ref();
     assert_eq!(ships.count(), 12);
     let mut next = ships.head();
@@ -307,8 +307,8 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     ) {
         return;
     }
-    use crate::graphics::drawable::ContextFrame;
-    let mut game = crate::engine::Game::new();
+    use uqm_engine::graphics::drawable::ContextFrame;
+    let mut game = uqm_engine::Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_INTERPLANETARY);
     game.world.clock.init();
@@ -322,15 +322,19 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     clock.day_index = 1;
     clock.day_in_ticks = 1;
     clock.tick_count = 1;
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("interplanetary daily events must not draw encounter RNG")
     });
     forward_to_next_event(&mut cx, true);
     assert_eq!(cx.world.data.calendar_date(), (2, 1, 2155));
     for (day, selector) in [(2, HYPERSPACE_ENCOUNTER_EVENT), (3, ARILOU_UMGAH_CHECK)] {
-        crate::time::clock_abi::insert_event(&mut cx.world.clock, (2155, 2, day), selector as u8)
-            .unwrap();
+        uqm_engine::time::clock_abi::insert_event(
+            &mut cx.world.clock,
+            (2155, 2, day),
+            selector as u8,
+        )
+        .unwrap();
     }
     forward_to_next_event(&mut cx, true);
     assert_eq!(cx.world.data.calendar_date(), (2, 3, 2155));
@@ -355,8 +359,8 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
 #[test]
 #[serial_test::serial]
 fn moon_dump_preserves_world_bytes_and_skips_shielded_and_special_scans() {
-    use crate::engine::{world::generation::SolarSys, world::planet::PlanetInfo, StarId};
     use crate::planets::generate::{SiteHost, SystemGenerator};
+    use uqm_engine::{world::generation::SolarSys, world::planet::PlanetInfo, StarId};
     struct NoScans;
     impl Generation for NoScans {
         fn invoke<R>(
@@ -369,7 +373,7 @@ fn moon_dump_preserves_world_bytes_and_skips_shielded_and_special_scans() {
             panic!("shielded and special moons must not generate resource scans")
         }
     }
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.world.set_catalog(std::borrow::Cow::Owned(
         crate::planets::tables::STARMAP_ARRAY,
     ));
@@ -377,7 +381,7 @@ fn moon_dump_preserves_world_bytes_and_skips_shielded_and_special_scans() {
     strings[SCAN_STRING_BASE as usize + 4] = b"rock\0".to_vec();
     strings[SCAN_STRING_BASE as usize + 54] = b"world\0".to_vec();
     game.kernel
-        .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+        .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             strings,
         ));
     let mut solar = SolarSystem::new(&game.world, StarId(0));
@@ -401,11 +405,11 @@ fn moon_dump_preserves_world_bytes_and_skips_shielded_and_special_scans() {
         planet_to_sun_dist: 789,
         ..PlanetInfo::default()
     };
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("diagnostic formatting must not consume campaign RNG")
     });
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };

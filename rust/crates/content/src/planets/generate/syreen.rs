@@ -4,14 +4,14 @@
 //! Overridden: `generatePlanets`, `generateMoons`, `generateOrbital`. No story
 //! flags.
 
-use crate::engine::math::battle_types::{cosine, sine, QUADRANT};
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
-use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, EARTH_ATMOSPHERE, HIERARCHY_STARBASE, MIN_MOON_RADIUS, WATER_WORLD,
 };
+use uqm_engine::math::battle_types::{cosine, sine, QUADRANT};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame};
 
 /// `GenerateSyreen_generatePlanets`.
 pub fn generate_planets(
@@ -84,7 +84,7 @@ pub fn generate_orbital(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

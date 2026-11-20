@@ -1,7 +1,7 @@
 //! Color conversion for graphics-context diagnostics.
 
-use crate::graphics::geometry::Color;
 use std::ffi::c_int;
+use uqm_engine::graphics::geometry::Color;
 
 pub(super) fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: u8) -> Color {
     let hi = (hue / 60.0) as c_int as u32;

@@ -1,26 +1,24 @@
 //! The Zoq-Fot-Pik home's story gating and conversation flow against
 //! recording fakes.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::rc::Rc;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 use super::{
     generate_energy, generate_orbital, init_npcs, pickup_energy, ZoqFotPikSite, TALK_FLAGS,
 };
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::special::{Body, Orbit};
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 
 const WORLD: Body = Body::Planet(0);
 const OTHER_BODIES: [Body; 3] = [
@@ -223,7 +221,7 @@ impl HomeContactSite for Site {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         artifact_taken: bool,
     ) {
         self.record(Call::LoadRuinsScene(artifact_taken));

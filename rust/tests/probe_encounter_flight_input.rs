@@ -917,9 +917,9 @@ fn the_second_commander_visit_waits_for_its_offer_before_the_first_pick() {
 // Commander's reward from the Rust dialogue. Nothing below copies an observed value.
 // ---------------------------------------------------------------------------
 
-use uqm_rust::planet_side::selection::landing_fuel_needed;
-use uqm_rust::starbase::sis_modules::{FUEL_RESERVE, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE};
-use uqm_rust::starbase::{
+use uqm_modes::planet_side::selection::landing_fuel_needed;
+use uqm_modes::starbase::sis_modules::{FUEL_RESERVE, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE};
+use uqm_modes::starbase::{
     change_fuel_quantity, round_fuel_on_outfit_entry, FuelChange, FuelKey, FuelRuState,
 };
 
@@ -936,18 +936,18 @@ struct DerivedPreparation {
 
 impl DerivedPreparation {
     fn from_game_data(opening_res_units: u32) -> Self {
-        let mut sis = uqm_rust::engine::world::SisState::default();
-        let mut state = uqm_rust::engine::battle::schema::GameRecord::default();
-        uqm_rust::engine::world::new_game::equipment(&mut sis);
-        uqm_rust::engine::world::new_game::prices(&mut sis, &mut state);
+        let mut sis = uqm_engine::world::SisState::default();
+        let mut state = uqm_engine::battle::schema::GameRecord::default();
+        uqm_engine::world::new_game::equipment(&mut sis);
+        uqm_engine::world::new_game::prices(&mut sis, &mut state);
         let opening_fuel = sis.fuel_on_board;
         let fuel_price = state.fuel_cost;
 
         // Derive fuel cost from the production Sol physical owner.
         let mut lunar_info = Default::default();
-        uqm_rust::planets::generate::sol::orbital::physical_overrides(
+        uqm_modes::planets::generate::sol::orbital::physical_overrides(
             &mut lunar_info,
-            uqm_rust::planets::generate::special::Body::Moon { planet: 2, moon: 1 },
+            uqm_modes::planets::generate::special::Body::Moon { planet: 2, moon: 1 },
         );
         let gravity = lunar_info.planet_info.gravity;
         let landing_cost = u32::from(landing_fuel_needed(
@@ -956,9 +956,9 @@ impl DerivedPreparation {
         ));
 
         let mut mercury_info = Default::default();
-        uqm_rust::planets::generate::sol::orbital::physical_overrides(
+        uqm_modes::planets::generate::sol::orbital::physical_overrides(
             &mut mercury_info,
-            uqm_rust::planets::generate::special::Body::Planet(0),
+            uqm_modes::planets::generate::special::Body::Planet(0),
         );
         let mercury_gravity = mercury_info.planet_info.gravity;
         let mercury_landing_cost = u32::from(landing_fuel_needed(
@@ -966,7 +966,7 @@ impl DerivedPreparation {
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
         ));
 
-        let reward = u32::from(uqm_rust::comm::races::starbas::STARBASE_READY_REWARD);
+        let reward = u32::from(uqm_modes::comm::races::starbas::STARBASE_READY_REWARD);
         Self {
             opening_fuel,
             opening_res_units,

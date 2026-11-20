@@ -92,7 +92,7 @@ impl AutomationObserver {
             capture,
             button_wait,
             setup,
-            &mut crate::engine::observe::Unobserved,
+            &mut uqm_engine::observe::Unobserved,
         )
     }
 
@@ -101,7 +101,7 @@ impl AutomationObserver {
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
         button_wait: bool,
         setup: &mut crate::automation::input_admission::Target<'_>,
-        sink: &mut dyn crate::engine::observe::Observer,
+        sink: &mut dyn uqm_engine::observe::Observer,
     ) -> bool {
         let mut inner = self.inner.lock();
         let event = match crate::automation::input_admission::with_context(setup, |cx| {
@@ -122,7 +122,7 @@ impl AutomationObserver {
     fn prepare_input_boundary(
         &self,
         inner: &mut CoordInner,
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
         button_wait: bool,
     ) -> std::ops::ControlFlow<bool, SchedulerEvent> {
@@ -204,7 +204,7 @@ impl AutomationObserver {
     fn queue_input_fixture(
         &self,
         inner: &mut CoordInner,
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         scheduler_event: SchedulerEvent,
     ) -> bool {
         if matches!(
@@ -250,9 +250,9 @@ impl AutomationObserver {
                 Some(Action::SetupPlanetSideMineralGallery(_))
             );
             let layout = if gallery {
-                crate::engine::observe_port::planet_side::FixtureLayout::MineralGallery
+                uqm_engine::observe_port::planet_side::FixtureLayout::MineralGallery
             } else {
-                crate::engine::observe_port::planet_side::FixtureLayout::CollisionParity
+                uqm_engine::observe_port::planet_side::FixtureLayout::CollisionParity
             };
             let request = self.planet_side_fixtures.lock().queue(layout);
             match request {
@@ -356,8 +356,8 @@ mod tests {
         let observer = AutomationObserver::new(
             script,
             temp.path().into(),
-            crate::engine::World::new().activity_control(),
-            crate::engine::input::InputControls::default(),
+            uqm_engine::World::new().activity_control(),
+            uqm_engine::input::InputControls::default(),
             Default::default(),
         );
         let mut capture = || panic!("admission must not acquire a campaign owner");
@@ -377,7 +377,7 @@ mod tests {
                 &mut capture,
                 false,
                 setup,
-                &mut crate::engine::observe::Unobserved
+                &mut uqm_engine::observe::Unobserved
             )),
             1
         );
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn setup_effects_complete_inside_the_admitted_scheduler_transaction() {
-        use crate::engine::observe::{InputSetup, InputView, Observer, PeerSetup};
+        use uqm_engine::observe::{InputSetup, InputView, Observer, PeerSetup};
         struct Setup<'a> {
             coordinator: &'a AutomationObserver,
             effects: Vec<&'static str>,
@@ -414,7 +414,7 @@ mod tests {
                 assert_eq!((player, server, port), (1, true, 0));
                 assert!(self.coordinator.inner.try_lock().is_none());
                 assert!(
-                    crate::engine::Game::new()
+                    uqm_engine::Game::new()
                         .with_context(|cx| observer.input_admitted(&InputView::Active, cx))
                         .stop
                 );
@@ -430,18 +430,15 @@ mod tests {
             fn poll_peer(&mut self, observer: &mut dyn Observer) {
                 assert!(self.coordinator.inner.try_lock().is_none());
                 assert!(
-                    crate::engine::Game::new()
+                    uqm_engine::Game::new()
                         .with_context(|cx| observer.input_admitted(&InputView::Active, cx))
                         .stop
                 );
                 self.effects.push("poll");
                 self.ready = true;
             }
-            fn with_context(
-                &mut self,
-                operation: &mut dyn FnMut(&mut crate::engine::battle::Cx<'_>),
-            ) {
-                crate::engine::Game::new().with_context(|cx| operation(cx));
+            fn with_context(&mut self, operation: &mut dyn FnMut(&mut uqm_engine::battle::Cx<'_>)) {
+                uqm_engine::Game::new().with_context(|cx| operation(cx));
             }
         }
         let source = serde_json::to_vec(&serde_json::json!({
@@ -461,8 +458,8 @@ mod tests {
         let coordinator = AutomationObserver::new(
             script,
             directory.path().into(),
-            crate::engine::World::new().activity_control(),
-            crate::engine::input::InputControls::default(),
+            uqm_engine::World::new().activity_control(),
+            uqm_engine::input::InputControls::default(),
             Default::default(),
         );
         let mut handle = crate::automation::observer::Handle(coordinator.clone());
@@ -530,12 +527,12 @@ mod tests {
         )?;
         let temp = tempfile::tempdir()?;
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 script,
                 temp.path().into(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)

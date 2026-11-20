@@ -2,19 +2,19 @@
 pub(super) mod rules;
 pub mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::engine::input_port::frames::{
-        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_SELECT, KEY_MENU_UP,
-    };
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-    use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
-    use crate::engine::Kernel as KernelOwner;
-    use crate::graphics::{context::ContextLease, drawable::LoadedDrawable};
-    use crate::sound::heart_ffi::fade_music as FadeMusic;
-    use crate::sound::heart_ffi::wait_for_sound_end;
     use crate::starbase::ids::MELEE_STRING_BASE;
     use crate::supermelee::native::{MELEE_MUSIC, MELEE_SCREEN_PMAP_ANIM};
     use crate::supermelee::session::MeleeSession;
+    use uqm_engine::graphics::{context::ContextLease, drawable::LoadedDrawable};
+    use uqm_engine::input_port::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_SELECT, KEY_MENU_UP,
+    };
+    use uqm_engine::sound::heart_ffi::fade_music as FadeMusic;
+    use uqm_engine::sound::heart_ffi::wait_for_sound_end;
+    use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
+    use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
+    use uqm_engine::Kernel as KernelOwner;
 
     pub(crate) mod admission;
     mod boundary;
@@ -43,7 +43,7 @@ pub mod live {
         )
     }
 
-    pub(crate) fn fade(cx: &mut crate::engine::battle::Cx<'_>, kind: u32) {
+    pub(crate) fn fade(cx: &mut uqm_engine::battle::Cx<'_>, kind: u32) {
         let context = screen_context(cx.kernel);
         let deadline = context.fade_screen(kind, 840 / 2).wrapping_add(840 / 60);
         cx.kernel.input_runtime().sleep_until(cx, deadline);
@@ -72,7 +72,7 @@ pub mod live {
         );
     }
 
-    fn load_setup(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
+    fn load_setup(state: &mut MeleeSession, cx: &mut uqm_engine::battle::Cx<'_>) {
         if !state.load_config(&mut cx.kernel.player_control) {
             cx.kernel.player_control[0] = HUMAN_CONTROL | 16;
             let team = state.load.builtins[0].clone();
@@ -83,7 +83,7 @@ pub mod live {
         }
     }
 
-    fn change_option(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>, next: u8) {
+    fn change_option(state: &mut MeleeSession, cx: &mut uqm_engine::battle::Cx<'_>, next: u8) {
         if state.melee_option == 1 || state.melee_option == 7 {
             status_player(cx, state, -1);
         }
@@ -99,9 +99,9 @@ pub mod live {
 
     fn run_menu_frame(
         state: &mut MeleeSession,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        input: &uqm_engine::input::InputSession,
     ) -> bool {
         use crate::supermelee::session::MenuPhase;
         (match state.phase {
@@ -113,14 +113,14 @@ pub mod live {
             MenuPhase::Building => panic!("build picker escaped its nested input loop"),
         }) != 0
     }
-    pub(super) fn key(input: &crate::engine::input::InputSession, key: u32) -> bool {
+    pub(super) fn key(input: &uqm_engine::input::InputSession, key: u32) -> bool {
         input.pulsed().menu[key as usize] != 0
     }
     fn select_option(
-        input: &crate::engine::input::InputSession,
+        input: &uqm_engine::input::InputSession,
         state: &mut MeleeSession,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
     ) {
         match state.melee_option {
             4 => start_button(state, cx),
@@ -166,9 +166,9 @@ pub mod live {
     /// State and its graphics remain live through this synchronous menu frame.
     pub fn do_melee(
         state: &mut MeleeSession,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        input: &uqm_engine::input::InputSession,
     ) -> u32 {
         let time = get_time_counter();
         input.set_paused(false);
@@ -257,13 +257,13 @@ pub mod live {
                 .space_context
                 .unwrap_or_else(|| panic!("melee drawing context")),
         ));
-        state.menu_target = Some(crate::graphics::drawable::ContextFrame::retain(
+        state.menu_target = Some(uqm_engine::graphics::drawable::ContextFrame::retain(
             kernel
                 .screen
                 .non_null()
                 .unwrap_or_else(|| panic!("melee screen frame")),
         ));
-        state.menu_font = Some(crate::graphics::font::FontLease::retain(
+        state.menu_font = Some(uqm_engine::graphics::font::FontLease::retain(
             kernel
                 .micro_font
                 .unwrap_or_else(|| panic!("melee menu font")),
@@ -272,8 +272,8 @@ pub mod live {
     }
     /// Run on the initialized game thread with exclusive access to native menu resources.
     pub fn melee(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
         config: uqm_engine::io::Dir,
         teams: uqm_engine::io::Dir,
     ) {
@@ -282,7 +282,7 @@ pub mod live {
         cx.world.reset_game_data();
         let mut state = MeleeSession::new(
             cx.world.activity_control(),
-            crate::ships::master_native::choices(&cx.kernel.master_queue),
+            uqm_content::ships::master_native::choices(&cx.kernel.master_queue),
         );
         state.files = Some(crate::supermelee::session::MeleeFiles { config, teams });
         let offscreen = admit_menu_rendering(&mut state, cx.kernel);
@@ -290,7 +290,7 @@ pub mod live {
         let fallback = get_time_counter();
         // Seed admission is part of the recorded input sequence.
         io.observer.input_admitted(
-            &crate::engine::observe::InputView::Seed {
+            &uqm_engine::observe::InputView::Seed {
                 domain: 1,
                 fallback,
             },
@@ -302,7 +302,8 @@ pub mod live {
             team.rename(cx.kernel.game_text(MELEE_STRING_BASE as usize + 4 + index));
         }
         cx.world.set_activity(SUPER_MELEE);
-        cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
+        cx.kernel.game_sounds =
+            uqm_engine::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
         state.fleet_picker =
             Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
         load_menu_graphics(&mut state, offscreen);
@@ -315,8 +316,8 @@ pub mod live {
             let mut frame = admission::SessionFrame::new(
                 &mut state,
                 |state: &mut MeleeSession,
-                 cx: &mut crate::engine::battle::Cx<'_>,
-                 io: &mut crate::engine::observe::Io<'_>| {
+                 cx: &mut uqm_engine::battle::Cx<'_>,
+                 io: &mut uqm_engine::observe::Io<'_>| {
                     {
                         run_menu_frame(state, cx, io, input)
                     }

@@ -7,7 +7,7 @@ use super::decode::{decode_save_from, decode_summary_from};
 use super::encode::encode_save;
 use super::error::SlotError;
 use super::types::{SaveFile, Summary, MAX_SAVED_GAMES};
-use crate::engine::host::{FileStream, Files};
+use uqm_engine::host::{FileStream, Files};
 
 /// What one slot holds, as the slot list needs it.
 #[derive(Debug, Clone, PartialEq, Eq)]

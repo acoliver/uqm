@@ -22,11 +22,11 @@ use crate::automation::campaign_state::StatePredicate;
 use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
-use crate::planet_side::cargo::ElementCategory;
 use crate::time::counter_abi::ONE_SECOND;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
+use uqm_modes::planet_side::cargo::ElementCategory;
 
 // ===========================================================================
 fn serialize_scene<S: serde::Serializer>(
@@ -498,7 +498,7 @@ impl PlanetSideOutcomeName {
     /// Terminal code recorded by `planet_side::telemetry::finish`.
     #[must_use]
     pub const fn terminal_code(self) -> u32 {
-        use crate::engine::observe_port::planet_side::terminal;
+        use uqm_engine::observe_port::planet_side::terminal;
         match self {
             Self::Returned => terminal::RETURNED,
             Self::Destroyed => terminal::DESTROYED,
@@ -2802,7 +2802,7 @@ mod tests {
         let key = MenuKey::from_name("special").unwrap();
         assert_eq!(
             key.index(),
-            crate::engine::input::frames::KEY_MENU_SPECIAL as u8
+            uqm_engine::input::frames::KEY_MENU_SPECIAL as u8
         );
         assert_eq!(crate::automation::input::menu_key_to_index(key), 11);
         assert_eq!(MenuKey::from_index(11), Some(key));
@@ -2810,7 +2810,7 @@ mod tests {
 
     #[test]
     fn ship_spin_fixture_selects_arilou_melee_index_and_video_resource() {
-        use crate::supermelee::types::MeleeShip;
+        use uqm_modes::supermelee::types::MeleeShip;
         let bytes = include_bytes!("../../tests/fixtures/native/ship-spin-3do-v1.json");
         let script = validate_script(parse_script(bytes, p()).unwrap(), p()).unwrap();
         let picker = script.steps().iter().position(|action| {
@@ -2940,7 +2940,7 @@ mod tests {
 
     #[test]
     fn planet_side_outcome_terminal_codes_are_distinct_and_never_running() {
-        use crate::engine::observe_port::planet_side::terminal;
+        use uqm_engine::observe_port::planet_side::terminal;
         let codes = [
             PlanetSideOutcomeName::Returned.terminal_code(),
             PlanetSideOutcomeName::Destroyed.terminal_code(),

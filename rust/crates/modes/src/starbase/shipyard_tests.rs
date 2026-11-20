@@ -17,7 +17,7 @@ use super::test_support::{
     cancel, down, idle, left, press, right, select, up, Event, RecordingPlatform, HUMAN_SHIP,
     SHOFIXTI_SHIP,
 };
-use crate::engine::world::activity::{activity_flags, ActivityValue};
+use uqm_engine::world::activity::{activity_flags, ActivityValue};
 
 fn special() -> MenuPulses {
     press(|p| p.special = true)

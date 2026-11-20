@@ -5,8 +5,8 @@ mod chmmr;
 
 use crate::comm::races::script::*;
 use crate::comm::Comm;
-use crate::engine::StoryKey;
 use std::ffi::CString;
+use uqm_engine::StoryKey;
 
 use crate::ui::sis::draw_landers;
 
@@ -17,14 +17,14 @@ extern "C" {}
 // Callbacks and live globals belong to the game thread, as in the C scripts.
 pub(crate) struct Host<'a, 'b, H> {
     pub comm: std::cell::RefCell<&'a mut Comm>,
-    pub cx: std::cell::RefCell<&'a mut crate::engine::battle::Cx<'b>>,
+    pub cx: std::cell::RefCell<&'a mut uqm_engine::battle::Cx<'b>>,
     pub callback: fn(H) -> crate::comm::response::ResponseFunc,
 }
 
 impl<'a, 'b, H> Host<'a, 'b, H> {
     pub fn new(
         comm: &'a mut Comm,
-        cx: &'a mut crate::engine::battle::Cx<'b>,
+        cx: &'a mut uqm_engine::battle::Cx<'b>,
         callback: fn(H) -> crate::comm::response::ResponseFunc,
     ) -> Self {
         Self {
@@ -174,7 +174,7 @@ mod tests {
             Err("response phrase has no text")
         );
         comm.set_conversation_phrases(Some(
-            crate::strings::owned_table::LoadedTextTable::new(vec![
+            uqm_engine::strings::owned_table::LoadedTextTable::new(vec![
                 c"éclair ".to_owned(),
                 c"船".to_owned(),
             ])
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn story_and_animation_effects_use_only_the_supplied_owners() {
         crate::comm::with_test_context(|cx| {
-            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            cx.world.story = Some(uqm_engine::world::story::StoryState::new());
             cx.world.data.flagship.num_landers = 2;
             cx.world.data.flagship.fuel_on_board = 321;
             cx.world.data.flagship.element_amounts[6] = 17;
@@ -219,8 +219,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn supplied_names_are_copied_into_responses_and_admitted_to_real_speech() {
-        use crate::sound::trackplayer;
-        fn selected(comm: &mut Comm, _: &mut crate::engine::battle::Cx<'_>, reference: u16) {
+        use uqm_engine::sound::trackplayer;
+        fn selected(comm: &mut Comm, _: &mut uqm_engine::battle::Cx<'_>, reference: u16) {
             comm.disable_phrase(reference as i32);
         }
         trackplayer::stop_track().unwrap();

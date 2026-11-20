@@ -5,11 +5,11 @@
 //! `pickupEnergy`. Story flags: none; the conversation sequence is a host
 //! effect.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite};
 use crate::planets::generate::special::{self, Body, PRIMORDIAL_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 
 /// `GenerateIlwrath_generatePlanets`.
 pub fn generate_planets(
@@ -75,7 +75,7 @@ pub fn pickup_energy(
     if body == Body::Planet(0) {
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
     }
     false
@@ -83,7 +83,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

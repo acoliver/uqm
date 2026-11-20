@@ -49,17 +49,17 @@ pub(super) fn fight_if_selected(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u16 {
 
 pub(super) fn update_fleet(
     world: &mut World,
-    id: LinkId<crate::engine::world::queues::Encounter>,
+    id: LinkId<uqm_engine::world::queues::Encounter>,
     status: u16,
 ) {
     let queue = world.npc_built_ships_ref();
-    let mut ships = [crate::engine::world::queues::BriefShipInfo::default(); MAX_HYPER_SHIPS];
+    let mut ships = [uqm_engine::world::queues::BriefShipInfo::default(); MAX_HYPER_SHIPS];
     let mut count = 0;
     let mut next = queue.head();
     while let Some(current) = next {
         let fragment = queue.get(current);
         next = queue.succ(current);
-        ships[count] = crate::engine::world::queues::BriefShipInfo {
+        ships[count] = uqm_engine::world::queues::BriefShipInfo {
             race_id: fragment.race_id,
             crew_level: fragment.crew_level,
             max_crew: fragment.max_crew,
@@ -86,7 +86,7 @@ mod tests {
     fn descriptor_install_runs_both_passes_and_keeps_the_selected_session() {
         crate::comm::with_test_context(|cx| {
             use crate::comm::{live, locdata::resource_key};
-            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            cx.world.story = Some(uqm_engine::world::story::StoryState::new());
             let mut comm = Comm::new();
             assert!(comm.race_scratch.spathi.is_none());
             cx.world
@@ -154,31 +154,29 @@ mod tests {
 
     #[test]
     fn unhailed_teardown_skips_post_on_abort_or_load_but_always_uninitializes() {
-        fn post(_comm: &mut crate::comm::Comm, cx: &mut crate::engine::battle::Cx<'_>) {
+        fn post(_comm: &mut crate::comm::Comm, cx: &mut uqm_engine::battle::Cx<'_>) {
             assert_eq!(
-                cx.world
-                    .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                cx.world.story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE),
                 0
             );
             cx.world
-                .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 1);
+                .set_story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE, 1);
         }
-        fn uninit(_comm: &mut crate::comm::Comm, cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+        fn uninit(_comm: &mut crate::comm::Comm, cx: &mut uqm_engine::battle::Cx<'_>) -> u16 {
             assert_eq!(
-                cx.world
-                    .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                cx.world.story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE),
                 u32::from(cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0)
             );
             cx.world
-                .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 2);
+                .set_story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE, 2);
             0
         }
         crate::comm::with_test_context(|cx| {
-            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            cx.world.story = Some(uqm_engine::world::story::StoryState::new());
             for flags in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
                 cx.world.set_activity(flags);
                 cx.world
-                    .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 0);
+                    .set_story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE, 0);
                 let mut comm = crate::comm::Comm::new();
                 let data = crate::comm::locdata::SessionData {
                     post_encounter_func: Some(post),
@@ -190,16 +188,14 @@ mod tests {
                 comm.install_descriptor(data);
                 finish_callbacks(&mut comm, cx);
                 assert_eq!(
-                    cx.world
-                        .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                    cx.world.story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE),
                     2
                 );
                 comm.data.post_encounter_func = None;
                 comm.data.uninit_encounter_func = None;
                 finish_callbacks(&mut comm, cx);
                 assert_eq!(
-                    cx.world
-                        .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                    cx.world.story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE),
                     2
                 );
             }

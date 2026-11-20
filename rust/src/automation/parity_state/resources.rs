@@ -1,9 +1,9 @@
 //! Resource identities borrowed from the live graph, never pointer values.
 use super::{value, Fields};
 use crate::automation::parity::Journal;
-use crate::graphics::drawable::FrameId;
-use crate::strings::owned_table::EntryRef;
 use std::ffi::CStr;
+use uqm_engine::graphics::drawable::FrameId;
+use uqm_engine::strings::owned_table::EntryRef;
 
 #[derive(Clone, Copy)]
 pub(super) struct Frame(pub(super) FrameId);

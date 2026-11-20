@@ -1,9 +1,9 @@
 use super::shipyard_layout::{
     HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_WIDTH,
 };
-use crate::engine::battle::link_queue::{LinkId, LinkQueue};
-use crate::engine::world::queues::Fragment;
-use crate::graphics::{drawable::FrameId, geometry::Point, intersection::Stamp};
+use uqm_engine::battle::link_queue::{LinkId, LinkQueue};
+use uqm_engine::graphics::{drawable::FrameId, geometry::Point, intersection::Stamp};
+use uqm_engine::world::queues::Fragment;
 
 #[derive(Clone, Copy)]
 pub(super) struct ShipWindow {
@@ -25,7 +25,7 @@ pub(super) fn prepare_windows(
 ) {
     let stamp = Stamp {
         origin: Point { x: 0, y: 0 },
-        frame: crate::graphics::drawable::FrameId::NULL,
+        frame: uqm_engine::graphics::drawable::FrameId::NULL,
     };
     let mut windows = [ShipWindow {
         ship: None,
@@ -47,8 +47,8 @@ pub(super) fn prepare_windows(
             x: SHIP_WIN_WIDTH >> 1,
             y: 0,
         };
-        info.left_door.frame = crate::graphics::menu::relative_frame(module_frame, 1);
-        info.right_door.frame = crate::graphics::menu::relative_frame(info.left_door.frame, 1);
+        info.left_door.frame = uqm_engine::graphics::menu::relative_frame(module_frame, 1);
+        info.right_door.frame = uqm_engine::graphics::menu::relative_frame(info.left_door.frame, 1);
         info.image.origin = Point {
             x: (SHIP_WIN_WIDTH >> 1) + 1,
             y: SHIP_WIN_WIDTH >> 1,
@@ -86,8 +86,9 @@ pub(super) fn prepare_windows(
             info.ship = Some(id);
             info.left_door.origin = Point { x: -1, y: 0 };
             info.right_door.origin = Point { x: 1, y: 0 };
-            info.left_door.frame = crate::graphics::menu::relative_frame(module_frame, 1);
-            info.right_door.frame = crate::graphics::menu::relative_frame(info.left_door.frame, 1);
+            info.left_door.frame = uqm_engine::graphics::menu::relative_frame(module_frame, 1);
+            info.right_door.frame =
+                uqm_engine::graphics::menu::relative_frame(info.left_door.frame, 1);
             info.image.origin = Point {
                 x: (SHIP_WIN_WIDTH >> 1) + 1,
                 y: SHIP_WIN_WIDTH >> 1,
@@ -102,7 +103,7 @@ pub(super) fn prepare_windows(
 }
 
 pub(super) fn draw_background(module_frame: FrameId) {
-    use crate::graphics::menu as draw;
+    use uqm_engine::graphics::menu as draw;
     let frame = draw::frame(module_frame, 0);
     if super::shipyard_layout::USE_3DO_HANGAR {
         draw::stamp(frame, Point { x: 0, y: 0 });
@@ -121,7 +122,7 @@ pub(super) fn draw_background(module_frame: FrameId) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::World;
+    use uqm_engine::World;
 
     #[test]
     fn empty_hangar_has_no_ship_windows() {
@@ -129,7 +130,7 @@ mod tests {
         let mut queue = world.built_ships();
         let (windows, count) = prepare_windows(
             &mut queue,
-            crate::graphics::drawable::FrameId::NULL,
+            uqm_engine::graphics::drawable::FrameId::NULL,
             u16::MAX,
             None,
         );
@@ -149,7 +150,7 @@ mod tests {
         queue.put(second);
         let (windows, count) = prepare_windows(
             &mut queue,
-            crate::graphics::drawable::FrameId::NULL,
+            uqm_engine::graphics::drawable::FrameId::NULL,
             u16::MAX,
             None,
         );
@@ -175,7 +176,7 @@ mod tests {
         });
         let (windows, count) = prepare_windows(
             &mut queue,
-            crate::graphics::drawable::FrameId::NULL,
+            uqm_engine::graphics::drawable::FrameId::NULL,
             3,
             None,
         );
@@ -195,7 +196,7 @@ mod tests {
         let removed = queue.alloc().unwrap();
         let (windows, count) = prepare_windows(
             &mut queue,
-            crate::graphics::drawable::FrameId::NULL,
+            uqm_engine::graphics::drawable::FrameId::NULL,
             7,
             Some(removed),
         );

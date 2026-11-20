@@ -4,25 +4,25 @@ use super::assets::Assets;
 use super::sis_graphics::ConversationDisplay;
 use super::sis_graphics::ConversationResources;
 use super::Comm;
-use crate::engine::{battle::Cx, observe::Io, StoryKey};
-use crate::graphics::{
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Rect,
 };
+use uqm_engine::{battle::Cx, observe::Io, StoryKey};
 
 pub(super) fn load_conversation_text(comm: &mut Comm) {
     let phrases = comm
         .data
         .definition
         .conversation_phrases_res
-        .and_then(crate::strings::conversation::ConversationTable::load);
+        .and_then(uqm_engine::strings::conversation::ConversationTable::load);
     comm.set_conversation_phrases(phrases);
 }
 
 /// Load and admit retained resources using the supplied campaign graphics.
 pub fn prepare(
     comm: &mut Comm,
-    world: &crate::engine::World,
-    kernel: &crate::engine::Kernel,
+    world: &uqm_engine::World,
+    kernel: &uqm_engine::Kernel,
     dimensions: (i32, i32),
 ) -> Result<(), String> {
     assert!(
@@ -105,10 +105,10 @@ pub fn finish(comm: &mut Comm, cx: &mut Cx<'_>) {
     space.finish_color_transforms();
     super::ffi::rust_clear_subtitles(comm);
     crate::ui::settings::stop_music();
-    crate::sound::heart_ffi::stop_sound();
-    crate::sound::heart_ffi::stop_track();
-    let fade_end = crate::sound::heart_ffi::fade_music(128, 0);
-    crate::threading::pacing::GameThreadPacer::new(space.clone())
+    uqm_engine::sound::heart_ffi::stop_sound();
+    uqm_engine::sound::heart_ffi::stop_track();
+    let fade_end = uqm_engine::sound::heart_ffi::fade_music(128, 0);
+    uqm_engine::threading::pacing::GameThreadPacer::new(space.clone())
         .sleep_until(fade_end.wrapping_add(840 / 60));
     super::dispatch::finish_callbacks(comm, cx);
     let mut assets = comm
@@ -125,7 +125,7 @@ pub fn finish(comm: &mut Comm, cx: &mut Cx<'_>) {
 }
 
 pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    use crate::engine::observe::CheckpointView;
+    use uqm_engine::observe::CheckpointView;
     let input = cx.kernel.input_runtime().input().clone();
     let activity = cx.world.activity();
     prepare(comm, cx.world, cx.kernel, cx.screen_dimensions())
@@ -157,17 +157,17 @@ pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
 }
 
 fn admit_completion(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    let admitted = crate::engine::input::admit_observer(
+    let admitted = uqm_engine::input::admit_observer(
         cx,
         io,
-        crate::engine::observe::InputView::CommunicationCompleted,
+        uqm_engine::observe::InputView::CommunicationCompleted,
     );
     comm.apply_input(admitted);
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{
+    use uqm_engine::{
         observe::{CheckpointView, Injected, InputView, Io, Observer, Presented},
         Kernel, World,
     };
@@ -182,7 +182,7 @@ mod tests {
         fn input_admitted(
             &mut self,
             view: &InputView,
-            cx: &mut crate::engine::battle::Cx<'_>,
+            cx: &mut uqm_engine::battle::Cx<'_>,
         ) -> Injected {
             assert!(matches!(view, InputView::CommunicationCompleted));
             assert_eq!(cx.world.activity(), 17);

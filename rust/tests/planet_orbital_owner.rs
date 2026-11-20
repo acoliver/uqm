@@ -1,33 +1,31 @@
 #![forbid(unsafe_code)]
 use std::cell::RefCell;
-use uqm_rust::engine::{
-    battle::Battle, battle::Cx, observe::Io, observe::Unobserved, Game, StoryKey,
-};
-use uqm_rust::planets::c_api::{built_ship_count, built_ship_queue_has_ships};
-use uqm_rust::planets::generate::special::Story;
-use uqm_rust::planets::solarsys::site::Site;
+use uqm_engine::{battle::Battle, battle::Cx, observe::Io, observe::Unobserved, Game, StoryKey};
+use uqm_modes::planets::c_api::{built_ship_count, built_ship_queue_has_ships};
+use uqm_modes::planets::generate::special::Story;
+use uqm_modes::planets::solarsys::site::Site;
 
 #[test]
 fn orbital_story_and_queue_hosts_share_the_caller_owner() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let mut battle = Battle::new();
     let owner = RefCell::new(Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     ));
     let mut observer = Unobserved;
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
-    let mut story_pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+    let mut pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
+    let mut story_pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
     let host = Site::new(
         &owner,
         &io,
-        uqm_rust::engine::StarId(0),
+        uqm_engine::StarId(0),
         0,
         false,
         &mut pickup,
@@ -36,7 +34,7 @@ fn orbital_story_and_queue_hosts_share_the_caller_owner() {
     let mut story = Site::new(
         &owner,
         &io,
-        uqm_rust::engine::StarId(0),
+        uqm_engine::StarId(0),
         0,
         false,
         &mut story_pickup,

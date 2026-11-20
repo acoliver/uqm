@@ -5,26 +5,26 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::POINT_DEFENSE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::CREW_OBJECT;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::ONE_SHIFT;
+use uqm_engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::POINT_DEFENSE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::CREW_OBJECT;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_UR_QUAN_ID;
 
 #[test]
 fn descriptor_and_fusion_match_c() {
@@ -195,7 +195,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             let laser = battle::tail().unwrap();
             assert_eq!(
                 battle::get(laser).parent,
-                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                uqm_engine::battle::Parent::Ship(ship.ship_id)
             );
             assert_eq!(battle::get(laser).mass, 1);
             // On the return leg the ship becomes collidable with its own fighters.
@@ -216,7 +216,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             ship.postprocess();
             let e = battle::tail().unwrap();
             battle::get_mut(e).next = battle::get(e).current.clone();
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(e).velocity,
                 8 << ONE_SHIFT,
                 0,

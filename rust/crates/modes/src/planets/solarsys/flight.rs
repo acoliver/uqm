@@ -3,10 +3,10 @@
 use super::drawing::{draw_outer_system, draw_system_transition, find_radius, point_within_rect};
 use super::*;
 use crate::comm::locdata::CPoint;
-use crate::engine::world::generation::Body;
-use crate::engine::{Kernel, World};
 use crate::planets::solar_system::{SolarSystem, SystemLocation};
 use uqm_engine::input_port::frames as input;
+use uqm_engine::world::generation::Body;
+use uqm_engine::{Kernel, World};
 
 const MIN_MOON_RADIUS: i32 = 35;
 const MAX_MOONS: i32 = 4;
@@ -23,11 +23,11 @@ const QUADRANT: u16 = 16;
 const SIN_SHIFT: u32 = 14;
 
 use crate::battle::process_native::engine::redraw_queue;
-use crate::engine::battle::Cx;
-use crate::graphics::{
+use crate::navigation::events::game_clock_tick;
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, intersection::FrameIntersection,
 };
-use crate::navigation::events::game_clock_tick;
 
 #[inline]
 fn normalize_facing(facing: u16) -> u16 {
@@ -41,7 +41,7 @@ fn facing_to_angle(facing: u16) -> u16 {
 
 #[inline]
 fn sine(angle: u16, magnitude: i32) -> i16 {
-    ((i64::from(crate::math::SINE_TABLE[usize::from(angle & 63)]) * i64::from(magnitude))
+    ((i64::from(uqm_engine::math::SINE_TABLE[usize::from(angle & 63)]) * i64::from(magnitude))
         >> SIN_SHIFT) as i16
 }
 
@@ -61,15 +61,15 @@ fn speed_squared(dx: i16, dy: i16) -> u32 {
 }
 
 #[inline]
-fn c_point(point: CPoint) -> crate::graphics::geometry::Point {
-    crate::graphics::geometry::Point {
+fn c_point(point: CPoint) -> uqm_engine::graphics::geometry::Point {
+    uqm_engine::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     }
 }
 
 #[inline]
-fn game_point(point: crate::graphics::geometry::Point) -> CPoint {
+fn game_point(point: uqm_engine::graphics::geometry::Point) -> CPoint {
     CPoint {
         x: point.x,
         y: point.y,
@@ -83,7 +83,7 @@ pub(super) fn get_collision_frame(
     wait_planet: u16,
 ) -> ContextFrame {
     if solar.wait_intersect != u16::MAX && solar.wait_intersect != wait_planet {
-        let allocations = crate::graphics::drawable::retain_frames(&[kernel.stars_in_space]);
+        let allocations = uqm_engine::graphics::drawable::retain_frames(&[kernel.stars_in_space]);
         let allocation = allocations
             .first()
             .unwrap_or_else(|| panic!("retained collision placeholder"));
@@ -114,7 +114,7 @@ pub(super) fn check_intersect(
     );
     let mut planet = FrameIntersection::new(
         ContextFrame::default(),
-        crate::graphics::geometry::Point::default(),
+        uqm_engine::graphics::geometry::Point::default(),
     );
     let mut candidates = Vec::with_capacity(17);
     match solar.location() {
@@ -149,7 +149,7 @@ pub(super) fn check_intersect(
     for (body, wait, center) in candidates {
         let origin = if center {
             let (width, height) = solar.coordinates().dimensions();
-            crate::graphics::geometry::Point {
+            uqm_engine::graphics::geometry::Point {
                 x: (width >> 1) as _,
                 y: (height >> 1) as _,
             }
@@ -236,9 +236,9 @@ pub(super) fn flagship_inertial_thrust(
 
 pub(super) fn process_ship_controls(
     kernel: &Kernel,
-    game: &mut crate::engine::battle::schema::GameRecord,
+    game: &mut uqm_engine::battle::schema::GameRecord,
     solar: &mut SolarSystem,
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
 ) {
     let player = input.player_controls()[0] as usize;
     let keys = input.current();
@@ -290,7 +290,7 @@ pub(super) fn process_ship_controls(
 
 pub(super) fn enter_inner_system(
     cx: &mut Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     solar: &mut SolarSystem,
     planet: u8,
 ) {
@@ -424,13 +424,13 @@ pub(super) fn restore_system_view(context: &ContextLease, solar: &SolarSystem) {
         .unwrap_or_else(|| panic!("solar system image is not initialized"));
     context.draw_stamp(
         &image.lease().context_frame(0),
-        crate::graphics::geometry::Point::default(),
+        uqm_engine::graphics::geometry::Point::default(),
     );
 }
 
 pub(super) fn ip_frame(
     cx: &mut Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     solar: &mut SolarSystem,
 ) {
     let runtime = cx.kernel.input_runtime();
@@ -469,7 +469,7 @@ pub(super) fn ip_frame(
 }
 
 pub(super) fn check_zoom_level(
-    game: &mut crate::engine::battle::schema::GameRecord,
+    game: &mut uqm_engine::battle::schema::GameRecord,
     solar: &mut SolarSystem,
 ) -> u32 {
     let inner_system = matches!(solar.location(), SystemLocation::Inner(_));
@@ -534,54 +534,54 @@ mod tests {
 
     #[test]
     fn zoom_rectangle_is_half_open_and_promotes_coordinates_before_adding() {
-        let rect = crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point { x: -10, y: -20 },
-            extent: crate::graphics::geometry::Extent {
+        let rect = uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point { x: -10, y: -20 },
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: 20,
                 height: 40,
             },
         };
         assert!(point_within_rect(
             rect,
-            crate::graphics::geometry::Point { x: -10, y: -20 }
+            uqm_engine::graphics::geometry::Point { x: -10, y: -20 }
         ));
         assert!(point_within_rect(
             rect,
-            crate::graphics::geometry::Point { x: 9, y: 19 }
+            uqm_engine::graphics::geometry::Point { x: 9, y: 19 }
         ));
         assert!(!point_within_rect(
             rect,
-            crate::graphics::geometry::Point { x: 10, y: 0 }
+            uqm_engine::graphics::geometry::Point { x: 10, y: 0 }
         ));
         assert!(!point_within_rect(
             rect,
-            crate::graphics::geometry::Point { x: 0, y: 20 }
+            uqm_engine::graphics::geometry::Point { x: 0, y: 20 }
         ));
         assert!(!point_within_rect(
             rect,
-            crate::graphics::geometry::Point { x: -11, y: 0 }
+            uqm_engine::graphics::geometry::Point { x: -11, y: 0 }
         ));
-        let high_rect = crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point { x: 32760, y: 0 },
-            extent: crate::graphics::geometry::Extent {
+        let high_rect = uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point { x: 32760, y: 0 },
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: 20,
                 height: 1,
             },
         };
         assert!(point_within_rect(
             high_rect,
-            crate::graphics::geometry::Point { x: 32767, y: 0 }
+            uqm_engine::graphics::geometry::Point { x: 32767, y: 0 }
         ));
-        let empty = crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point { x: 0, y: 0 },
-            extent: crate::graphics::geometry::Extent {
+        let empty = uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: 0,
                 height: 0,
             },
         };
         assert!(!point_within_rect(
             empty,
-            crate::graphics::geometry::Point { x: 0, y: 0 }
+            uqm_engine::graphics::geometry::Point { x: 0, y: 0 }
         ));
     }
 

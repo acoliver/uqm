@@ -9,40 +9,40 @@ mod battle_context;
 mod special_hooks;
 use battle::Battle as Battlefield;
 use battle::{PoolElement, Ship};
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::IMMEDIATE_WEAPON;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::POINT_DEFENSE;
-use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::POST_PROCESS;
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
-use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::battle::LINE_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_CHMMR_ID;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::arctan;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::square_root;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
-use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::IMMEDIATE_WEAPON;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::POINT_DEFENSE;
+use uqm_engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::POST_PROCESS;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+use uqm_engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::arctan;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::square_root;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_CHMMR_ID;
 
 // Layouts from libs/graphics/drawable.h. These are real frame arrays and parent
 // descriptors, so SetAbsFrameIndex and GetFrameRect exercise the engine ABI.
@@ -294,7 +294,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         assert_eq!(battle::prim(spot).kind, STAMP_PRIMITIVE);
                         assert_eq!(
                             battle::get(spot).parent,
-                            uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                            uqm_engine::battle::Parent::Ship(ship.ship_id)
                         );
                         let animate = battle::get(spot).preprocess_func.unwrap();
                         battle::get_mut(spot).turn = 1;
@@ -378,7 +378,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                     assert_eq!(battle::prim(flash).kind, STAMP_PRIMITIVE);
                     assert_eq!(
                         battle::get(flash).parent,
-                        uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                        uqm_engine::battle::Parent::Ship(ship.ship_id)
                     );
                     battle_context::unlink(flash_handle);
                     battle_context::dispose(flash_handle);
@@ -403,7 +403,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
             let transit = delay;
             assert!(matches!(
                 ship.descriptor_mut().race_callbacks.pre,
-                uqm_rust::engine::battle::Selection::Disabled
+                uqm_engine::battle::Selection::Disabled
             ));
             assert_eq!(battle::get(transit).life, 16);
             assert_eq!(battle::prim(transit).kind, EMPTY_PRIMITIVE);
@@ -472,12 +472,12 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
             hooks::invoke_element(death, delay);
             assert_rng_after(88, 0);
             ship.ship_mut().ship_element = Some(ship.id);
-            ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
+            ship.descriptor_mut().race_callbacks.pre = uqm_engine::battle::Selection::Default;
             let tail = battle::tail();
             ship.preprocess();
             assert!(matches!(
                 ship.descriptor_mut().race_callbacks.pre,
-                uqm_rust::engine::battle::Selection::Disabled
+                uqm_engine::battle::Selection::Disabled
             ));
             assert_eq!(battle::tail(), tail);
         }
@@ -838,7 +838,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                     assert_eq!(battle::get(shadow).player_nr, 1);
                     assert_eq!(
                         battle::get(shadow).parent,
-                        uqm_rust::engine::battle::Parent::Ship(enemy.ship_id)
+                        uqm_engine::battle::Parent::Ship(enemy.ship_id)
                     );
                     assert_eq!(
                         battle::get(shadow).state_flags,

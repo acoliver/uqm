@@ -12,17 +12,14 @@ pub enum OrbitSubmenu {
 /// Synchronous mode and persistence effects supplied by the exploration owner.
 pub struct OrbitServices {
     pub submenu: fn(
-        &mut crate::engine::battle::Cx<'_>,
-        &mut crate::engine::observe::Io<'_>,
+        &mut uqm_engine::battle::Cx<'_>,
+        &mut uqm_engine::observe::Io<'_>,
         &mut crate::planets::solar_system::SolarSystem,
         OrbitSubmenu,
     ) -> bool,
-    pub save_location: fn(
-        &mut crate::engine::World,
-        &crate::engine::Kernel,
-        &crate::planets::solar_system::SolarSystem,
-    ),
-    pub store_groups: fn(&mut crate::engine::World),
+    pub save_location:
+        fn(&mut uqm_engine::World, &uqm_engine::Kernel, &crate::planets::solar_system::SolarSystem),
+    pub store_groups: fn(&mut uqm_engine::World),
 }
 
 fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
@@ -36,14 +33,6 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 pub(crate) mod live {
     use super::{presentation::OrbitPresentation, submenu_selection};
     use crate::comm::locdata::CRect;
-    use crate::engine::graphics::context::ContextLease;
-    use crate::engine::world::activity::activity_flags::{
-        CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER,
-    };
-    use crate::engine::{
-        battle::Cx,
-        observe::{CheckpointView, Io},
-    };
     use crate::planets::plangen::live::generate_planet_surface;
     use crate::planets::pstarmap::star_map;
     use crate::planets::render::draw_star_background;
@@ -55,6 +44,12 @@ pub(crate) mod live {
     use crate::planets::sphere::live::zoom_in_planet_sphere;
     use crate::starbase::gfx::{ContextId, Gfx, Point, Rect, Rgba, Stamp};
     use crate::starbase::graphics::Graphics;
+    use uqm_engine::graphics::context::ContextLease;
+    use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+    use uqm_engine::{
+        battle::Cx,
+        observe::{CheckpointView, Io},
+    };
 
     fn black() -> crate::comm::locdata::CColor {
         crate::comm::locdata::CColor {
@@ -90,9 +85,9 @@ pub(crate) mod live {
                     },
                     frame: (state.next.image.frame.raw()).bits(),
                 };
-                crate::graphics::menu::stamp(
-                    crate::graphics::drawable::FrameId::from_bits(stamp.frame),
-                    crate::graphics::geometry::Point {
+                uqm_engine::graphics::menu::stamp(
+                    uqm_engine::graphics::drawable::FrameId::from_bits(stamp.frame),
+                    uqm_engine::graphics::geometry::Point {
                         x: stamp.origin.x,
                         y: stamp.origin.y,
                     },
@@ -185,11 +180,11 @@ pub(crate) mod live {
             if mode == WAIT {
                 scan.context().select();
                 let frame =
-                    crate::engine::graphics::drawable::LoadedDrawable::load(c"graphics.orbitenter")
+                    uqm_engine::graphics::drawable::LoadedDrawable::load(c"graphics.orbitenter")
                         .unwrap_or_else(|| panic!("missing orbit entry graphic"));
                 scan.context().draw_stamp(
                     &frame.lease().context_frame(0),
-                    crate::graphics::geometry::Point { x: 0, y: 0 },
+                    uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
                 );
             } else if mode == FULL {
                 draw_default_planet_sphere(planet, &scan.sphere.borrow());
@@ -198,12 +193,12 @@ pub(crate) mod live {
                 scan.context().select();
                 scan.draw_surface(0, black());
             }
-            let region = crate::graphics::geometry::Rect {
-                corner: crate::graphics::geometry::Point {
+            let region = uqm_engine::graphics::geometry::Rect {
+                corner: uqm_engine::graphics::geometry::Point {
                     x: r.corner.x,
                     y: r.corner.y,
                 },
-                extent: crate::graphics::geometry::Extent {
+                extent: uqm_engine::graphics::geometry::Extent {
                     width: r.width,
                     height: r.height,
                 },
@@ -226,17 +221,17 @@ pub(crate) mod live {
     /// The supplied system must retain disjoint records and RNG; callbacks may
     /// access them only between its bounded record borrows.
     pub fn load_planet(
-        game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
-        system: &mut crate::engine::world::generation::SolarSys<'_>,
-        body: crate::engine::world::generation::Body,
+        game: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
+        system: &mut uqm_engine::world::generation::SolarSys<'_>,
+        body: uqm_engine::world::generation::Body,
         in_orbit: bool,
-        surface: Option<crate::engine::graphics::drawable::LoadedDrawable>,
+        surface: Option<uqm_engine::graphics::drawable::LoadedDrawable>,
         resources: (
             crate::planets::report::typography::ReportResources,
-            Option<crate::graphics::drawable::ContextFrame>,
+            Option<uqm_engine::graphics::drawable::ContextFrame>,
         ),
         populate: impl FnOnce(
-            &mut crate::engine::world::generation::SolarSys<'_>,
+            &mut uqm_engine::world::generation::SolarSys<'_>,
             crate::planets::report::typography::ReportContext,
         ),
     ) -> Option<OrbitPresentation> {
@@ -274,7 +269,9 @@ pub(crate) mod live {
                         rng: data.rng,
                         planet: data.world,
                         info: &data.info.planet_info,
-                        location: crate::graphics::geometry::Point::new(location.x, location.y),
+                        location: uqm_engine::graphics::geometry::Point::new(
+                            location.x, location.y,
+                        ),
                         width: width as usize,
                     },
                     surface,
@@ -297,20 +294,20 @@ pub(crate) mod live {
     }
 
     fn play_planet_music(game: &Cx<'_>, planet_type: u8) {
-        if !crate::sound::music::plr_playing_current() {
+        if !uqm_engine::sound::music::plr_playing_current() {
             let music = game
                 .kernel
                 .lander_resources
                 .as_ref()
                 .and_then(|resources| resources.music(planet_type));
-            crate::sound::music::remember_music(
+            uqm_engine::sound::music::remember_music(
                 music.map_or(
-                    crate::sound::music::MusicRequest::Absent,
-                    crate::sound::music::MusicRequest::Track,
+                    uqm_engine::sound::music::MusicRequest::Absent,
+                    uqm_engine::sound::music::MusicRequest::Track,
                 ),
                 true,
                 1,
-                game.world.data.game.glob_flags & crate::engine::world::MUSIC_DISABLED == 0,
+                game.world.data.game.glob_flags & uqm_engine::world::MUSIC_DISABLED == 0,
             );
         }
     }
@@ -323,7 +320,7 @@ pub(crate) mod live {
             crate::ui::settings::stop_music();
             solar.sys.frames.fill_with(|| None);
             solar.sys.report.clear();
-            crate::graphics::menu::select(space_context);
+            uqm_engine::graphics::menu::select(space_context);
         };
     }
 
@@ -338,7 +335,7 @@ pub(crate) mod live {
     ) -> u32 {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        use crate::input::frames::KEY_MENU_SELECT;
+        use uqm_engine::input_port::frames::KEY_MENU_SELECT;
         let mut selected = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
         if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
             || cx.world.data.flagship.crew_enlisted == u16::MAX
@@ -408,9 +405,9 @@ pub(crate) mod live {
     fn orbit_frame_hook(
         planet: ContextLease,
         sphere: std::rc::Rc<std::cell::RefCell<crate::planets::sphere::SphereState>>,
-        animation: std::rc::Rc<crate::engine::kernel::planet_animation::PlanetAnimation>,
-    ) -> crate::engine::input::InputFrameHook {
-        crate::engine::input::InputFrameHook::new(move |_, _| {
+        animation: std::rc::Rc<uqm_engine::kernel::planet_animation::PlanetAnimation>,
+    ) -> uqm_engine::input::InputFrameHook {
+        uqm_engine::input::InputFrameHook::new(move |_, _| {
             rotate_planet_sphere(&planet, &sphere, &animation, true);
         })
     }
@@ -460,12 +457,10 @@ mod tests {
     use super::*;
     #[test]
     fn real_orbit_entry_points_use_supplied_owners_without_unsafe() {
-        let _: fn(
-            &mut crate::engine::battle::Cx<'_>,
-            &mut crate::planets::solar_system::SolarSystem,
-        ) = super::live::free_planet;
+        let _: fn(&mut uqm_engine::battle::Cx<'_>, &mut crate::planets::solar_system::SolarSystem) =
+            super::live::free_planet;
         type Visible = fn(u16, u16) -> bool;
-        let _: fn(&mut crate::engine::battle::Cx<'_>, bool, Visible) =
+        let _: fn(&mut uqm_engine::battle::Cx<'_>, bool, Visible) =
             super::live::draw_scanned_objects;
         let _ = super::live::planet_orbit_menu;
     }
@@ -473,25 +468,25 @@ mod tests {
     #[test]
     #[cfg(feature = "debug-process")]
     fn noninteractive_load_does_not_enter_graphics_or_generate_nodes() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let _quiet = game.kernel.diagnostics.suppress_interaction();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
-        let mut system = crate::engine::world::generation::SolarSys::new(
+        let mut system = uqm_engine::world::generation::SolarSys::new(
             &crate::planets::tables::PLANET_ARRAY,
             0,
             0,
-            crate::math::RandomContext::with_seed(12345),
+            uqm_engine::math::RandomContext::with_seed(12345),
         );
         assert!(super::live::load_planet(
             &cx,
             &mut system,
-            crate::engine::world::generation::Body::Planet(0),
+            uqm_engine::world::generation::Body::Planet(0),
             false,
             None,
             (Default::default(), None),

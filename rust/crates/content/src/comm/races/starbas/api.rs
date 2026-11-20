@@ -1,4 +1,4 @@
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 pub(crate) const STARBASE_BULLETS: [StoryKey; 4] = [
     StoryKey::STARBASE_BULLETS0,
     StoryKey::STARBASE_BULLETS1,

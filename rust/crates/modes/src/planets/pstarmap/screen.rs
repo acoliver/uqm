@@ -1,10 +1,10 @@
 use super::*;
 use crate::comm::locdata::{CPoint, CRect};
-use crate::graphics::{
+use crate::planets::render::oval::{self, OvalGfx};
+use uqm_engine::graphics::{
     batch::DrawCommand, batch::NativeBatch, batch::NativeShape, geometry::Extent, geometry::Point,
     geometry::Rect,
 };
-use crate::planets::render::oval::{self, OvalGfx};
 
 pub(super) struct Display {
     pub context: ContextLease,
@@ -73,7 +73,7 @@ impl Display {
             .measure(
                 text,
                 self.sphere_text(rect),
-                crate::graphics::geometry::TextAlign::Center,
+                uqm_engine::graphics::geometry::TextAlign::Center,
                 length,
             )
             .rect;
@@ -101,7 +101,7 @@ impl Display {
         let measurement = self.font.measure(
             text,
             baseline,
-            crate::graphics::geometry::TextAlign::Center,
+            uqm_engine::graphics::geometry::TextAlign::Center,
             length,
         );
         let rect = measurement.rect;
@@ -125,7 +125,7 @@ impl Display {
             &self.font,
             text,
             baseline,
-            crate::graphics::geometry::TextAlign::Center,
+            uqm_engine::graphics::geometry::TextAlign::Center,
             color,
             measurement.characters,
         );

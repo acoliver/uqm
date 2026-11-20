@@ -1,10 +1,10 @@
 //! Real UIO -> PNG -> font and animation loading with the remaining engine linked.
 #![forbid(unsafe_code)]
 use std::io::Write;
-use uqm_rust::engine::test_support::native_probe;
-use uqm_rust::graphics::drawable::{FrameKind, LoadedDrawable};
-use uqm_rust::graphics::font::LoadedFont;
-use uqm_rust::graphics::geometry::{Extent, HotSpot};
+use uqm_engine::graphics::drawable::{FrameKind, LoadedDrawable};
+use uqm_engine::graphics::font::LoadedFont;
+use uqm_engine::graphics::geometry::{Extent, HotSpot};
+use uqm_engine::test_support::native_probe;
 
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();

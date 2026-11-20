@@ -1,6 +1,6 @@
 //! Orz dialogue, ported from orzc.c.
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,7 +59,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.set(StoryKey::ORZ_PERSONAL_INFO, 0_u8);
             self.api.set(StoryKey::ORZ_MANNER, 3_u8);
             self.api
-                .set_allied((crate::engine::species::ship::ORZ_SHIP) as u16, true);
+                .set_allied((uqm_engine::species::ship::ORZ_SHIP) as u16, true);
         } else if r == DEMAND_TO_LAND {
             self.api.npc(i32::from(NO_DEMAND));
             self.api.segue(1_u32);
@@ -74,9 +74,9 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.segue(1_u32);
             if r == ABOUT_ANDRO_3 {
                 self.api
-                    .set_allied((crate::engine::species::ship::ORZ_SHIP) as u16, false);
+                    .set_allied((uqm_engine::species::ship::ORZ_SHIP) as u16, false);
                 self.api
-                    .remove_escorts((crate::engine::species::ship::ORZ_SHIP) as u16);
+                    .remove_escorts((uqm_engine::species::ship::ORZ_SHIP) as u16);
             }
             self.api.fade_palette(1, 420);
         } else {
@@ -147,7 +147,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             if (i32::from(manner) == 3)
                 && (i32::from(
                     self.api
-                        .alliance((crate::engine::species::ship::ORZ_SHIP) as u16),
+                        .alliance((uqm_engine::species::ship::ORZ_SHIP) as u16),
                 ) == 1)
             {
                 self.api
@@ -518,7 +518,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         } else if (i32::from(manner) == 3)
             && (i32::from(
                 self.api
-                    .alliance((crate::engine::species::ship::ORZ_SHIP) as u16),
+                    .alliance((uqm_engine::species::ship::ORZ_SHIP) as u16),
             ) == 1)
         {
             if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {

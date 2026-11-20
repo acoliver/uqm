@@ -2,24 +2,24 @@
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
 use crate::battle::galaxy::move_galaxy;
-use crate::engine::battle::ai_constants::IGNORE_SIMILAR;
-use crate::engine::battle::flags::{
+use crate::starbase::ids::STATUS_WIDTH;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, COLLISION, DEFY_PHYSICS, DISAPPEARING, FINITE_LIFE, IGNORE_VELOCITY,
     IN_LAST_BATTLE, MAX_TIME_VALUE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP, POST_PROCESS, PRE_PROCESS,
     SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, STAMPFILL_PRIMITIVE,
 };
-use crate::engine::battle::LINE_PRIMITIVE;
-use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD};
-use crate::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
-use crate::engine::world::IN_HYPERSPACE;
-use crate::graphics::geometry::Line;
-use crate::graphics::geometry::Point;
-use crate::math::battle_types::{
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_engine::graphics::geometry::Line;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::{
     MAX_REDUCTION, MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ONE_SHIFT, REDUCTION_SHIFT, ZOOM_SHIFT,
 };
-use crate::math::wrap_delta;
-use crate::starbase::ids::STATUS_WIDTH;
+use uqm_engine::math::wrap_delta;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD};
+use uqm_engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
+use uqm_engine::world::IN_HYPERSPACE;
 const GSCALE_IDENTITY: u32 = 256;
 const VIEW_STATE_VIEW_CHANGE: u32 = 2;
 const VIEW_STATE_VIEW_SCROLL: u32 = 1;
@@ -224,7 +224,7 @@ mod helpers {
 pub mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
-    use crate::engine::battle::{Cx, ElementId};
+    use uqm_engine::battle::{Cx, ElementId};
 
     fn damage(cx: &mut Cx<'_>, id: ElementId) {
         let amount = cx.element(id).hits as i16;
@@ -233,7 +233,7 @@ pub mod engine {
 
     fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.elements()[e].life == 0 {
-            if cx.elements()[e].parent != crate::engine::battle::Parent::None {
+            if cx.elements()[e].parent != uqm_engine::battle::Parent::None {
                 cx.untarget(e);
             }
             cx.element_mut(e).flags |= DISAPPEARING as u16;
@@ -344,8 +344,8 @@ pub mod engine {
     fn align_contact_frame(
         cx: &mut Cx<'_>,
         id: ElementId,
-        current: &crate::engine::battle::frames::FrameSelection,
-        next: &crate::engine::battle::frames::FrameSelection,
+        current: &uqm_engine::battle::frames::FrameSelection,
+        next: &uqm_engine::battle::frames::FrameSelection,
     ) {
         if cx.frame_number(current.view()) != cx.frame_number(next.view()) {
             cx.set_frame(id, true, cx.equivalent_frame(next.view(), current.view()));
@@ -419,7 +419,7 @@ pub mod engine {
                                 if test_state_flags & APPEARING as u16 != 0 {
                                     damage(cx, test);
                                     if cx.elements()[test].parent
-                                        != crate::engine::battle::Parent::None
+                                        != uqm_engine::battle::Parent::None
                                     {
                                         cx.untarget(test);
                                     }
@@ -430,8 +430,7 @@ pub mod engine {
                                 }
                                 if state_flags & APPEARING as u16 != 0 {
                                     damage(cx, el);
-                                    if cx.elements()[el].parent
-                                        != crate::engine::battle::Parent::None
+                                    if cx.elements()[el].parent != uqm_engine::battle::Parent::None
                                     {
                                         cx.untarget(el);
                                     }
@@ -786,7 +785,7 @@ pub mod engine {
     }
 
     pub fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
-        use crate::graphics::context::ContextLease;
+        use uqm_engine::graphics::context::ContextLease;
         let status = ContextLease::require(cx.kernel.status_context);
         status.select();
         let scale = cx.kernel.configuration.preferences().melee_scale;
@@ -826,7 +825,7 @@ pub use engine::{init_display_list, process_collisions};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::display::DisplayPool;
+    use uqm_engine::battle::display::DisplayPool;
 
     #[test]
     fn frame_skip_preserves_byte_counter_cycles_and_suppression() {

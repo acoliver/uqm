@@ -1,47 +1,47 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
 #![forbid(unsafe_code)]
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::input_port::frames::KEY_WEAPON;
-use uqm_rust::engine::species::species_id::SPECIES_ID_NO_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
-use uqm_rust::engine::world::activity::activity_flags::CHECK_ABORT;
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
-use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-use uqm_rust::engine::world::activity::activity_kinds::SUPER_MELEE;
-use uqm_rust::engine::world::story::native_bits::END_SHOFIXTI_RECRUITED;
-use uqm_rust::engine::world::story::native_bits::SHOFIXTI_RECRUITED;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
-use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
-use uqm_rust::supermelee::native::battle_picker::live::FleetSelection;
+use uqm_content::ships::races::{intruder_preprocess, marine_collision};
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::input_port::frames::KEY_WEAPON;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_NO_ID;
+use uqm_engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
+use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_engine::world::story::native_bits::END_SHOFIXTI_RECRUITED;
+use uqm_engine::world::story::native_bits::SHOFIXTI_RECRUITED;
+use uqm_modes::supermelee::native::battle_picker::live::FleetSelection;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-use uqm_rust::battle::tactrans_native::reset_winner;
-use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
-use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+use uqm_engine::test_support::native_probe::{graphics_status, set_graphics_status};
+use uqm_modes::battle::tactrans_native::reset_winner;
 
 struct Battle {
     inner: battle::Battle,
-    globals: uqm_rust::engine::WorldData,
+    globals: uqm_engine::WorldData,
     graphics_flags: u8,
     counters: [u8; 2],
 }
@@ -52,7 +52,7 @@ impl Battle {
         let counters = crate::battle_context::with(|cx| cx.b.counters);
         let inner = battle::Battle::new(capacity);
         crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as _));
-        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+        crate::battle_context::with(|cx| uqm_engine::state::ffi::rust_init_game_state(cx.world));
         set_recruited(true);
         set_graphics_status(graphics_flags & !4);
         crate::battle_context::with(|cx| cx.b.counters = [10, 10]);
@@ -76,7 +76,7 @@ impl Drop for Battle {
 
 fn set_recruited(value: bool) {
     crate::battle_context::with(|cx| {
-        uqm_rust::state::ffi::rust_set_game_state_bits(
+        uqm_engine::state::ffi::rust_set_game_state_bits(
             cx.world,
             SHOFIXTI_RECRUITED as i32,
             END_SHOFIXTI_RECRUITED as i32,
@@ -142,7 +142,7 @@ impl<'a> Ship<'a> {
         self.inner
             .intelligence_subject(&mut subject, &mut concerns[..4], 0);
     }
-    fn arm(&mut self) -> Option<uqm_rust::engine::battle::ElementHook> {
+    fn arm(&mut self) -> Option<uqm_engine::battle::ElementHook> {
         self.inner
             .descriptor_mut()
             .ship_data
@@ -159,7 +159,7 @@ impl<'a> Ship<'a> {
         }
     }
 }
-fn core(callback: uqm_rust::engine::battle::ElementFn, element: ElementId) {
+fn core(callback: uqm_engine::battle::ElementFn, element: ElementId) {
     let id = element;
     crate::battle_context::with(|cx| callback(cx, id));
 }
@@ -328,7 +328,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             assert!(d.callbacks()[1] == 0 && d.callbacks()[0] == 0);
             original.characteristics.max_thrust = 999;
             original.ship_info.crew_level = 0;
-            original.race_callbacks.post = uqm_rust::engine::battle::Selection::Disabled;
+            original.race_callbacks.post = uqm_engine::battle::Selection::Disabled;
             let fresh = battle::descriptor(SPECIES_ID_SHOFIXTI_ID);
             assert_eq!(fresh.ship_info.crew_level, 6);
             assert_ne!(fresh.callbacks()[2], 0);
@@ -385,7 +385,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                     && battle::get(dart).death_func.is_none()
                     && battle::get(dart).collision_func.is_some()
             );
-            assert!(battle::get(dart).parent == uqm_rust::engine::battle::Parent::None);
+            assert!(battle::get(dart).parent == uqm_engine::battle::Parent::None);
             let angle = facing_to_angle(facing as i32) as u16;
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
@@ -438,7 +438,7 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
             ship.inner.descriptor_mut().ship_data.special = if special_available {
                 ship.special_frames.array()
             } else {
-                uqm_rust::engine::battle::frames::FrameArray::EMPTY
+                uqm_engine::battle::frames::FrameArray::EMPTY
             };
             ship.inner.ship_mut().ship_input_state =
                 WEAPON as u8 | if start { SPECIAL as u8 } else { 0 };
@@ -586,22 +586,18 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         }
         let marine_owner = object(&_battle, (NONSOLID | DISAPPEARING) as u16, 1, 1, 0, 0);
         let marine = marine_owner.id;
-        battle::get_mut(marine).preprocess_func = Some(
-            uqm_rust::engine::battle::ElementHook::Native(intruder_preprocess),
-        );
-        battle::get_mut(marine).collision_func = Some(
-            uqm_rust::engine::battle::CollisionHook::Native(marine_collision),
-        );
+        battle::get_mut(marine).preprocess_func =
+            Some(uqm_engine::battle::ElementHook::Native(intruder_preprocess));
+        battle::get_mut(marine).collision_func =
+            Some(uqm_engine::battle::CollisionHook::Native(marine_collision));
         let preprocess_only_owner = object(&_battle, NONSOLID as u16, 1, 1, 0, 0);
         let preprocess_only = preprocess_only_owner.id;
-        battle::get_mut(preprocess_only).preprocess_func = Some(
-            uqm_rust::engine::battle::ElementHook::Native(intruder_preprocess),
-        );
+        battle::get_mut(preprocess_only).preprocess_func =
+            Some(uqm_engine::battle::ElementHook::Native(intruder_preprocess));
         let collision_only_owner = object(&_battle, NONSOLID as u16, 1, 1, 0, 0);
         let collision_only = collision_only_owner.id;
-        battle::get_mut(collision_only).collision_func = Some(
-            uqm_rust::engine::battle::CollisionHook::Native(marine_collision),
-        );
+        battle::get_mut(collision_only).collision_func =
+            Some(uqm_engine::battle::CollisionHook::Native(marine_collision));
         let fragile_owner = object(&_battle, 0, 1, 19, 0, 0);
         let fragile = fragile_owner.id;
         let kill = ship.arm().unwrap();
@@ -662,12 +658,15 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             battle::get_mut(other.id).mass = other_mass;
             if prior == 1 {
                 crate::battle_context::with(|cx| {
-                    uqm_rust::battle::tactrans_native::set_winner_ship(cx, Some(ship.inner.ship_id))
+                    uqm_modes::battle::tactrans_native::set_winner_ship(
+                        cx,
+                        Some(ship.inner.ship_id),
+                    )
                 });
             }
             if prior == 2 {
                 crate::battle_context::with(|cx| {
-                    uqm_rust::battle::tactrans_native::set_winner_ship(
+                    uqm_modes::battle::tactrans_native::set_winner_ship(
                         cx,
                         Some(other.inner.ship_id),
                     )
@@ -805,7 +804,7 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
     })
 }
 
-fn sample_weapon(input: &uqm_rust::engine::input::InputSession, side: usize, pressed: bool) {
+fn sample_weapon(input: &uqm_engine::input::InputSession, side: usize, pressed: bool) {
     input.set_player_key(side, KEY_WEAPON as usize, pressed);
     let sampled = input.immediate();
     input.advance(
@@ -818,24 +817,22 @@ fn sample_weapon(input: &uqm_rust::engine::input::InputSession, side: usize, pre
 #[test]
 fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
     battle_context::run(|input| {
-        use uqm_rust::{
-            battle::tactrans_native as transitions,
-            pickship::ffi::get_encounter_star_ship_with_picker,
-        };
+        use uqm_modes::battle::tactrans_native as transitions;
+        use uqm_modes::pickship::ffi::get_encounter_star_ship_with_picker;
         let fixture_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
         std::fs::create_dir_all(&fixture_root).unwrap();
         let directory = tempfile::tempdir_in(fixture_root).unwrap();
         std::fs::create_dir(directory.path().join("font")).unwrap();
         std::fs::write(directory.path().join("font/not-a-glyph.txt"), []).unwrap();
         {
-            use uqm_rust::graphics::drawable::LoadedDrawable;
+            use uqm_engine::graphics::drawable::LoadedDrawable;
             let content =
                 uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-            let font = uqm_rust::graphics::font::LoadedFont::load_file(c"font")
+            let font = uqm_engine::graphics::font::LoadedFont::load_file(c"font")
                 .unwrap_or_else(|| panic!("font fixture"));
             drop(content);
-            let context = uqm_rust::graphics::context::LoadedContext::create(c"melee-death-test");
-            let screens = uqm_rust::engine::test_support::native_probe::DrawQueue::init();
+            let context = uqm_engine::graphics::context::LoadedContext::create(c"melee-death-test");
+            let screens = uqm_engine::test_support::native_probe::DrawQueue::init();
             let picker = LoadedDrawable::create(2, 149, 55, 2).unwrap();
             let status = LoadedDrawable::create(2, 1, 1, 4).unwrap();
             let saved_graphics = crate::battle_context::with(|cx| {
@@ -868,7 +865,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     other.inner.ship_mut().species_id = SPECIES_ID_SHOFIXTI_ID;
                     let mut reserves = [PoolShip::new(0), PoolShip::new(1)];
                     let inputs = std::array::from_fn::<_, 2, _>(|side| {
-                        uqm_rust::engine::battle::input::InputContext::new(
+                        uqm_engine::battle::input::InputContext::new(
                             side as u16,
                             if computer && side == 1 { 2 } else { 1 },
                         )
@@ -926,10 +923,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         } else {
                             other.inner.descriptor_mut()
                         };
-                        desc.ship_data.ship = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
-                        desc.ship_data.weapon = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
-                        desc.ship_data.special =
-                            uqm_rust::engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.ship = uqm_engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.weapon = uqm_engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.special = uqm_engine::battle::frames::FrameArray::EMPTY;
                         drop(desc);
                         crate::battle_context::with(|cx| {
                             let outgoing = outgoing;
@@ -959,12 +955,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                                 sample_weapon(runtime.input(), side, true);
                                             }
                                             let result = {
-                                                let mut observer =
-                                                    uqm_rust::engine::observe::Unobserved;
-                                                let mut io = uqm_rust::engine::observe::Io {
+                                                let mut observer = uqm_engine::observe::Unobserved;
+                                                let mut io = uqm_engine::observe::Io {
                                                     observer: &mut observer,
                                                 };
-                                                uqm_rust::supermelee::native::battle_picker::live::select_ship(cx, &mut io, runtime.input(), &inputs[side], &mut state)
+                                                uqm_modes::supermelee::native::battle_picker::live::select_ship(cx, &mut io, runtime.input(), &inputs[side], &mut state)
                                             };
                                             sample_weapon(runtime.input(), side, false);
                                             assert_eq!(result, 1);

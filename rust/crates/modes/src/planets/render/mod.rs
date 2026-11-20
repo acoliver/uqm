@@ -8,10 +8,13 @@ pub mod topo_scale;
 pub mod topography;
 
 pub(crate) fn draw_star_background(
-    context: &crate::engine::graphics::context::ContextLease,
-    background: &crate::engine::graphics::drawable::ContextFrame,
+    context: &uqm_engine::graphics::context::ContextLease,
+    background: &uqm_engine::graphics::drawable::ContextFrame,
 ) {
-    context.draw_stamp(background, crate::graphics::geometry::Point { x: 0, y: 0 });
+    context.draw_stamp(
+        background,
+        uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
+    );
 }
 
 #[cfg(test)]
@@ -19,10 +22,10 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn background_draw_keeps_the_supplied_frame_alive_after_its_owner_drops() {
-        use crate::engine::graphics::{
+        use uqm_engine::graphics::{
             context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
         };
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();

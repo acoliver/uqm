@@ -1,11 +1,11 @@
 //! Mineral display resources retained independently of the input callback owner.
 
-use crate::engine::{Kernel, World};
-use crate::graphics::{
+use std::ffi::CString;
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
     geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
-use std::ffi::CString;
+use uqm_engine::{Kernel, World};
 
 const BACK: Color = rgb15(0, 0, 20);
 const WORTH: Color = rgb15(10, 10, 31);
@@ -177,7 +177,7 @@ impl CargoDisplay {
             &self.tiny,
             &self.capacity_label,
             Point { x: 5, y: 113 },
-            crate::graphics::geometry::TextAlign::Left,
+            uqm_engine::graphics::geometry::TextAlign::Left,
             WORTH,
         );
         self.show_capacity(world);

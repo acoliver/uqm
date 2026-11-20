@@ -6,18 +6,18 @@
 //! use the owned fixed-capacity game-clock pool.
 
 use super::*;
-use crate::engine::battle::link_queue::LinkId;
-use crate::engine::battle::schema::GameRecord;
-use crate::engine::clock::NUM_EVENTS;
-use crate::engine::clock::{GameClock, ScheduledEvent};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{
     ClockState, EventEntry, Extent, GlobalState, Point, Velocity, GAME_STATE_BYTES,
 };
-use crate::state::ffi::{snapshot_game_state, GameStateOwnerError};
 use serial_test::serial;
 use std::mem::offset_of;
 use std::ops::{Deref, DerefMut};
+use uqm_engine::battle::link_queue::LinkId;
+use uqm_engine::battle::schema::GameRecord;
+use uqm_engine::clock::NUM_EVENTS;
+use uqm_engine::clock::{GameClock, ScheduledEvent};
+use uqm_engine::state::ffi::{snapshot_game_state, GameStateOwnerError};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
@@ -453,7 +453,7 @@ fn restore_writes_every_glst_field_at_its_c_offset() {
 #[test]
 fn restore_leaves_what_glst_does_not_carry() {
     let mut game = LiveGame::new();
-    let frame = crate::graphics::drawable::FrameId::from_bits(0x1_0001);
+    let frame = uqm_engine::graphics::drawable::FrameId::from_bits(0x1_0001);
     game.ship_stamp.frame = frame;
     game.battle_group_ref = 0xdead_beef;
 
@@ -735,7 +735,7 @@ fn game_state_bits(seed: u8) -> [u8; GAME_STATE_BYTES] {
 #[test]
 #[serial]
 fn restore_uses_the_already_borrowed_story_owner() {
-    let mut owner = crate::engine::Game::new();
+    let mut owner = uqm_engine::Game::new();
     {
         let mut game = LiveGame::new();
         {
@@ -756,7 +756,7 @@ fn restore_uses_the_already_borrowed_story_owner() {
 #[test]
 #[serial]
 fn restore_then_capture_returns_the_sections_that_were_restored() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = LiveGame::new();
         game.current_activity = 0x0100;
@@ -799,7 +799,7 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
 #[test]
 #[serial]
 fn capture_reads_game_state_from_the_singleton() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = LiveGame::new();
         let singleton = game_state_bits(40);
@@ -832,7 +832,7 @@ fn capture_reads_game_state_from_the_singleton() {
 #[test]
 #[serial]
 fn a_rejected_restore_changes_nothing() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = LiveGame::new();
         let original_bits = game_state_bits(1);
@@ -910,7 +910,7 @@ fn a_rejected_restore_changes_nothing() {
 #[test]
 #[serial]
 fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         assert_eq!(&C_WRITTEN_SAVE[FIXTURE_GLST.start - 8..][..4], b"GlSt");
         assert_eq!(&C_WRITTEN_SAVE[FIXTURE_GMST.start - 8..][..4], b"GmSt");

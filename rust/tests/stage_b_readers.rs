@@ -5,15 +5,15 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Ship};
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::flags::{
     APPEARING, FINITE_LIFE, LOW_ON_ENERGY, NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, PRE_PROCESS,
 };
-use uqm_rust::engine::battle::views::Laser;
-use uqm_rust::engine::battle::LINE_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::views::Laser;
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_VUX_ID;
 
 #[test]
 fn laser_construction_preserves_fields_and_pool_exhaustion() {
@@ -85,7 +85,7 @@ fn gravity_reads_next_positions_and_preserves_queue_order() {
                 cx.element_mut(ship.id).flags |= PRE_PROCESS as u16;
                 assert!(cx.gravity(ship.id));
                 assert_eq!(cx.elements().head(), head);
-                uqm_rust::battle::sounds::engine::unlink(cx, planet);
+                uqm_modes::battle::sounds::engine::unlink(cx, planet);
                 cx.dispose(planet);
             });
         }
@@ -136,7 +136,7 @@ fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
                 );
                 assert_eq!((state.next.location.x, state.next.location.y), (4000, 4016));
                 assert_eq!(cx.primitive_style(trail).kind, POINT_PRIMITIVE);
-                uqm_rust::battle::sounds::engine::unlink(cx, trail);
+                uqm_modes::battle::sounds::engine::unlink(cx, trail);
                 cx.dispose(trail);
             });
         }

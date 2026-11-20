@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn the_faked_starbase_cleanup_load_resolves_to_the_interplanetary_start() {
-        use crate::starbase::visit::{cleanup_after_starbase, CleanupOutcome};
+        use uqm_modes::starbase::visit::{cleanup_after_starbase, CleanupOutcome};
         let CleanupOutcome::Apply {
             current_activity,
             next_activity,

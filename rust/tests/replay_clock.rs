@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
-use uqm_rust::{engine::host as source, time::counter_abi::get_time_counter};
+use uqm_engine::host as source;
+use uqm_rust::time::counter_abi::get_time_counter;
 
 /// Run the earliest alarm that is due on the replay clock.
 fn process_one() -> bool {
@@ -8,7 +9,7 @@ fn process_one() -> bool {
 
 #[test]
 fn replay_alarms_follow_game_time_while_host_time_passes() {
-    uqm_rust::platform::install(true);
+    uqm_platform::install(true);
     let (tx, rx) = std::sync::mpsc::channel();
     for deadline in [30, 10, 20] {
         source::dispatch().add_alarm_absolute_ms(
@@ -43,7 +44,7 @@ fn replay_alarms_follow_game_time_while_host_time_passes() {
     // DoInput yields here even when its callback (communication responses)
     // has no frame-pacing sleep of its own.
     for _ in 0..10_001 {
-        uqm_rust::threading::pacing::yield_input_loop(|| panic!("native sleep during replay"));
+        uqm_engine::threading::pacing::yield_input_loop(|| panic!("native sleep during replay"));
         assert!(get_time_counter() > before);
     }
     assert_eq!(get_time_counter(), before + 10_001);

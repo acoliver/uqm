@@ -1,12 +1,14 @@
-use crate::graphics::{
+use uqm_engine::graphics::{
     geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 const GAMESTR_COUNT: usize = 579;
 use super::*;
-use crate::engine::Game;
-use crate::graphics::{context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable};
+use uqm_engine::graphics::{
+    context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable,
+};
 use uqm_engine::test_support::campaign_display::CampaignDisplay;
 use uqm_engine::test_support::conversation_display;
+use uqm_engine::Game;
 
 fn rgba(color: Color) -> (u8, u8, u8, u8) {
     (color.r, color.g, color.b, color.a)
@@ -76,7 +78,7 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
         .configuration
         .update_preferences(|preferences| preferences.menu = 2);
     game.kernel
-        .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+        .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             vec![b"A\0".to_vec(); GAMESTR_COUNT],
         ));
     let effect = gradient(&mut game);
@@ -93,10 +95,10 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
     ] {
         assert_eq!(rgba(screen.pixel(point)), rgba(color));
     }
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     {
         let cx =
-            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+            uqm_engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
                 panic!("menu draw sampled RNG")
             });
         crate::ui::menu::draw_campaign_menu(&cx, crate::ui::menu_state::PM_CREW, 0);
@@ -133,9 +135,9 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
     };
     {
         use crate::ui::shipyard_selection::{dms_set_mode, ModifyMode};
-        let input = crate::engine::input::InputSession::default();
+        let input = uqm_engine::input::InputSession::default();
         let mut cx =
-            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+            uqm_engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
                 panic!("shipyard selection sampled RNG")
             });
         for (mode, state, sounds, highlighted) in [
@@ -184,7 +186,7 @@ fn conversation_headers_use_the_campaign_display_resources() {
     game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
     game.kernel.star_con_font = game.kernel.tiny_font;
     game.kernel.play_frame = game.kernel.screen;
-    game.world.story = Some(crate::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.data.flagship.planet_name[..2].copy_from_slice(b"A\0");
     let effect = gradient(&mut game);
     let screen = ContextFrame::retain(game.kernel.screen);

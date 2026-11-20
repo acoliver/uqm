@@ -14,7 +14,7 @@ use super::resources::PlanetSideAssets;
 use super::runtime::AdapterError;
 use super::scan_frames::mineral_surface_sprite;
 use super::scan_frames::ScanFrameError;
-use crate::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
+use uqm_engine::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
 
 pub struct CffiSurfaceVisuals {
     misc_data: ContextFrame,
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn life_variations_are_stable_and_limited_to_three() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
@@ -380,7 +380,7 @@ mod tests {
     fn invalid_mineral_category_is_rejected_before_mask_extraction() {
         // The production entry point rejects an invalid category through the shared
         // helper before any frame or mask work, using a typed entity.
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();

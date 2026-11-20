@@ -1,6 +1,6 @@
 //! Typed access to engine owners shared with the melee menu.
 use super::*;
-use crate::engine::battle::net::NetState;
+use uqm_engine::battle::net::NetState;
 #[derive(Clone, Copy)]
 pub(super) struct ConnectionView {
     pub player: usize,
@@ -50,8 +50,8 @@ pub(super) fn netplay_notify_all_set_fleet(state: &MeleeSession, side: usize) {
 }
 pub(super) fn close_player_network_connection(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     player: u16,
 ) {
     let session = state.netplay.clone();
@@ -62,8 +62,8 @@ pub(super) fn close_player_network_connection(
 pub(super) fn open_player_network_connection(
     player: u16,
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> Option<ConnectionView> {
     let session = state.netplay.clone();
     if session.open_player_network_connection(player, &mut |event| {
@@ -76,8 +76,8 @@ pub(super) fn open_player_network_connection(
 }
 pub(crate) fn poll_menu(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     timeout: u32,
 ) {
     let session = state.netplay.clone();
@@ -87,8 +87,8 @@ pub(crate) fn poll_menu(
 }
 pub(super) fn flush_menu(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) {
     let session = state.netplay.clone();
     session.flush_packet_queues(&mut |event| changes::apply_protocol_event(state, cx, io, event));

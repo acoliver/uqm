@@ -190,7 +190,7 @@ impl Journal {
     }
 
     pub fn drain_events(&mut self, registry: &[(usize, &'static str)]) {
-        use crate::collections::observation::{drain, Event};
+        use uqm_engine::collections::observation::{drain, Event};
         for event in drain() {
             match event {
                 Event::Allocate(address) => self.allocate(address),
@@ -245,7 +245,7 @@ impl Journal {
                     self.event(format!("spawn {side} {species}"));
                 }
                 Event::Hook { parent, callback } => {
-                    let name = crate::battle::hook_registry::name_for_species(
+                    let name = uqm_modes::battle::hook_registry::name_for_species(
                         registry,
                         callback,
                         self.owner_species(parent).1,
@@ -305,7 +305,7 @@ impl Journal {
 
     pub fn present(
         &mut self,
-        frame: &crate::graphics::presented_frame::PresentedFrame,
+        frame: &uqm_engine::graphics::presented_frame::PresentedFrame,
     ) -> std::io::Result<()> {
         self.boundary();
         writeln!(
@@ -382,7 +382,7 @@ mod tests {
         journal.input(1, 512, "weapon")?;
         journal.event("spawn 0 7".into());
         journal.checkpoint(512, 0x1234, &fields)?;
-        journal.present(&crate::graphics::presented_frame::PresentedFrame {
+        journal.present(&uqm_engine::graphics::presented_frame::PresentedFrame {
             count: 1,
             generation: 0,
             width: 1,

@@ -3,8 +3,8 @@
 //! A trip owns these values; observers receive copies at synchronous boundaries.
 
 #[cfg(test)]
-use crate::engine::observe_port::planet_side::phase_name;
-use crate::engine::observe_port::planet_side::{terminal, MineralDeposit, PlanetSideObservation};
+use uqm_engine::observe_port::planet_side::phase_name;
+use uqm_engine::observe_port::planet_side::{terminal, MineralDeposit, PlanetSideObservation};
 
 use crate::battle::battle_types::shortest_path_delta;
 
@@ -20,13 +20,13 @@ pub const DEPOSITS_PER_CATEGORY: usize = 64;
 /// Observations owned by one synchronous lander trip.
 #[derive(Debug)]
 pub struct TripTelemetry {
-    snapshot: crate::engine::observe_port::planet_side::PlanetSideSnapshot,
+    snapshot: uqm_engine::observe_port::planet_side::PlanetSideSnapshot,
 }
 
 impl TripTelemetry {
     pub fn pending(generation: u64) -> Self {
         Self {
-            snapshot: crate::engine::observe_port::planet_side::PlanetSideSnapshot {
+            snapshot: uqm_engine::observe_port::planet_side::PlanetSideSnapshot {
                 observation: PlanetSideObservation {
                     generation,
                     ..Default::default()
@@ -42,7 +42,7 @@ impl TripTelemetry {
 
     pub fn new(generation: u64, session: &PlanetSideSession) -> Self {
         Self {
-            snapshot: crate::engine::observe_port::planet_side::PlanetSideSnapshot {
+            snapshot: uqm_engine::observe_port::planet_side::PlanetSideSnapshot {
                 observation: PlanetSideObservation {
                     generation,
                     active: true,
@@ -62,7 +62,7 @@ impl TripTelemetry {
         }
     }
 
-    pub fn snapshot(&self) -> &crate::engine::observe_port::planet_side::PlanetSideSnapshot {
+    pub fn snapshot(&self) -> &uqm_engine::observe_port::planet_side::PlanetSideSnapshot {
         &self.snapshot
     }
 

@@ -4,11 +4,11 @@
 //! Overridden: `generatePlanets`, `generateOrbital`. Story flags:
 //! `RAINBOW_WORLD0` (8 bits), `RAINBOW_WORLD1` (2 bits).
 
-use crate::engine::math::battle_types::{FULL_CIRCLE, QUADRANT};
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::special::{self, Body, Story, RAINBOW_WORLD};
+use uqm_engine::math::battle_types::{FULL_CIRCLE, QUADRANT};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame};
+use uqm_engine::StoryKey;
 
 /// `RAINBOW_DEFINED` (`gendef.h`).
 pub const RAINBOW_DEFINED: u8 = 42;
@@ -27,7 +27,7 @@ pub fn generate_planets(
         planet.num_planets = 0;
         planet.radius =
             (i32::from(crate::planets::generate::consts::EARTH_RADIUS) * 50 / 100) as i16;
-        let mut angle = crate::engine::math::battle_types::arctan(
+        let mut angle = uqm_engine::math::battle_types::arctan(
             i32::from(planet.location.x),
             i32::from(planet.location.y),
         );
@@ -67,7 +67,7 @@ pub fn generate_orbital(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

@@ -1,11 +1,5 @@
 //! `genspa.c`: Spathiwa, its moon, the broadcasters and the Evil Ones.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::calc;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
@@ -13,6 +7,10 @@ use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::orbits::{self, OrbitRequest, MOON_DELTA};
 use crate::planets::generate::special::{self, Body, Orbit, Story, MIN_MOON_RADIUS, WATER_WORLD};
 use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WORLD: Body = Body::Planet(0);
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
@@ -25,7 +23,7 @@ pub trait SpathiSite: HomeContactSite {
     /// Load font, UMGAH_BCS mask and strings; select entry 1 if unshielded.
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         unshielded: bool,
     );
 }
@@ -202,7 +200,7 @@ pub fn pickup_energy(
     assert!(lander.flag(StoryKey::UMGAH_BROADCASTERS) == 0 && which == 0);
     lander.report(
         system,
-        crate::engine::world::generation::ReportDisposition::Once,
+        uqm_engine::world::generation::ReportDisposition::Once,
     );
     lander.lander_takeoff();
     lander.set_flag(StoryKey::UMGAH_BROADCASTERS, 1);
@@ -226,7 +224,7 @@ pub fn pickup_life(body: Body, retrieved: u32, story: &mut (impl Story + ?Sized)
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

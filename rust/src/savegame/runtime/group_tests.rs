@@ -12,16 +12,16 @@ use super::queue_tests::{
     frame_handle, free_slots, handle, records, FixturePool, LiveGame, C_WRITTEN_SAVE, RACES,
 };
 use super::queues::QueueKind;
-use crate::comm::dispatch::{
-    CPoint, IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,
-};
-use crate::engine::battle::link_queue::LinkQueue;
-use crate::engine::world::queues::{
-    Encounter, EncounterRecord as CEncounter, Group, IpGroup as CIpGroup,
-};
 use crate::savegame::decode::decode_save;
 use crate::savegame::encode::encode_save;
 use crate::savegame::types::{BriefShipInfo, EncounterEntry, IpGroup, Point};
+use uqm_engine::battle::link_queue::LinkQueue;
+use uqm_engine::world::queues::{
+    Encounter, EncounterRecord as CEncounter, Group, IpGroup as CIpGroup,
+};
+use uqm_modes::comm::dispatch::{
+    CPoint, IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,
+};
 
 /// The 13 bytes of the "IGpQ" chunk body of the seed save, read with a
 /// separate script: `group_counter` 0, race 23, `sys_loc` 3, `task` 0,
@@ -109,7 +109,7 @@ fn sections(groups: Vec<IpGroup>, encounters: Vec<EncounterEntry>) -> GroupSecti
 fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
     let mut queue = game.ip_groups();
     let id = queue.alloc().unwrap();
-    *queue.get_mut(id) = crate::engine::world::queues::IpGroup {
+    *queue.get_mut(id) = uqm_engine::world::queues::IpGroup {
         group_counter: entry.group_counter,
         race_id: entry.race_id,
         sys_loc: entry.sys_loc,
@@ -119,14 +119,14 @@ fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
         orbit_pos: entry.orbit_pos,
         group_id: entry.group_id,
         loc: cp(entry.loc.x, entry.loc.y),
-        melee_icon: crate::graphics::drawable::FrameId::from_bits(icon << 16),
+        melee_icon: uqm_engine::graphics::drawable::FrameId::from_bits(icon << 16),
     };
     queue.put(id);
 }
 fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
     let mut queue = game.encounters();
     let id = queue.alloc().unwrap();
-    *queue.get_mut(id) = crate::engine::world::queues::EncounterRecord {
+    *queue.get_mut(id) = uqm_engine::world::queues::EncounterRecord {
         h_element: element as _,
         transition_state: entry.transition_state,
         origin: cp(entry.origin.x, entry.origin.y),
@@ -135,7 +135,7 @@ fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
         num_ships: entry.num_ships,
         flags: entry.flags,
         loc_pt: cp(entry.loc_pt.x, entry.loc_pt.y),
-        ship_list: std::array::from_fn(|i| crate::engine::world::queues::BriefShipInfo {
+        ship_list: std::array::from_fn(|i| uqm_engine::world::queues::BriefShipInfo {
             race_id: entry.ship_list[i].race_id,
             crew_level: entry.ship_list[i].crew_level,
             max_crew: entry.ship_list[i].max_crew,

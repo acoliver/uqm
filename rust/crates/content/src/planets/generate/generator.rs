@@ -1,8 +1,8 @@
 //! The complete system-generation contract.
 
 use super::{default, host::SiteHost, special};
-use crate::engine::world::generation::{Body, SolarSys};
-use crate::engine::world::planet::NodeInfo;
+use uqm_engine::world::generation::{Body, SolarSys};
+use uqm_engine::world::planet::NodeInfo;
 
 pub trait SystemGenerator: Sync {
     fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {

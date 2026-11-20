@@ -7,13 +7,13 @@
 //! `pickupEnergy`. Story flags: `HELIX_UNPROTECTED`, `THRADD_MISSION`,
 //! `AQUA_HELIX`, `AQUA_HELIX_ON_SHIP`, `HELIX_VISITS`.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
 use crate::planets::generate::special::{self, Body, Story, PRIMORDIAL_WORLD, WATER_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WORLD: Body = Body::Planet(0);
 
@@ -27,7 +27,7 @@ pub trait ThraddashSite: HomeContactSite {
     /// `RepairSISBorder ()`.
     fn repair_sis_border(&mut self);
     /// `LoadStdLanderFont`, the Aqua Helix mask and report strings.
-    fn load_aqua_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
+    fn load_aqua_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>);
 }
 
 /// `GenerateThraddash_generatePlanets` for the system at `star_index`.
@@ -133,7 +133,7 @@ pub fn pickup_energy(
     if star_index == THRADD_DEFINED && body == WORLD {
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
         return false;
     }
@@ -144,7 +144,7 @@ pub fn pickup_energy(
         );
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::HELIX_VISITS, 0);
@@ -158,7 +158,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

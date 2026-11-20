@@ -8,24 +8,22 @@ mod battle_context;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 use battle::*;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::math::seed_random;
+use uqm_engine::battle::ElementId;
+use uqm_engine::math::seed_random;
 
 use std::ffi::CStr;
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, MOVEMENT_STATE_AVOID,
     MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST, WEAPON,
 };
-use uqm_rust::engine::battle::flags::{
-    SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
-};
-use uqm_rust::engine::battle::motion::inertial_thrust;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SUPOX_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::{arctan, random};
+use uqm_engine::battle::flags::{SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL};
+use uqm_engine::battle::motion::inertial_thrust;
+use uqm_engine::battle::Concern;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::{arctan, random};
+use uqm_engine::species::species_id::SPECIES_ID_SUPOX_ID;
 
 /// The element queue and RNG are process-wide engine state.
 use battle::Battle as Battlefield;
@@ -47,7 +45,7 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
 fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
     {
         let mut v: VelocityDesc = VelocityDesc::new();
-        uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+        uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
 }

@@ -2,7 +2,7 @@
 
 pub(crate) use super::encounter::EncounterApi;
 pub(crate) use crate::comm::races::descriptor::CommDescriptor;
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 

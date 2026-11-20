@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::urquan::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 
 fn run(
     comm: &mut Comm,
@@ -83,13 +83,13 @@ mod api {
     use super::Handler;
 
     use crate::comm::races::urquan::api::*;
-    use crate::engine::StoryKey;
+    use uqm_engine::StoryKey;
 
     impl UrquanApi for crate::comm::host::Host<'_, '_, Handler> {
         fn group_battle(&self, state_key: StoryKey) -> bool {
             let cx = self.cx.borrow();
             let offset =
-                crate::state::ffi::rust_get_game_state_32(cx.world, state_key.start() as i32);
+                uqm_engine::state::ffi::rust_get_game_state_32(cx.world, state_key.start() as i32);
             let group = cx.world.data.game.battle_group_ref;
             group != 0 && group == offset
         }

@@ -10,7 +10,7 @@ impl AutomationObserver {
         }
     }
 
-    pub(super) fn complete_admitted_load(&self, cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn complete_admitted_load(&self, cx: &mut uqm_engine::battle::Cx<'_>) {
         let mut inner = self.inner.lock();
         let Some(request) = inner.save_capture.as_mut() else {
             return;
@@ -44,7 +44,7 @@ impl AutomationObserver {
     }
 
     /// Complete the admitted save after the input observer returns its borrowed owner.
-    pub(crate) fn complete_save_capture(&self, cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(crate) fn complete_save_capture(&self, cx: &mut uqm_engine::battle::Cx<'_>) {
         let mut inner = self.inner.lock();
         let Some(request) = inner.save_capture.as_mut() else {
             return;
@@ -80,8 +80,8 @@ mod tests {
         let observer = AutomationObserver::new(
             script,
             output.path().into(),
-            crate::engine::World::new().activity_control(),
-            crate::engine::input::InputControls::default(),
+            uqm_engine::World::new().activity_control(),
+            uqm_engine::input::InputControls::default(),
             Default::default(),
         );
         let mut inner = observer.inner.lock();

@@ -1,10 +1,10 @@
 use super::*;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
 use crate::planets::generate::default::Npcs;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
 
 pub(super) type Trace = Rc<RefCell<Vec<String>>>;
 

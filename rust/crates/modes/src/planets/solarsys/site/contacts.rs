@@ -1,8 +1,6 @@
 //! Contact and encounter capabilities of the solar-system host.
 
 use super::*;
-use crate::engine::species::{conv, ship};
-use crate::engine::StoryKey;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::c_api::{self, *};
 use crate::planets::generate::default::Npcs;
@@ -14,6 +12,8 @@ use crate::planets::generate::{
     pet::{TalkingPetSite, UrquanEncounterSite},
     sam, slylandro, syreen, thrad, utw, vux, yehat, zoq,
 };
+use uqm_engine::species::{conv, ship};
+use uqm_engine::StoryKey;
 impl HomeContactSite for Site<'_, '_, '_> {
     fn start_sphere_tracking(&mut self) -> bool {
         start_sphere_tracking(self.game.borrow_mut().world, u16::from(self.contact().0))
@@ -121,7 +121,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         begin_urquan_encounter(self.game.borrow_mut().world, loc)
     }
     fn fade_to_black(&mut self) {
-        let context = crate::engine::graphics::context::ContextLease::require(
+        let context = uqm_engine::graphics::context::ContextLease::require(
             self.game.borrow().kernel.screen_context,
         );
         fade_to_black_for_two_seconds(context)
@@ -141,7 +141,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, delta, 0);
     }
     fn random(&mut self) -> u32 {
-        crate::math::random()
+        uqm_engine::math::random()
     }
     fn clear_sis_message(&mut self) {
         let cx = self.game.borrow();
@@ -152,7 +152,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         crate::ui::sis::draw_hyper_coords(
             cx.kernel,
             cx.screen_dimensions().0,
-            crate::graphics::geometry::Point { x: loc.0, y: loc.1 },
+            uqm_engine::graphics::geometry::Point { x: loc.0, y: loc.1 },
         );
     }
     fn finish_encounter(&mut self) {}

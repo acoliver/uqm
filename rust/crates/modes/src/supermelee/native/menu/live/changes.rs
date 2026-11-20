@@ -3,17 +3,13 @@ use super::*;
 use crate::starbase::ids::NETMELEE_STRING_BASE;
 use crate::supermelee::types::MeleeShip as SetupShip;
 
-pub(super) fn view_name(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    state: &mut MeleeSession,
-    side: u16,
-) {
+pub(super) fn view_name(cx: &mut uqm_engine::battle::Cx<'_>, state: &mut MeleeSession, side: u16) {
     if state.melee_started == 0 {
         name(cx, state, side, 4, None);
     }
 }
 fn change_ship(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
     index: u16,
@@ -27,7 +23,7 @@ fn change_ship(
     let changed = menu
         .melee_setup
         .set_ship_with_cost(side as usize, index, ship_kind, |ship| {
-            crate::ships::master_native::choice_cost(&menu.catalog, ship as u16)
+            uqm_content::ships::master_native::choice_cost(&menu.catalog, ship as u16)
         })
         .unwrap_or_else(|error| panic!("validated melee fleet slot: {error}"));
     if !changed {
@@ -49,7 +45,7 @@ fn change_ship(
     true
 }
 fn change_name(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
     value: &std::ffi::CStr,
@@ -64,7 +60,7 @@ fn change_name(
 }
 /// The menu and its graphics must be live on the game thread.
 pub fn local_change_ship(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
     index: u16,
@@ -82,7 +78,7 @@ pub fn local_change_ship(
 }
 /// The menu and its graphics must be live on the game thread.
 pub fn local_change_team_name(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
     value: &std::ffi::CStr,
@@ -98,7 +94,7 @@ pub fn local_change_team_name(
 }
 /// The menu and its graphics must be live on the game thread.
 pub fn local_change_team(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: usize,
     team: &crate::supermelee::setup::team::MeleeTeam,
@@ -123,7 +119,7 @@ pub(super) fn bootstrap_sync_team(state: &mut MeleeSession, side: usize) {
 }
 /// The menu and its graphics must be live on the game thread.
 pub(super) fn remote_ship(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     remote: usize,
     side: u16,
@@ -149,7 +145,7 @@ pub(super) fn remote_ship(
 }
 /// The menu and its graphics must be live on the game thread.
 pub(super) fn remote_name(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     remote: usize,
     side: u16,
@@ -174,7 +170,7 @@ pub(super) fn remote_name(
     }
 }
 pub(super) fn confirmation_cancelled(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
 ) {
@@ -189,17 +185,16 @@ pub(super) fn confirmation_cancelled(
 }
 pub(super) fn with_protocol_driver<R>(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-    action: impl FnOnce(&mut dyn crate::engine::battle::net::ProtocolDriver) -> R,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
+    action: impl FnOnce(&mut dyn uqm_engine::battle::net::ProtocolDriver) -> R,
 ) -> R {
-    let mut notices = |cx: &mut crate::engine::battle::Cx<'_>,
-                       io: &mut crate::engine::observe::Io<'_>,
-                       notice| {
-        crate::supermelee::native::protocol::feedback(cx, io, notice, |cx, message| {
-            status(cx, state, message);
-        });
-    };
+    let mut notices =
+        |cx: &mut uqm_engine::battle::Cx<'_>, io: &mut uqm_engine::observe::Io<'_>, notice| {
+            crate::supermelee::native::protocol::feedback(cx, io, notice, |cx, message| {
+                status(cx, state, message);
+            });
+        };
     action(&mut crate::supermelee::native::protocol::Driver::new(
         cx,
         io,
@@ -209,8 +204,8 @@ pub(super) fn with_protocol_driver<R>(
 
 pub(crate) fn apply_protocol_event(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     event: crate::supermelee::netplay::Event,
 ) {
     use crate::supermelee::netplay::Effect;
@@ -234,7 +229,7 @@ pub(crate) fn apply_protocol_event(
             remote_name(cx, state, event.player, side, name);
         }
         Effect::Seed(seed) => {
-            crate::math::seed_random(seed);
+            uqm_engine::math::seed_random(seed);
         }
         _ => {
             let session = state.netplay.clone();

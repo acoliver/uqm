@@ -5,9 +5,9 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Object, Ship};
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_SLYLANDRO_ID};
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_SLYLANDRO_ID};
 
 #[test]
 fn legacy_slylandro_receives_the_fifth_junk_concern() {

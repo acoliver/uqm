@@ -1,14 +1,14 @@
 //! Diagnostic bytes are written to the host's supplied streams.
 
 use super::*;
-use crate::engine::world::planet::PlanetFrame;
-use crate::engine::{clock::CEvent, world::CStarDesc};
 use crate::planets::generate::{
     orbits::FIRST_GAS_GIANT, sam::SA_MATRA, special::HIERARCHY_STARBASE,
 };
 use crate::planets::tables::PLANET_ARRAY;
 use crate::starbase::ids::*;
 use std::io::{self, Write};
+use uqm_engine::world::planet::PlanetFrame;
+use uqm_engine::{clock::CEvent, world::CStarDesc};
 
 pub fn dump_event(out: &mut impl Write, event: &CEvent) -> io::Result<()> {
     writeln!(

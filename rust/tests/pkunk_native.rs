@@ -9,30 +9,32 @@ mod battle_context;
 mod special_hooks;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::FIRES_LEFT;
-use uqm_rust::engine::battle::ai_constants::FIRES_RIGHT;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::{
+use uqm_content::ships::native::{
+    angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+};
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::FIRES_LEFT;
+use uqm_engine::battle::ai_constants::FIRES_RIGHT;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
     STAMPFILL_PRIMITIVE,
 };
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-use uqm_rust::engine::species::species_id::SPECIES_ID_PKUNK_ID;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
-use uqm_rust::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+use uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID;
 
 // races.h / intel.h flags that are macros with casts rather than constants.
 const STANDARD_RATING: u8 = 1 << 4;
@@ -66,32 +68,26 @@ use battle::FrameSet;
 #[derive(Clone, Copy)]
 struct SavedState {
     phoenix: Option<ElementId>,
-    saved_preprocess: Option<uqm_rust::engine::battle::ElementHook>,
-    saved_postprocess: Option<uqm_rust::engine::battle::ElementHook>,
-    saved_death: Option<uqm_rust::engine::battle::ElementHook>,
+    saved_preprocess: Option<uqm_engine::battle::ElementHook>,
+    saved_postprocess: Option<uqm_engine::battle::ElementHook>,
+    saved_death: Option<uqm_engine::battle::ElementHook>,
 }
 
 static MARK: AtomicUsize = AtomicUsize::new(0);
 
 // Stand-ins for the engine callbacks Pkunk saves around an explosion. Each
 // body differs so the functions keep distinct addresses.
-fn engine_preprocess(
-    _: &mut uqm_rust::engine::battle::Cx<'_>,
-    _: uqm_rust::engine::battle::ElementId,
-) {
+fn engine_preprocess(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {
     MARK.store(1, Ordering::SeqCst);
 }
-fn engine_postprocess(
-    _: &mut uqm_rust::engine::battle::Cx<'_>,
-    _: uqm_rust::engine::battle::ElementId,
-) {
+fn engine_postprocess(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {
     MARK.store(2, Ordering::SeqCst);
 }
-fn engine_death(_: &mut uqm_rust::engine::battle::Cx<'_>, _: uqm_rust::engine::battle::ElementId) {
+fn engine_death(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {
     MARK.store(3, Ordering::SeqCst);
 }
 
-fn addr(f: Option<uqm_rust::engine::battle::ElementHook>) -> Option<usize> {
+fn addr(f: Option<uqm_engine::battle::ElementHook>) -> Option<usize> {
     f.map(|f| (f).address())
 }
 
@@ -140,7 +136,7 @@ impl<'a> Ship<'a> {
         })
     }
     fn data(&mut self) -> SavedState {
-        let uqm_rust::engine::battle::RaceState::Pkunk {
+        let uqm_engine::battle::RaceState::Pkunk {
             phoenix,
             saved_pre,
             saved_post,
@@ -189,7 +185,7 @@ impl<'a> Ship<'a> {
 
     /// Drives the real hooks (the phoenix sees the death, then the death
     /// function explodes the ship) until the death function is `new_pkunk`.
-    fn armed_new_pkunk(&mut self) -> uqm_rust::engine::battle::ElementHook {
+    fn armed_new_pkunk(&mut self) -> uqm_engine::battle::ElementHook {
         self.appearing();
         seed_random(odd_seed());
         self.preprocess();
@@ -323,10 +319,10 @@ fn nothing_saved(ship: &mut Ship) -> bool {
         && data.saved_death.is_none()
 }
 
-fn block_is_zero(state: uqm_rust::engine::battle::RaceState) -> bool {
+fn block_is_zero(state: uqm_engine::battle::RaceState) -> bool {
     matches!(
         state,
-        uqm_rust::engine::battle::RaceState::Pkunk {
+        uqm_engine::battle::RaceState::Pkunk {
             phoenix: None,
             saved_pre: None,
             saved_post: None,
@@ -371,7 +367,7 @@ fn check_trail(ship: &mut Ship, trail: ElementId, at: Point, angle: u16) {
     assert!(battle::get(trail).collision_func.is_none());
     assert_eq!(
         battle::get(trail).parent,
-        uqm_rust::engine::battle::Parent::Ship(ship.inner.ship_id)
+        uqm_engine::battle::Parent::Ship(ship.inner.ship_id)
     );
 }
 
@@ -468,40 +464,38 @@ fn every_init_copies_the_template_and_gives_the_copy_its_own_zeroed_state() {
         assert!(block_is_zero(first.inner.descriptor_mut().race_state));
         assert!(block_is_zero(second.inner.descriptor_mut().race_state));
         let phoenix = first.inner.id;
-        first.inner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
+        first.inner.descriptor_mut().race_state = uqm_engine::battle::RaceState::Pkunk {
             phoenix: Some(phoenix),
             saved_pre: None,
             saved_post: None,
             saved_death: None,
         };
-        second.inner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
+        second.inner.descriptor_mut().race_state = uqm_engine::battle::RaceState::Pkunk {
             phoenix: None,
             saved_pre: None,
             saved_post: None,
-            saved_death: Some(uqm_rust::engine::battle::ElementHook::Native(engine_death)),
+            saved_death: Some(uqm_engine::battle::ElementHook::Native(engine_death)),
         };
         assert!(second.data().phoenix.is_none());
         assert!(first.data().saved_death.is_none());
         first.inner.uninit();
         assert!(matches!(
             first.inner.descriptor_mut().race_state,
-            uqm_rust::engine::battle::RaceState::None
+            uqm_engine::battle::RaceState::None
         ));
         first.inner.uninit();
         assert!(matches!(
             first.inner.descriptor_mut().race_state,
-            uqm_rust::engine::battle::RaceState::None
+            uqm_engine::battle::RaceState::None
         ));
         assert_eq!(
             addr(second.data().saved_death),
-            addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                engine_death
-            )))
+            addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
         );
         second.inner.uninit();
         assert!(matches!(
             second.inner.descriptor_mut().race_state,
-            uqm_rust::engine::battle::RaceState::None
+            uqm_engine::battle::RaceState::None
         ));
         let mut third = Ship::new(&_battle, 0);
         assert!(block_is_zero(third.inner.descriptor_mut().race_state));
@@ -539,7 +533,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                 for ship_speed in [0i16, 14] {
                     ship.inner.ship_mut().ship_facing = facing;
                     ship.at(321, -654);
-                    uqm_rust::battle::velocity::set_velocity_vector(
+                    uqm_modes::battle::velocity::set_velocity_vector(
                         &mut battle::get_mut(ship.id).velocity,
                         ship_speed,
                         (facing + 3) % 16,
@@ -579,7 +573,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         assert!(battle::get(m).collision_func.is_some());
                         assert!(battle::get(m).postprocess_func.is_none());
                         assert!(battle::get(m).death_func.is_none());
-                        assert!(battle::get(m).parent == uqm_rust::engine::battle::Parent::None);
+                        assert!(battle::get(m).parent == uqm_engine::battle::Parent::None);
                         assert!(battle::get(m).preprocess_func.is_some());
 
                         // initialize_missile at speed DISPLAY_TO_WORLD (24), then the
@@ -727,7 +721,7 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
             assert!(battle::get(phoenix).postprocess_func.is_none());
             assert_eq!(
                 battle::get(phoenix).parent,
-                uqm_rust::engine::battle::Parent::Ship(ship.inner.ship_id)
+                uqm_engine::battle::Parent::Ship(ship.inner.ship_id)
             );
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, start_status);
@@ -750,7 +744,7 @@ fn phoenix_allocation_failure_still_consumes_the_draw_and_records_no_phoenix() {
             let mut ship = Ship::new(&_battle, 0);
             ship.appearing();
             let id = ship.inner.id;
-            if let uqm_rust::engine::battle::RaceState::Pkunk { phoenix, .. } =
+            if let uqm_engine::battle::RaceState::Pkunk { phoenix, .. } =
                 &mut ship.inner.descriptor_mut().race_state
             {
                 *phoenix = Some(id);
@@ -886,7 +880,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             battle::get_mut(el).current.location = Point { x: 400, y: -800 };
             battle::get_mut(el).next.location = Point { x: 1201, y: 77 };
             battle::get_mut(el).velocity = VelocityDesc::new();
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(el).velocity,
                 9,
                 6,
@@ -1021,14 +1015,12 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
         {
             let mut ship = Ship::new(&_battle, 0);
             let el = ship.id;
-            battle::get_mut(el).preprocess_func = Some(
-                uqm_rust::engine::battle::ElementHook::Native(engine_preprocess),
-            );
-            battle::get_mut(el).postprocess_func = Some(
-                uqm_rust::engine::battle::ElementHook::Native(engine_postprocess),
-            );
+            battle::get_mut(el).preprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_preprocess));
+            battle::get_mut(el).postprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_postprocess));
             battle::get_mut(el).death_func =
-                Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
+                Some(uqm_engine::battle::ElementHook::Native(engine_death));
             ship.appearing();
             with_rng(odd_seed(), 1, || ship.preprocess());
             let phoenix = ship.data().phoenix.unwrap();
@@ -1043,9 +1035,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
             assert_eq!(battle::get(el).mass, 1);
             assert_eq!(
                 addr(battle::get(el).death_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_death
-                )))
+                addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
             );
             assert!(nothing_saved(&mut ship));
 
@@ -1057,9 +1047,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
                 assert_eq!(battle::get(el).mass, warping);
                 assert_eq!(
                     addr(battle::get(el).death_func),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                        engine_death
-                    )))
+                    addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
                 );
                 assert!(nothing_saved(&mut ship));
             }
@@ -1067,12 +1055,11 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
             // Anything else is a death Pkunk walks away from.
             for mass in [0u8, 1, 10, 99] {
                 battle::get_mut(el).mass = mass;
-                battle::get_mut(el).preprocess_func = Some(
-                    uqm_rust::engine::battle::ElementHook::Native(engine_preprocess),
-                );
+                battle::get_mut(el).preprocess_func =
+                    Some(uqm_engine::battle::ElementHook::Native(engine_preprocess));
                 battle::get_mut(el).death_func =
-                    Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
-                if let uqm_rust::engine::battle::RaceState::Pkunk { saved_death, .. } =
+                    Some(uqm_engine::battle::ElementHook::Native(engine_death));
+                if let uqm_engine::battle::RaceState::Pkunk { saved_death, .. } =
                     &mut ship.inner.descriptor_mut().race_state
                 {
                     *saved_death = None;
@@ -1084,28 +1071,24 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
                 let data = ship.data();
                 assert_eq!(
                     addr(data.saved_preprocess),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                    addr(Some(uqm_engine::battle::ElementHook::Native(
                         engine_preprocess
                     )))
                 );
                 assert_eq!(
                     addr(data.saved_postprocess),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                    addr(Some(uqm_engine::battle::ElementHook::Native(
                         engine_postprocess
                     )))
                 );
                 assert_eq!(
                     addr(data.saved_death),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                        engine_death
-                    )))
+                    addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
                 );
                 assert!(battle::get(el).death_func.is_some());
                 assert_ne!(
                     addr(battle::get(el).death_func),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                        engine_death
-                    )))
+                    addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
                 );
             }
         }
@@ -1126,14 +1109,12 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
                 .unwrap()
                 .preprocess
                 .unwrap();
-            battle::get_mut(el).preprocess_func = Some(
-                uqm_rust::engine::battle::ElementHook::Native(engine_preprocess),
-            );
-            battle::get_mut(el).postprocess_func = Some(
-                uqm_rust::engine::battle::ElementHook::Native(engine_postprocess),
-            );
+            battle::get_mut(el).preprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_preprocess));
+            battle::get_mut(el).postprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_postprocess));
             battle::get_mut(el).death_func =
-                Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
+                Some(uqm_engine::battle::ElementHook::Native(engine_death));
             ship.at(2000, 3000);
 
             // The brand-new ship spawns its phoenix, which later sees the death.
@@ -1148,7 +1129,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             // The armed death function explodes the ship (without ship_death).
             battle::get_mut(el).target = Some(ship.id);
             battle::get_mut(el).state_flags |= DISAPPEARING as u16;
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(el).velocity,
                 20,
                 3,
@@ -1166,28 +1147,26 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 0);
             assert_ne!(
                 addr(battle::get(el).preprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_preprocess
                 )))
             );
             assert_ne!(
                 addr(battle::get(el).postprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_postprocess
                 )))
             );
             assert_ne!(
                 addr(battle::get(el).death_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_death
-                )))
+                addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
             );
             assert_ne!(addr(battle::get(el).death_func), addr(Some(reincarnation)));
 
             // When the explosion ends the engine runs the new death function.
             // Leave the ship in a state a Vux-slowed, long-dead Pkunk would have.
             ship.inner.descriptor_mut().race_callbacks.pre =
-                uqm_rust::engine::battle::Selection::Disabled;
+                uqm_engine::battle::Selection::Disabled;
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             ship.inner.descriptor_mut().ship_info.energy_level = 0;
             {
@@ -1232,21 +1211,19 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(battle::get(el).mass, 1);
             assert_eq!(
                 addr(battle::get(el).preprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_preprocess
                 )))
             );
             assert_eq!(
                 addr(battle::get(el).postprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_postprocess
                 )))
             );
             assert_eq!(
                 addr(battle::get(el).death_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_death
-                )))
+                addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
             );
             assert_eq!(
                 Some(ship.inner.descriptor_mut().callbacks()[1]),

@@ -1,9 +1,9 @@
 //! Owner-supplied PlanetSide session boundary.
 
-use crate::engine::observe::InputView;
-use crate::graphics::drawable::ContextFrame;
 use crate::planets::solar_system::SolarSystem;
 use std::num::NonZeroU32;
+use uqm_engine::graphics::drawable::ContextFrame;
+use uqm_engine::observe::InputView;
 
 /// Retained resources and validated parameters for one synchronous lander trip.
 pub struct TripInput {
@@ -62,10 +62,10 @@ use super::visual_adapter::CffiSurfaceVisuals;
 
 pub fn run_session(
     drawing: SurfaceDrawing<'_>,
-    controls: &crate::engine::input::InputSession,
-    activity: crate::engine::world::activity::ActivityControl,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    controls: &uqm_engine::input::InputSession,
+    activity: uqm_engine::world::activity::ActivityControl,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     solar: &mut SolarSystem,
     input: TripInput,
 ) -> TripResult {
@@ -74,7 +74,7 @@ pub fn run_session(
         "lander trip requires retained misc frames"
     );
     let game = std::cell::RefCell::new(cx.reborrow());
-    let observe = std::cell::RefCell::new(crate::engine::observe::Io {
+    let observe = std::cell::RefCell::new(uqm_engine::observe::Io {
         observer: &mut *io.observer,
     });
     let admission = admit_trip(&mut game.borrow_mut(), &observe);
@@ -87,13 +87,13 @@ pub fn run_session(
 
 struct TripAdmission<'a, 'observer> {
     telemetry: std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
-    fixture: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
-    observe: &'a std::cell::RefCell<crate::engine::observe::Io<'observer>>,
+    fixture: Option<uqm_engine::observe_port::planet_side::FixtureLayout>,
+    observe: &'a std::cell::RefCell<uqm_engine::observe::Io<'observer>>,
 }
 
 fn admit_trip<'a, 'observer>(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    observe: &'a std::cell::RefCell<crate::engine::observe::Io<'observer>>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    observe: &'a std::cell::RefCell<uqm_engine::observe::Io<'observer>>,
 ) -> TripAdmission<'a, 'observer> {
     let admission = observe
         .borrow_mut()
@@ -112,7 +112,7 @@ fn admit_trip<'a, 'observer>(
 
 fn complete_trip(
     trip: &std::cell::RefCell<TripTelemetry>,
-    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    observe: &std::cell::RefCell<uqm_engine::observe::Io<'_>>,
     result: &TripResult,
 ) {
     {
@@ -131,9 +131,9 @@ fn complete_trip(
 
 fn run_retained_session(
     drawing: SurfaceDrawing<'_>,
-    controls: &crate::engine::input::InputSession,
-    activity: crate::engine::world::activity::ActivityControl,
-    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    controls: &uqm_engine::input::InputSession,
+    activity: uqm_engine::world::activity::ActivityControl,
+    game: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
     solar: &mut SolarSystem,
     context: &TripInput,
     admission: &TripAdmission<'_, '_>,
@@ -171,7 +171,7 @@ fn run_retained_session(
     let _menu_silence = super::menu_sounds::MenuSoundSilence::acquire(controls);
     telemetry.borrow_mut().begin(&session);
     publish(&telemetry.borrow());
-    let clock = CffiPlanetSideClock(crate::threading::pacing::GameThreadPacer::new(
+    let clock = CffiPlanetSideClock(uqm_engine::threading::pacing::GameThreadPacer::new(
         drawing.planet.clone(),
     ));
     let adapters = RuntimeAdapters {
@@ -221,7 +221,7 @@ fn run_retained_session(
 }
 
 fn retained_assets(
-    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    game: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
     context: &TripInput,
 ) -> Result<(PlanetSideAssets, CffiSurfaceVisuals), super::runtime::AdapterError> {
     let assets = PlanetSideAssets::retain(game.borrow().kernel.lander_resources.as_ref().ok_or(
@@ -243,8 +243,8 @@ fn hazard_frame_counts(assets: &PlanetSideAssets) -> (u16, u16) {
 }
 
 fn prepare_frame(
-    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
-    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    game: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
+    observe: &std::cell::RefCell<uqm_engine::observe::Io<'_>>,
     session: &super::session::PlanetSideSession,
     input: &mut CffiPlanetSideInput,
     clock: &impl PlanetSideClock,
@@ -273,7 +273,7 @@ fn create_trip_session(
 }
 
 fn install_fixture(
-    layout: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
+    layout: Option<uqm_engine::observe_port::planet_side::FixtureLayout>,
     session: &super::session::PlanetSideSession,
     surface: &super::assembly::SharedSurface,
     world_visuals: &mut impl super::automation_fixture::FixtureVisualPort,
@@ -324,7 +324,7 @@ pub(super) const fn adapter_error_code(operation: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe::CheckpointView;
+    use uqm_engine::observe::CheckpointView;
 
     #[test]
     fn typed_trip_failures_preserve_the_operation_and_batch_corrections() {
@@ -351,8 +351,8 @@ mod tests {
     #[test]
     fn finalization_publishes_each_outcome_as_a_copy_of_its_own_trip() {
         use super::super::{runtime::AdapterError, session::SessionOutcome};
-        use crate::engine::observe::{Injected, Observer, Presented};
-        use crate::engine::observe_port::planet_side::{terminal, PlanetSideSnapshot};
+        use uqm_engine::observe::{Injected, Observer, Presented};
+        use uqm_engine::observe_port::planet_side::{terminal, PlanetSideSnapshot};
 
         #[derive(Default)]
         struct Recording(Vec<PlanetSideSnapshot>);
@@ -360,7 +360,7 @@ mod tests {
             fn input_admitted(
                 &mut self,
                 _: &InputView,
-                _: &mut crate::engine::battle::Cx<'_>,
+                _: &mut uqm_engine::battle::Cx<'_>,
             ) -> Injected {
                 Default::default()
             }
@@ -397,7 +397,7 @@ mod tests {
         for (index, (result, terminal)) in cases.into_iter().enumerate() {
             let trip = std::cell::RefCell::new(TripTelemetry::pending(index as u64 + 1));
             {
-                let io = std::cell::RefCell::new(crate::engine::observe::Io {
+                let io = std::cell::RefCell::new(uqm_engine::observe::Io {
                     observer: &mut observer,
                 });
                 complete_trip(&trip, &io, &result);

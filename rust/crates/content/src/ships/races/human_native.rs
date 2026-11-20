@@ -21,26 +21,26 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
 
 pub mod engine {
     use super::{in_defense_range, nuke_speed, use_defense, MISSILE_LIFE};
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, POINT_DEFENSE,
         RIGHT, SEEKING_WEAPON, SPECIAL, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::ElementHook;
-    use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::ONE_SHIFT;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
 
     const TRACK_WAIT: u8 = 3;
     const SPECIAL_ENERGY_COST: u8 = 4;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
-        let d = crate::engine::battle::template::RaceTemplate {
-            info: crate::engine::battle::views::Info {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        let d = uqm_engine::battle::template::RaceTemplate {
+            info: uqm_engine::battle::views::Info {
                 ship_flags: (FIRES_FORE | SEEKING_WEAPON | POINT_DEFENSE) as u16,
                 ship_cost: 11,
                 crew_level: 18,
@@ -48,7 +48,7 @@ pub mod engine {
                 energy_level: 18,
                 max_energy: 18,
             },
-            resources: crate::engine::battle::template::RaceResources {
+            resources: uqm_engine::battle::template::RaceResources {
                 strings: Some(c"ship.earthling.text"),
                 icons: Some(c"ship.earthling.icons"),
                 melee_icon: Some(c"ship.earthling.meleeicons"),
@@ -81,7 +81,7 @@ pub mod engine {
                 special_wait: 9,
                 ship_mass: 6,
             },
-            intelligence: crate::engine::battle::views::Intelligence {
+            intelligence: uqm_engine::battle::views::Intelligence {
                 weapon_range: 1000 << ONE_SHIFT,
                 ..Default::default()
             },
@@ -90,7 +90,7 @@ pub mod engine {
         d.descriptor(&HUMAN)
     }
 
-    pub static HUMAN: crate::engine::battle::Race = crate::engine::battle::Race {
+    pub static HUMAN: uqm_engine::battle::Race = uqm_engine::battle::Race {
         descriptor,
         preprocess: None,
         postprocess: Some(human_postprocess),
@@ -120,7 +120,7 @@ pub mod engine {
 
     pub fn initialize_nuke(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let facing = cx.ship_state(ss).facing;
-        let mut block = crate::engine::battle::views::Missile {
+        let mut block = uqm_engine::battle::views::Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
             flags: 0,
@@ -184,7 +184,7 @@ pub mod engine {
                     cx.race_stats(ss).characteristics.special_wait;
                 paid = true;
             }
-            let laser = crate::engine::battle::views::Laser {
+            let laser = uqm_engine::battle::views::Laser {
                 origin: cx.element(ship).next.location,
                 end: Point {
                     x: dx as i16,

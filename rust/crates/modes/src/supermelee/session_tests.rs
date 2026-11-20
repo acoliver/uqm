@@ -17,10 +17,7 @@ use crate::supermelee::types::MeleeShip;
 use std::io::{self, Cursor, Write};
 
 fn session() -> MeleeSession {
-    MeleeSession::new(
-        crate::engine::World::default().activity_control(),
-        Vec::new(),
-    )
+    MeleeSession::new(uqm_engine::World::default().activity_control(), Vec::new())
 }
 
 fn config() -> [u8; 140] {
@@ -102,10 +99,8 @@ fn native_config_writes_the_same_legacy_bytes_from_the_live_session() {
     expected[0] = 17;
     expected[4] = MeleeShip::Vux as u8;
     assert_eq!(actual, expected);
-    let mut restored = super::MeleeSession::new(
-        crate::engine::World::default().activity_control(),
-        Vec::new(),
-    );
+    let mut restored =
+        super::MeleeSession::new(uqm_engine::World::default().activity_control(), Vec::new());
     assert!(restored.read_config(&mut Cursor::new(actual), Some(140), &mut controls));
     assert_eq!(restored.melee_setup.teams[0].ships[3], MeleeShip::Vux);
 }

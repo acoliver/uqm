@@ -1,37 +1,37 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine, wrap_delta};
+    use uqm_engine::battle::ai_constants::{
         IGNORE_SIMILAR, IMMEDIATE_WEAPON, MAX_ENERGY_SIZE, MAX_SHIP_MASS,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, COLLISION, CREW_IMMUNE, DEFY_PHYSICS, DISAPPEARING, FINITE_LIFE,
         NONSOLID, NORMAL_LIFE, NPC_PLAYER_NUM, PLAYER_SHIP, RPG_PLAYER_NUM, SHIP_AT_MAX_SPEED,
         SHIP_BEYOND_MAX_SPEED, STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::race::SaMatraState;
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::battle::{
+    use uqm_engine::battle::race::SaMatraState;
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, RaceTemplate, ShipId, StoryKey,
     };
-    use crate::engine::world::activity::activity_flags::IN_BATTLE;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
-    use crate::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
-    use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine, wrap_delta};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
+    use uqm_engine::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+    use uqm_engine::world::activity::activity_flags::IN_BATTLE;
     const COLLISION_THRUST_WAIT: u32 = 3;
     const COLLISION_TURN_WAIT: u32 = 1;
 
-    use crate::engine::battle::observation::samatra as observation;
+    use uqm_engine::battle::observation::samatra as observation;
     const COMET_SPEED: i16 = 12 << ONE_SHIFT;
     const SENTINEL_SPEED: i16 = 8 << ONE_SHIFT;
     const RECOIL: i32 = (10 << ONE_SHIFT) << VELOCITY_SHIFT;
     const MAX_RECOIL: i32 = RECOIL * 4;
     const SHIP_MASS: u8 = (MAX_SHIP_MASS * 10) as u8;
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (IMMEDIATE_WEAPON | CREW_IMMUNE) as u16;
         d.info.ship_cost = 16;
@@ -460,7 +460,7 @@ pub mod engine {
                         .wrapping_sub(cx.element(e).current.location.y),
                     height,
                 );
-                let frames = (crate::math::square_root(
+                let frames = (uqm_engine::math::square_root(
                     (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32,
                 ) >> 6)
                     .max(1);
@@ -486,7 +486,7 @@ pub mod engine {
                     height,
                 );
                 dx = normalize_facing(
-                    angle_to_facing(crate::math::arctan(dx, dy) as i32) - i32::from(facing),
+                    angle_to_facing(uqm_engine::math::arctan(dx, dy) as i32) - i32::from(facing),
                 ) as i16;
                 if dx > 0 {
                     if dx <= angle_to_facing(HALF_CIRCLE as i32) as i16 {
@@ -512,7 +512,7 @@ pub mod engine {
         if i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)
             > i64::from(MAX_RECOIL) * i64::from(MAX_RECOIL)
         {
-            let angle = crate::math::arctan(dx, dy);
+            let angle = uqm_engine::math::arctan(dx, dy);
             cx.element_mut(o).velocity.set_components(
                 i32::from(cosine(i32::from(angle), MAX_RECOIL)),
                 i32::from(sine(i32::from(angle), MAX_RECOIL)),
@@ -532,7 +532,7 @@ pub mod engine {
                 && (p.x != cx.weapon_origin(e).intersection().intersect_stamp.origin.x
                     || p.y != cx.weapon_origin(e).intersection().intersect_stamp.origin.y)
             {
-                let angle = crate::math::arctan(p.x.wrapping_sub(q.x), p.y.wrapping_sub(q.y));
+                let angle = uqm_engine::math::arctan(p.x.wrapping_sub(q.x), p.y.wrapping_sub(q.y));
                 cx.element_mut(e).velocity.set_components(
                     i32::from(cosine(
                         i32::from(angle),

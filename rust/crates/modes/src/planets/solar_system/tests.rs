@@ -46,13 +46,13 @@ fn selected_body_names_preserve_sol_moons_and_samatra() {
 #[test]
 #[serial_test::serial]
 fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
-    use crate::engine::graphics::drawable::LoadedDrawable;
-    use crate::engine::kernel::solar_resources::SolarResources;
+    use uqm_engine::graphics::drawable::LoadedDrawable;
+    use uqm_engine::kernel::solar_resources::SolarResources;
     fn image() -> LoadedDrawable {
         LoadedDrawable::create(2, 0, 0, 2)
             .unwrap_or_else(|| panic!("fixture drawable allocation failed"))
     }
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.world = world();
     game.kernel.solar_presentation.frame_deadline = 47;
     game.kernel.solar_presentation.assets = Some(SolarResources {
@@ -94,31 +94,33 @@ fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
     visit.clear_system_image();
     assert!(visit.system_image.is_none());
     assert!(
-        std::panic::catch_unwind(|| crate::graphics::drawable::retain_frames(&[cached])).is_err()
+        std::panic::catch_unwind(|| uqm_engine::graphics::drawable::retain_frames(&[cached]))
+            .is_err()
     );
     assert_eq!(
-        crate::graphics::drawable::retain_frames(&[background])[0].frame(0),
+        uqm_engine::graphics::drawable::retain_frames(&[background])[0].frame(0),
         Some(background)
     );
     drop(visit);
     assert!(
-        std::panic::catch_unwind(|| crate::graphics::drawable::retain_frames(&[background]))
+        std::panic::catch_unwind(|| uqm_engine::graphics::drawable::retain_frames(&[background]))
             .is_err()
     );
     assert_eq!(
-        crate::graphics::drawable::retain_frames(&[shared])[0].frame(0),
+        uqm_engine::graphics::drawable::retain_frames(&[shared])[0].frame(0),
         Some(shared)
     );
     let second = SolarSystem::new(&game.world, StarId(82));
     assert!(second.stars.is_none());
     assert!(second.system_image.is_none());
     assert_eq!(
-        crate::graphics::drawable::retain_frames(&[shared])[0].frame(0),
+        uqm_engine::graphics::drawable::retain_frames(&[shared])[0].frame(0),
         Some(shared)
     );
     game.kernel.solar_presentation.assets = None;
     assert!(
-        std::panic::catch_unwind(|| crate::graphics::drawable::retain_frames(&[shared])).is_err()
+        std::panic::catch_unwind(|| uqm_engine::graphics::drawable::retain_frames(&[shared]))
+            .is_err()
     );
     assert_eq!(game.kernel.solar_presentation.frame_deadline, 47);
 }
@@ -147,8 +149,8 @@ fn presentation_requires_its_admitted_screen() {
 #[test]
 fn zoom_clipping_is_local_to_each_visit() {
     let world = world();
-    let mut first = super::SolarSystem::new(&world, crate::engine::StarId(82));
-    let second = super::SolarSystem::new(&world, crate::engine::StarId(82));
+    let mut first = super::SolarSystem::new(&world, uqm_engine::StarId(82));
+    let second = super::SolarSystem::new(&world, uqm_engine::StarId(82));
     assert_eq!(first.scale_rect, Default::default());
     first.scale_rect.corner.x = 42;
     assert_eq!(second.scale_rect, Default::default());
@@ -157,9 +159,9 @@ fn zoom_clipping_is_local_to_each_visit() {
 #[test]
 fn scoped_flight_effects_apply_on_both_sides_of_the_input_callback() {
     use super::*;
-    use crate::engine::world::generation::SolarFlight;
     use std::cell::Cell;
-    let mut game = crate::engine::Game::new();
+    use uqm_engine::world::generation::SolarFlight;
+    let mut game = uqm_engine::Game::new();
     game.world = world();
     let mut solar = SolarSystem::new(&game.world, StarId(82));
     let independent = SolarSystem::new(&game.world, StarId(82));
@@ -167,10 +169,10 @@ fn scoped_flight_effects_apply_on_both_sides_of_the_input_callback() {
         max_ship_speed: 40,
         turn_wait: 3,
     }));
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
     cx.solar_flight = Some(&effects);
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -192,7 +194,7 @@ fn scoped_flight_effects_apply_on_both_sides_of_the_input_callback() {
 }
 
 use super::*;
-use crate::engine::{world::generation::Body, world::StarId, World};
+use uqm_engine::{world::generation::Body, world::StarId, World};
 
 fn world() -> World {
     let mut world = World::new();
@@ -205,16 +207,16 @@ fn world() -> World {
 #[test]
 #[serial_test::serial]
 fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
-    use crate::engine::observe::{Observer, Presented};
+    use uqm_engine::observe::{Observer, Presented};
     struct Recording {
-        solar: Option<crate::engine::world::generation::SolarSnapshot>,
+        solar: Option<uqm_engine::world::generation::SolarSnapshot>,
         admissions: Vec<(i16, bool)>,
     }
     impl Observer for Recording {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &mut crate::engine::battle::Cx<'_>,
+            _: &mut uqm_engine::battle::Cx<'_>,
         ) -> Injected {
             let snapshot = self.solar.expect("solar checkpoint precedes admission");
             self.admissions
@@ -232,7 +234,7 @@ fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
         false
     }
 
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.world = world();
     game.world.current_star = Some(StarId(82));
     let mut solar = SolarSystem::new(&game.world, StarId(82));
@@ -240,7 +242,7 @@ fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
     solar.sys.planets[2].image.origin.x = 37;
     solar.enter_inner(2);
     solar.enter_orbit(Body::Planet(2));
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
     let mut observer = Recording {
         solar: None,

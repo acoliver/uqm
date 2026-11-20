@@ -9,7 +9,7 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         event: SchedulerEvent,
         setup: &mut crate::automation::input_admission::Target<'_>,
-        sink: &mut dyn crate::engine::observe::Observer,
+        sink: &mut dyn uqm_engine::observe::Observer,
     ) -> bool {
         let result = self.execute_parity_fixture(inner, event, setup, sink);
         match result {
@@ -40,11 +40,11 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         event: SchedulerEvent,
         setup: &mut crate::automation::input_admission::Target<'_>,
-        sink: &mut dyn crate::engine::observe::Observer,
+        sink: &mut dyn uqm_engine::observe::Observer,
     ) -> Result<Option<String>, String> {
-        let checkpoint = |cx: &crate::engine::battle::Cx<'_>| self.parity_checkpoint(cx, "fixture");
+        let checkpoint = |cx: &uqm_engine::battle::Cx<'_>| self.parity_checkpoint(cx, "fixture");
         crate::automation::input_admission::with_context(setup, |cx| -> Result<(), String> {
-            let witnesses = crate::collections::observation::take_saves();
+            let witnesses = uqm_engine::collections::observation::take_saves();
             if let Some(run) = inner.parity_fixture.as_mut() {
                 for (slot, loading) in witnesses {
                     if loading {
@@ -69,7 +69,7 @@ impl AutomationObserver {
             }
             Some(Action::ConfigureParityMelee(request)) => {
                 request.validate()?;
-                crate::collections::observation::enable();
+                uqm_engine::collections::observation::enable();
                 setup.configure_fleet(request.ships, request.cyborg)?;
                 Ok(Some("parity_melee_configured".into()))
             }

@@ -1,6 +1,6 @@
 //! Setup notifications borrow values, never menu or team storage.
 use super::{netconnection::NetConnection, packet::Packet, session::SessionCore};
-use crate::engine::battle::net::NetState;
+use uqm_engine::battle::net::NetState;
 
 fn side(conn: &NetConnection, player: usize) -> u8 {
     u8::from(player == conn.player)

@@ -3,11 +3,11 @@
 
 use super::{Harness, ScreenWidth};
 use crate::planets_common::sol_orbital::{self, Case, Ops};
-use uqm_rust::engine::world::planet::{PlanetFrame, SystemInfo};
+use uqm_engine::world::planet::{PlanetFrame, SystemInfo};
 
-use uqm_rust::engine::kernel::diagnostics::DiagnosticGuard;
-use uqm_rust::planets::generate::special::Body;
-use uqm_rust::state::game_state_keys::get_game_state;
+use uqm_engine::kernel::diagnostics::DiagnosticGuard;
+use uqm_engine::state::game_state_keys::get_game_state;
+use uqm_modes::planets::generate::special::Body;
 
 impl Ops for Harness {
     fn orbital(&mut self, case: Case) -> (bool, SystemInfo, u32) {
@@ -38,14 +38,14 @@ impl Ops for Harness {
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
+                uqm_engine::StoryKey::FOUND_PLUTO_SPATHI
             )),
             1
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
+                uqm_engine::StoryKey::MOONBASE_DESTROYED
             )),
             1
         );
@@ -65,20 +65,20 @@ impl DebugTraversal {
             _quiet: crate::battle_context::with(|cx| cx.kernel.diagnostics.suppress_interaction()),
             pluto_spathi: crate::battle_context::with(|cx| {
                 cx.world
-                    .story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI)
+                    .story_state(uqm_engine::StoryKey::FOUND_PLUTO_SPATHI)
             }),
             moonbase_destroyed: crate::battle_context::with(|cx| {
                 cx.world
-                    .story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED)
+                    .story_state(uqm_engine::StoryKey::MOONBASE_DESTROYED)
             }),
         };
         crate::battle_context::with(|cx| {
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 1)
+                .set_story_state(uqm_engine::StoryKey::FOUND_PLUTO_SPATHI, 1)
         });
         crate::battle_context::with(|cx| {
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 1)
+                .set_story_state(uqm_engine::StoryKey::MOONBASE_DESTROYED, 1)
         });
         saved
     }
@@ -87,14 +87,12 @@ impl DebugTraversal {
 impl Drop for DebugTraversal {
     fn drop(&mut self) {
         crate::battle_context::with(|cx| {
-            cx.world.set_story_state(
-                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
-                self.pluto_spathi,
-            )
+            cx.world
+                .set_story_state(uqm_engine::StoryKey::FOUND_PLUTO_SPATHI, self.pluto_spathi)
         });
         crate::battle_context::with(|cx| {
             cx.world.set_story_state(
-                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
+                uqm_engine::StoryKey::MOONBASE_DESTROYED,
                 self.moonbase_destroyed,
             )
         });
@@ -114,4 +112,4 @@ pub fn check(c: &mut Harness, table: &[PlanetFrame]) {
     println!("Sol orbital: 3168 complete SYSTEM_INFO/RNG records: Rust ABI == immutable C fixture == Rust core; LoadPlanet exits via existing DEBUG traversal seam");
 }
 
-use uqm_rust::planets::generate::SystemGenerator;
+use uqm_modes::planets::generate::SystemGenerator;

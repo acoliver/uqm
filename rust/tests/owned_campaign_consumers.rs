@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use uqm_rust::engine::{Game, World};
+use uqm_engine::{Game, World};
 
 #[test]
 #[serial_test::serial]
@@ -54,10 +54,10 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
                 assert!(ships.clone_fragment(&template, 0, 1, &mut name).is_none());
                 assert_eq!(ships.count(), 12);
             };
-            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
+            uqm_modes::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
                 .unwrap();
             let first = game.world.npc_built_ships_ref().head().unwrap();
-            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
+            uqm_modes::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
                 .unwrap();
             {
                 let ships = game.world.npc_built_ships_ref();
@@ -120,9 +120,9 @@ fn clock_helpers_work_with_an_unpublished_world() {
 #[test]
 #[serial_test::serial]
 fn scene_star_lookup_uses_the_unpublished_world() {
-    use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
+    use uqm_engine::world::{CStarDesc, CATALOG_LEN};
     let mut world = World::new();
-    world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(
         [CStarDesc {
             star_pt: Default::default(),
@@ -138,7 +138,7 @@ fn scene_star_lookup_uses_the_unpublished_world() {
     catalog[0].star_pt.x = 1752;
     catalog[0].star_pt.y = 1450;
     world.set_catalog(std::borrow::Cow::Owned(*catalog));
-    let result = uqm_rust::comm::dispatch::place_flagship_at_star(&mut world, (1752, 1450));
+    let result = uqm_modes::comm::dispatch::place_flagship_at_star(&mut world, (1752, 1450));
     assert_eq!(result, Ok(()));
     assert_eq!(world.star_pointer(), world.catalog().as_ptr().cast_mut());
 }
@@ -147,13 +147,13 @@ fn scene_star_lookup_uses_the_unpublished_world() {
 #[serial_test::serial]
 fn rainbow_ordinal_reads_the_unpublished_visit_star() {
     use std::cell::RefCell;
-    use uqm_rust::engine::{
+    use uqm_engine::{
         battle::{Battle, Cx},
         observe::{Io, Unobserved},
         world::{CStarDesc, CATALOG_LEN},
         Kernel, StarId,
     };
-    use uqm_rust::planets::generate::{host::PlanetSite, rainbow::RAINBOW_DEFINED};
+    use uqm_modes::planets::generate::{host::PlanetSite, rainbow::RAINBOW_DEFINED};
     let mut world = World::new();
     let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(
         [CStarDesc {
@@ -177,8 +177,8 @@ fn rainbow_ordinal_reads_the_unpublished_visit_star() {
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
-    let site = uqm_rust::planets::solarsys::site::Site::new(
+    let mut pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
+    let site = uqm_modes::planets::solarsys::site::Site::new(
         &game,
         &io,
         StarId(2),

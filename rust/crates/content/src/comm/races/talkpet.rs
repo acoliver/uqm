@@ -1,5 +1,5 @@
 //! Talkpet dialogue, ported from talkpet.c.
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;

@@ -5,7 +5,7 @@ impl<S: Story, H: crate::planets::generate::spa::SpathiSite, R, L, F>
 {
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         unshielded: bool,
     ) {
         crate::planets::generate::spa::SpathiSite::load_broadcasters_scene(
@@ -60,7 +60,7 @@ impl<S: Story, H: crate::planets::generate::chmmr::ChmmrSite, R, L, F>
     fn load_ip_groups(&mut self) {
         crate::planets::generate::chmmr::ChmmrSite::load_ip_groups(&mut *self.site)
     }
-    fn visit_starbase(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn visit_starbase(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         crate::planets::generate::chmmr::ChmmrSite::visit_starbase(&mut *self.site, _system)
     }
 }
@@ -70,7 +70,7 @@ impl<S: Story, H: crate::planets::generate::wreck::WreckSite, R, L, F>
 {
     fn load_wreck_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         first_report: u16,
     ) {
         crate::planets::generate::wreck::WreckSite::load_wreck_scene(
@@ -128,7 +128,7 @@ impl<S: Story, H: crate::planets::generate::yehat::YehatSite, R, L, F>
     fn load_ip_groups(&mut self) {
         crate::planets::generate::yehat::YehatSite::load_ip_groups(&mut *self.site)
     }
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         crate::planets::generate::yehat::YehatSite::load_ruins_scene(&mut *self.site, _system)
     }
 }

@@ -1,7 +1,7 @@
 //! Colors used by game menus, in the original RGB15 palette.
 
 use super::rgb15;
-use crate::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Color;
 
 pub(super) const MENU_HIGHLIGHT_COLOR: Color = rgb15(0x1F, 0x1F, 0x00);
 pub(super) const MENU_TEXT_COLOR: Color = rgb15(0x06, 0x06, 0x06);

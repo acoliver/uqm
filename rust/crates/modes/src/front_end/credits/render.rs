@@ -1,22 +1,22 @@
 use super::*;
 use crate::comm::locdata::CRect;
-use crate::engine::input::InputFrameHook;
-use crate::engine::input::InputSession;
-use crate::engine::observe::CheckpointView;
 use crate::front_end::intro::args::Arguments;
 use crate::front_end::intro::text::owned_lines;
 use crate::front_end::intro::BLACK_COLOR;
-use crate::graphics::{
-    context::ContextLease, context::LoadedContext, drawable::ContextFrame,
-    drawable::LoadedDrawable, font::LoadedFont, geometry::Color, geometry::Extent, geometry::Point,
-    geometry::Rect, geometry::TextAlign,
-};
-use crate::strings::owned_table::LoadedTextTable;
 use std::{
     cell::{Cell, RefCell},
     ffi::CString,
     rc::Rc,
 };
+use uqm_engine::graphics::{
+    context::ContextLease, context::LoadedContext, drawable::ContextFrame,
+    drawable::LoadedDrawable, font::LoadedFont, geometry::Color, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
+};
+use uqm_engine::input::InputFrameHook;
+use uqm_engine::input::InputSession;
+use uqm_engine::observe::CheckpointView;
+use uqm_engine::strings::owned_table::LoadedTextTable;
 use uqm_engine::time::counter_abi::get_time_counter;
 
 const TRANS_COLOR: Color = crate::ui::rgb15(0, 0, 31);
@@ -164,7 +164,7 @@ fn record(line: &[u8]) -> Option<Record> {
 
 fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
     let mut result = [ColumnFormat {
-        align: crate::graphics::geometry::TextAlign::Left,
+        align: uqm_engine::graphics::geometry::TextAlign::Left,
         x: width / 64,
     }; 5];
     for (format, column) in result.iter_mut().zip(
@@ -173,7 +173,7 @@ fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
             .filter(|column| !column.is_empty()),
     ) {
         *format = ColumnFormat {
-            align: crate::graphics::geometry::TextAlign::Left,
+            align: uqm_engine::graphics::geometry::TextAlign::Left,
             x: margin,
         };
         let x = if column.get(1) == Some(&b'/') {
@@ -184,11 +184,11 @@ fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
         match column[0] {
             b'L' => format.x = x.unwrap_or(margin),
             b'C' => {
-                format.align = crate::graphics::geometry::TextAlign::Center;
+                format.align = uqm_engine::graphics::geometry::TextAlign::Center;
                 format.x = x.unwrap_or(width / 2);
             }
             b'R' => {
-                format.align = crate::graphics::geometry::TextAlign::Right;
+                format.align = uqm_engine::graphics::geometry::TextAlign::Right;
                 format.x = x.unwrap_or(width - margin);
             }
             _ => (),
@@ -275,7 +275,7 @@ impl Session {
             .measure(
                 c" ",
                 Point { x: 100, y: 100 },
-                crate::graphics::geometry::TextAlign::Left,
+                uqm_engine::graphics::geometry::TextAlign::Left,
                 1,
             )
             .rect

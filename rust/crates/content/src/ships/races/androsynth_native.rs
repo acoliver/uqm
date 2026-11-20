@@ -1,21 +1,21 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         CREW_OBJECT_INDEX, ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, LEFT,
         MOVEMENT_STATE_AVOID, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SLOW_SHIP,
         SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         CHANGING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID, SHIP_AT_MAX_SPEED,
         SHIP_BEYOND_MAX_SPEED,
     };
 
-    use crate::engine::battle::CollisionHook;
-    use crate::engine::battle::{
+    use uqm_engine::battle::CollisionHook;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{
         CIRCLE_SHIFT, FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT,
     };
     // Core characteristics
@@ -69,10 +69,8 @@ pub mod engine {
         (hi << 4) | lo
     }
 
-    fn build_descriptor(
-        _world: &mut crate::engine::battle::World,
-    ) -> crate::engine::battle::RaceDesc {
-        crate::engine::battle::androsynth_template::descriptor(&ANDROSYNTH)
+    fn build_descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        uqm_engine::battle::androsynth_template::descriptor(&ANDROSYNTH)
     }
 
     pub static ANDROSYNTH: Race = Race {
@@ -102,7 +100,7 @@ pub mod engine {
         cx.element_mut(a).set_life_span(old_life);
         cx.element_mut(a).set_hit_points(old_crew_level);
         cx.element_mut(a).flags &= !((DISAPPEARING | NONSOLID) as u16);
-        crate::engine::battle::motion::collision(cx, a, pa, b, pb);
+        uqm_engine::battle::motion::collision(cx, a, pa, b, pb);
     }
 
     pub fn bubble_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
@@ -144,7 +142,7 @@ pub mod engine {
     }
 
     pub fn initialize_bubble(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
-        let mut block = crate::engine::battle::views::Missile {
+        let mut block = uqm_engine::battle::views::Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
             frames: cx.ship_frame_set(ss, 1),
@@ -241,8 +239,8 @@ pub mod engine {
                     let (dx, dy) = concerns.subject.velocity.get_current_components();
                     let (other_dx, other_dy) = cx.element(target).velocity.get_current_components();
                     let travel =
-                        crate::math::arctan((dx - other_dx) as i16, (dy - other_dy) as i16);
-                    let direction = crate::math::arctan(
+                        uqm_engine::math::arctan((dx - other_dx) as i16, (dy - other_dy) as i16);
+                    let direction = uqm_engine::math::arctan(
                         (i32::from(cx.element(target).next.location.x)
                             - i32::from(concerns.subject.next.location.x))
                             as i16,
@@ -319,7 +317,7 @@ pub mod engine {
                 cx.race_stats_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;
             }
             if cx.race_stats(ss).ship_info.energy_level == 0 {
-                cx.element_mut(ship).velocity = crate::engine::math::velocity::VelocityDesc::new();
+                cx.element_mut(ship).velocity = uqm_engine::math::velocity::VelocityDesc::new();
                 flags &= !((LEFT | RIGHT | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
                 cx.race_stats_mut(ss).characteristics.turn_wait =
                     cx.race_stats(ss).characteristics.special_wait;
@@ -359,8 +357,8 @@ pub mod engine {
     }
 
     pub fn uninit_androsynth(
-        _world: &mut crate::engine::battle::World,
-        stats: &mut crate::engine::battle::views::RaceStats,
+        _world: &mut uqm_engine::battle::World,
+        stats: &mut uqm_engine::battle::views::RaceStats,
     ) {
         stats.state = RaceState::None;
     }

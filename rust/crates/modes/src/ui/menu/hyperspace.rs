@@ -1,13 +1,13 @@
 //! Retained hyperspace menu presentation with supplied submenu routing.
 use super::*;
-use crate::graphics::menu as draw;
+use uqm_engine::graphics::menu as draw;
 
 pub fn hyperspace_menu(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     mut submenu: impl FnMut(
-        &mut crate::engine::battle::Cx<'_>,
-        &mut crate::engine::observe::Io<'_>,
+        &mut uqm_engine::battle::Cx<'_>,
+        &mut uqm_engine::observe::Io<'_>,
         u8,
     ) -> bool,
 ) {

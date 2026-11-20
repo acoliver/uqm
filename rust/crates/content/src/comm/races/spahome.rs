@@ -2,7 +2,7 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 
 mod phrases;
 use phrases::*;
@@ -107,7 +107,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             DO_AS_WE_SAY => {
                 self.api.npc(DEPART_FOR_EARTH as i32);
                 self.api
-                    .set_allied(crate::engine::species::ship::SPATHI_SHIP as u16, true);
+                    .set_allied(uqm_engine::species::ship::SPATHI_SHIP as u16, true);
                 self.api.event(1, 6, 0, 0, 11);
                 self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
                 self.api.set(StoryKey::SPATHI_VISITS, 0)
@@ -583,7 +583,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.angry(0)
         } else if self
             .api
-            .alliance(crate::engine::species::ship::SPATHI_SHIP as u16)
+            .alliance(uqm_engine::species::ship::SPATHI_SHIP as u16)
             == 1
         {
             self.api.palette(1);
@@ -646,23 +646,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            crate::engine::StoryKey::from_name("FOUND_PLUTO_SPATHI").is_some(),
+            uqm_engine::StoryKey::from_name("FOUND_PLUTO_SPATHI").is_some(),
             "missing game state key: FOUND_PLUTO_SPATHI"
         );
         assert!(
-            crate::engine::StoryKey::from_name("KNOW_KOHR_AH_STORY").is_some(),
+            uqm_engine::StoryKey::from_name("KNOW_KOHR_AH_STORY").is_some(),
             "missing game state key: KNOW_KOHR_AH_STORY"
         );
         assert!(
-            crate::engine::StoryKey::from_name("KNOW_SPATHI_EVIL").is_some(),
+            uqm_engine::StoryKey::from_name("KNOW_SPATHI_EVIL").is_some(),
             "missing game state key: KNOW_SPATHI_EVIL"
         );
         assert!(
-            crate::engine::StoryKey::from_name("KNOW_SPATHI_PASSWORD").is_some(),
+            uqm_engine::StoryKey::from_name("KNOW_SPATHI_PASSWORD").is_some(),
             "missing game state key: KNOW_SPATHI_PASSWORD"
         );
         assert!(
-            crate::engine::StoryKey::from_name("KNOW_SPATHI_QUEST").is_some(),
+            uqm_engine::StoryKey::from_name("KNOW_SPATHI_QUEST").is_some(),
             "missing game state key: KNOW_SPATHI_QUEST"
         );
     }

@@ -1,22 +1,22 @@
-use crate::engine::battle::input::InputContext;
-use crate::engine::battle::Battle;
-use crate::engine::battle::Cx;
-use crate::engine::input::frames::InputState;
-use crate::engine::input::Frame;
-use crate::engine::input::InputControls;
-use crate::engine::input::InputRuntime;
-use crate::engine::input::InputSession;
-use crate::engine::observe::Io;
-use crate::engine::observe::Observer;
-use crate::engine::observe::Unobserved;
-use crate::engine::Game;
 use crate::front_end::uqmdebug::debug_contexts;
-use crate::graphics::{
+use std::{cell::Cell, io, rc::Rc};
+use uqm_engine::battle::input::InputContext;
+use uqm_engine::battle::Battle;
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::{
     context::ContextLease, context::LoadedContext, drawable::ContextFrame, geometry::Color,
     geometry::Extent, geometry::Point, geometry::Rect,
 };
-use std::{cell::Cell, io, rc::Rc};
+use uqm_engine::input::frames::InputState;
+use uqm_engine::input::Frame;
+use uqm_engine::input::InputControls;
+use uqm_engine::input::InputRuntime;
+use uqm_engine::input::InputSession;
+use uqm_engine::observe::Io;
+use uqm_engine::observe::Observer;
+use uqm_engine::observe::Unobserved;
 use uqm_engine::test_support::campaign_display::CampaignDisplay;
+use uqm_engine::Game;
 
 fn rgba(color: Color) -> (u8, u8, u8, u8) {
     (color.r, color.g, color.b, color.a)
@@ -71,7 +71,7 @@ impl InputRuntime for Driver {
         assert!(nested.is_empty(), "nested inspection must not recurse");
         assert!(!self.panic_on_run.get(), "injected diagnostic unwind");
         let mut pressed = InputState::default();
-        pressed.menu[crate::input::frames::KEY_MENU_SELECT as usize] = 1;
+        pressed.menu[uqm_engine::input_port::frames::KEY_MENU_SELECT as usize] = 1;
         let now = self.calls.get() as u32 * 1000;
         self.input
             .advance(InputState::default(), InputState::default(), now - 1);
@@ -135,7 +135,7 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
     let mut output = Vec::new();
     debug_contexts(&mut cx, &mut io, &mut output).unwrap();

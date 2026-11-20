@@ -13,16 +13,16 @@ pub mod hyperspace;
 pub mod interplanetary;
 mod portal;
 
-pub fn get(world: &crate::engine::World, key: crate::engine::StoryKey) -> u8 {
+pub fn get(world: &uqm_engine::World, key: uqm_engine::StoryKey) -> u8 {
     world.story_state(key) as u8
 }
 
-pub fn set(world: &mut crate::engine::World, key: crate::engine::StoryKey, value: u8) {
+pub fn set(world: &mut uqm_engine::World, key: uqm_engine::StoryKey, value: u8) {
     world.set_story_state(key, u32::from(value));
 }
 
-pub(crate) fn color(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
-    crate::graphics::geometry::Color {
+pub(crate) fn color(r: u8, g: u8, b: u8) -> uqm_engine::graphics::geometry::Color {
+    uqm_engine::graphics::geometry::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),
         b: (b << 3) | (b >> 2),

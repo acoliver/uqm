@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = ["native"]
-native = ["dep:uqm-rust"]
+native = ["dep:uqm-rust", "dep:uqm-engine", "dep:uqm-modes"]
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -26,6 +26,8 @@ quote = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 toml_edit = "0.25"
 uqm-rust = { optional = true, package = "uqm", path = "..", default-features = false, features = ["audio_heart", "debug-process"] }
+uqm-engine = { optional = true, path = "../crates/engine", version = "=0.9.0", default-features = false }
+uqm-modes = { optional = true, path = "../crates/modes", version = "=0.9.0", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["process"] }

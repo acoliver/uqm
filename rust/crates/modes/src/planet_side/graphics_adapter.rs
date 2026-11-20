@@ -5,8 +5,10 @@ use super::entities::{SurfaceEntityId, SurfaceEntityKind};
 use super::resources::PlanetSideAssets;
 use super::runtime::{AdapterError, PlanetSideGraphics, RenderSnapshot};
 use super::selection::{LANDING_CURSOR_STEP, MAP_WIDTH};
-use crate::graphics::{context::ContextLease, drawable::ContextFrame, geometry::Point as CPoint};
 use std::collections::HashMap;
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Point as CPoint,
+};
 
 const SURFACE_WIDTH: i32 = 242;
 
@@ -104,11 +106,11 @@ impl SurfaceFrameRegistry {
     }
 }
 pub struct SurfaceDrawing<'a> {
-    pub planet: crate::engine::graphics::context::ContextLease,
+    pub planet: uqm_engine::graphics::context::ContextLease,
     pub scan: &'a crate::planets::scan::state::ScanState,
     pub refresh: fn(
         &crate::planets::scan::state::ScanState,
-        &mut crate::engine::battle::Cx<'_>,
+        &mut uqm_engine::battle::Cx<'_>,
         &super::assembly::SurfaceAssembly,
         super::model::SurfacePoint,
     ),
@@ -119,7 +121,7 @@ pub struct SurfaceDrawing<'a> {
 /// draws the lander at the center of the orbit viewport.
 pub struct CffiPlanetSideGraphics<'a, 'game> {
     pub drawing: SurfaceDrawing<'a>,
-    pub game: &'a std::cell::RefCell<crate::engine::battle::Cx<'game>>,
+    pub game: &'a std::cell::RefCell<uqm_engine::battle::Cx<'game>>,
     pub surface: SharedSurface,
     pub assets: &'a PlanetSideAssets,
     pub last_scan_position: Option<super::model::SurfacePoint>,
@@ -203,7 +205,7 @@ pub fn draw_surface_entities(
     }
 }
 
-fn damage_color(remaining: u8) -> crate::graphics::geometry::Color {
+fn damage_color(remaining: u8) -> uqm_engine::graphics::geometry::Color {
     let (r, g, b) = match remaining {
         7 => (31, 31, 31),
         6 => (31, 31, 10),
@@ -214,7 +216,7 @@ fn damage_color(remaining: u8) -> crate::graphics::geometry::Color {
         1 => (27, 0, 0),
         _ => unreachable!("damage flash has seven colors"),
     };
-    crate::graphics::geometry::Color {
+    uqm_engine::graphics::geometry::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),
         b: (b << 3) | (b >> 2),
@@ -433,17 +435,18 @@ mod tests {
             return;
         }
         {
-            let owner = crate::graphics::context::LoadedContext::create(c"uninitialized display");
+            let owner =
+                uqm_engine::graphics::context::LoadedContext::create(c"uninitialized display");
             assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 owner.lease().present_retained();
             }))
             .is_err());
         }
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
-        crate::graphics::context::ContextLease::require(game.kernel.status_context)
+        uqm_engine::graphics::context::ContextLease::require(game.kernel.status_context)
             .present_retained();
         display.finish(game);
     }

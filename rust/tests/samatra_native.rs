@@ -1,32 +1,34 @@
 #![forbid(unsafe_code)]
-use uqm_rust::battle::ContextOps;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::DEFY_PHYSICS;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::IN_LAST_BATTLE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::NPC_PLAYER_NUM;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::flags::RPG_PLAYER_NUM;
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
-use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_CHENJESU_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SA_MATRA_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
-use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-use uqm_rust::engine::world::activity::activity_kinds::WON_LAST_BATTLE;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::DEFY_PHYSICS;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::IN_LAST_BATTLE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::NPC_PLAYER_NUM;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::flags::RPG_PLAYER_NUM;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+use uqm_engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_CHENJESU_ID;
+use uqm_engine::species::species_id::SPECIES_ID_SA_MATRA_ID;
+use uqm_engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_engine::world::activity::activity_kinds::WON_LAST_BATTLE;
+use uqm_modes::battle::ContextOps;
 #[test]
 fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
     battle_context::run(|_| {
         let battle = Battle::new(64);
         {
             use uqm_rust::automation::samatra::observe;
-            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            crate::battle_context::with(|cx| {
+                uqm_engine::state::ffi::rust_init_game_state(cx.world)
+            });
             crate::battle_context::with(|cx| cx.world.set_activity(IN_LAST_BATTLE as u16));
             crate::battle_context::with(|cx| cx.b.initialize(cx.kernel));
             let mut ship = boss(&battle);
@@ -48,7 +50,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             drop(ship);
             crate::battle_context::with(|cx| {
                 let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
-                uqm_rust::battle::process_native::init_display_list(cx, scaled);
+                uqm_modes::battle::process_native::init_display_list(cx, scaled);
             });
             crate::battle_context::with(|cx| cx.world.set_activity(WON_LAST_BATTLE));
             assert_eq!(
@@ -74,7 +76,9 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
         let battle = Battle::new(64);
         {
             use uqm_rust::automation::samatra::observe;
-            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            crate::battle_context::with(|cx| {
+                uqm_engine::state::ffi::rust_init_game_state(cx.world)
+            });
             assert_eq!(
                 crate::battle_context::with(|cx| observe(cx)).0.generation,
                 0
@@ -91,7 +95,7 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             player.ship_mut().species_id = SPECIES_ID_SIS_SHIP_ID;
             player.ship_mut().ship_facing = 19;
             crate::battle_context::with(|cx| {
-                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1)
+                set_game_state(cx.world, uqm_engine::StoryKey::BOMB_CARRIER, 1)
             });
             crate::battle_context::with(|cx| {
                 cx.world.set_activity(IN_LAST_BATTLE as u16 | IN_BATTLE)
@@ -145,8 +149,8 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
                 .into_iter()
                 .find(|h| {
                     battle::get(*h).collision_func.is_some_and(|hook| {
-                        uqm_rust::battle::hook_registry::name(
-                            &uqm_rust::battle::hook_registry::hooks(),
+                        uqm_modes::battle::hook_registry::name(
+                            &uqm_modes::battle::hook_registry::hooks(),
                             hook.address(),
                         ) == "ships::races::samatra::gate_collision"
                     })
@@ -173,13 +177,13 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             assert_eq!(events.destroyed, 255);
             assert!(snapshot.is_none());
             crate::battle_context::with(|cx| {
-                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
+                set_game_state(cx.world, uqm_engine::StoryKey::BOMB_CARRIER, 0)
             });
         }
     });
 }
 
-use uqm_rust::engine::battle::{race::SaMatraState, RaceState};
+use uqm_engine::battle::{race::SaMatraState, RaceState};
 
 fn owned_state(ship: &mut Ship<'_>) -> SaMatraState {
     let RaceState::SaMatra(state) = ({ ship.descriptor_mut() }).race_state else {
@@ -193,7 +197,9 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
     battle_context::run(|_| {
         let battle = Battle::new(64);
         {
-            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            crate::battle_context::with(|cx| {
+                uqm_engine::state::ffi::rust_init_game_state(cx.world)
+            });
             let mut ship = boss(&battle);
             let mut other = Ship::with_frames(
                 &battle,
@@ -215,8 +221,8 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
                 .into_iter()
                 .find(|h| {
                     battle::get(*h).collision_func.is_some_and(|hook| {
-                        uqm_rust::battle::hook_registry::name(
-                            &uqm_rust::battle::hook_registry::hooks(),
+                        uqm_modes::battle::hook_registry::name(
+                            &uqm_modes::battle::hook_registry::hooks(),
                             hook.address(),
                         ) == "ships::races::samatra::gate_collision"
                     })
@@ -225,7 +231,7 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
             call_element("ships::races::samatra::gate_preprocess", gate);
             crate::battle_context::with(|cx| cx.world.set_activity(IN_BATTLE));
             crate::battle_context::with(|cx| {
-                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1)
+                set_game_state(cx.world, uqm_engine::StoryKey::BOMB_CARRIER, 1)
             });
             let mut pa = Point { x: 0, y: 0 };
             let mut pb = pa;
@@ -245,7 +251,7 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
             assert_eq!(restarted.destroyed, 0);
             assert!(!restarted.gate_entered);
             crate::battle_context::with(|cx| {
-                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
+                set_game_state(cx.world, uqm_engine::StoryKey::BOMB_CARRIER, 0)
             });
         }
     });
@@ -262,7 +268,7 @@ fn identity_does_not_depend_on_scrolling_or_survivor_order() {
                 let generator = generator.unwrap_or_else(|| panic!("eight allocated generators"));
                 crate::battle_context::with(|cx| {
                     cx.element_mut(generator).current.location = Point { x: 17, y: 31 };
-                    uqm_rust::battle::sounds::engine::unlink(cx, generator);
+                    uqm_modes::battle::sounds::engine::unlink(cx, generator);
                     cx.put(generator);
                 });
                 call_element("ships::races::samatra::generator_death", generator);
@@ -302,7 +308,7 @@ fn sentinel_tracking_preserves_absent_owner_element() {
 #[test]
 fn assigned_races_use_native_dispatch() {
     for species in [SPECIES_ID_CHENJESU_ID, SPECIES_ID_SA_MATRA_ID] {
-        assert!(uqm_rust::ships::races::race(species).is_some());
+        assert!(uqm_content::ships::races::race(species).is_some());
     }
 }
 
@@ -312,7 +318,7 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use uqm_rust::state::game_state_keys::set_game_state;
+use uqm_engine::state::game_state_keys::set_game_state;
 
 fn boss(battle: &Battle) -> Ship<'_> {
     let mut ship = Ship::with_frames(
@@ -404,7 +410,9 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
     battle_context::run(|_| {
         let _battle = Battle::new(64);
         {
-            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            crate::battle_context::with(|cx| {
+                uqm_engine::state::ffi::rust_init_game_state(cx.world)
+            });
             let mut ship = boss(&_battle);
             let gate = *queued()
                 .iter()
@@ -430,11 +438,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                         for owner in [RPG_PLAYER_NUM, NPC_PLAYER_NUM] {
                             crate::battle_context::with(|cx| cx.world.set_activity(IN_BATTLE));
                             crate::battle_context::with(|cx| {
-                                set_game_state(
-                                    cx.world,
-                                    uqm_rust::engine::StoryKey::BOMB_CARRIER,
-                                    bomb,
-                                )
+                                set_game_state(cx.world, uqm_engine::StoryKey::BOMB_CARRIER, bomb)
                             });
                             battle::get_mut(player.id).player_nr = owner as i16;
                             battle::get_mut(player.id).state_flags = if is_ship {
@@ -459,7 +463,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                 }
             }
             crate::battle_context::with(|cx| {
-                set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0)
+                set_game_state(cx.world, uqm_engine::StoryKey::BOMB_CARRIER, 0)
             });
         }
     })
@@ -540,7 +544,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             battle::get_mut(player.id).mass = 10;
             player.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             battle::get_mut(player.id).velocity.set_components(5000, 0);
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(sentinel).velocity,
                 32,
                 4,

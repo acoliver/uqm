@@ -7,7 +7,7 @@ fn button_y(y: i32, button_height: i16, slider_height: i16) -> i16 {
 pub(crate) mod runtime {
     use super::button_y;
     use crate::comm::Comm;
-    use crate::graphics::{
+    use uqm_engine::graphics::{
         context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Point,
     };
 
@@ -57,7 +57,7 @@ pub(crate) mod runtime {
             .scope_frame
             .as_ref()
             .unwrap_or_else(|| panic!("oscilloscope not initialized"));
-        let waveform = crate::sound::stream::graph_foreground_stream(
+        let waveform = uqm_engine::sound::stream::graph_foreground_stream(
             &mut data,
             comm.scope.scope_width as usize,
             comm.scope.scope_height as usize,
@@ -129,7 +129,7 @@ pub(crate) mod runtime {
         if !comm.options.slider {
             return;
         }
-        let offset = crate::sound::heart_ffi::get_track_position(comm.scope.slider_space);
+        let offset = uqm_engine::sound::heart_ffi::get_track_position(comm.scope.slider_space);
         if Some(offset) != comm.scope.last_offset || comm.scope.slider_changed {
             comm.scope.slider_changed = false;
             comm.scope.last_offset = Some(offset);
@@ -157,7 +157,7 @@ pub(crate) mod runtime {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::graphics::drawable::LoadedDrawable;
+        use uqm_engine::graphics::drawable::LoadedDrawable;
 
         #[test]
         #[serial_test::serial]
@@ -261,9 +261,9 @@ mod owner_tests {
 #[cfg(test)]
 mod lifetime_tests {
     use super::runtime::*;
-    use crate::collections::observation::{self, Event};
     use crate::comm::Comm;
-    use crate::graphics::drawable::LoadedDrawable;
+    use uqm_engine::collections::observation::{self, Event};
+    use uqm_engine::graphics::drawable::LoadedDrawable;
 
     #[test]
     #[serial_test::serial]
@@ -273,7 +273,7 @@ mod lifetime_tests {
         let frame = background.lease().context_frame(0);
         observation::enable();
         observation::drain();
-        let kernel = crate::engine::Kernel::new();
+        let kernel = uqm_engine::Kernel::new();
         let mut comm = Comm::new();
         comm.presentation = crate::comm::presentation::Presentation::from(&kernel);
         init_oscilloscope(&mut comm, frame.clone());

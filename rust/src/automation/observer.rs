@@ -1,11 +1,11 @@
 //! Automation's implementation of the engine's ordered observation boundaries.
 
 use super::{coordinator::AutomationObserver, input_admission, input_ffi};
-use crate::engine::battle::Cx;
-use crate::engine::observe::{
+use std::sync::Arc;
+use uqm_engine::battle::Cx;
+use uqm_engine::observe::{
     CampaignView, CheckpointView, Injected, InputSetup, InputView, Observer, Presented,
 };
-use std::sync::Arc;
 
 pub(crate) struct Handle(pub(crate) Arc<AutomationObserver>);
 
@@ -44,7 +44,7 @@ impl Handle {
                     *sequence
                 };
                 return Injected {
-                    planet_side: Some(crate::engine::observe_port::planet_side::TripAdmission {
+                    planet_side: Some(uqm_engine::observe_port::planet_side::TripAdmission {
                         generation,
                         fixture: self.0.planet_side_fixtures.lock().take(),
                     }),
@@ -110,11 +110,11 @@ impl Observer for Handle {
         self.0.native_diagnostics() || self.0.observes_pkunk_rebirth()
     }
 
-    fn battle_tick(&mut self, tick: &crate::engine::observe::battle::BattleTick) {
+    fn battle_tick(&mut self, tick: &uqm_engine::observe::battle::BattleTick) {
         self.0.trace_battle_tick(tick);
     }
 
-    fn replacement_gate(&mut self, gate: &crate::engine::observe::battle::ReplacementGate) {
+    fn replacement_gate(&mut self, gate: &uqm_engine::observe::battle::ReplacementGate) {
         self.0.trace_replacement_gate(gate);
     }
 

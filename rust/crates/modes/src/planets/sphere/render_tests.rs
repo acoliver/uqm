@@ -1,12 +1,12 @@
 use super::*;
-use crate::engine::graphics::{
+use uqm_engine::graphics::{
     context::LoadedContext, drawable::LoadedDrawable, geometry::Color, geometry::Point,
 };
 
 #[test]
 #[serial_test::serial]
 fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     {
@@ -49,17 +49,17 @@ fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
 #[test]
 fn real_rotation_and_zoom_compile_in_the_library_test_target() {
     let _: fn(&mut SphereState, i32, bool) = live::init_sphere_rotation;
-    let _: fn(&crate::graphics::context::ContextLease, &std::cell::RefCell<SphereState>) =
+    let _: fn(&uqm_engine::graphics::context::ContextLease, &std::cell::RefCell<SphereState>) =
         live::zoom_in_planet_sphere;
-    let _: fn(&crate::graphics::context::ContextLease, &SphereState) =
+    let _: fn(&uqm_engine::graphics::context::ContextLease, &SphereState) =
         live::draw_default_planet_sphere;
 }
 
 #[test]
 #[serial_test::serial]
 fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
-    use crate::engine::graphics::{geometry::DrawMode, geometry::Extent, geometry::Rect};
-    let mut game = crate::engine::Game::new();
+    use uqm_engine::graphics::{geometry::DrawMode, geometry::Extent, geometry::Rect};
+    let mut game = uqm_engine::Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     {
@@ -75,17 +75,17 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
             .context_frame(0)
             .write_colors(&vec![source; 242 * 75], 242, 75);
         let mut sphere = SphereState::default();
-        let planet = crate::engine::world::planet::PlanetDesc {
+        let planet = uqm_engine::world::planet::PlanetDesc {
             data_index: 128,
             rand_seed: 12345,
             ..Default::default()
         };
-        let info = crate::engine::world::planet::PlanetInfo {
+        let info = uqm_engine::world::planet::PlanetInfo {
             atmo_density: u16::MAX,
             axial_tilt: 17,
             ..Default::default()
         };
-        let mut rng = crate::math::RandomContext::with_seed(37);
+        let mut rng = uqm_engine::math::RandomContext::with_seed(37);
         crate::planets::plangen::live::generate_planet_surface(
             &mut sphere,
             &game.kernel.planet_animation,
@@ -94,7 +94,7 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
                 rng: &mut rng,
                 planet: &planet,
                 info: &info,
-                location: crate::graphics::geometry::Point { x: 10, y: -7 },
+                location: uqm_engine::graphics::geometry::Point { x: 10, y: -7 },
                 width: 242,
             },
             Some(definition),
@@ -168,8 +168,8 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
 #[test]
 #[serial_test::serial]
 fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
-    use crate::engine::graphics::surface::CapturedSurface;
-    let mut game = crate::engine::Game::new();
+    use uqm_engine::graphics::surface::CapturedSurface;
+    let mut game = uqm_engine::Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     {
@@ -236,7 +236,7 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
         assert_eq!(normalized.first_frame(), frame);
 
         let source = CapturedSurface::pixmap(2, 2, 1);
-        let retained = crate::graphics::drawable::ContextFrame::retain(source.first_frame());
+        let retained = uqm_engine::graphics::drawable::ContextFrame::retain(source.first_frame());
         let expected = [Color {
             r: 11,
             g: 23,

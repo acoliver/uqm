@@ -1,10 +1,8 @@
 //! Drawing resources retained by one synchronous orbit visit.
 
-use crate::engine::graphics::{
-    context::ContextLease, context::LoadedContext, drawable::ContextFrame,
-};
-use crate::engine::Kernel;
 use std::{cell::RefCell, rc::Rc};
+use uqm_engine::graphics::{context::ContextLease, context::LoadedContext, drawable::ContextFrame};
+use uqm_engine::Kernel;
 
 pub struct OrbitPresentation {
     planet: LoadedContext,
@@ -64,16 +62,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn independent_orbits_release_images_after_their_last_retained_frame() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let space = ContextLease::require(game.kernel.space_context);
         space.set_frame(ContextFrame::retain(game.kernel.screen));
-        space.set_clip(crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point { x: 7, y: 13 },
-            extent: crate::graphics::geometry::Extent {
+        space.set_clip(uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point { x: 7, y: 13 },
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: 242,
                 height: 227,
             },

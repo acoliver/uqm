@@ -3,18 +3,18 @@ use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
 use super::hyper_units::{Geometry, ARILOU_HOME_X, ARILOU_HOME_Y};
 use super::{color, get};
-use crate::engine::battle::views::FrameSelection as Frame;
-use crate::engine::battle::{CollisionHook, ElementHook};
-use crate::engine::{
-    battle::{hyperspace as resources, Cx},
-    StoryKey,
-};
-use crate::graphics::{
+use crate::planets::generate::consts::{NUM_STAR_COLORS, SUPER_GIANT_STAR};
+use crate::planets::starmap::find_star_id;
+use uqm_engine::battle::views::FrameSelection as Frame;
+use uqm_engine::battle::{CollisionHook, ElementHook};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
     geometry::Rect,
 };
-use crate::planets::generate::consts::{NUM_STAR_COLORS, SUPER_GIANT_STAR};
-use crate::planets::starmap::find_star_id;
+use uqm_engine::{
+    battle::{hyperspace as resources, Cx},
+    StoryKey,
+};
 
 fn grid(context: &ContextLease, ux: i16, uy: i16, ox: i16, oy: i16) {
     context.clear();
@@ -60,7 +60,7 @@ fn radar(point: Point, ox: i16, oy: i16) -> Point {
 
 pub fn seed_universe(
     cx: &mut Cx<'_>,
-    catalog: &[crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN],
+    catalog: &[uqm_engine::world::CStarDesc; uqm_engine::world::CATALOG_LEN],
 ) -> Option<Point> {
     let geometry = Geometry::new(cx.screen_dimensions());
     let universe = Point {

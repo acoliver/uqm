@@ -7,10 +7,10 @@ mod battle;
 mod battle_context;
 use battle::*;
 
-use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::species::species_id::SPECIES_ID_MYCON_ID;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_MYCON_ID;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {

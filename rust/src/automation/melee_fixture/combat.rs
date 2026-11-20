@@ -1,8 +1,8 @@
 //! Combat setup and proof decisions over the currently borrowed production records.
 
 use super::*;
-use crate::engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
-use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
 
 pub(super) fn mutual_loss(
     run: &mut Battle,

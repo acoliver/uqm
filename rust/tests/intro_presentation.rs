@@ -1,14 +1,14 @@
 //! Movie frames must survive the same input, pacing and expose boundaries as slides.
 #![forbid(unsafe_code)]
 use std::{cell::RefCell, path::Path, rc::Rc, time::Duration};
-use uqm_rust::engine::test_support::native_probe::register_rect;
-use uqm_rust::graphics::present::{swap_buffers, PresentObserver, Redraw};
-use uqm_rust::graphics::presentation_diagnostics::PresentationSample;
-use uqm_rust::graphics::presented_frame::PresentedFrame;
-use uqm_rust::graphics::state::{draw_on_screen, fade_screen};
-use uqm_rust::graphics::{dcq::Screen, geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::graphics::present::{swap_buffers, PresentObserver, Redraw};
+use uqm_engine::graphics::presentation_diagnostics::PresentationSample;
+use uqm_engine::graphics::presented_frame::PresentedFrame;
+use uqm_engine::graphics::state::{draw_on_screen, fade_screen};
+use uqm_engine::graphics::{dcq::Screen, geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::test_support::native_probe::register_rect;
+use uqm_engine::video::{decoder::DukVideoDecoder, legacy::LoadedVideo, DUCK_FPS};
 use uqm_rust::mainloop::input_frame::rust_complete_input_frame;
-use uqm_rust::video::{decoder::DukVideoDecoder, legacy::LoadedVideo, DUCK_FPS};
 
 /// The last frame the window presented, read back by the display.
 #[derive(Clone, Default)]
@@ -66,14 +66,14 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
 
     // This process owns its SDL instance; no native window or user config is used.
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
-    uqm_rust::platform::install(false);
+    uqm_platform::install(false);
     let window = Window::default();
-    let options = uqm_rust::graphics::present::GraphicsOptions {
+    let options = uqm_engine::graphics::present::GraphicsOptions {
         observer: Some(Box::new(window.clone())),
         ..Default::default()
     };
     {
-        uqm_rust::graphics::present::init_graphics(0, 0, options, 320, 240);
+        uqm_engine::graphics::present::init_graphics(0, 0, options, 320, 240);
         fade_screen(253, 0);
         draw_on_screen(Screen::Main, |canvas| canvas.words_mut().fill(0));
         let bounds = Rect {
@@ -86,7 +86,11 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         register_rect(bounds);
 
         let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
-        uqm_rust::resource::load_index(&uqm_rust::io::content_dir().unwrap(), c"video.rmp", None);
+        uqm_engine::resource::load_index(
+            &uqm_engine::io::content_dir().unwrap(),
+            c"video.rmp",
+            None,
+        );
         let playback = LoadedVideo::load(c"fixture.logo")
             .and_then(|video| video.play())
             .expect("logo playback");
@@ -96,14 +100,14 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
             let movie = window.shown();
             assert!(movie.as_chunks::<4>().0.iter().any(|p| p[..3] != [0, 0, 0]));
             for _ in 0..3 {
-                let mut observer = uqm_rust::engine::observe::Unobserved;
-                let mut io = uqm_rust::engine::observe::Io {
+                let mut observer = uqm_engine::observe::Unobserved;
+                let mut io = uqm_engine::observe::Io {
                     observer: &mut observer,
                 };
-                uqm_rust::engine::Game::new()
+                uqm_engine::Game::new()
                     .with_context(|cx| rust_complete_input_frame(cx, 1, &mut io));
                 assert!(window.shown() == movie, "input boundary erased the movie");
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 assert!(window.shown() == movie, "pacing flush erased the movie");
                 swap_buffers(Redraw::Expose);
                 assert!(window.shown() == movie, "expose erased the movie");
@@ -137,6 +141,6 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
             .iter()
             .all(|p| p[..3] == [0, 0, 0]));
         drop(mount);
-        uqm_rust::graphics::present::uninit_graphics();
+        uqm_engine::graphics::present::uninit_graphics();
     }
 }

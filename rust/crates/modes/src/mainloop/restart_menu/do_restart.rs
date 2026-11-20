@@ -6,11 +6,11 @@
 use super::menu_logic::{self, check_timeout};
 use super::restart_ops::RestartMenuOps;
 use super::types::{MenuInputState, RestartMenuItem, SelectionResult};
-use crate::engine::input::frames::MENU_SOUND_DOWN;
-use crate::engine::input::frames::MENU_SOUND_SELECT;
-use crate::engine::input::frames::MENU_SOUND_UP;
-use crate::graphics::{colormap::FADE_ALL_TO_BLACK, colormap::FADE_ALL_TO_COLOR};
-use crate::sound::types::NORMAL_VOLUME;
+use uqm_engine::graphics::{colormap::FADE_ALL_TO_BLACK, colormap::FADE_ALL_TO_COLOR};
+use uqm_engine::input::frames::MENU_SOUND_DOWN;
+use uqm_engine::input::frames::MENU_SOUND_SELECT;
+use uqm_engine::input::frames::MENU_SOUND_UP;
+use uqm_engine::sound::types::NORMAL_VOLUME;
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
 // ===========================================================================
@@ -169,10 +169,10 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(ops: &mut O, state: &mut DoResta
     let fade_result = ops.fade_screen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as i16);
     ops.sleep_thread_until(fade_result);
     state.scene_replaces_introduction = ops
-        .input(crate::engine::observe::InputView::ReplacesIntroduction)
+        .input(uqm_engine::observe::InputView::ReplacesIntroduction)
         .stop;
     let _stop = ops
-        .input(crate::engine::observe::InputView::MainMenuReady)
+        .input(uqm_engine::observe::InputView::MainMenuReady)
         .stop;
 }
 
@@ -227,8 +227,8 @@ fn handle_select<O: RestartMenuOps + ?Sized>(ops: &mut O, state: &mut DoRestartS
             let fade_result = ops.fade_screen(FADE_ALL_TO_BLACK, (ONE_SECOND / 2) as i16);
             ops.sleep_thread_until(fade_result);
             ops.set_current_activity(CHECK_ABORT);
-            if ops.input(crate::engine::observe::InputView::Active).stop {
-                ops.input(crate::engine::observe::InputView::QuitSelected);
+            if ops.input(uqm_engine::observe::InputView::Active).stop {
+                ops.input(uqm_engine::observe::InputView::QuitSelected);
             }
             ops.flash_pause();
             false
@@ -267,9 +267,9 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
         // Feed the menu transition to the automation coordinator if active.
         // This drives the scheduler's WaitingSemantic state and semantic
         // assertion matching.
-        if ops.input(crate::engine::observe::InputView::Active).stop {
+        if ops.input(uqm_engine::observe::InputView::Active).stop {
             let _stop = ops
-                .input(crate::engine::observe::InputView::MenuTransition {
+                .input(uqm_engine::observe::InputView::MenuTransition {
                     from: cur_item.as_u8(),
                     to: new_item.as_u8(),
                 })
@@ -328,9 +328,9 @@ fn handle_timeout<O: RestartMenuOps + ?Sized>(ops: &mut O) {
 mod tests {
     use super::super::restart_ops::RestartMenuOps;
     use super::*;
-    use crate::graphics::geometry::Color;
     use std::cell::Cell;
     use std::os::raw::{c_int, c_short};
+    use uqm_engine::graphics::geometry::Color;
 
     /// Mock implementation of RestartMenuOps for unit testing.
     /// Uses interior mutability via Cell to track state.

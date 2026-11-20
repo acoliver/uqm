@@ -1,18 +1,16 @@
 //! The real options/settings/name chain borrows one campaign through nested input loops.
 #![forbid(unsafe_code)]
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+use uqm_engine::input::frames::{
+    KEY_MENU_CANCEL, KEY_MENU_EDIT_CANCEL, KEY_MENU_RIGHT, KEY_MENU_SELECT,
+};
 use uqm_engine::test_support::campaign_display;
 use uqm_engine::test_support::native_process as native_test_process;
-use uqm_rust::{
-    engine::input::frames::{
-        KEY_MENU_CANCEL, KEY_MENU_EDIT_CANCEL, KEY_MENU_RIGHT, KEY_MENU_SELECT,
-    },
-    engine::{
-        battle::Cx,
-        input::{frames::InputState, Frame, InputRuntime, InputSession},
-        observe::{Io, Observer, Unobserved},
-        Game,
-    },
+use uqm_engine::{
+    battle::Cx,
+    input::{frames::InputState, Frame, InputRuntime, InputSession},
+    observe::{Io, Observer, Unobserved},
+    Game,
 };
 
 struct ScriptedInput {
@@ -39,7 +37,7 @@ impl InputRuntime for ScriptedInput {
         panic!("unexpected quit confirmation")
     }
     fn update(&self, _: &mut Cx<'_>) {}
-    fn battle_input(&self, _: &uqm_rust::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, _: &uqm_engine::battle::input::InputContext) -> u8 {
         panic!("options must not read ship controls")
     }
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, _: bool, frame: &mut dyn Frame) {
@@ -65,14 +63,14 @@ fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
 
 fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16]) {
     use campaign_display::CampaignDisplay;
-    use uqm_rust::graphics::{context::ContextLease, drawable::ContextFrame};
-    use uqm_rust::starbase::ids::{
+    use uqm_engine::graphics::{context::ContextLease, drawable::ContextFrame};
+    use uqm_modes::starbase::ids::{
         MAINMENU_STRING_BASE, MONTHS_STRING_BASE, NAMING_STRING_BASE, OPTION_STRING_BASE,
     };
     let mut game = Game::new();
     let display = CampaignDisplay::install(&mut game)
         .unwrap_or_else(|error| panic!("options display: {error}"));
-    let frames = uqm_rust::graphics::drawable::LoadedDrawable::create(8, 1, 1, 100)
+    let frames = uqm_engine::graphics::drawable::LoadedDrawable::create(8, 1, 1, 100)
         .unwrap_or_else(|| panic!("options frames"));
     game.kernel.play_frame = frames
         .lease()
@@ -80,7 +78,7 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
         .unwrap_or_else(|| panic!("options first frame"));
     game.kernel.misc_data_frame = game.kernel.play_frame;
     if from_main {
-        game.kernel.last_activity = uqm_rust::engine::world::activity::activity_flags::CHECK_LOAD;
+        game.kernel.last_activity = uqm_engine::world::activity::activity_flags::CHECK_LOAD;
     }
     game.kernel.screen_context = game.kernel.status_context;
     game.kernel.space_context = game.kernel.status_context;
@@ -90,7 +88,7 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
         preferences.fonts = 1;
     });
     game.kernel
-        .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+        .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             vec![
                 b"A\0".to_vec();
                 (OPTION_STRING_BASE
@@ -118,8 +116,8 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
     let mut io = Io {
         observer: &mut observer,
     };
-    let mut battle = uqm_rust::engine::battle::Battle::new();
-    let result = uqm_rust::front_end::gameopt::game_options(
+    let mut battle = uqm_engine::battle::Battle::new();
+    let result = uqm_modes::front_end::gameopt::game_options(
         &mut Cx {
             b: &mut battle,
             world: &mut game.world,
@@ -134,7 +132,7 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
     assert!(runtime.keys.borrow().is_empty());
     if from_main {
         assert_ne!(
-            game.world.activity() & uqm_rust::engine::world::activity::activity_flags::CHECK_ABORT,
+            game.world.activity() & uqm_engine::world::activity::activity_flags::CHECK_ABORT,
             0
         );
         assert_eq!(game.kernel.last_save_slot, 0);
@@ -147,7 +145,7 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
         game.world.data.flagship.ship_name,
     );
     drop(context);
-    uqm_rust::engine::host::dispatch().clear();
+    uqm_engine::host::dispatch().clear();
     display.finish(game);
     state
 }
@@ -241,18 +239,18 @@ fn supplied_graphics_keeps_fonts_and_text_after_the_campaign_is_dropped() {
     ) {
         return;
     }
-    use uqm_rust::graphics::{
+    use uqm_engine::graphics::{
         context::ContextLease, drawable::ContextFrame, geometry::Point as CPoint,
     };
-    use uqm_rust::starbase::gfx::Align;
-    use uqm_rust::starbase::gfx::ContextId;
-    use uqm_rust::starbase::gfx::FontId;
-    use uqm_rust::starbase::gfx::Gfx;
-    use uqm_rust::starbase::gfx::Point;
-    use uqm_rust::starbase::gfx::Rect;
-    use uqm_rust::starbase::gfx::Rgba;
-    use uqm_rust::starbase::gfx::TextDraw;
-    use uqm_rust::starbase::graphics::Graphics;
+    use uqm_modes::starbase::gfx::Align;
+    use uqm_modes::starbase::gfx::ContextId;
+    use uqm_modes::starbase::gfx::FontId;
+    use uqm_modes::starbase::gfx::Gfx;
+    use uqm_modes::starbase::gfx::Point;
+    use uqm_modes::starbase::gfx::Rect;
+    use uqm_modes::starbase::gfx::Rgba;
+    use uqm_modes::starbase::gfx::TextDraw;
+    use uqm_modes::starbase::graphics::Graphics;
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game)
         .unwrap_or_else(|error| panic!("retained graphics fixture: {error}"));
@@ -310,13 +308,13 @@ fn supplied_graphics_restores_context_selection_and_retained_font_effects() {
     ) {
         return;
     }
-    use uqm_rust::graphics::{
+    use uqm_engine::graphics::{
         context::ContextLease, context::LoadedContext, drawable::LoadedDrawable,
     };
-    use uqm_rust::starbase::gfx::ContextId;
-    use uqm_rust::starbase::gfx::FontId;
-    use uqm_rust::starbase::gfx::Gfx;
-    use uqm_rust::starbase::graphics::Graphics;
+    use uqm_modes::starbase::gfx::ContextId;
+    use uqm_modes::starbase::gfx::FontId;
+    use uqm_modes::starbase::gfx::Gfx;
+    use uqm_modes::starbase::graphics::Graphics;
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game)
         .unwrap_or_else(|error| panic!("retained graphics fixture: {error}"));

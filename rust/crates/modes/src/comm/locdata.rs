@@ -15,10 +15,10 @@ use super::types::{CommData, TextAlign, TextValign};
 // ===========================================================================
 
 /// C `Color` struct: { BYTE r, g, b, a } — 4 bytes.
-pub use crate::graphics::geometry::Color as CColor;
+pub use uqm_engine::graphics::geometry::Color as CColor;
 
 /// C `POINT` struct: { COORD x, y } where COORD = SIZE = SWORD = i16.
-pub use crate::graphics::geometry::Point as CPoint;
+pub use uqm_engine::graphics::geometry::Point as CPoint;
 
 /// C `Rect` struct (units.h / comm.h).
 #[repr(C)]
@@ -30,7 +30,7 @@ pub struct CRect {
 }
 
 const _: () = {
-    use crate::graphics::{geometry::Extent, geometry::Rect};
+    use uqm_engine::graphics::{geometry::Extent, geometry::Rect};
     assert!(std::mem::size_of::<CRect>() == std::mem::size_of::<Rect>());
     assert!(std::mem::align_of::<CRect>() == std::mem::align_of::<Rect>());
     assert!(std::mem::offset_of!(CRect, corner) == std::mem::offset_of!(Rect, corner));
@@ -44,16 +44,16 @@ const _: () = {
     );
 };
 
-pub use crate::engine::battle::schema::GameRecord as CGameState;
-pub use crate::engine::world::SisState as CSisState;
+pub use uqm_engine::battle::schema::GameRecord as CGameState;
+pub use uqm_engine::world::SisState as CSisState;
 
 /// Loaded resources and callbacks owned by one conversation mode.
 #[derive(Default)]
 pub struct SessionData {
     pub definition: CommDescriptor,
-    pub init_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
-    pub post_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
-    pub uninit_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16>,
+    pub init_encounter_func: Option<fn(&mut Comm, &mut uqm_engine::battle::Cx<'_>)>,
+    pub post_encounter_func: Option<fn(&mut Comm, &mut uqm_engine::battle::Cx<'_>)>,
+    pub uninit_encounter_func: Option<fn(&mut Comm, &mut uqm_engine::battle::Cx<'_>) -> u16>,
 }
 
 impl SessionData {
@@ -117,13 +117,13 @@ mod tests {
     fn descriptor_conversion_preserves_typed_lifecycle_callbacks() {
         use std::sync::atomic::{AtomicU8, Ordering};
         static CALLS: AtomicU8 = AtomicU8::new(0);
-        fn init(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) {
+        fn init(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>) {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 0);
         }
-        fn post(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) {
+        fn post(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>) {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 1);
         }
-        fn uninit(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+        fn uninit(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>) -> u16 {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 2);
             17
         }

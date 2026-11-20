@@ -1,4 +1,4 @@
-use crate::engine::battle::net::NetState;
+use uqm_engine::battle::net::NetState;
 
 pub(super) fn meaningful(state: NetState) -> bool {
     [

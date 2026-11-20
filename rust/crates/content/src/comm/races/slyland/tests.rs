@@ -1,8 +1,8 @@
 use super::super::encounter::testing::{Effect, Fake as BaseFake};
 use super::descriptor::descriptor;
 use super::*;
-use crate::engine::StoryKey;
 use api::{Speech, World};
+use uqm_engine::StoryKey;
 type Fake = BaseFake<Handler, World>;
 
 #[test]

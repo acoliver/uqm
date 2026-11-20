@@ -1,7 +1,7 @@
 //! The synchronous fixture driver commits plans before callbacks and resource retirement.
 
 use super::*;
-use crate::battle::context_access::fixture::FixtureOps;
+use uqm_modes::battle::context_access::fixture::FixtureOps;
 
 fn zoom_matches(
     view: usize,
@@ -17,30 +17,31 @@ fn zoom_matches(
 }
 
 fn hooks() -> Hooks {
-    use crate::ships::races::{
+    use uqm_content::ships::races::{
         androsynth_native, chmmr_native, pkunk_native, urquan_native, vux_native,
     };
     Hooks {
         blazer_collision: androsynth_native::engine::blazer_collision as *const () as usize,
-        satellite: Some(crate::engine::battle::ElementHook::Native(
+        satellite: Some(uqm_engine::battle::ElementHook::Native(
             chmmr_native::engine::satellite_postprocess,
         )),
         defense: chmmr_native::engine::spawn_point_defense as *const () as usize,
-        limpets: Some(crate::engine::battle::ElementHook::Native(
+        limpets: Some(uqm_engine::battle::ElementHook::Native(
             vux_native::engine::spawn_limpets,
         )),
-        fighters: Some(crate::engine::battle::ElementHook::Native(
+        fighters: Some(uqm_engine::battle::ElementHook::Native(
             urquan_native::engine::spawn_fighters,
         )),
         fighter_preprocess: urquan_native::engine::fighter_preprocess as *const () as usize,
         pkunk: Some(pkunk_native::engine::pkunk_preprocess),
         intercept: pkunk_native::engine::intercept_pkunk_death as *const () as usize,
         rebirth: pkunk_native::engine::new_pkunk as *const () as usize,
-        ship_death: Some(crate::engine::battle::ElementHook::Native(
-            crate::battle::tactrans_native::ship_death,
+        ship_death: Some(uqm_engine::battle::ElementHook::Native(
+            uqm_modes::battle::tactrans_native::ship_death,
         )),
-        star_collision: crate::navigation::hyper_transition::star_collision as *const () as usize,
-        unhyper: crate::navigation::hyper_transition::unhyper as *const () as usize,
+        star_collision: uqm_modes::navigation::hyper_transition::star_collision as *const ()
+            as usize,
+        unhyper: uqm_modes::navigation::hyper_transition::unhyper as *const () as usize,
     }
 }
 
@@ -50,7 +51,7 @@ pub(in crate::automation::melee_fixture) fn execute(
     checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<Option<FixtureRun>, String> {
     let hooks = hooks();
-    let mut registry = crate::battle::hook_registry::hooks();
+    let mut registry = uqm_modes::battle::hook_registry::hooks();
     registry.extend(crate::automation::parity_hooks::hooks());
     let run = |cx: &mut Cx<'_>| {
         let (activity, position) = (
@@ -70,8 +71,9 @@ pub(in crate::automation::melee_fixture) fn execute(
             .needed_species()
             .into_iter()
             .map(|index| {
-                let master = crate::ships::master_native::master_in(cx.kernel, u16::from(index))
-                    .unwrap_or_else(|| panic!("loaded fixture catalog"));
+                let master =
+                    uqm_content::ships::master_native::master_in(cx.kernel, u16::from(index))
+                        .unwrap_or_else(|| panic!("loaded fixture catalog"));
                 (index, master.species)
             })
             .collect();
@@ -87,7 +89,7 @@ fn drive(
     catalog: &BTreeMap<u8, u32>,
     checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<Option<FixtureRun>, String> {
-    let mut retained: Option<crate::battle::context_access::fixture::Descriptor> = None;
+    let mut retained: Option<uqm_modes::battle::context_access::fixture::Descriptor> = None;
     let mut retained_owner = None;
     let mut old_scale = 0;
     loop {
@@ -125,7 +127,7 @@ fn drive(
                     }
                     Effect::Reset => {
                         crate::mainloop::input_frame::drain_committed_draws();
-                        crate::battle::tactrans_native::reset_winner(cx.kernel);
+                        uqm_modes::battle::tactrans_native::reset_winner(cx.kernel);
                         cx.b.counters = [7, 7];
                         apply(cx, Effect::Remove(elements.clone()), checkpoint)?;
                         for &owner in &ships {
@@ -192,7 +194,7 @@ fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn(&Cx<'_>)) -> Resul
     {
         match effect {
             Effect::Redraw(check) => {
-                crate::battle::process_native::engine::redraw_queue(cx, false);
+                uqm_modes::battle::process_native::engine::redraw_queue(cx, false);
                 redrawn(check, &|| checkpoint(cx));
                 return Ok(Reply::None);
             }
@@ -206,7 +208,7 @@ fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn(&Cx<'_>)) -> Resul
             _ => {}
         }
         {
-            use crate::battle::process_native::{
+            use uqm_modes::battle::process_native::{
                 invoke_collision::invoke_collision, invoke_element::invoke_element,
             };
             match effect {
@@ -220,13 +222,13 @@ fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn(&Cx<'_>)) -> Resul
                 }
                 Effect::Remove(ids) => {
                     for id in ids {
-                        crate::battle::sounds::engine::unlink(cx, id);
+                        uqm_modes::battle::sounds::engine::unlink(cx, id);
                         cx.dispose(id);
                     }
                 }
                 Effect::Spawn(ship) => return Ok(Reply::Loaded(cx.fixture_spawn(ship))),
                 Effect::PhoenixFirst(id) => {
-                    crate::battle::sounds::engine::unlink(cx, id);
+                    uqm_modes::battle::sounds::engine::unlink(cx, id);
                     let head = cx.elements().head();
                     cx.insert_before(id, head);
                 }
@@ -262,13 +264,13 @@ fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn(&Cx<'_>)) -> Resul
                 Effect::NativeShip(callback, id) => {
                     let ship = cx.owner(id);
                     let parent = cx.ship_address(ship);
-                    crate::battle::process_native::dispatch::invoke(
+                    uqm_modes::battle::process_native::dispatch::invoke(
                         callback as usize,
                         parent,
                         || callback(cx, ship),
                     );
                 }
-                Effect::Weapon(id) => crate::battle::ship_native::ship_postprocess(cx, id),
+                Effect::Weapon(id) => uqm_modes::battle::ship_native::ship_postprocess(cx, id),
                 Effect::Death(id) => {
                     let hook = cx
                         .element(id)
@@ -319,7 +321,7 @@ pub(super) fn loaded(reply: Reply) -> Result<(), String> {
 }
 
 fn redrawn(check: bool, checkpoint: &dyn Fn()) {
-    crate::collections::observation::advance();
+    uqm_engine::collections::observation::advance();
     if check {
         checkpoint();
     }
@@ -331,11 +333,11 @@ mod zoom_tests {
 
     #[test]
     fn configuration_borrows_its_menu_and_world_without_publication() {
-        use crate::engine::{
+        use uqm_engine::{
             battle::{Battle, Cx},
             Game,
         };
-        use crate::supermelee::{
+        use uqm_modes::supermelee::{
             session::{MeleeSession, MenuPhase},
             types::MeleeShip,
         };
@@ -345,13 +347,13 @@ mod zoom_tests {
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         let catalog = (0..25)
-            .map(|index| crate::ships::master_native::ShipChoice {
+            .map(|index| uqm_content::ships::master_native::ShipChoice {
                 cost: index + 1,
-                icon: crate::engine::battle::frames::FrameSelection::ABSENT,
-                melee_icon: crate::engine::battle::frames::FrameSelection::ABSENT,
+                icon: uqm_engine::battle::frames::FrameSelection::ABSENT,
+                melee_icon: uqm_engine::battle::frames::FrameSelection::ABSENT,
             })
             .collect();
         let mut menu = MeleeSession::new(cx.world.activity_control(), catalog);

@@ -1,10 +1,10 @@
 use super::*;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 impl crate::planets::generate::spa::SpathiSite for NoEffects {
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _unshielded: bool,
     ) {
         panic!("unexpected dispatch effect")
@@ -47,14 +47,14 @@ impl crate::planets::generate::chmmr::ChmmrSite for NoEffects {
     fn load_ip_groups(&mut self) {
         panic!("unexpected dispatch effect")
     }
-    fn visit_starbase(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn visit_starbase(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         panic!("unexpected dispatch effect")
     }
 }
 impl crate::planets::generate::wreck::WreckSite for NoEffects {
     fn load_wreck_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _first_report: u16,
     ) {
         panic!("unexpected dispatch effect")
@@ -100,7 +100,7 @@ impl crate::planets::generate::yehat::YehatSite for NoEffects {
     fn load_ip_groups(&mut self) {
         panic!("unexpected dispatch effect")
     }
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         panic!("unexpected dispatch effect")
     }
 }
@@ -122,7 +122,7 @@ impl crate::planets::generate::utw::UtwigSite for NoEffects {
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _bomb: bool,
     ) {
         panic!("unexpected dispatch effect")
@@ -179,7 +179,7 @@ impl crate::planets::generate::syreen::StarbaseSite for NoEffects {
 impl crate::planets::generate::andro::AndrosynthSite for NoEffects {
     fn load_ruins_story(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _visits: u32,
     ) {
         panic!("unexpected dispatch effect")
@@ -189,7 +189,7 @@ impl crate::planets::generate::thrad::ThraddashSite for NoEffects {
     fn repair_sis_border(&mut self) {
         panic!("unexpected dispatch effect")
     }
-    fn load_aqua_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_aqua_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         panic!("unexpected dispatch effect")
     }
 }
@@ -202,7 +202,7 @@ impl crate::planets::generate::orz::OrzSite for NoEffects {
     }
     fn load_taalo_device_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     ) {
         panic!("unexpected dispatch effect")
     }
@@ -230,7 +230,7 @@ impl crate::planets::generate::myc::MyconSite for NoEffects {
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _scene: crate::planets::generate::myc::Scene,
     ) {
         panic!("unexpected dispatch effect")
@@ -275,7 +275,7 @@ impl crate::planets::generate::home_contact::HomeContactSite for NoEffects {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _artifact_taken: bool,
     ) {
         panic!("unexpected dispatch effect")
@@ -390,19 +390,19 @@ impl crate::planets::generate::vux::VuxSite for NoEffects {
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _scene: crate::planets::generate::vux::Scene,
     ) {
         panic!("unexpected dispatch effect")
     }
 }
 impl crate::planets::generate::burv::BurvScenes for NoEffects {
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         panic!("unexpected dispatch effect")
     }
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     ) {
         panic!("unexpected dispatch effect")
     }
@@ -458,7 +458,7 @@ impl crate::planets::generate::default::PlanetNames for NoEffects {
 impl crate::planets::generate::vault::VaultSite for NoEffects {
     fn load_vault_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _first_report: u16,
     ) {
         panic!("unexpected dispatch effect")
@@ -501,7 +501,7 @@ impl crate::planets::generate::sol::orbital::Orbital for NoEffects {
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _scene: crate::planets::generate::sol::orbital::Scene,
     ) {
         panic!("unexpected dispatch effect")

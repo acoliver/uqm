@@ -7,14 +7,14 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
 };
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::species::species_id::SPECIES_ID_DRUUGE_ID;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::Concern;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_DRUUGE_ID;
 
 use battle::Battle as Battlefield;
 

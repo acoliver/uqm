@@ -5,9 +5,9 @@
 //! dispatch. Runtime setup then drives the normal game-loop encounter path;
 //! it does not invoke communication recursively from an input callback.
 
-use crate::engine::StoryKey;
 use serde::Deserialize;
 use std::fmt;
+use uqm_engine::StoryKey;
 
 /// Closed registry of deterministic automation scenes.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)]
@@ -58,7 +58,7 @@ pub struct ScenePlan {
     /// must establish it as the real game does.
     pub star_location: (i16, i16),
     /// Named game-state values the scene's circumstances require.
-    pub game_state: &'static [(crate::engine::StoryKey, u32)],
+    pub game_state: &'static [(uqm_engine::StoryKey, u32)],
 }
 
 /// Scene activation or verification failure.
@@ -136,11 +136,11 @@ pub fn scene_plan(
             }
             Ok(ScenePlan {
                 scene,
-                encounter_ship: crate::engine::species::ship::SAMATRA_SHIP,
-                expected_encounter_conversation: crate::engine::species::conv::TALKING_PET,
-                expected_dialogue_conversation: crate::engine::species::conv::TALKING_PET,
-                current_activity: crate::comm::dispatch::IN_LAST_BATTLE
-                    | crate::comm::dispatch::START_ENCOUNTER,
+                encounter_ship: uqm_engine::species::ship::SAMATRA_SHIP,
+                expected_encounter_conversation: uqm_engine::species::conv::TALKING_PET,
+                expected_dialogue_conversation: uqm_engine::species::conv::TALKING_PET,
+                current_activity: uqm_modes::comm::dispatch::IN_LAST_BATTLE
+                    | uqm_modes::comm::dispatch::START_ENCOUNTER,
                 star_location: (6200, 5935),
                 game_state: &[
                     (StoryKey::CHMMR_BOMB_STATE, 3),
@@ -152,21 +152,21 @@ pub fn scene_plan(
         }
         AutomationScene::SolProbeEncounter => Ok(ScenePlan {
             scene,
-            encounter_ship: crate::engine::species::ship::URQUAN_DRONE_SHIP,
-            expected_encounter_conversation: crate::engine::species::conv::URQUAN_DRONE,
-            expected_dialogue_conversation: crate::engine::species::conv::URQUAN,
-            current_activity: crate::comm::dispatch::IN_ENCOUNTER
-                | crate::comm::dispatch::START_ENCOUNTER,
+            encounter_ship: uqm_engine::species::ship::URQUAN_DRONE_SHIP,
+            expected_encounter_conversation: uqm_engine::species::conv::URQUAN_DRONE,
+            expected_dialogue_conversation: uqm_engine::species::conv::URQUAN,
+            current_activity: uqm_modes::comm::dispatch::IN_ENCOUNTER
+                | uqm_modes::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
             game_state: &[(StoryKey::PROBE_MESSAGE_DELIVERED, 0)],
         }),
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
             encounter_ship: 0,
-            expected_encounter_conversation: crate::engine::species::conv::COMMANDER,
-            expected_dialogue_conversation: crate::engine::species::conv::COMMANDER,
-            current_activity: crate::comm::dispatch::IN_INTERPLANETARY
-                | crate::comm::dispatch::START_ENCOUNTER,
+            expected_encounter_conversation: uqm_engine::species::conv::COMMANDER,
+            expected_dialogue_conversation: uqm_engine::species::conv::COMMANDER,
+            current_activity: uqm_modes::comm::dispatch::IN_INTERPLANETARY
+                | uqm_modes::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
             game_state: &[
                 (StoryKey::GLOBAL_FLAGS_AND_DATA, 0xFF),
@@ -327,16 +327,16 @@ pub trait SceneEntryOps {
 /// it every frame of the scene is composited through a black colormap. The C
 /// does not wait on the fade, so neither does the scene.
 pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
-    ops.set_last_activity(crate::comm::dispatch::IN_ENCOUNTER);
+    ops.set_last_activity(uqm_modes::comm::dispatch::IN_ENCOUNTER);
     ops.set_current_activity(plan.current_activity);
     ops.clear_screen();
     ops.fade_screen_to_color();
 }
 
 pub(crate) struct LinkedSceneEntry<'a> {
-    pub(crate) world: &'a mut crate::engine::World,
-    pub(crate) kernel: &'a mut crate::engine::Kernel,
-    pub(crate) screen_context: Option<crate::graphics::context::ContextId>,
+    pub(crate) world: &'a mut uqm_engine::World,
+    pub(crate) kernel: &'a mut uqm_engine::Kernel,
+    pub(crate) screen_context: Option<uqm_engine::graphics::context::ContextId>,
 }
 
 impl SceneEntryOps for LinkedSceneEntry<'_> {
@@ -349,14 +349,14 @@ impl SceneEntryOps for LinkedSceneEntry<'_> {
     }
 
     fn clear_screen(&mut self) {
-        crate::graphics::menu::select(self.screen_context);
-        crate::graphics::menu::clear();
+        uqm_engine::graphics::menu::select(self.screen_context);
+        uqm_engine::graphics::menu::clear();
     }
 
     fn fade_screen_to_color(&mut self) {
         // The completion time is deliberately not awaited, as in the C entry.
-        crate::graphics::state::fade_screen(
-            crate::graphics::colormap::FADE_ALL_TO_COLOR,
+        uqm_engine::graphics::state::fade_screen(
+            uqm_engine::graphics::colormap::FADE_ALL_TO_COLOR,
             (crate::time::counter_abi::ONE_SECOND / 2) as i16,
         );
     }
@@ -369,7 +369,7 @@ impl SceneEntryOps for LinkedSceneEntry<'_> {
 impl super::coordinator::AutomationObserver {
     pub(crate) fn activate_scene(
         &self,
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         scene: AutomationScene,
         boundary: SceneActivationBoundary,
         enter: impl FnOnce(&ScenePlan),
@@ -379,19 +379,19 @@ impl super::coordinator::AutomationObserver {
 
         {
             if scene == AutomationScene::SamatraDevFixture {
-                crate::comm::dispatch::prepare_samatra_dev_fixture(cx)
+                uqm_modes::comm::dispatch::prepare_samatra_dev_fixture(cx)
                     .map_err(SceneError::SetupFailed)?;
             }
             if scene == AutomationScene::SolProbeEncounter {
                 if let Err(reason) =
-                    crate::comm::dispatch::prepare_automation_sol_probe_encounter(cx.world)
+                    uqm_modes::comm::dispatch::prepare_automation_sol_probe_encounter(cx.world)
                 {
                     *self.scene.lock() = SceneObservation::default();
                     return Err(SceneError::SetupFailed(reason));
                 }
             }
             if let Err(reason) =
-                crate::comm::dispatch::place_flagship_at_star(cx.world, plan.star_location)
+                uqm_modes::comm::dispatch::place_flagship_at_star(cx.world, plan.star_location)
             {
                 *self.scene.lock() = SceneObservation::default();
                 return Err(SceneError::SetupFailed(reason));
@@ -504,7 +504,7 @@ mod tests {
             SceneActivationBoundary::GameInitialized,
         )
         .unwrap();
-        let state = |name: crate::engine::StoryKey| {
+        let state = |name: uqm_engine::StoryKey| {
             plan.game_state
                 .iter()
                 .find(|(key, _)| *key == name)
@@ -562,7 +562,10 @@ mod tests {
             assert_eq!(
                 ops.calls,
                 [
-                    format!("last_activity:{:#x}", crate::comm::dispatch::IN_ENCOUNTER),
+                    format!(
+                        "last_activity:{:#x}",
+                        uqm_modes::comm::dispatch::IN_ENCOUNTER
+                    ),
                     format!("current_activity:{:#x}", plan.current_activity),
                     "clear_screen".to_string(),
                     "fade_to_color".to_string(),

@@ -2,9 +2,9 @@
 
 use super::{generateMyconFunctions, Harness};
 use crate::planets_common::mycon::{self, MyconOps, RustMycon, ScanCase};
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
 
-use uqm_rust::state::game_state_keys::set_game_state;
+use uqm_engine::state::game_state_keys::set_game_state;
 
 impl MyconOps for Harness {
     fn layout(
@@ -32,7 +32,7 @@ impl MyconOps for Harness {
         crate::battle_context::with(|cx| {
             set_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::SUN_DEVICE,
+                uqm_engine::StoryKey::SUN_DEVICE,
                 u32::from(case.taken),
             )
         });
@@ -40,18 +40,18 @@ impl MyconOps for Harness {
         self.state.sys.moons = Default::default();
         self.state.sys.info = mycon::scan_info(case);
         self.state.sys.report =
-            uqm_rust::engine::world::generation::ReportSlot::new(case.strings.then(|| {
-                uqm_rust::engine::strings::owned_table::LoadedTextTable::new(vec![
-                    c"egg case report".to_owned(),
+            uqm_engine::world::generation::ReportSlot::new(case.strings.then(|| {
+                uqm_engine::strings::owned_table::LoadedTextTable::new(vec![
+                    c"egg case report".to_owned()
                 ])
                 .entry(0)
                 .unwrap_or_else(|| panic!("Mycon report fixture has no first entry"))
             }));
 
         let generate =
-            |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
+            |view: &mut uqm_engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,
-             host: &mut dyn uqm_rust::planets::generate::SiteHost| {
+             host: &mut dyn uqm_modes::planets::generate::SiteHost| {
                 if case.life {
                     generateMyconFunctions.generate_life(view, case.body, case.which, info, host)
                 } else {
@@ -76,9 +76,9 @@ impl MyconOps for Harness {
         );
         assert_eq!(
             crate::battle_context::with(|cx| {
-                uqm_rust::state::game_state_keys::get_game_state(
+                uqm_engine::state::game_state_keys::get_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::SUN_DEVICE,
+                    uqm_engine::StoryKey::SUN_DEVICE,
                 )
             }),
             u32::from(case.taken)
@@ -97,4 +97,4 @@ pub fn check(table: &[PlanetFrame]) {
     );
 }
 
-use uqm_rust::planets::generate::SystemGenerator;
+use uqm_modes::planets::generate::SystemGenerator;

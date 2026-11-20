@@ -32,7 +32,6 @@ use crate::automation::{
     NATIVE_LINKED_BUILD_RECEIPT_SCHEMA, NATIVE_WINDOW_ACK_SCHEMA, NATIVE_WINDOW_CONFIG_SCHEMA,
 };
 use crate::mainloop::options::{DEFAULT_RESOLUTION_HEIGHT, DEFAULT_RESOLUTION_WIDTH};
-use crate::platform::os as sys;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -40,6 +39,7 @@ use std::io::{self, Read as _, Seek as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
+use uqm_platform::os as sys;
 
 const NATIVE_OBSERVER_HELPER_SCHEMA: &str = "uqm-native-observer-helper-v1";
 const MAX_CONTENT_ARCHIVE_ENTRIES: usize = 100_000;

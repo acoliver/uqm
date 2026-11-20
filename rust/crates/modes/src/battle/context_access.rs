@@ -1,7 +1,7 @@
 //! Game and resource operations wired to the explicit battle context.
-use crate::engine::battle::flags::PLAYER_SHIP;
-use crate::engine::battle::{Cx, ElementId, ShipId};
 use crate::ui::settings::OPT_PC;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::{Cx, ElementId, ShipId};
 
 mod status_native_access {
     use super::*;
@@ -19,7 +19,7 @@ mod status_native_access {
             let Some(context) = self
                 .kernel
                 .status_context
-                .map(crate::graphics::context::ContextLease::retain)
+                .map(uqm_engine::graphics::context::ContextLease::retain)
                 .and_then(|context| context.selected_context())
             else {
                 return;
@@ -36,12 +36,12 @@ mod status_native_access {
             let Some(context) = self
                 .kernel
                 .status_context
-                .map(crate::graphics::context::ContextLease::retain)
+                .map(uqm_engine::graphics::context::ContextLease::retain)
                 .and_then(|context| context.selected_context())
             else {
                 return;
             };
-            let frames = crate::graphics::drawable::retain_frames(&[self.kernel.status_frame]);
+            let frames = uqm_engine::graphics::drawable::retain_frames(&[self.kernel.status_frame]);
             crate::ui::shipstat::draw_crew_energy_labels(
                 &context,
                 &frames[0],
@@ -74,8 +74,8 @@ pub trait ContextOps {
 
     fn negotiate_battle(
         &mut self,
-        net: &dyn crate::engine::battle::net::BattleNet,
-        state: crate::engine::battle::net::NetState,
+        net: &dyn uqm_engine::battle::net::BattleNet,
+        state: uqm_engine::battle::net::NetState,
     ) -> bool;
 
     fn draw_final_battle_captain(&mut self, ship: ShipId);
@@ -107,12 +107,12 @@ impl ContextOps for Cx<'_> {
 
     fn negotiate_battle(
         &mut self,
-        net: &dyn crate::engine::battle::net::BattleNet,
-        state: crate::engine::battle::net::NetState,
+        net: &dyn uqm_engine::battle::net::BattleNet,
+        state: uqm_engine::battle::net::NetState,
     ) -> bool {
         let runtime = self.kernel.input_runtime();
         let mut observer = runtime.observer();
-        let mut io = crate::engine::observe::Io {
+        let mut io = uqm_engine::observe::Io {
             observer: observer.as_mut(),
         };
         crate::supermelee::native::protocol::with_battle_driver(self, &mut io, |driver| {
@@ -126,7 +126,7 @@ impl ContextOps for Cx<'_> {
 
     fn start_battle_song_if_ready(&mut self, ship: ShipId) {
         use crate::battle::tactrans_native::opponent_alive;
-        if !crate::sound::music::plr_playing_current() && opponent_alive(self, ship) {
+        if !uqm_engine::sound::music::plr_playing_current() && opponent_alive(self, ship) {
             crate::battle::battle_native::engine::battle_song(self.kernel, self.world, true);
         }
     }

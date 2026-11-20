@@ -3,11 +3,11 @@
 use super::races::descriptor::CommDescriptor;
 use super::sis_graphics::SubtitleCache;
 use super::Comm;
-use crate::graphics::{
+use uqm_engine::graphics::{
     context::ContextLease, context::LoadedContext, drawable::LoadedDrawable, font::FontLease,
     font::LoadedFont, geometry::Color, palette_cycle::PaletteCycle,
 };
-use crate::sound::resource_types::LoadedMusic;
+use uqm_engine::sound::resource_types::LoadedMusic;
 
 pub(crate) struct Assets {
     pub frame: LoadedDrawable,
@@ -19,7 +19,7 @@ pub(crate) struct Assets {
     pub cache_frame: LoadedDrawable,
     pub animation: Option<LoadedContext>,
     pub old_font: Option<FontLease>,
-    pub intro_batch: Option<crate::graphics::context::BatchGuard>,
+    pub intro_batch: Option<uqm_engine::graphics::context::BatchGuard>,
 }
 
 impl Assets {

@@ -1,6 +1,6 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 pub trait BlackurApi: EncounterApi<Handler> {
     fn battle_group(&self, key: StoryKey) -> (u32, u32);

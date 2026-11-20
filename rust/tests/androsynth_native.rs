@@ -8,27 +8,27 @@ mod battle_context;
 mod battle;
 use battle::{Battle, Object, Ship};
 use std::ffi::CStr;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     CREW_OBJECT_INDEX, ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
     MOVEMENT_STATE_AVOID, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SEEKING_WEAPON,
     SPECIAL, THRUST, WEAPON,
 };
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::flags::{
     CHANGING, CREW_OBJECT, FINITE_LIFE, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
 };
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::battle::{Cx, ElementId, RaceState};
-use uqm_rust::engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::HALF_CIRCLE;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::{arctan, random};
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::battle::{Cx, ElementId, RaceState};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::HALF_CIRCLE;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::{arctan, random};
+use uqm_engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
 
 fn original_collision(_: &mut Cx<'_>, _: ElementId, _: &mut Point, _: ElementId, _: &mut Point) {}
 
-fn address(func: Option<uqm_rust::engine::battle::CollisionHook>) -> Option<usize> {
+fn address(func: Option<uqm_engine::battle::CollisionHook>) -> Option<usize> {
     func.map(|f| (f).address())
 }
 
@@ -49,7 +49,7 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
 fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
     {
         let mut v: VelocityDesc = VelocityDesc::new();
-        uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+        uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
 }
@@ -65,7 +65,7 @@ fn descriptor_matches_the_c_race_data() {
             let desc = battle::descriptor(SPECIES_ID_ANDROSYNTH_ID);
             assert!(std::ptr::eq(
                 desc.race.unwrap(),
-                uqm_rust::ships::races::race(SPECIES_ID_ANDROSYNTH_ID).unwrap()
+                uqm_content::ships::races::race(SPECIES_ID_ANDROSYNTH_ID).unwrap()
             ));
             assert_eq!(
                 desc.ship_info.ship_flags,
@@ -296,9 +296,9 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
         let _battle = Battle::new(32);
         {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
-            ship.element_mut().collision_func = Some(
-                uqm_rust::engine::battle::CollisionHook::Native(original_collision),
-            );
+            ship.element_mut().collision_func = Some(uqm_engine::battle::CollisionHook::Native(
+                original_collision,
+            ));
             ship.element_mut().mass = 6;
             ship.element_mut().turn = 3;
             ship.element_mut().thrust = 3;
@@ -333,14 +333,14 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
             let saved = ship.saved_collision();
             assert_eq!(
                 address(saved),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
+                address(Some(uqm_engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
             assert!(ship.element_mut().collision_func.is_some());
             assert_ne!(
                 address(ship.element_mut().collision_func),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
+                address(Some(uqm_engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
@@ -454,16 +454,16 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
         let _battle = Battle::new(32);
         {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
-            ship.element_mut().collision_func = Some(
-                uqm_rust::engine::battle::CollisionHook::Native(original_collision),
-            );
+            ship.element_mut().collision_func = Some(uqm_engine::battle::CollisionHook::Native(
+                original_collision,
+            ));
             enter_blazer(&mut ship);
             let blazer_handler = address(ship.element_mut().collision_func);
             let blazer_farray = ship.special_frames();
             assert_eq!(ship.element_mut().next.image.frames, blazer_farray);
 
             // Moving, turning and out of energy.
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut ship.element_mut().velocity,
                 60,
                 3,
@@ -485,7 +485,7 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             assert_ne!(address(ship.element_mut().collision_func), blazer_handler);
             assert_eq!(
                 address(ship.element_mut().collision_func),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
+                address(Some(uqm_engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
@@ -507,9 +507,9 @@ fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
         let _battle = Battle::new(32);
         {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
-            ship.element_mut().collision_func = Some(
-                uqm_rust::engine::battle::CollisionHook::Native(original_collision),
-            );
+            ship.element_mut().collision_func = Some(uqm_engine::battle::CollisionHook::Native(
+                original_collision,
+            ));
             enter_blazer(&mut ship);
             let first_saved = ship.saved_collision();
             assert_eq!(
@@ -524,7 +524,7 @@ fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
             ship.descriptor_mut().ship_info.energy_level = 24;
             assert_eq!(
                 address(ship.element_mut().collision_func),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
+                address(Some(uqm_engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
@@ -535,7 +535,7 @@ fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
             ));
             assert_eq!(
                 address(ship.saved_collision()),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
+                address(Some(uqm_engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
@@ -765,7 +765,7 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
                     x: 5000,
                     y: 5000 + dy,
                 };
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut duel.ship.element_mut().velocity,
                     20,
                     0,

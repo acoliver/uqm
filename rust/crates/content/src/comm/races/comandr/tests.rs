@@ -1,8 +1,8 @@
 use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::script::Supplies;
-use crate::engine::StoryKey;
 use std::collections::{HashMap, HashSet};
+use uqm_engine::StoryKey;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Effect {

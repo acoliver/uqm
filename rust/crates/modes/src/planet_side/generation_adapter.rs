@@ -4,17 +4,17 @@
 //! system generator is ported, this adapter calls only the selected generator
 //! hook and immediately converts its output into typed Rust data.
 
-#[cfg(not(test))]
-use crate::engine::world::planet::NodeInfo;
-use crate::engine::world::{
-    generation::{Body, SolarSys},
-    StarId,
-};
-use crate::engine::{battle::Cx, observe::Io, StoryKey};
 use crate::planets::solar_system::SolarSystem;
 #[cfg(not(test))]
 use crate::planets::solarsys::site::Site;
 use std::cell::RefCell;
+#[cfg(not(test))]
+use uqm_engine::world::planet::NodeInfo;
+use uqm_engine::world::{
+    generation::{Body, SolarSys},
+    StarId,
+};
+use uqm_engine::{battle::Cx, observe::Io, StoryKey};
 
 #[cfg(not(test))]
 use super::creatures::{CreatureCatalog, CreatureKind};
@@ -212,7 +212,7 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
                     {
                         let mut game = self.game.borrow_mut();
                         let world = &mut *game.world;
-                        crate::state::ffi::with_state_files(world, |files| {
+                        uqm_engine::state::ffi::with_state_files(world, |files| {
                             files.remove_canned_node(key)
                         })
                     }
@@ -254,7 +254,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
                 if let Some(canned) = {
                     let mut game = self.game.borrow_mut();
                     let world = &mut *game.world;
-                    crate::state::ffi::with_state_files(world, |files| files.canned_node(key))
+                    uqm_engine::state::ffi::with_state_files(world, |files| files.canned_node(key))
                 }
                 .map_err(|_| AdapterError::new("canned_node_state"))?
                 {
@@ -280,7 +280,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
                     // Legacy `generateBioNode` is only embedded in a real
                     // `generate_planet_side` lander population, never in the orbit
                     // scan render, so only that role draws a random 0..3 frame.
-                    let initial_frame = select_initial_frame(self.role, crate::math::random);
+                    let initial_frame = select_initial_frame(self.role, uqm_engine::math::random);
                     GeneratedNodeKind::Biological {
                         creature,
                         hit_points: CreatureCatalog::stats(creature).hit_points,
@@ -310,7 +310,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
         value: u16,
     ) -> Result<(), AdapterError> {
         let (star, planet, moon, node) = self.node_key(node);
-        let canned = crate::engine::world::planet_info::CannedNode {
+        let canned = uqm_engine::world::planet_info::CannedNode {
             star,
             planet,
             moon,
@@ -322,7 +322,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
         {
             let mut game = self.game.borrow_mut();
             let world = &mut *game.world;
-            crate::state::ffi::with_state_files(world, |files| files.can_node(canned))
+            uqm_engine::state::ffi::with_state_files(world, |files| files.can_node(canned))
         }
         .map_err(|_| AdapterError::new("canned_node_state"))
     }
@@ -360,22 +360,22 @@ mod tests {
     ) {
         let _queue = uqm_engine::test_support::native_probe::DrawQueue::init();
 
-        let mut owners = crate::engine::Game::new();
+        let mut owners = uqm_engine::Game::new();
         owners.world.set_catalog(std::borrow::Cow::Borrowed(
             &crate::planets::tables::STARMAP_ARRAY,
         ));
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let game = RefCell::new(Cx::new(
             &mut battle,
             &mut owners.world,
             &mut owners.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
-        let mut observer = crate::engine::observe::Unobserved;
+        let mut observer = uqm_engine::observe::Unobserved;
         let io = RefCell::new(Io {
             observer: &mut observer,
         });
-        let scan = crate::engine::graphics::context::LoadedContext::create(c"generation-test-scan");
+        let scan = uqm_engine::graphics::context::LoadedContext::create(c"generation-test-scan");
         run(
             &game,
             &io,
@@ -389,13 +389,13 @@ mod tests {
     #[serial_test::serial]
     fn accepted_live_pickups_update_the_planet_mask_and_dirty_flag() {
         with_context(|game, io, report_context| {
-            crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
+            uqm_engine::state::ffi::rust_init_game_state(game.borrow_mut().world);
             game.borrow_mut().world.data.flagship.crew_enlisted = 23;
             let mut system = SolarSystem::new(game.borrow().world, StarId(0));
             system.sys.sun.num_planets = 1;
             system.enter_inner(0);
             system.enter_orbit(Body::Planet(0));
-            let report_color = crate::graphics::geometry::Color {
+            let report_color = uqm_engine::graphics::geometry::Color {
                 r: 3,
                 g: 5,
                 b: 7,
@@ -471,7 +471,7 @@ mod tests {
     #[serial_test::serial]
     fn held_pickup_rejects_the_callback_without_persisting_a_node() {
         with_context(|game, io, report| {
-            crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
+            uqm_engine::state::ffi::rust_init_game_state(game.borrow_mut().world);
             let mut solar = SolarSystem::new(game.borrow().world, StarId(0));
             solar.sys.sun.num_planets = 1;
             solar.enter_inner(0);
@@ -499,7 +499,7 @@ mod tests {
     #[serial_test::serial]
     fn canning_uses_the_supplied_world_and_selected_body_key() {
         with_context(|game, io, report| {
-            crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
+            uqm_engine::state::ffi::rust_init_game_state(game.borrow_mut().world);
             let mut solar = SolarSystem::new(game.borrow().world, StarId(0));
             solar.sys.sun.num_planets = 1;
             solar.sys.planets[0].num_planets = 1;
@@ -517,7 +517,7 @@ mod tests {
                     )
                     .unwrap();
                 let canned =
-                    crate::state::ffi::with_state_files(game.borrow_mut().world, |files| {
+                    uqm_engine::state::ffi::with_state_files(game.borrow_mut().world, |files| {
                         files.canned_node(key)
                     })
                     .unwrap()

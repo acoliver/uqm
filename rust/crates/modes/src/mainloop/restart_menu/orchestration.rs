@@ -8,10 +8,12 @@
 
 use super::do_restart::DoRestartState;
 use super::restart_ops::RestartMenuOps;
-use crate::engine::input::frames::MENU_SOUND_DOWN;
-use crate::engine::input::frames::MENU_SOUND_SELECT;
-use crate::engine::input::frames::MENU_SOUND_UP;
-use crate::graphics::{colormap::FADE_ALL_TO_BLACK, colormap::FADE_ALL_TO_WHITE, geometry::Color};
+use uqm_engine::graphics::{
+    colormap::FADE_ALL_TO_BLACK, colormap::FADE_ALL_TO_WHITE, geometry::Color,
+};
+use uqm_engine::input::frames::MENU_SOUND_DOWN;
+use uqm_engine::input::frames::MENU_SOUND_SELECT;
+use uqm_engine::input::frames::MENU_SOUND_UP;
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
 // ===========================================================================
@@ -267,9 +269,9 @@ fn play_campaign_introduction(ops: &mut (impl RestartMenuOps + ?Sized), start: C
 mod tests {
     use super::super::restart_ops::RestartMenuOps;
     use super::*;
-    use crate::graphics::geometry::Color;
     use std::cell::Cell;
     use std::os::raw::{c_int, c_short};
+    use uqm_engine::graphics::geometry::Color;
 
     // Re-use the MockOps pattern from do_restart tests
     struct MockOps {

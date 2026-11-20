@@ -31,22 +31,22 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 pub(crate) mod live {
     use super::navigate;
 
-    use crate::engine::input_port::frames::{
-        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT,
-        KEY_MENU_SPECIAL, KEY_MENU_UP,
-    };
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-    use crate::graphics::geometry::Extent;
-    use crate::graphics::geometry::Point;
-    use crate::graphics::geometry::Rect;
-    use crate::graphics::{
+    use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
+    use crate::supermelee::session::MeleeSession;
+    use uqm_content::ships::master_native::ShipChoice;
+    use uqm_engine::graphics::geometry::Extent;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::graphics::geometry::Rect;
+    use uqm_engine::graphics::{
         context::ContextLease, drawable::ContextFrame, drawable::DrawableLease,
         drawable::LoadedDrawable,
     };
-    use crate::ships::master_native::ShipChoice;
-    use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
-    use crate::supermelee::session::MeleeSession;
+    use uqm_engine::input_port::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT,
+        KEY_MENU_SPECIAL, KEY_MENU_UP,
+    };
+    use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
 
     pub(crate) struct BuildPicker {
         drawable: LoadedDrawable,
@@ -76,7 +76,7 @@ pub(crate) mod live {
             draw: bool,
         ) {
             let rect = frame.frame_rect(0);
-            let origin = crate::graphics::geometry::Point {
+            let origin = uqm_engine::graphics::geometry::Point {
                 x: rect.corner.x + 20 + (ship % 5) as i16 * 18,
                 y: rect.corner.y + 5 + (ship / 5) as i16 * 18,
             };
@@ -90,7 +90,7 @@ pub(crate) mod live {
                 context.draw_filled_stamp_preserving_color(
                     &icon,
                     origin,
-                    crate::graphics::geometry::Color {
+                    uqm_engine::graphics::geometry::Color {
                         r: 0,
                         g: 0,
                         b: 0,
@@ -112,9 +112,9 @@ pub(crate) mod live {
                 rect.extent.width,
                 rect.extent.height,
             );
-            frame.replace_hotspot(crate::graphics::geometry::Point { x, y });
+            frame.replace_hotspot(uqm_engine::graphics::geometry::Point { x, y });
             self.screen
-                .draw_stamp(&frame, crate::graphics::geometry::Point { x: 0, y: 0 });
+                .draw_stamp(&frame, uqm_engine::graphics::geometry::Point { x: 0, y: 0 });
         }
     }
 
@@ -130,8 +130,11 @@ pub(crate) mod live {
         let frame = drawable.lease();
         context.draw_batch(|| {
             context.set_frame(frame.context_frame(0));
-            source.replace_hotspot(crate::graphics::geometry::Point { x: 0, y: 0 });
-            context.draw_stamp(&source, crate::graphics::geometry::Point { x: 0, y: 0 });
+            source.replace_hotspot(uqm_engine::graphics::geometry::Point { x: 0, y: 0 });
+            context.draw_stamp(
+                &source,
+                uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
+            );
             for ship in 0..25 {
                 BuildPicker::draw_icon_in(&context, &frame, catalog, ship, true);
             }
@@ -140,16 +143,16 @@ pub(crate) mod live {
     }
 
     /// State must be the active fleet editor on the game thread.
-    pub fn draw_pick_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+    pub fn draw_pick_frame(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession) {
         state.build_picker().draw_frame(state.side);
         draw_ship_strings(cx, state, state.current_ship);
     }
 
     fn pick(
         state: &mut MeleeSession,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        input: &uqm_engine::input::InputSession,
     ) -> u32 {
         let time = get_time_counter();
         input.set_paused(false);
@@ -191,9 +194,9 @@ pub(crate) mod live {
     }
     /// State must be the active fleet editor on the game thread.
     pub fn build_pick_ship(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        input: &uqm_engine::input::InputSession,
         state: &mut MeleeSession,
     ) -> bool {
         cx.kernel.input_runtime().flush();
@@ -206,8 +209,8 @@ pub(crate) mod live {
             let mut frame = crate::supermelee::native::menu::live::admission::SessionFrame::new(
                 state,
                 |state: &mut MeleeSession,
-                 cx: &mut crate::engine::battle::Cx<'_>,
-                 io: &mut crate::engine::observe::Io<'_>| {
+                 cx: &mut uqm_engine::battle::Cx<'_>,
+                 io: &mut uqm_engine::observe::Io<'_>| {
                     pick(state, cx, io, input) != 0
                 },
             );

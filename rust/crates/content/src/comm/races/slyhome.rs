@@ -2,7 +2,7 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 
 mod phrases;
 use phrases::*;
@@ -530,23 +530,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            crate::engine::StoryKey::from_name("DESTRUCT_CODE_ON_SHIP").is_some(),
+            uqm_engine::StoryKey::from_name("DESTRUCT_CODE_ON_SHIP").is_some(),
             "missing game state key: DESTRUCT_CODE_ON_SHIP"
         );
         assert!(
-            crate::engine::StoryKey::from_name("PLAYER_KNOWS_EFFECTS").is_some(),
+            uqm_engine::StoryKey::from_name("PLAYER_KNOWS_EFFECTS").is_some(),
             "missing game state key: PLAYER_KNOWS_EFFECTS"
         );
         assert!(
-            crate::engine::StoryKey::from_name("PLAYER_KNOWS_PRIORITY").is_some(),
+            uqm_engine::StoryKey::from_name("PLAYER_KNOWS_PRIORITY").is_some(),
             "missing game state key: PLAYER_KNOWS_PRIORITY"
         );
         assert!(
-            crate::engine::StoryKey::from_name("PLAYER_KNOWS_PROBE").is_some(),
+            uqm_engine::StoryKey::from_name("PLAYER_KNOWS_PROBE").is_some(),
             "missing game state key: PLAYER_KNOWS_PROBE"
         );
         assert!(
-            crate::engine::StoryKey::from_name("PLAYER_KNOWS_PROGRAM").is_some(),
+            uqm_engine::StoryKey::from_name("PLAYER_KNOWS_PROGRAM").is_some(),
             "missing game state key: PLAYER_KNOWS_PROGRAM"
         );
     }

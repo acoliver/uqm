@@ -10,23 +10,23 @@ mod render;
 mod render_tests;
 pub(super) mod text;
 
-use crate::engine::battle::Cx;
-use crate::engine::input::InputSession;
-use crate::engine::observe::CheckpointView;
-use crate::engine::observe::Io;
-use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
-    geometry::Rect,
-};
-use crate::sound::music;
-use crate::sound::resource_types::LoadedMusic;
-use crate::strings::owned_table::LoadedTextTable;
-use crate::video::legacy::LoadedVideo;
-use crate::video::legacy::VideoPlayback;
 use args::rgb as parse_rgb;
 use records::PresentationState;
 use std::ffi::{CStr, CString};
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
+    geometry::Rect,
+};
+use uqm_engine::input::InputSession;
+use uqm_engine::observe::CheckpointView;
+use uqm_engine::observe::Io;
+use uqm_engine::sound::music;
+use uqm_engine::sound::resource_types::LoadedMusic;
+use uqm_engine::strings::owned_table::LoadedTextTable;
+use uqm_engine::video::legacy::LoadedVideo;
+use uqm_engine::video::legacy::VideoPlayback;
+use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
 use uqm_engine::{
     input::frames::{
         KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_SPECIAL,
@@ -104,7 +104,7 @@ fn presentation_frame(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut Presentation
 
 struct DisplayRestore {
     context: ContextLease,
-    font: Option<crate::graphics::font::FontLease>,
+    font: Option<uqm_engine::graphics::font::FontLease>,
     clip: Rect,
 }
 impl Drop for DisplayRestore {
@@ -142,10 +142,10 @@ fn show_slides(
         cx.run_input(io, true, |cx, io| presentation_frame(cx, io, &mut state));
         cx.kernel.input_runtime().sleep_until(
             cx,
-            crate::sound::heart_ffi::fade_music(0, ONE_SECOND as i16),
+            uqm_engine::sound::heart_ffi::fade_music(0, ONE_SECOND as i16),
         );
         music::stop_requested_music();
-        crate::sound::heart_ffi::fade_music(160, 0);
+        uqm_engine::sound::heart_ffi::fade_music(160, 0);
         drop(state.music.take());
         drop(state.rotated.take());
         drop(state.frame.take());
@@ -156,7 +156,7 @@ fn show_slides(
 }
 
 pub fn show_presentation(cx: &mut Cx<'_>, io: &mut Io<'_>, presentation: &CStr) -> bool {
-    let Some(kind) = crate::resource::settings::Settings.kind(presentation) else {
+    let Some(kind) = uqm_engine::resource::settings::Settings.kind(presentation) else {
         return false;
     };
     match kind.as_str() {

@@ -6,44 +6,44 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{Battle, PoolElement, Ship};
-use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::GRAVITY_MASS_INDEX;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::IMMEDIATE_WEAPON;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_NO_MOVEMENT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::CREW_OBJECT;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_UMGAH_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::arctan;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
+use uqm_engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::GRAVITY_MASS_INDEX;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::IMMEDIATE_WEAPON;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_NO_MOVEMENT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::CREW_OBJECT;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_IN_GRAVITY_WELL;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::arctan;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::species::species_id::SPECIES_ID_UMGAH_ID;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 
-use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+use uqm_engine::collections::observation;
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
@@ -268,12 +268,12 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             let mut template = battle::descriptor(SPECIES_ID_UMGAH_ID);
             template.ship_info.energy_level = 0;
             template.characteristics.special_wait = 0;
-            template.race_callbacks.pre = uqm_rust::engine::battle::Selection::Disabled;
+            template.race_callbacks.pre = uqm_engine::battle::Selection::Disabled;
             assert_eq!(template.ship_info.energy_level, 0);
             assert_eq!(template.characteristics.special_wait, 0);
             assert!(matches!(
                 template.race_callbacks.pre,
-                uqm_rust::engine::battle::Selection::Disabled
+                uqm_engine::battle::Selection::Disabled
             ));
             let fresh = battle::descriptor(SPECIES_ID_UMGAH_ID);
             assert_eq!(fresh.ship_info.energy_level, 30);
@@ -1032,14 +1032,13 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
 fn fire(ship: &mut Ship<'_>) -> Option<ElementId> {
     let h = ship.initialize_from(ship.id, 1)[0];
     if let Some(h) = h {
-        assert!(battle::get(h).parent == uqm_rust::engine::battle::Parent::None);
+        assert!(battle::get(h).parent == uqm_engine::battle::Parent::None);
         battle::get_mut(h).parent = battle::get(ship.id).parent;
     }
     h
 }
 fn previous_facing(ship: &mut Ship<'_>) -> Option<u16> {
-    let uqm_rust::engine::battle::RaceState::Umgah { previous_facing } =
-        ship.descriptor_mut().race_state
+    let uqm_engine::battle::RaceState::Umgah { previous_facing } = ship.descriptor_mut().race_state
     else {
         panic!("Umgah fixture state")
     };

@@ -2,18 +2,18 @@
 
 use crate::battle::context_access::ContextOps;
 use crate::battle::tactrans_native::engine::{ship_death, ship_transition};
-use crate::engine::battle::ai_constants::{IGNORE_SIMILAR, LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
-use crate::engine::battle::flags::{
-    APPEARING, CHANGING, IN_LAST_BATTLE, NORMAL_LIFE, NPC_PLAYER_NUM, PLAYER_SHIP,
-};
-use crate::engine::battle::STAMP_PRIMITIVE;
-use crate::engine::battle::{CollisionHook, ElementHook};
-use crate::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
-use crate::graphics::geometry::Point;
-use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
-use crate::ships::DescriptorLoader;
 use crate::starbase::ids::STATUS_WIDTH;
 use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
+use uqm_content::ships::DescriptorLoader;
+use uqm_engine::battle::ai_constants::{IGNORE_SIMILAR, LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+use uqm_engine::battle::flags::{
+    APPEARING, CHANGING, IN_LAST_BATTLE, NORMAL_LIFE, NPC_PLAYER_NUM, PLAYER_SHIP,
+};
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::battle::{CollisionHook, ElementHook};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
+use uqm_engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
 
 const INPUT_FLAGS: u16 = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
 
@@ -47,16 +47,15 @@ fn spawn_coordinate(random: u32, extent: i32) -> i16 {
 }
 
 fn install_ship_hooks(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    element: crate::engine::battle::ElementId,
-    ship: crate::engine::battle::ShipId,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    element: uqm_engine::battle::ElementId,
+    ship: uqm_engine::battle::ShipId,
 ) {
     cx.element_mut(element).pre = Some(ElementHook::Native(engine::ship_preprocess));
     cx.element_mut(element).post = Some(ElementHook::Native(engine::ship_postprocess));
     cx.element_mut(element).death = Some(ElementHook::Native(ship_death));
-    cx.element_mut(element).collide = Some(CollisionHook::Native(
-        crate::engine::battle::motion::collision,
-    ));
+    cx.element_mut(element).collide =
+        Some(CollisionHook::Native(uqm_engine::battle::motion::collision));
     cx.element_mut(element).velocity.zero();
     cx.set_parent(element, Some(ship));
     crate::battle::process_native::dispatch::record_spawn(
@@ -70,11 +69,11 @@ fn install_ship_hooks(
 pub(crate) mod engine {
     use super::*;
     use crate::battle::status_native::post_process_status;
-    use crate::engine::battle::input::NUM_PLAYERS;
-    use crate::engine::battle::{Cx, ElementId, ShipId};
-    use crate::ships::native::normalize_facing;
+    use uqm_content::ships::native::normalize_facing;
+    use uqm_engine::battle::input::NUM_PLAYERS;
+    use uqm_engine::battle::{Cx, ElementId, ShipId};
 
-    pub use crate::engine::battle::hooks::animation_preprocess;
+    pub use uqm_engine::battle::hooks::animation_preprocess;
 
     pub fn ship_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ship = cx.owner(e);
@@ -147,14 +146,14 @@ pub(crate) mod engine {
             let facing = cx.ship(ship).ship_facing;
             let status = cx.ship(ship).cur_status_flags;
             let characteristics = cx.desc(ship).characteristics;
-            let result = crate::engine::battle::motion::thrust(
+            let result = uqm_engine::battle::motion::thrust(
                 &mut cx.element_mut(e).velocity,
                 facing,
                 status,
                 characteristics.thrust_increment,
                 characteristics.max_thrust,
             );
-            cx.ship_state_mut(ship).status &= !crate::engine::battle::flags::SHIP_SPEED_FLAGS;
+            cx.ship_state_mut(ship).status &= !uqm_engine::battle::flags::SHIP_SPEED_FLAGS;
             cx.ship_state_mut(ship).status |= result;
             cx.element_mut(e)
                 .set_thrust_wait(characteristics.thrust_wait);
@@ -180,7 +179,7 @@ pub(crate) mod engine {
                 -i16::from(cx.desc(ship).characteristics.weapon_energy_cost),
             )
         {
-            let weapons = crate::engine::battle::Cx::spawn_weapons(cx, ship, cx.weapon_origin(e));
+            let weapons = uqm_engine::battle::Cx::spawn_weapons(cx, ship, cx.weapon_origin(e));
             if !weapons.is_empty() {
                 let mut played = false;
                 for weapon in weapons.into_iter().flatten() {
@@ -208,7 +207,7 @@ pub(crate) mod engine {
 
     pub fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> u32 {
         let Some(descriptor) =
-            crate::engine::battle::RaceDesc::load(cx.world, cx.ship(ship).species_id, true)
+            uqm_engine::battle::RaceDesc::load(cx.world, cx.ship(ship).species_id, true)
         else {
             return 0;
         };
@@ -341,7 +340,7 @@ pub use engine::{
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::battle::flags::{LOW_ON_ENERGY, SHIP_AT_MAX_SPEED};
+    use uqm_engine::battle::flags::{LOW_ON_ENERGY, SHIP_AT_MAX_SPEED};
 
     use super::*;
 

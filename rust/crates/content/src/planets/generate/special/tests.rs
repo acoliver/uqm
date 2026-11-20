@@ -1,17 +1,17 @@
 //! Story gating and side effects of the small per-system generators, with a
 //! fake game state, report and sites.
 
-use crate::engine::StoryKey;
 use std::collections::HashMap;
+use uqm_engine::StoryKey;
 
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::{
     Body, FleetGroups, Story, MELNORME_SHIP, URQUAN_SHIP, ZOQFOTPIK_SHIP,
 };
 use crate::planets::generate::testing::RecordReport;
 use crate::planets::generate::{colony, rainbow, syreen, vault, wreck, yehat, zfpscout};
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 
 #[derive(Default)]
 struct FakeStory(HashMap<StoryKey, u32>);
@@ -55,7 +55,7 @@ struct FakeSite {
 impl vault::VaultSite for FakeSite {
     fn load_vault_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _first_report: u16,
     ) {
     }
@@ -67,7 +67,7 @@ impl vault::VaultSite for FakeSite {
 impl wreck::WreckSite for FakeSite {
     fn load_wreck_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _first_report: u16,
     ) {
     }
@@ -320,8 +320,8 @@ fn melnorme_posts_pick_their_own_group_reference() {
 
 #[test]
 fn syreen_moon_slot_is_the_starbase_only_for_planet_zero() {
-    use crate::engine::world::planet::PlanetDesc;
-    use crate::math::RandomContext;
+    use uqm_engine::math::RandomContext;
+    use uqm_engine::world::planet::PlanetDesc;
     for (body, starbase) in [(Body::Planet(0), true), (Body::Planet(1), false)] {
         let mut moons: Vec<PlanetDesc> = vec![Default::default(); 16];
         let mut rng = RandomContext::with_seed(7);
@@ -334,7 +334,7 @@ fn syreen_moon_slot_is_the_starbase_only_for_planet_zero() {
 #[test]
 fn story_words_are_stored_least_significant_byte_first() {
     let key = StoryKey::new(40, 47);
-    let mut state = crate::state::game_state::StoryState::new();
+    let mut state = uqm_engine::state::game_state::StoryState::new();
     state.set_word(key, 0x1234_ABCD);
     assert_eq!(
         state.as_bytes().iter().filter(|&&byte| byte != 0).count(),
@@ -574,15 +574,15 @@ fn zoqfotpik_scout_flees_only_after_colliding_with_the_flagship() {
 
 #[test]
 fn owned_story_implements_generator_flags_and_group_words_without_a_live_owner() {
-    let mut first = crate::engine::world::story::StoryState::new();
-    let second = crate::engine::world::story::StoryState::new();
+    let mut first = uqm_engine::world::story::StoryState::new();
+    let second = uqm_engine::world::story::StoryState::new();
     first.set_flag(StoryKey::TAALO_UNPROTECTED, 1);
     first.set_word(StoryKey::SAMATRA_GRPOFFS0, 0x89abcdef);
     assert_eq!(first.flag(StoryKey::TAALO_UNPROTECTED), 1);
     assert_eq!(second.flag(StoryKey::TAALO_UNPROTECTED), 0);
     assert_eq!(first.word(StoryKey::SAMATRA_GRPOFFS0), 0x89abcdef);
     assert_eq!(second.word(StoryKey::SAMATRA_GRPOFFS0), 0);
-    let start = crate::engine::StoryKey::SAMATRA_GRPOFFS0.start();
+    let start = uqm_engine::StoryKey::SAMATRA_GRPOFFS0.start();
     for (byte, expected) in [0xef, 0xcd, 0xab, 0x89].into_iter().enumerate() {
         assert_eq!(
             first.get_state(start + 8 * byte, start + 8 * byte + 7),

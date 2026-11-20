@@ -1,5 +1,7 @@
 use super::*;
-use crate::graphics::{context::BatchGuard, font::LoadedFont, geometry::Point, geometry::Rect};
+use uqm_engine::graphics::{
+    context::BatchGuard, font::LoadedFont, geometry::Point, geometry::Rect,
+};
 
 pub(super) struct PresentationState {
     pub table: LoadedTextTable,

@@ -1,31 +1,31 @@
 //! Orz callbacks and descriptor translated from `sc2/src/uqm/ships/orz/orz.c`.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{
+        angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
+    };
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, FIRES_AFT, FIRES_FORE, FIRES_LEFT, FIRES_RIGHT, IGNORE_SIMILAR, LEFT,
         MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, POINT_DEFENSE, RIGHT, SEEKING_SPECIAL, SLOW_SHIP,
         SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM,
         NONSOLID, NORMAL_LIFE, PLAYER_SHIP, POINT_PRIMITIVE, POST_PROCESS, PRE_PROCESS,
         SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
     };
-    use crate::engine::battle::hooks::animation_preprocess;
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::battle::{
+    use uqm_engine::battle::hooks::animation_preprocess;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::ships::native::{
-        angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
-    };
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     const MODIFY_SWAP: u8 = 1 << 1;
     // The cast in element.h prevents bindgen from emitting this macro.
@@ -59,7 +59,7 @@ pub mod engine {
         color(0x13, 0, 0),
     ];
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE | SEEKING_SPECIAL) as u16;
         d.info.ship_cost = 23;
@@ -254,7 +254,7 @@ pub mod engine {
                 && cx.ship_state(ss).input & THRUST as u8 == 0
                 && normalize_angle(
                     i32::from(cx.element(ship).velocity.travel_angle)
-                        - i32::from(crate::math::arctan(
+                        - i32::from(uqm_engine::math::arctan(
                             (i32::from(cx.element(target).next.location.x)
                                 - i32::from(cx.element(ship).next.location.x))
                                 as i16,
@@ -318,7 +318,7 @@ pub mod engine {
         cx: &mut Cx<'_>,
         ship: ElementId,
         marine: ElementId,
-        frame: crate::engine::battle::views::FrameSelection,
+        frame: uqm_engine::battle::views::FrameSelection,
         flags: u8,
     ) {
         let origin = Point {
@@ -451,7 +451,7 @@ pub mod engine {
                 if i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)
                     <= i64::from((GRAVITY_THRESHOLD as i32) << ONE_SHIFT).pow(2)
                 {
-                    pfacing = angle_to_facing(i32::from(crate::math::arctan(dx, dy))) as u16;
+                    pfacing = angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))) as u16;
                     let delta = normalize_facing(
                         i32::from(pfacing)
                             - angle_to_facing(i32::from(cx.element(e).velocity.travel_angle))
@@ -506,7 +506,7 @@ pub mod engine {
                     cx.element_mut(e).flags &= !(IGNORE_SIMILAR as u16);
                     cx.element_mut(e).flags |= CHANGING as u16;
                 }
-                let mut frames = (crate::math::square_root(
+                let mut frames = (uqm_engine::math::square_root(
                     (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32,
                 ) >> 6) as u16;
                 if frames == 0 {
@@ -519,7 +519,8 @@ pub mod engine {
                 dy = (i32::from(cx.element(object).current.location.y) + i32::from(vy as i16)
                     - i32::from(cx.element(e).current.location.y)) as i16;
                 delta = normalize_facing(
-                    angle_to_facing(i32::from(crate::math::arctan(dx, dy))) - i32::from(facing),
+                    angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy)))
+                        - i32::from(facing),
                 ) as i16;
                 if delta > 0 {
                     if i32::from(delta) == angle_to_facing(HALF_CIRCLE as i32) {

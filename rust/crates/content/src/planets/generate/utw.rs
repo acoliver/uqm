@@ -9,16 +9,14 @@
 //! `UTWIG_HAVE_ULTRON`, `BOMB_UNPROTECTED`, `UTWIG_BOMB_ON_SHIP`,
 //! `DRUUGE_MANNER`, `DRUUGE_VISITS`, `DRUUGE_HOME_VISITS`.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default::{self, Npcs};
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 /// The Utwig home world.
 const HOME: Body = Body::Planet(0);
@@ -49,11 +47,7 @@ pub trait UtwigSite: HomeContactSite {
     fn repair_sis_border(&mut self);
     /// `LoadStdLanderFont`, the mask and the report strings of the bomb
     /// (`bomb`) or the Utwig ruins.
-    fn load_scene(
-        &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
-        bomb: bool,
-    );
+    fn load_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>, bomb: bool);
 }
 
 /// The bomb moon is the object of the visit while the bomb is still there.
@@ -228,7 +222,7 @@ pub fn pickup_energy(
     if star_index == UTWIG_DEFINED && body == HOME {
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
         return false;
     }
@@ -239,7 +233,7 @@ pub fn pickup_energy(
         );
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::UTWIG_BOMB, 1);
@@ -254,7 +248,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

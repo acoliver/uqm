@@ -1,6 +1,6 @@
-use crate::engine::{Kernel, StoryKey, World};
 use crate::mainloop::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
 use crate::mainloop::types::ActivityValue;
+use uqm_engine::{Kernel, StoryKey, World};
 
 fn state(world: &World) -> GameStateInfo {
     GameStateInfo {
@@ -47,9 +47,9 @@ pub(super) fn finish_dispatch(world: &World, kernel: &mut Kernel) -> BreakAction
 #[cfg(test)]
 mod tests {
     use super::{complete_encounter, finish_dispatch, prepare_dispatch};
-    use crate::engine::{world::story::StoryState, Kernel, StoryKey, World};
     use crate::mainloop::state_machine::{ActivityDecision, BreakAction};
     use crate::mainloop::types::activity_flags::*;
+    use uqm_engine::{world::story::StoryState, Kernel, StoryKey, World};
 
     fn world(activity: u16) -> World {
         let mut world = World::new();

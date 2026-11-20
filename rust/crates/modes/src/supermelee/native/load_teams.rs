@@ -34,15 +34,6 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 
 pub(crate) mod live {
     use super::page;
-    use crate::engine::input_port::frames::{
-        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_PAGE_DOWN, KEY_MENU_PAGE_UP, KEY_MENU_SELECT,
-        KEY_MENU_UP,
-    };
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-    use crate::graphics::geometry::{Extent, Point, Rect};
-    use crate::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
-    use crate::ships::master_native::ShipChoice;
     use crate::supermelee::native::menu::live::changes::local_change_team;
     use crate::supermelee::native::menu::live::drawing::repair_frame;
     use crate::supermelee::session::MeleeSession;
@@ -51,13 +42,22 @@ pub(crate) mod live {
         team::{ship_cost, MeleeTeam as OwnedTeam},
     };
     use std::ffi::CString;
+    use uqm_content::ships::master_native::ShipChoice;
+    use uqm_engine::graphics::geometry::{Extent, Point, Rect};
+    use uqm_engine::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
+    use uqm_engine::input_port::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_PAGE_DOWN, KEY_MENU_PAGE_UP, KEY_MENU_SELECT,
+        KEY_MENU_UP,
+    };
+    use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
 
     fn draw_entry(
         context: &ContextLease,
         font: &FontLease,
         catalog: &[ShipChoice],
         team: &OwnedTeam,
-        origin: crate::graphics::geometry::Point,
+        origin: uqm_engine::graphics::geometry::Point,
         ships: bool,
         highlighted: bool,
     ) {
@@ -70,7 +70,7 @@ pub(crate) mod live {
             font,
             team.c_name(),
             origin,
-            crate::graphics::geometry::TextAlign::Left,
+            uqm_engine::graphics::geometry::TextAlign::Left,
             color,
         );
         let value = CString::new(
@@ -85,15 +85,15 @@ pub(crate) mod live {
         context.draw_text(
             font,
             &value,
-            crate::graphics::geometry::Point {
+            uqm_engine::graphics::geometry::Point {
                 x: origin.x + 7 * 35 - 1,
                 y: origin.y,
             },
-            crate::graphics::geometry::TextAlign::Right,
+            uqm_engine::graphics::geometry::TextAlign::Right,
             color,
         );
         if ships {
-            let mut origin = crate::graphics::geometry::Point {
+            let mut origin = uqm_engine::graphics::geometry::Point {
                 x: origin.x + 1,
                 y: origin.y + 4,
             };
@@ -101,7 +101,7 @@ pub(crate) mod live {
                 if ship.is_valid() && ship as u8 != 255 {
                     let source = catalog
                         .get(ship as u8 as usize)
-                        .map_or(crate::graphics::drawable::FrameId::NULL, |ship| {
+                        .map_or(uqm_engine::graphics::drawable::FrameId::NULL, |ship| {
                             ship.icon.raw()
                         });
                     context.draw_stamp(&ContextFrame::retain(source), origin);
@@ -110,8 +110,8 @@ pub(crate) mod live {
             }
         }
     }
-    fn rgb(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
-        crate::graphics::geometry::Color {
+    fn rgb(r: u8, g: u8, b: u8) -> uqm_engine::graphics::geometry::Color {
+        uqm_engine::graphics::geometry::Color {
             r: (r << 3) | (r >> 2),
             g: (g << 3) | (g >> 2),
             b: (b << 3) | (b >> 2),
@@ -141,7 +141,7 @@ pub(crate) mod live {
                 font,
                 &state.catalog,
                 &state.load.view[index as usize],
-                crate::graphics::geometry::Point {
+                uqm_engine::graphics::geometry::Point {
                     x: 5,
                     y: 34 + index as i16 * 32,
                 },
@@ -171,7 +171,7 @@ pub(crate) mod live {
                         &font,
                         &state.catalog,
                         &state.load.view[relative as usize],
-                        crate::graphics::geometry::Point {
+                        uqm_engine::graphics::geometry::Point {
                             x: 5,
                             y: 34 + relative as i16 * 32,
                         },
@@ -193,8 +193,8 @@ pub(crate) mod live {
     /// State and its load view must be live on the game thread.
     pub fn do_load_team(
         state: &mut MeleeSession,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        input: &uqm_engine::input::InputSession,
     ) -> u32 {
         let time = get_time_counter();
         input.set_paused(false);
@@ -275,8 +275,8 @@ pub(crate) mod live {
     pub fn do_save_team(
         state: &mut MeleeSession,
         screen: &ContextLease,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
     ) {
         let mut filename = state.melee_setup.teams[state.side as usize]
             .c_name()

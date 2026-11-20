@@ -30,41 +30,41 @@ pub mod live {
     use super::move_cursor;
     use crate::battle::context_access::ContextOps;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::graphics::{context::ContextLease, drawable::FrameId, geometry::TextAlign};
+    use uqm_engine::graphics::{context::ContextLease, drawable::FrameId, geometry::TextAlign};
 
     #[derive(Default)]
     pub struct FleetSelection {
         initialized: bool,
         pub player: [PlayerSelection; 2],
-        net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
+        net: Option<std::rc::Rc<dyn uqm_engine::battle::net::BattleNet>>,
     }
 
     #[derive(Default)]
     pub struct PlayerSelection {
         pub entered_at: u32,
-        pub ship: Option<crate::engine::battle::ShipId>,
+        pub ship: Option<uqm_engine::battle::ShipId>,
         pub row: u16,
         pub col: u16,
         random_index: u16,
         pub selecting: bool,
         pub done: bool,
-        highlight: Option<crate::graphics::highlight::Highlight>,
+        highlight: Option<uqm_engine::graphics::highlight::Highlight>,
     }
 
     const FADE_ALL_TO_COLOR: u32 = 253;
 
-    use crate::engine::battle::net::NetState;
+    use uqm_engine::battle::net::NetState;
 
-    use crate::engine::battle::ShipId;
-    use crate::engine::input_port::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
-    use crate::graphics::geometry::Color;
-    use crate::sound::heart_ffi::wait_for_sound_end;
     use crate::supermelee::native::MELEE_PICK_MASK_PMAP_ANIM;
     use std::ffi::CString;
+    use uqm_engine::battle::ShipId;
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::input_port::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
+    use uqm_engine::sound::heart_ffi::wait_for_sound_end;
+    use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
     fn by_index(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         player: usize,
         index: u16,
         used: bool,
@@ -73,12 +73,12 @@ pub mod live {
     }
     fn changed(state: &mut FleetSelection, player: usize) {
         let s = &mut state.player[player];
-        let r = crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point {
+        let r = uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point {
                 x: 57 + 18 * s.col as i16,
                 y: 24 + 18 * s.row as i16 + (1 - player as i16) * 100,
             },
-            extent: crate::graphics::geometry::Extent {
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: 18,
                 height: 18,
             },
@@ -89,7 +89,7 @@ pub mod live {
             .set_rect(r);
     }
     pub fn set_ship_selected(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         state: &mut FleetSelection,
         player: u16,
         choice: u16,
@@ -116,7 +116,7 @@ pub mod live {
         true
     }
     fn process(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         state: &mut FleetSelection,
         player: usize,
         keys: u8,
@@ -145,13 +145,13 @@ pub mod live {
         1
     }
     pub fn select_ship(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        input: &crate::engine::input::InputSession,
-        context: &crate::engine::battle::input::InputContext,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        input: &uqm_engine::input::InputSession,
+        context: &uqm_engine::battle::input::InputContext,
         state: &mut FleetSelection,
     ) -> u32 {
-        use crate::engine::battle::input::InputSource;
+        use uqm_engine::battle::input::InputSource;
         let player = context.player();
         match context.source() {
             InputSource::Human => process(
@@ -194,11 +194,11 @@ pub mod live {
         }
     }
     fn choose(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        input: &uqm_engine::input::InputSession,
         state: &mut FleetSelection,
-        inputs: &[Option<crate::engine::battle::input::InputContext>; 2],
+        inputs: &[Option<uqm_engine::battle::input::InputContext>; 2],
     ) -> u32 {
         input.set_menu_sounds(0, 0);
         if !state.initialized {
@@ -286,13 +286,13 @@ pub mod live {
         }
     }
     pub(crate) struct FleetPicker {
-        drawable: crate::graphics::drawable::LoadedDrawable,
+        drawable: uqm_engine::graphics::drawable::LoadedDrawable,
     }
     impl FleetPicker {
         pub(crate) fn new(context: &ContextLease) -> Self {
-            let drawable = crate::graphics::drawable::LoadedDrawable::create(2, 149, 55, 2)
+            let drawable = uqm_engine::graphics::drawable::LoadedDrawable::create(2, 149, 55, 2)
                 .unwrap_or_else(|| panic!("fleet picker allocation"));
-            let mask = crate::graphics::drawable::LoadedDrawable::load(
+            let mask = uqm_engine::graphics::drawable::LoadedDrawable::load(
                 std::ffi::CStr::from_bytes_with_nul(MELEE_PICK_MASK_PMAP_ANIM)
                     .unwrap_or_else(|error| panic!("fleet mask resource: {error}")),
             )
@@ -302,41 +302,43 @@ pub mod live {
                     context.set_frame(drawable.lease().context_frame(player));
                     context.draw_stamp(
                         &mask.lease().context_frame(player),
-                        crate::graphics::geometry::Point { x: 0, y: 0 },
+                        uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
                     );
                 }
             });
             Self { drawable }
         }
-        pub(crate) fn frames(&self) -> [crate::graphics::drawable::ContextFrame; 2] {
+        pub(crate) fn frames(&self) -> [uqm_engine::graphics::drawable::ContextFrame; 2] {
             std::array::from_fn(|player| self.drawable.lease().context_frame(player))
         }
     }
-    fn context(raw: Option<crate::graphics::context::ContextId>) -> ContextLease {
+    fn context(raw: Option<uqm_engine::graphics::context::ContextId>) -> ContextLease {
         ContextLease::retain(raw.unwrap_or_else(|| panic!("picker context")))
     }
-    fn font(raw: Option<crate::graphics::font::FontId>) -> crate::graphics::font::FontLease {
-        crate::graphics::font::FontLease::retain(raw.unwrap_or_else(|| panic!("picker font")))
+    fn font(
+        raw: Option<uqm_engine::graphics::font::FontId>,
+    ) -> uqm_engine::graphics::font::FontLease {
+        uqm_engine::graphics::font::FontLease::retain(raw.unwrap_or_else(|| panic!("picker font")))
     }
-    fn retained_frame(raw: FrameId, index: usize) -> crate::graphics::drawable::ContextFrame {
-        let leases = crate::graphics::drawable::retain_frames(&[raw]);
+    fn retained_frame(raw: FrameId, index: usize) -> uqm_engine::graphics::drawable::ContextFrame {
+        let leases = uqm_engine::graphics::drawable::retain_frames(&[raw]);
         leases
             .first()
             .unwrap_or_else(|| panic!("picker drawable absent"))
             .context_frame(index)
     }
     fn frame(
-        cx: &crate::engine::battle::Cx<'_>,
+        cx: &uqm_engine::battle::Cx<'_>,
         player: usize,
-    ) -> crate::graphics::drawable::ContextFrame {
+    ) -> uqm_engine::graphics::drawable::ContextFrame {
         cx.b.selection_frames
             .as_ref()
             .unwrap_or_else(|| panic!("battle selection frames not admitted"))[player]
             .clone()
     }
     fn value(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        target: &crate::graphics::drawable::ContextFrame,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        target: &uqm_engine::graphics::drawable::ContextFrame,
         player: usize,
     ) {
         let mut worth = 0u16;
@@ -358,9 +360,9 @@ pub mod live {
             let x = target.rect().extent.width - 4;
             context.fill_rectangle(
                 rgb(0, 1, 15),
-                crate::graphics::geometry::Rect {
-                    corner: crate::graphics::geometry::Point { x: x - 18, y: 2 },
-                    extent: crate::graphics::geometry::Extent {
+                uqm_engine::graphics::geometry::Rect {
+                    corner: uqm_engine::graphics::geometry::Point { x: x - 18, y: 2 },
+                    extent: uqm_engine::graphics::geometry::Extent {
                         width: 18,
                         height: 5,
                     },
@@ -371,18 +373,18 @@ pub mod live {
             context.draw_text(
                 &font,
                 &text,
-                crate::graphics::geometry::Point { x, y: 7 },
+                uqm_engine::graphics::geometry::Point { x, y: 7 },
                 TextAlign::Right,
                 rgb(19, 0, 0),
             );
         });
     }
-    fn draw(cx: &crate::engine::battle::Cx<'_>, player: usize) {
+    fn draw(cx: &uqm_engine::battle::Cx<'_>, player: usize) {
         let context = context(cx.kernel.space_context);
         context.with_selected(|| {
             context.draw_stamp(
                 &frame(cx, player),
-                crate::graphics::geometry::Point {
+                uqm_engine::graphics::geometry::Point {
                     x: 54,
                     y: 15 + (1 - player as i16) * 100,
                 },
@@ -390,11 +392,11 @@ pub mod live {
         });
     }
     fn build_fleet_ship(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        master: &crate::ships::master_native::engine::MasterShip,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        master: &uqm_content::ships::master_native::engine::MasterShip,
         side: usize,
         index: u16,
-        context: &crate::graphics::context::ContextLease,
+        context: &uqm_engine::graphics::context::ContextLease,
     ) {
         let random = cx.rng;
         let mut queue = cx.kernel.ships(side);
@@ -402,10 +404,10 @@ pub mod live {
         let built = queue
             .build(master.species)
             .unwrap_or_else(|| panic!("battle ship pool exhausted"));
-        let icon = crate::graphics::drawable::ContextFrame::retain(master.info.icons);
+        let icon = uqm_engine::graphics::drawable::ContextFrame::retain(master.info.icons);
         context.draw_stamp(
             &icon,
-            crate::graphics::geometry::Point {
+            uqm_engine::graphics::geometry::Point {
                 x: 4 + 18 * (index % 7) as i16,
                 y: 10 + 18 * (index / 7) as i16,
             },
@@ -421,20 +423,20 @@ pub mod live {
         queue.clear_descriptor(built);
     }
     pub(crate) fn fill_pick_melee_frame(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         setup: &crate::supermelee::setup::team::MeleeSetup,
     ) {
         let context = context(cx.kernel.off_screen_context);
         let font = font(cx.kernel.tiny_font);
         let order = [cx.kernel.player_order(0), cx.kernel.player_order(1)];
-        let catalog = crate::ships::master_native::engine::snapshot(cx.kernel);
+        let catalog = uqm_content::ships::master_native::engine::snapshot(cx.kernel);
         context.with_selected(|| {
             for side_i in order {
                 let side = usize::from(side_i == 0);
                 let frame = frame(cx, side);
                 context.set_frame(frame.clone());
                 let mut rect = frame.rect();
-                let baseline = crate::graphics::geometry::Point {
+                let baseline = uqm_engine::graphics::geometry::Point {
                     x: rect.extent.width >> 1,
                     y: rect.extent.height - 7 + 4,
                 };
@@ -460,7 +462,7 @@ pub mod live {
                 context.draw_text(
                     &font,
                     &text,
-                    crate::graphics::geometry::Point { x: 4, y: 7 },
+                    uqm_engine::graphics::geometry::Point { x: 4, y: 7 },
                     TextAlign::Left,
                     rgb(4, 5, 31),
                 );
@@ -478,7 +480,7 @@ pub mod live {
             }
         });
     }
-    pub(crate) fn ship_death(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
+    pub(crate) fn ship_death(cx: &mut uqm_engine::battle::Cx<'_>, owner: ShipId) {
         cx.set_ship_species(owner, 0);
         let ship = cx.pick_ship(owner);
         let target = frame(cx, ship.player as usize);
@@ -488,7 +490,7 @@ pub mod live {
             context.set_frame(target.clone());
             context.draw_stamp(
                 &icon,
-                crate::graphics::geometry::Point {
+                uqm_engine::graphics::geometry::Point {
                     x: 3 + 18 * (ship.index % 7) as i16,
                     y: 9 + 18 * (ship.index / 7) as i16,
                 },
@@ -497,11 +499,11 @@ pub mod live {
         value(cx, &target, ship.player as usize);
     }
 
-    use crate::engine::observe::Io;
+    use uqm_engine::observe::Io;
     /// Called at the end of a live melee battle on the game thread.
     pub fn melee_game_over(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        input: &uqm_engine::input::InputSession,
         io: &mut Io<'_>,
     ) {
         for player in 0..2 {
@@ -540,11 +542,11 @@ pub mod live {
         }
     }
     fn initialize_selection(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         state: &mut FleetSelection,
         counters: [u8; 2],
         mask: u16,
-        screen_context: Option<crate::graphics::context::ContextId>,
+        screen_context: Option<uqm_engine::graphics::context::ContextId>,
         controls: [u8; 2],
         order: [u16; 2],
     ) {
@@ -563,9 +565,9 @@ pub mod live {
             let context = ContextLease::retain(
                 screen_context.unwrap_or_else(|| panic!("picker screen context")),
             );
-            let mut highlight = context.highlight(crate::graphics::geometry::Rect {
-                corner: crate::graphics::geometry::Point { x: 0, y: 0 },
-                extent: crate::graphics::geometry::Extent {
+            let mut highlight = context.highlight(uqm_engine::graphics::geometry::Rect {
+                corner: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
+                extent: uqm_engine::graphics::geometry::Extent {
                     width: 0,
                     height: 0,
                 },
@@ -587,8 +589,8 @@ pub mod live {
         }
     }
     fn get_ships(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        input: &uqm_engine::input::InputSession,
         mask: u16,
     ) -> Option<[Option<ShipId>; 2]> {
         {
@@ -656,8 +658,8 @@ pub mod live {
     }
     /// Both battle fleets and their selection resources must be initialized.
     pub fn get_initial_melee_star_ships(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        input: &uqm_engine::input::InputSession,
     ) -> Option<[Option<ShipId>; 2]> {
         for player in 0..2 {
             value(cx, &frame(cx, player), player);
@@ -677,8 +679,8 @@ pub mod live {
     }
     /// The selected player's battle fleet and selection resources must be initialized.
     pub fn get_next_melee_star_ship(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        input: &uqm_engine::input::InputSession,
         player: u16,
     ) -> Option<ShipId> {
         draw(cx, player as usize);

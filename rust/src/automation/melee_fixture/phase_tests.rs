@@ -1,10 +1,10 @@
 //! Phase contracts use real borrowed records; engine execution is integration-tested.
 use super::*;
-use crate::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
-use crate::engine::battle::record::{RaceDescriptor, ShipRecord};
-use crate::engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
-use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
-use crate::graphics::drawable::FrameId;
+use uqm_engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_engine::battle::record::{RaceDescriptor, ShipRecord};
+use uqm_engine::graphics::drawable::FrameId;
+use uqm_engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
 fn frame_views(views: Frames) -> [FrameId; 3] {
     std::array::from_fn(|index| views.view(index).raw())
 }
@@ -28,7 +28,7 @@ fn world(
     let mut world = World::new(SUPER_MELEE | IN_BATTLE, [2; 2], None);
     for (side, ((element, state), race)) in elements.iter_mut().zip(states).zip(races).enumerate() {
         let id = ElementId::fixture(side as u8, 0);
-        let owner = crate::engine::battle::ShipId::fixture(side as u8, 0, 0);
+        let owner = uqm_engine::battle::ShipId::fixture(side as u8, 0, 0);
         element.parent = Parent::Ship(owner);
         element.player = side as i16;
         element.flags = ElementFlags::PLAYER_SHIP.bits();
@@ -113,9 +113,9 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
     assert!(matches!(effects.as_slice(), [Effect::Spawn(owner)] if *owner == run.owner()));
     run.stage = 9;
     run.array = Some(Frames::shared(
-        crate::engine::battle::frames::SharedFrames::Fixture(0),
-        crate::engine::battle::frames::FrameArray::fixture(
-            [crate::graphics::drawable::FrameId::NULL; 3],
+        uqm_engine::battle::frames::SharedFrames::Fixture(0),
+        uqm_engine::battle::frames::FrameArray::fixture(
+            [uqm_engine::graphics::drawable::FrameId::NULL; 3],
             (),
         ),
     ));
@@ -131,7 +131,7 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
         .unwrap()
         .unwrap();
     assert!(
-        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a() && *b == run.b() && *element == run.a() && frame_views(views.clone()) == [crate::graphics::drawable::FrameId::NULL; 3])
+        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a() && *b == run.b() && *element == run.a() && frame_views(views.clone()) == [uqm_engine::graphics::drawable::FrameId::NULL; 3])
     );
     run.wait = 3;
     let effects = frames::advance(&mut run, &mut world, &hooks)
@@ -180,7 +180,7 @@ fn arilou_threat_and_collision_operands_are_snapshots_of_the_real_borrowed_recor
 
 #[test]
 fn phoenix_install_invokes_the_native_preprocess_on_its_live_ship() {
-    fn preprocess(_: &mut crate::engine::battle::Cx<'_>, _: crate::engine::battle::ShipId) {}
+    fn preprocess(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ShipId) {}
     let (mut elements, mut states, mut races) = records();
     let mut world = world(&mut elements, &mut states, &mut races);
     let mut run = run(&world, FixtureName::PkunkRebirth);
@@ -192,7 +192,7 @@ fn phoenix_install_invokes_the_native_preprocess_on_its_live_ship() {
         .unwrap();
     assert!(
         matches!(effects.as_slice(), [Effect::NativeShip(callback, ship)]
-        if std::ptr::fn_addr_eq(*callback, preprocess as crate::engine::battle::race::ShipFn) && *ship == run.a())
+        if std::ptr::fn_addr_eq(*callback, preprocess as uqm_engine::battle::race::ShipFn) && *ship == run.a())
     );
     assert!(world.elements[&run.a()].flags & ElementFlags::APPEARING.bits() != 0);
 }
@@ -308,7 +308,7 @@ fn special_records() -> ([Element; 2], [ShipRecord; 2], [RaceDescriptor; 2]) {
 fn neutral_junk(world: &mut World, mass: u8) -> ElementId {
     let id = ElementId::fixture(2, 0);
     let mut junk = Element::new();
-    junk.player = crate::engine::battle::flags::NEUTRAL_PLAYER_NUM as i16;
+    junk.player = uqm_engine::battle::flags::NEUTRAL_PLAYER_NUM as i16;
     junk.mass = mass;
     junk.life = 1;
     world.order.push(id);
@@ -335,7 +335,7 @@ fn druuge_furnace_holds_special_until_the_race_arms_then_checks_the_burn() {
     specials::furnace(&mut run, &mut world).unwrap();
     assert_eq!(
         world.ship(a).state.control,
-        crate::battle::ai::HUMAN_CONTROL
+        uqm_modes::battle::ai::HUMAN_CONTROL
     );
     assert_eq!(world.ship(b).state.input, 0);
     assert_eq!(world.ship(a).info.as_ref().unwrap().energy_level, 0);

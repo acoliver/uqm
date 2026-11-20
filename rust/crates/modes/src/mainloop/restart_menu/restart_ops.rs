@@ -1,21 +1,21 @@
 //! Supplied restart operations and retained menu resources.
 use super::{do_restart::DoRestartState, types::MenuInputState};
-use crate::engine::{
+use uqm_engine::graphics::{
+    context::BatchGuard, context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
+    font::FontLease, geometry::Color, geometry::Point, geometry::TextAlign, highlight::Overlay,
+};
+use uqm_engine::sound::resource_types::LoadedMusic;
+use uqm_engine::time::counter_abi::{get_time_counter, ONE_SECOND};
+use uqm_engine::{
     battle::Cx,
     input::{self, frames::*},
     observe::{Injected, InputView, Io},
     StoryKey,
 };
-use crate::graphics::{
-    context::BatchGuard, context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
-    font::FontLease, geometry::Color, geometry::Point, geometry::TextAlign, highlight::Overlay,
-};
-use crate::sound::resource_types::LoadedMusic;
-use uqm_engine::time::counter_abi::{get_time_counter, ONE_SECOND};
 
 pub fn seed_new_campaign(automation_seed: u32, clock_seed: impl FnOnce()) {
     if automation_seed != 0 {
-        crate::math::seed_random(automation_seed);
+        uqm_engine::math::seed_random(automation_seed);
     } else {
         clock_seed();
     }
@@ -365,7 +365,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         self.menu.music = None;
     }
     fn fade_music(&mut self, end_volume: u8, duration: i16) -> u32 {
-        crate::sound::heart_ffi::fade_music(end_volume, duration)
+        uqm_engine::sound::heart_ffi::fade_music(end_volume, duration)
     }
     fn create_flash_overlay(&mut self) {
         self.menu.overlay = Some(self.menu.context().overlay());
@@ -403,10 +403,8 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         self.host.melee(self.cx, self.io);
     }
     fn setup_menu(&mut self) {
-        use crate::engine::{
-            configuration::runtime::RuntimeSettings, resource::settings::Settings,
-        };
         use crate::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
+        use uqm_engine::{configuration::runtime::RuntimeSettings, resource::settings::Settings};
         let context = self.menu.context().clone();
         let runtime = RuntimeSettings::capture(&context);
         let font = self
@@ -419,7 +417,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
             input: self.cx.kernel.input_runtime().input().clone(),
             runtime,
             settings: Settings,
-            names: crate::engine::input_port::templates::input_templates(),
+            names: uqm_engine::input_port::templates::input_templates(),
         };
         setup_menu(self.cx, self.io, configuration, resources);
     }

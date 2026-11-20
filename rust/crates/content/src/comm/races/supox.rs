@@ -2,7 +2,7 @@
 pub(crate) use super::alliance::AllianceApi;
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 pub(crate) use crate::comm::races::descriptor::CommDescriptor;
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 pub(crate) use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;

@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
-use uqm_rust::{engine::Game, navigation::hyper_data};
+use uqm_engine::Game;
+use uqm_modes::navigation::hyper_data;
 
 #[test]
 fn resource_teardown_uses_only_the_supplied_kernel() {
@@ -7,20 +8,18 @@ fn resource_teardown_uses_only_the_supplied_kernel() {
     hyper_data::free_hyper_data(&mut game.kernel);
     assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));
     assert!(game.kernel.cmaps.iter().all(Option::is_none));
-    uqm_rust::engine::battle::hyperspace::free_hyperspace(&mut game.kernel);
+    uqm_engine::battle::hyperspace::free_hyperspace(&mut game.kernel);
     assert!(game.kernel.stars_in_space.is_null());
 }
 
 #[test]
 fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
-    use uqm_rust::{
-        comm::dispatch::ONE_SHOT_ENCOUNTER,
-        engine::{
-            species::ship::MELNORME_SHIP, world::activity::activity_flags::IN_BATTLE,
-            world::story::StoryState, StoryKey,
-        },
-        navigation::{hyper_units::Geometry, hyperspace::check_hyperspace_encounter},
+    use uqm_engine::{
+        species::ship::MELNORME_SHIP, world::activity::activity_flags::IN_BATTLE,
+        world::story::StoryState, StoryKey,
     };
+    use uqm_modes::comm::dispatch::ONE_SHOT_ENCOUNTER;
+    use uqm_modes::navigation::{hyper_units::Geometry, hyperspace::check_hyperspace_encounter};
     let mut game = Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_BATTLE);
@@ -89,14 +88,14 @@ fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
 #[test]
 #[serial_test::serial]
 fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
-    use uqm_rust::engine::battle::Battle;
-    use uqm_rust::engine::battle::Cx;
-    use uqm_rust::engine::world::activity::activity_flags::CHECK_LOAD;
-    use uqm_rust::engine::world::story::StoryState;
-    use uqm_rust::engine::StoryKey;
-    use uqm_rust::graphics::{context::LoadedContext, drawable::LoadedDrawable, geometry::Point};
-    use uqm_rust::navigation::hyper_data::load_hyperspace;
-    use uqm_rust::navigation::hyper_data::EntryDisplay;
+    use uqm_engine::battle::Battle;
+    use uqm_engine::battle::Cx;
+    use uqm_engine::graphics::{context::LoadedContext, drawable::LoadedDrawable, geometry::Point};
+    use uqm_engine::world::activity::activity_flags::CHECK_LOAD;
+    use uqm_engine::world::story::StoryState;
+    use uqm_engine::StoryKey;
+    use uqm_modes::navigation::hyper_data::load_hyperspace;
+    use uqm_modes::navigation::hyper_data::EntryDisplay;
     for activity in [0, CHECK_LOAD, CHECK_LOAD | 3] {
         for side in [0, 3] {
             let mut game = Game::new();
@@ -153,7 +152,7 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
                 cx.world.story_state(StoryKey::BROADCASTER_RESPONSE),
                 u32::from(side == 0)
             );
-            uqm_rust::engine::battle::hyperspace::free_hyperspace(cx.kernel);
+            uqm_engine::battle::hyperspace::free_hyperspace(cx.kernel);
             assert_eq!(cx.kernel.stars_in_space, stars);
             hyper_data::free_hyper_data(cx.kernel);
             drop(LoadedDrawable::from_frame(cx.kernel.stars_in_space));
@@ -177,23 +176,23 @@ fn loaded_flagship_keeps_its_hooks_and_skips_the_entry_animation() {
 }
 
 fn flagship_entry(loading: bool) {
-    use uqm_rust::battle::element::APPEARING;
-    use uqm_rust::battle::element::NONSOLID;
-    use uqm_rust::battle::element::PLAYER_SHIP;
-    use uqm_rust::battle::ship_native::ship_postprocess;
-    use uqm_rust::battle::ship_native::ship_preprocess;
-    use uqm_rust::engine::battle::views::FrameSelection;
-    use uqm_rust::engine::battle::views::Frames;
-    use uqm_rust::engine::battle::views::SharedFrames;
-    use uqm_rust::engine::battle::Battle;
-    use uqm_rust::engine::battle::Cx;
-    use uqm_rust::engine::battle::ElementHook;
-    use uqm_rust::engine::world::activity::activity_flags::CHECK_LOAD;
-    use uqm_rust::engine::world::activity::ActivityKind;
-    use uqm_rust::graphics::drawable::LoadedDrawable;
-    use uqm_rust::navigation::hyper_transition::hyper_transition;
-    use uqm_rust::navigation::hyper_transition::save_sis_hyper_state;
-    use uqm_rust::ships::types::SpeciesId;
+    use uqm_content::ships::types::SpeciesId;
+    use uqm_engine::battle::views::FrameSelection;
+    use uqm_engine::battle::views::Frames;
+    use uqm_engine::battle::views::SharedFrames;
+    use uqm_engine::battle::Battle;
+    use uqm_engine::battle::Cx;
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::graphics::drawable::LoadedDrawable;
+    use uqm_engine::world::activity::activity_flags::CHECK_LOAD;
+    use uqm_engine::world::activity::ActivityKind;
+    use uqm_modes::battle::element::APPEARING;
+    use uqm_modes::battle::element::NONSOLID;
+    use uqm_modes::battle::element::PLAYER_SHIP;
+    use uqm_modes::battle::ship_native::ship_postprocess;
+    use uqm_modes::battle::ship_native::ship_preprocess;
+    use uqm_modes::navigation::hyper_transition::hyper_transition;
+    use uqm_modes::navigation::hyper_transition::save_sis_hyper_state;
     const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
     let mut game = Game::new();
     game.world.data.game.ship_facing = 1;
@@ -264,10 +263,11 @@ fn flagship_entry(loading: bool) {
     drop(drawable);
 }
 
-fn load_palette_fixture(
-) -> Result<[Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2], Box<dyn std::error::Error>>
-{
-    use uqm_rust::graphics::palette_cycle::PaletteCycle;
+fn load_palette_fixture() -> Result<
+    [Option<uqm_engine::graphics::palette_cycle::PaletteCycle>; 2],
+    Box<dyn std::error::Error>,
+> {
+    use uqm_engine::graphics::palette_cycle::PaletteCycle;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     std::fs::create_dir_all(&root)?;
     let directory = tempfile::tempdir_in(root)?;
@@ -288,7 +288,7 @@ fn load_palette_fixture(
         let content = uqm_engine::test_support::native_session::ContentMount::new(
             &directory.path().canonicalize()?,
         );
-        uqm_rust::resource::init();
+        uqm_engine::resource::init();
         content.load_index("palettes.rmp");
         let palettes = [
             Some(
@@ -309,12 +309,12 @@ fn load_palette_fixture(
 #[serial_test::serial]
 fn owned_palette_selection_uses_the_supplied_tables_and_status_context(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use uqm_rust::engine::battle::hyperspace as resources;
-    use uqm_rust::engine::test_support::native_probe;
-    use uqm_rust::graphics::{context::LoadedContext, geometry::Color};
+    use uqm_engine::battle::hyperspace as resources;
+    use uqm_engine::graphics::{context::LoadedContext, geometry::Color};
+    use uqm_engine::test_support::native_probe;
     let mut game = Game::new();
     game.kernel.cmaps = load_palette_fixture()?;
-    let select: fn(&uqm_rust::engine::Kernel, bool) = resources::select_palette;
+    let select: fn(&uqm_engine::Kernel, bool) = resources::select_palette;
     let _graphics = native_probe::DrawQueue::init();
     for (side, channel) in [12u8, 90].into_iter().enumerate() {
         select(&game.kernel, side != 0);
@@ -336,7 +336,7 @@ fn owned_palette_selection_uses_the_supplied_tables_and_status_context(
     let selected = retained.background(Color::default());
     assert_eq!((selected.r, selected.g, selected.b), (12, 34, 56));
     drop(retained);
-    uqm_rust::graphics::menu::select(None);
+    uqm_engine::graphics::menu::select(None);
     drop(context);
     game.kernel.status_context = None;
     resources::free_hyper_data(&mut game.kernel);

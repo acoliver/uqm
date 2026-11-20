@@ -1,21 +1,21 @@
 //! Live utwig callbacks translated from ships/utwig/utwig.c.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{cosine, facing_to_angle, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, POINT_DEFENSE, SHIELD_DEFENSE, SPECIAL,
         WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CREW_OBJECT, FINITE_LIFE, NORMAL_LIFE, PLAYER_SHIP, STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::motion::collision;
-    use crate::engine::battle::CollisionHook;
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{ONE_SHIFT, QUADRANT};
-    use crate::ships::native::{cosine, facing_to_angle, sine};
+    use uqm_engine::battle::motion::collision;
+    use uqm_engine::battle::CollisionHook;
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{ONE_SHIFT, QUADRANT};
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
     const fn color(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -24,7 +24,7 @@ pub mod engine {
             a: 255,
         }
     }
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32 | POINT_DEFENSE as i32 | SHIELD_DEFENSE as i32) as _;
         d.info.ship_cost = 22;
@@ -65,8 +65,8 @@ pub mod engine {
         d.intelligence.weapon_range = (50 << ONE_SHIFT) as u16;
         d.descriptor(&UTWIG)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static UTWIG: Race = Race {

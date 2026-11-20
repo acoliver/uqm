@@ -51,7 +51,7 @@ where
 
     pub fn run(
         &mut self,
-        cx: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+        cx: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
     ) -> Result<SessionOutcome, ControllerError> {
         self.run_with_frame(|session, adapters, period| run_frame(cx, session, adapters, period))
     }
@@ -113,7 +113,7 @@ mod tests {
     impl PlanetSideAudio for Audio {
         fn play(
             &mut self,
-            _world: &crate::engine::World,
+            _world: &uqm_engine::World,
             _cue: super::super::hazards::SoundCue,
         ) -> Result<(), AdapterError> {
             Ok(())
@@ -167,13 +167,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn controller_runs_until_one_terminal_outcome() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         // Takeoff now runs through TakingOff + Return animation phases before
@@ -194,13 +194,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn controller_has_a_hard_frame_budget() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut controller =
@@ -214,13 +214,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn prepared_input_preserves_simulation_frames_and_terminal_settlement() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
         let budget = 3 + u32::from(super::super::lifecycle::LifecycleAnimation::takeoff_total());
         let mut input = vec![FrameInput::default(); budget as usize];

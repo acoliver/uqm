@@ -1,14 +1,14 @@
 use super::*;
-use crate::engine::save::summary_record::SummaryDesc;
 use crate::front_end::gameopt::{picker::PickerState, render::PickerDisplay};
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
-use crate::sound::heart_ffi::{fade_music, stop_sound};
 use crate::ui::settings::{pause_music, resume_music};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::save::summary_record::SummaryDesc;
+use uqm_engine::sound::heart_ffi::{fade_music, stop_sound};
 use uqm_engine::time::counter_abi::get_time_counter;
 
 struct RestoreInput<'a> {
     input: &'a InputSession,
-    callback: Option<crate::engine::input::InputFrameHook>,
+    callback: Option<uqm_engine::input::InputFrameHook>,
 }
 impl Drop for RestoreInput<'_> {
     fn drop(&mut self) {

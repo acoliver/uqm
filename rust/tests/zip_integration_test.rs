@@ -39,10 +39,8 @@ fn test_zip_archive_basic_functionality() -> Result<(), Box<dyn std::error::Erro
     let _ = zip.finish()?;
 
     // Now test the ZIP reader
-    let index = uqm_rust::io::zip_reader::ZipIndex::new(
-        uqm_rust::engine::host::platform().disk(),
-        &zip_path,
-    )?;
+    let index =
+        uqm_engine::io::zip_reader::ZipIndex::new(uqm_engine::host::platform().disk(), &zip_path)?;
 
     // Test 1: Check that files exist
     assert!(index.contains("readme.txt"), "Should find readme.txt");
@@ -154,10 +152,8 @@ fn test_zip_path_normalization() -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = zip.finish()?;
 
-    let index = uqm_rust::io::zip_reader::ZipIndex::new(
-        uqm_rust::engine::host::platform().disk(),
-        &zip_path,
-    )?;
+    let index =
+        uqm_engine::io::zip_reader::ZipIndex::new(uqm_engine::host::platform().disk(), &zip_path)?;
 
     // Test normalization: leading slashes should be stripped
     assert!(
@@ -200,10 +196,8 @@ fn test_zip_case_sensitivity() -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = zip.finish()?;
 
-    let index = uqm_rust::io::zip_reader::ZipIndex::new(
-        uqm_rust::engine::host::platform().disk(),
-        &zip_path,
-    )?;
+    let index =
+        uqm_engine::io::zip_reader::ZipIndex::new(uqm_engine::host::platform().disk(), &zip_path)?;
 
     // Both should exist as separate entries (case-sensitive)
     assert!(index.contains("README.txt"), "Should find README.txt");

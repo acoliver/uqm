@@ -4,11 +4,11 @@
 //! Overridden: `initNpcs`, `reinitNpcs`. Story flags: `MET_ZOQFOT`,
 //! `ZOQFOT_GRPOFFS0` (32-bit group reference).
 
-use crate::engine::StoryKey;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, FleetGroups, Story, ZOQFOTPIK_SHIP};
+use uqm_engine::StoryKey;
 
-use crate::engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 
 /// `GenerateZoqFotPikScout_initNpcs`.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
@@ -37,7 +37,7 @@ pub fn reinit_npcs(host: &mut (impl FleetGroups + ?Sized)) -> bool {
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

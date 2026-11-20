@@ -54,7 +54,7 @@ pub enum MainLoopError {
     LoadKernelFailed,
     /// A Starbase or Outfit route ended with an error.
     #[error("starbase: {0}")]
-    Starbase(#[from] crate::starbase::StarbaseError),
+    Starbase(#[from] uqm_modes::starbase::StarbaseError),
 }
 
 pub mod input_abi;

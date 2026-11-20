@@ -22,10 +22,10 @@ fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
 
 #[test]
 fn teardown_receives_final_crew_and_owned_state() {
-    fn descriptor(_world: &mut World) -> uqm_rust::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut World) -> uqm_engine::battle::RaceDesc {
         RaceTemplate::default().descriptor(&RACE)
     }
-    fn uninit(world: &mut World, stats: &mut uqm_rust::engine::battle::views::RaceStats) {
+    fn uninit(world: &mut World, stats: &mut uqm_engine::battle::views::RaceStats) {
         world.set_flagship_crew(stats.ship_info.crew_level);
         stats.state = RaceState::None;
     }
@@ -82,7 +82,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
                     assert_eq!(cx.target(id), Some(b.id));
                     assert_eq!(cx.element(id).life, 300);
                     assert_ne!(cx.element(id).flags & CREW_OBJECT as u16, 0);
-                    uqm_rust::battle::sounds::engine::unlink(cx, id);
+                    uqm_modes::battle::sounds::engine::unlink(cx, id);
                     cx.dispose(id);
                 }
             });
@@ -210,7 +210,9 @@ fn navigation_world_projections_write_the_single_authority() {
             let autopilot = crate::battle_context::with(|cx| cx.world.data.game.autopilot);
             let velocity = crate::battle_context::with(|cx| cx.world.data.game.velocity);
             let sis = crate::battle_context::with(|cx| cx.world.data.flagship);
-            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            crate::battle_context::with(|cx| {
+                uqm_engine::state::ffi::rust_init_game_state(cx.world)
+            });
             crate::battle_context::with(|cx| {
                 cx.set_activity(42);
                 assert_eq!(cx.world.activity(), 42);
@@ -285,17 +287,17 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Ship};
-use uqm_rust::engine::battle::ai_constants::{IGNORE_SIMILAR, PLAY_VICTORY_DITTY, WEAPON};
-use uqm_rust::engine::battle::flags::CREW_OBJECT;
-use uqm_rust::engine::battle::record::ElementRecord;
-use uqm_rust::engine::battle::LINE_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::battle::{race::*, views::*, *};
-use uqm_rust::engine::input_port::frames::KEY_MENU_CANCEL;
-use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
-use uqm_rust::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::ai_constants::{IGNORE_SIMILAR, PLAY_VICTORY_DITTY, WEAPON};
+use uqm_engine::battle::flags::CREW_OBJECT;
+use uqm_engine::battle::record::ElementRecord;
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::battle::{race::*, views::*, *};
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::input_port::frames::KEY_MENU_CANCEL;
+use uqm_engine::species::species_id::SPECIES_ID_VUX_ID;
+use uqm_engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
 
 fn empty_descriptor(_world: &mut World) -> RaceDesc {
     RaceTemplate::default().descriptor(&EMPTY_RACE)
@@ -330,13 +332,16 @@ fn absent_callbacks_remain_absent_in_metadata_and_dispatch() {
                     }; 10],
                     count: 0,
                 };
-                uqm_rust::collections::observation::enable();
-                uqm_rust::collections::observation::drain();
+                uqm_engine::collections::observation::enable();
+                uqm_engine::collections::observation::drain();
                 assert!(!cx.race_intelligence(ship.ship_id, &mut concerns));
                 assert!(!cx.invoke_ship_process(ship.ship_id, false));
-                assert!(!uqm_rust::collections::observation::drain()
+                assert!(!uqm_engine::collections::observation::drain()
                     .iter()
-                    .any(|e| matches!(e, uqm_rust::collections::observation::Event::Hook { .. })));
+                    .any(|e| matches!(
+                        e,
+                        uqm_engine::collections::observation::Event::Hook { .. }
+                    )));
             });
         }
     });
@@ -362,12 +367,12 @@ fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
                 let bounds = cx.frame_rect(first.view());
                 assert_eq!((bounds.corner.x, bounds.corner.y), (0, 0));
                 assert_eq!((bounds.extent.width, bounds.extent.height), (4, 4));
-                uqm_rust::collections::observation::enable();
-                uqm_rust::collections::observation::drain();
+                uqm_engine::collections::observation::enable();
+                uqm_engine::collections::observation::drain();
                 cx.set_ship_frame(ship.ship_id, 2, 0, last.clone());
                 assert!(matches!(
-                    uqm_rust::collections::observation::drain().as_slice(),
-                    [uqm_rust::collections::observation::Event::ImageFrame {
+                    uqm_engine::collections::observation::drain().as_slice(),
+                    [uqm_engine::collections::observation::Event::ImageFrame {
                         source_view: true,
                         ..
                     }]
@@ -397,8 +402,8 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
                     b: 3,
                     a: 255,
                 };
-                uqm_rust::collections::observation::enable();
-                uqm_rust::collections::observation::drain();
+                uqm_engine::collections::observation::enable();
+                uqm_engine::collections::observation::drain();
                 cx.copy_allocated_element(dest, ship.id);
                 assert_eq!(cx.elements()[dest].prim_index, index);
                 assert_ne!(index, cx.elements()[ship.id].prim_index);
@@ -410,15 +415,15 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
                 );
                 assert_eq!(cx.primitive_style(dest).kind, STAMP_PRIMITIVE);
                 assert_eq!(cx.primitive_style(dest).color.g, 2);
-                let events = uqm_rust::collections::observation::drain();
+                let events = uqm_engine::collections::observation::drain();
                 assert!(
-                    matches!(events.as_slice(), [uqm_rust::collections::observation::Event::ImageCopy { target, source, bytes }]
+                    matches!(events.as_slice(), [uqm_engine::collections::observation::Event::ImageCopy { target, source, bytes }]
                     if *target == cx.elements().raw(dest) as usize
                         && *source == cx.elements().raw(ship.id) as usize
                         && *bytes == std::mem::size_of::<ElementRecord>())
                 );
                 cx.put(dest);
-                uqm_rust::battle::sounds::engine::unlink(cx, dest);
+                uqm_modes::battle::sounds::engine::unlink(cx, dest);
                 cx.dispose(dest);
                 assert!(cx.elements().linked(ship.id));
             });
@@ -523,7 +528,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
     battle_context::run(|_| {
         let activity = crate::battle_context::with(|cx| cx.world.activity());
         let crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
-        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+        crate::battle_context::with(|cx| uqm_engine::state::ffi::rust_init_game_state(cx.world));
         crate::battle_context::with(|cx| {
             cx.world.set_activity(IN_ENCOUNTER);
             cx.world.set_flagship_crew(17);

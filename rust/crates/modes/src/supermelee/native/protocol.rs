@@ -1,13 +1,13 @@
 //! Protocol work borrows the input frame that admitted it.
-use crate::engine::battle::net::ProtocolNoticeKind;
-use crate::engine::{
+use std::ffi::CStr;
+use uqm_engine::battle::net::ProtocolNoticeKind;
+use uqm_engine::{
     battle::{
         net::{ProtocolDriver, ProtocolNotice, ProtocolPoll},
         Cx,
     },
     observe::Io,
 };
-use std::ffi::CStr;
 
 type NoticeHandler<'a> = dyn FnMut(&mut Cx<'_>, &mut Io<'_>, ProtocolNotice) + 'a;
 
@@ -87,7 +87,7 @@ pub(crate) fn feedback(
     }
     if matches!(notice.kind, Reset { .. }) {
         cx.world.set_activity(
-            cx.world.activity() | crate::engine::world::activity::activity_flags::CHECK_ABORT,
+            cx.world.activity() | uqm_engine::world::activity::activity_flags::CHECK_ABORT,
         );
     }
 }

@@ -1,7 +1,7 @@
 //! Ownership contracts at the protocol's stream boundary.
 #![forbid(unsafe_code)]
 use std::io;
-use uqm_rust::supermelee::netplay::{
+use uqm_modes::supermelee::netplay::{
     checkbuf::ChecksumBuffer, packet::Packet, packetq::PacketQueue,
 };
 

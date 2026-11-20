@@ -1,6 +1,6 @@
 //! Setup choices and their conversion to supplied runtime configuration.
 use super::GammaRange;
-use crate::engine::input::InputSession;
+use uqm_engine::input::InputSession;
 use uqm_engine::{
     configuration::runtime::{AudioSettings, DisplaySettings},
     resource::settings::Settings,

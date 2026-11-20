@@ -1,6 +1,6 @@
 //! The caller's menu-sound policy is restored when a surface trip returns.
 
-use crate::engine::input::InputControls;
+use uqm_engine::input::InputControls;
 
 pub const MENU_SOUND_NONE: u16 = 0;
 

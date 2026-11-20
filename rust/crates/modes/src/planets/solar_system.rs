@@ -1,6 +1,6 @@
 //! The solar-system visit owned by exploration, not published through a pointer.
 
-use crate::engine::{
+use uqm_engine::{
     battle::Cx,
     input::Frame,
     observe::{CheckpointView, Injected, InputView, Io},
@@ -60,9 +60,9 @@ pub struct SolarSystem {
     pub thrust_counter: u8,
     pub max_ship_speed: u8,
     pub(super) coordinates: Option<super::solar_coords::SolarCoordinates>,
-    pub(super) system_image: Option<crate::graphics::drawable::LoadedDrawable>,
-    pub(super) stars: Option<crate::graphics::drawable::LoadedDrawable>,
-    pub(super) scale_rect: crate::graphics::geometry::Rect,
+    pub(super) system_image: Option<uqm_engine::graphics::drawable::LoadedDrawable>,
+    pub(super) stars: Option<uqm_engine::graphics::drawable::LoadedDrawable>,
+    pub(super) scale_rect: uqm_engine::graphics::geometry::Rect,
 }
 
 impl SolarSystem {
@@ -91,7 +91,7 @@ impl SolarSystem {
                 &super::tables::PLANET_ARRAY,
                 descriptor.star_type,
                 descriptor.index,
-                crate::math::RandomContext::with_seed(12345),
+                uqm_engine::math::RandomContext::with_seed(12345),
             ),
             star,
             location: SystemLocation::Outer,
@@ -259,7 +259,7 @@ where
 {
     fn admit(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, view: InputView) -> Injected {
         self.solar.observe(cx, io);
-        crate::engine::input::admit_observer(cx, io, view)
+        uqm_engine::input::admit_observer(cx, io, view)
     }
 
     fn frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {

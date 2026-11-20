@@ -2,17 +2,17 @@ use super::{
     picker::{PickerState, MAX_SAVED_GAMES},
     render::PickerDisplay,
 };
-use crate::engine::{save::summary_record::SummaryDesc, Game};
-use crate::graphics::{
+use uqm_engine::graphics::{
     context::ContextLease, context::LoadedContext, drawable::ContextFrame, geometry::Extent,
     geometry::Point, geometry::Rect,
 };
+use uqm_engine::{save::summary_record::SummaryDesc, Game};
 
 #[test]
 #[serial_test::serial]
 fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
     if !uqm_engine::test_support::native_process::own_graphics_process("front_end::gameopt::render_tests::prepared_picker_draws_empty_and_populated_pages_without_published_owners") { return; }
-    use crate::graphics::drawable::LoadedDrawable;
+    use uqm_engine::graphics::drawable::LoadedDrawable;
     let mut game = Game::new();
     let fixture =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
@@ -25,7 +25,7 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
     game.kernel.flag_stat_frame = game.kernel.play_frame;
     game.kernel.font_grad_frame = game.kernel.play_frame;
     game.kernel
-        .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+        .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             vec![b"A\0".to_vec(); 600],
         ));
     let target = ContextFrame::retain(game.kernel.screen);

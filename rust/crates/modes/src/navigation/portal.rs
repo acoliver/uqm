@@ -1,8 +1,8 @@
 //! Portal animation state used by hyperspace radar and contact elements.
 
 use super::hyper_units::{ARILOU_SPACE_X, ARILOU_SPACE_Y, QUASI_SPACE_X, QUASI_SPACE_Y};
-use crate::engine::graphics::geometry::Point;
-use crate::engine::{Kernel, StoryKey, World};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::{Kernel, StoryKey, World};
 
 pub(super) fn portals(
     world: &mut World,
@@ -56,7 +56,7 @@ mod tests {
 
     fn world() -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world
     }
 

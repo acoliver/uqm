@@ -35,7 +35,7 @@ pub const fn classify(entry: i32, exit: i32) -> BatchVerdict {
 /// Fails if the depth is not zero on entry, or if the callback returns having
 /// changed it. `operation` names the boundary for diagnostics.
 pub fn calling_native_unbatched<T>(
-    context: &crate::graphics::context::ContextLease,
+    context: &uqm_engine::graphics::context::ContextLease,
     operation: &'static str,
     body: impl FnOnce() -> T,
 ) -> Result<T, AdapterError> {
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn batch_observation_rejects_an_uninitialized_queue() {
-        let context = crate::graphics::context::LoadedContext::create(c"queue-admission");
+        let context = uqm_engine::graphics::context::LoadedContext::create(c"queue-admission");
         let context = context.lease();
         let result =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| context.batch_depth()));
@@ -84,7 +84,7 @@ mod tests {
         use uqm_engine::test_support::native_probe::batch_graphics;
         use uqm_engine::test_support::native_probe::unbatch_graphics;
         use uqm_engine::test_support::native_probe::DrawQueue;
-        let context = crate::graphics::context::LoadedContext::create(c"queue-callback");
+        let context = uqm_engine::graphics::context::LoadedContext::create(c"queue-callback");
         let context = context.lease();
         let _queue = DrawQueue::init();
         let error = calling_native_unbatched(&context, "pickup_drift", || {

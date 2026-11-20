@@ -37,7 +37,7 @@ fn process_is_live(pid: u32) -> bool {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
         return false;
     };
-    uqm_rust::platform::os::process::exists(pid).unwrap_or(false)
+    uqm_platform::os::process::exists(pid).unwrap_or(false)
 }
 
 #[test]

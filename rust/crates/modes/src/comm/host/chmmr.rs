@@ -1,9 +1,9 @@
 use crate::comm::races::chmmr::{api::ChmmrApi, Handler};
-use crate::engine::StoryKey;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::starbase::sis_modules::{ModuleType, EMPTY_MODULE_SLOT, FUEL_RESERVE};
+use uqm_engine::StoryKey;
 
-fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
+fn refit(glob: &mut uqm_engine::WorldData, starbase: bool) {
     let ship = &mut glob.flagship;
     let game = &mut glob.game;
     ship.res_units = 1_000_000;
@@ -94,12 +94,12 @@ mod tests {
     use crate::comm::host::Host;
     use crate::comm::races::chmmr::{api::ChmmrApi, Handler};
     use crate::comm::Comm;
-    use crate::engine::StoryKey;
+    use uqm_engine::StoryKey;
 
     #[test]
     fn starbase_refit_resets_supplies_and_installs_bomb() {
         crate::comm::with_test_context(|cx| {
-            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            cx.world.story = Some(uqm_engine::world::story::StoryState::new());
             cx.world.set_story_state(StoryKey::STARBASE_AVAILABLE, 1);
             let ship = &mut cx.world.data.flagship;
             ship.module_slots.fill(9);
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn unvisited_starbase_refit_retains_supplies_and_reverse_packing() {
         crate::comm::with_test_context(|cx| {
-            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            cx.world.story = Some(uqm_engine::world::story::StoryState::new());
             cx.world.set_story_state(StoryKey::STARBASE_AVAILABLE, 0);
             let ship = &mut cx.world.data.flagship;
             ship.module_slots = [3, 22, 4, 22, 5, 6, 22, 7, 22, 8, 22, 9, 22, 10, 22, 11];

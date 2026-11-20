@@ -2,12 +2,12 @@
 //! fake game state.
 
 use super::pickup_energy;
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::StoryKey;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::special::{Body, Story};
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::StoryKey;
 
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);

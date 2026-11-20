@@ -5,13 +5,13 @@ use crate::battle::element::{
     APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DEFY_PHYSICS, NONSOLID, PLAYER_SHIP,
 };
 use crate::comm::dispatch::RPG_PLAYER_NUM;
-use crate::engine::battle::ai_constants::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
-use crate::engine::battle::EMPTY_PRIMITIVE;
-use crate::engine::battle::{Cx, ElementHook, ElementId};
-use crate::engine::world::activity::activity_flags::{CHECK_LOAD, IN_BATTLE, START_ENCOUNTER};
-use crate::engine::StoryKey;
-use crate::graphics::geometry::Point;
 use std::ptr;
+use uqm_engine::battle::ai_constants::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::{Cx, ElementHook, ElementId};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::world::activity::activity_flags::{CHECK_LOAD, IN_BATTLE, START_ENCOUNTER};
+use uqm_engine::StoryKey;
 pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> Point {
     let point = cx.element(element).next.location;
     let (width, height) = cx.screen_dimensions();
@@ -95,15 +95,15 @@ pub(crate) fn init_transition(cx: &mut Cx<'_>, source: ElementId, ship: ElementI
         .set_components(i32::from(dx / turns), i32::from(dy / turns));
 }
 pub fn hyper_preprocess(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    element: crate::engine::battle::ElementId,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    element: uqm_engine::battle::ElementId,
 ) {
     hyper_transition(cx, element);
 }
 
 pub fn hyper_transition(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    element: crate::engine::battle::ElementId,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    element: uqm_engine::battle::ElementId,
 ) -> bool {
     if cx.element(element).flags & APPEARING != 0 {
         let last = cx.kernel.last_activity;
@@ -150,10 +150,10 @@ pub fn hyper_transition(
     true
 }
 pub fn star_collision(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    source: crate::engine::battle::ElementId,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    source: uqm_engine::battle::ElementId,
     _p0: &mut Point,
-    ship: crate::engine::battle::ElementId,
+    ship: uqm_engine::battle::ElementId,
     _p1: &mut Point,
 ) {
     if cx.element(ship).flags & PLAYER_SHIP == 0 || cx.portal_counter() != 0 {
@@ -184,18 +184,12 @@ pub fn star_collision(
         }
     }
 }
-pub fn star_death(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    element: crate::engine::battle::ElementId,
-) {
+pub fn star_death(cx: &mut uqm_engine::battle::Cx<'_>, element: uqm_engine::battle::ElementId) {
     if cx.element(element).flags & DEFY_PHYSICS == 0 && cx.world.activity() & IN_BATTLE != 0 {
         cx.select_star(None);
     }
 }
-pub fn portal_death(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    element: crate::engine::battle::ElementId,
-) {
+pub fn portal_death(cx: &mut uqm_engine::battle::Cx<'_>, element: uqm_engine::battle::ElementId) {
     if cx.element(element).flags & DEFY_PHYSICS == 0
         || get(cx.world, StoryKey::ARILOU_SPACE_COUNTER) == 0
     {
@@ -211,10 +205,10 @@ pub fn portal_death(
     }
 }
 pub fn portal_collision(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    source: crate::engine::battle::ElementId,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    source: uqm_engine::battle::ElementId,
     _p0: &mut Point,
-    ship: crate::engine::battle::ElementId,
+    ship: uqm_engine::battle::ElementId,
     _p1: &mut Point,
 ) {
     if cx.element(ship).flags & PLAYER_SHIP == 0 {
@@ -247,12 +241,12 @@ pub fn save_sis_hyper_state(cx: &mut Cx<'_>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{battle::Battle, Game};
+    use uqm_engine::{battle::Battle, Game};
 
     #[test]
     fn portal_death_keeps_the_contacted_side_until_the_entrance_closes() {
         let mut game = Game::new();
-        game.world.story = Some(crate::engine::world::story::StoryState::new());
+        game.world.story = Some(uqm_engine::world::story::StoryState::new());
         game.kernel.reset_element_capacity(1);
         let mut battle = Battle::new();
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);

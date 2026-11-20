@@ -4,7 +4,7 @@ use super::oval::OvalGfx;
 use crate::comm::locdata::{CPoint, CRect};
 use crate::starbase::ids::RadarLayout;
 
-fn input(rect: crate::graphics::geometry::Rect) -> CRect {
+fn input(rect: uqm_engine::graphics::geometry::Rect) -> CRect {
     CRect {
         corner: CPoint {
             x: rect.corner.x,
@@ -49,14 +49,14 @@ impl NativeOvalGfx {
     }
 }
 
-fn point(p: CPoint) -> crate::graphics::geometry::Point {
-    crate::graphics::geometry::Point { x: p.x, y: p.y }
+fn point(p: CPoint) -> uqm_engine::graphics::geometry::Point {
+    uqm_engine::graphics::geometry::Point { x: p.x, y: p.y }
 }
 
-fn rect(r: &CRect) -> crate::graphics::geometry::Rect {
-    crate::graphics::geometry::Rect {
+fn rect(r: &CRect) -> uqm_engine::graphics::geometry::Rect {
+    uqm_engine::graphics::geometry::Rect {
         corner: point(r.corner),
-        extent: crate::graphics::geometry::Extent {
+        extent: uqm_engine::graphics::geometry::Extent {
             width: r.width,
             height: r.height,
         },
@@ -98,7 +98,7 @@ use super::topography::{
     render_topography, TopographyError, TopographyGfx, TopographyPalette, TopographyPoint,
     NUM_BATCH_POINTS,
 };
-use crate::graphics::{
+use uqm_engine::graphics::{
     batch::DrawCommand, batch::NativeBatch, batch::NativeShape, context::ContextLease,
     drawable::ContextFrame, geometry::Color,
 };
@@ -156,7 +156,7 @@ pub fn topography_batch(points: &[TopographyPoint; NUM_BATCH_POINTS], first: usi
 
 fn topography_points(
     points: &[TopographyPoint; NUM_BATCH_POINTS],
-) -> impl ExactSizeIterator<Item = (crate::engine::graphics::geometry::Point, Color)> + '_ {
+) -> impl ExactSizeIterator<Item = (uqm_engine::graphics::geometry::Point, Color)> + '_ {
     points.iter().map(|source| {
         let color = source.color;
         (
@@ -193,12 +193,12 @@ pub fn render_native_topography(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::graphics::{context::LoadedContext, drawable::LoadedDrawable};
+    use uqm_engine::graphics::{context::LoadedContext, drawable::LoadedDrawable};
 
     #[test]
     #[serial_test::serial]
     fn oval_retains_its_supplied_context_and_frame_after_owner_release() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();

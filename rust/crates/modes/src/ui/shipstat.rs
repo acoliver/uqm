@@ -1,10 +1,10 @@
 use crate::battle::status_native::draw_battle_crew_amount as draw_crew;
-use crate::engine::battle::link_queue::PickShip;
-use crate::engine::battle::record::ShipInfoRecord;
-use crate::engine::Kernel;
-use crate::graphics::{
+use uqm_engine::battle::link_queue::PickShip;
+use uqm_engine::battle::record::ShipInfoRecord;
+use uqm_engine::graphics::{
     geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
+use uqm_engine::Kernel;
 
 const STATUS_WIDTH: i16 = 64;
 const SHIP_INFO_HEIGHT: i16 = 65;
@@ -31,8 +31,8 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 }
 
 pub fn draw_crew_energy_labels(
-    context: &crate::graphics::context::ContextLease,
-    frames: &crate::graphics::drawable::DrawableLease,
+    context: &uqm_engine::graphics::context::ContextLease,
+    frames: &uqm_engine::graphics::drawable::DrawableLease,
     pc_menu: bool,
     y: i16,
     state: i16,
@@ -61,8 +61,8 @@ pub fn draw_crew_energy_labels(
 }
 
 pub fn draw_ship_name_text(
-    context: &crate::graphics::context::ContextLease,
-    font: &crate::graphics::font::FontLease,
+    context: &uqm_engine::graphics::context::ContextLease,
+    font: &uqm_engine::graphics::font::FontLease,
     text: &std::ffi::CStr,
     char_count: u16,
     y: i16,
@@ -88,7 +88,7 @@ pub fn draw_ship_name_text(
     context.set_foreground(rgb15(0, 0, 0));
 }
 
-pub fn clear_ship_status(context: &crate::graphics::context::ContextLease, y: i16) {
+pub fn clear_ship_status(context: &uqm_engine::graphics::context::ContextLease, y: i16) {
     context.fill_rectangle(
         rgb15(0x0a, 0x0a, 0x0a),
         Rect {
@@ -101,7 +101,7 @@ pub fn clear_ship_status(context: &crate::graphics::context::ContextLease, y: i1
     );
 }
 
-pub fn outline_ship_status(context: &crate::graphics::context::ContextLease, y: i16) {
+pub fn outline_ship_status(context: &uqm_engine::graphics::context::ContextLease, y: i16) {
     let mut r = Rect {
         corner: Point { x: 0, y: 1 + y },
         extent: Extent {
@@ -140,17 +140,17 @@ pub struct StatusTitle<'a> {
 }
 
 pub struct StatusGraphics {
-    pub context: crate::graphics::context::ContextLease,
-    pub frames: crate::graphics::drawable::DrawableLease,
-    pub font: crate::graphics::font::FontLease,
-    pub tiny_font: crate::graphics::font::FontLease,
-    pub crew_font: Option<crate::graphics::font::FontLease>,
+    pub context: uqm_engine::graphics::context::ContextLease,
+    pub frames: uqm_engine::graphics::drawable::DrawableLease,
+    pub font: uqm_engine::graphics::font::FontLease,
+    pub tiny_font: uqm_engine::graphics::font::FontLease,
+    pub crew_font: Option<uqm_engine::graphics::font::FontLease>,
     pub pc_menu: bool,
 }
 
 impl StatusGraphics {
-    pub fn new(kernel: &Kernel, crew_font: Option<crate::graphics::font::FontLease>) -> Self {
-        use crate::graphics::{context::ContextLease, font::FontLease};
+    pub fn new(kernel: &Kernel, crew_font: Option<uqm_engine::graphics::font::FontLease>) -> Self {
+        use uqm_engine::graphics::{context::ContextLease, font::FontLease};
 
         Self {
             context: ContextLease::retain(
@@ -158,7 +158,8 @@ impl StatusGraphics {
                     .status_context
                     .unwrap_or_else(|| panic!("status context not admitted")),
             ),
-            frames: crate::graphics::drawable::retain_frames(&[kernel.status_frame])[0].clone(),
+            frames: uqm_engine::graphics::drawable::retain_frames(&[kernel.status_frame])[0]
+                .clone(),
             font: FontLease::retain(
                 kernel
                     .star_con_font
@@ -177,7 +178,7 @@ impl StatusGraphics {
     pub fn draw(
         &self,
         ship: &mut ShipInfoRecord,
-        portrait: &crate::graphics::drawable::ContextFrame,
+        portrait: &uqm_engine::graphics::drawable::ContextFrame,
         y: i16,
         clip: Option<Rect>,
         title: Option<StatusTitle<'_>>,
@@ -253,8 +254,8 @@ impl StatusGraphics {
 }
 
 pub fn draw_battle_status(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    id: crate::engine::battle::ShipId,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    id: uqm_engine::battle::ShipId,
     clip: Option<Rect>,
 ) {
     if cx.kernel.status_context.is_none() {
@@ -265,7 +266,7 @@ pub fn draw_battle_status(
     let y = cx.kernel.status_offsets[selected.player as usize];
     let descriptor = cx.desc(id);
     let mut info = descriptor.ship_info;
-    let portrait = crate::graphics::drawable::ContextFrame::retain(info.icons).next_frame();
+    let portrait = uqm_engine::graphics::drawable::ContextFrame::retain(info.icons).next_frame();
     let title = battle_title(descriptor, selected, &cx.world.data.flagship.ship_name);
     graphics.draw(&mut info, &portrait, y, clip, title);
     let mut stats = cx.race_stats_mut(id);
@@ -274,7 +275,7 @@ pub fn draw_battle_status(
 }
 
 fn battle_title<'a>(
-    descriptor: &'a crate::engine::battle::record::RaceDescriptor,
+    descriptor: &'a uqm_engine::battle::record::RaceDescriptor,
     ship: PickShip,
     flagship: &'a [u8],
 ) -> Option<StatusTitle<'a>> {
@@ -298,10 +299,10 @@ fn battle_title<'a>(
 }
 
 pub fn update_statistics(
-    context: Option<&crate::graphics::context::ContextLease>,
+    context: Option<&uqm_engine::graphics::context::ContextLease>,
     numeric_crew: bool,
     pc_menu: bool,
-    font: Option<&crate::graphics::font::FontLease>,
+    font: Option<&uqm_engine::graphics::font::FontLease>,
     ship: &mut ShipInfoRecord,
     y_offs: i16,
     deltas: (i16, i16),
@@ -466,7 +467,7 @@ fn draw_crew_marker(
 }
 
 pub fn draw_gauge_frames(
-    context: &crate::graphics::context::ContextLease,
+    context: &uqm_engine::graphics::context::ContextLease,
     max_crew: u16,
     max_energy: u8,
     y: i16,

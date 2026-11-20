@@ -1,15 +1,15 @@
 //! Save-location preparation from explicit session topology and persistence identity.
 
 use super::solar::SolarError;
-use crate::engine::battle::schema::GameRecord as CGameState;
-pub use crate::engine::save::location::LocationError;
-use crate::engine::save::location::{OrbitLocation, SolarLocation};
-use crate::engine::world::generation::SolarSnapshot;
-use crate::engine::world::planet_info::ScanRetrieveMask;
-use crate::planets::solar_system::BodyLocation;
+use uqm_engine::battle::schema::GameRecord as CGameState;
+pub use uqm_engine::save::location::LocationError;
+use uqm_engine::save::location::{OrbitLocation, SolarLocation};
+use uqm_engine::world::generation::SolarSnapshot;
+use uqm_engine::world::planet_info::ScanRetrieveMask;
+use uqm_modes::planets::solar_system::BodyLocation;
 
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.
-fn frame_index(frame: crate::graphics::drawable::FrameId) -> u16 {
+fn frame_index(frame: uqm_engine::graphics::drawable::FrameId) -> u16 {
     frame.index()
 }
 

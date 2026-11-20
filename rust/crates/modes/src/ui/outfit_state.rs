@@ -3,7 +3,7 @@ use crate::starbase::module_guard;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
 
-use crate::engine::World;
+use uqm_engine::World;
 
 pub(super) const EMPTY_SLOT: u8 = equipment::NUM_MODULES as u8;
 

@@ -41,14 +41,14 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
     }
     let mut state = 0;
     if input & BATTLE_LEFT != 0 {
-        state |= crate::engine::battle::ai_constants::LEFT as u8;
+        state |= uqm_engine::battle::ai_constants::LEFT as u8;
     } else if input & BATTLE_RIGHT != 0 {
-        state |= crate::engine::battle::ai_constants::RIGHT as u8;
+        state |= uqm_engine::battle::ai_constants::RIGHT as u8;
     }
     for (battle, ship) in [
-        (BATTLE_THRUST, crate::engine::battle::ai_constants::THRUST),
-        (BATTLE_WEAPON, crate::engine::battle::ai_constants::WEAPON),
-        (BATTLE_SPECIAL, crate::engine::battle::ai_constants::SPECIAL),
+        (BATTLE_THRUST, uqm_engine::battle::ai_constants::THRUST),
+        (BATTLE_WEAPON, uqm_engine::battle::ai_constants::WEAPON),
+        (BATTLE_SPECIAL, uqm_engine::battle::ai_constants::SPECIAL),
     ] {
         if input & battle != 0 {
             state |= ship as u8;
@@ -57,48 +57,45 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
     state
 }
 
-fn run_away_allowed(world: &crate::engine::World) -> bool {
-    use crate::engine::StoryKey;
-    (world.activity() as u8 == crate::engine::world::activity::activity_kinds::IN_ENCOUNTER as u8
-        || world.activity() as u8 == crate::engine::battle::flags::IN_LAST_BATTLE as u8)
+fn run_away_allowed(world: &uqm_engine::World) -> bool {
+    use uqm_engine::StoryKey;
+    (world.activity() as u8 == uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER as u8
+        || world.activity() as u8 == uqm_engine::battle::flags::IN_LAST_BATTLE as u8)
         && world.story_state(StoryKey::STARBASE_AVAILABLE) != 0
         && world.story_state(StoryKey::BOMB_CARRIER) == 0
 }
 
 fn seed(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     domain: u32,
     fallback: u32,
 ) -> u32 {
     io.observer
         .input_admitted(
-            &crate::engine::observe::InputView::Seed { domain, fallback },
+            &uqm_engine::observe::InputView::Seed { domain, fallback },
             cx,
         )
         .seed
         .unwrap_or(fallback)
 }
 
-fn reset_observation(io: &mut crate::engine::observe::Io<'_>) {
-    crate::collections::observation::reset();
+fn reset_observation(io: &mut uqm_engine::observe::Io<'_>) {
+    uqm_engine::collections::observation::reset();
     io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::BattleReset);
+        .checkpoint(&uqm_engine::observe::CheckpointView::BattleReset);
 }
 
-fn advance_observation(
-    cx: &crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-) {
-    crate::collections::observation::advance();
+fn advance_observation(cx: &uqm_engine::battle::Cx<'_>, io: &mut uqm_engine::observe::Io<'_>) {
+    uqm_engine::collections::observation::advance();
     io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
+        .checkpoint(&uqm_engine::observe::CheckpointView::BattleAdvanced);
     io.observer.simulation(cx, "battle");
 }
 
 fn initialize_battle(
-    cx: &mut crate::engine::battle::Cx<'_>,
-) -> (std::rc::Rc<dyn crate::engine::battle::net::BattleNet>, bool) {
+    cx: &mut uqm_engine::battle::Cx<'_>,
+) -> (std::rc::Rc<dyn uqm_engine::battle::net::BattleNet>, bool) {
     cx.b.initialize(cx.kernel);
     let had_net = cx.b.net.is_some();
     cx.b.net
@@ -119,26 +116,26 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::netplay::CrcState as crc_State;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
-    use crate::engine::battle::ai_constants::MAX_SHIP_MASS;
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::ai_constants::MAX_SHIP_MASS;
+    use uqm_engine::battle::flags::{
         APPEARING, FINITE_LIFE, NORMAL_LIFE, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
         STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::net::NetState;
+    use uqm_engine::battle::net::NetState;
 
-    use crate::engine::battle::ElementHook;
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::engine::time::counter_abi::get_time_counter;
-    use crate::engine::time::counter_abi::ONE_SECOND;
-    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, IN_BATTLE};
-    use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Extent;
-    use crate::graphics::geometry::Point;
-    use crate::graphics::geometry::Rect;
-    use crate::sound::heart_ffi::stop_sound;
     use crate::supermelee::netplay::crc::{crc_finish, crc_init};
     use crate::supermelee::netplay::{ResetReason, CHECKSUM_INTERVAL};
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Extent;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::graphics::geometry::Rect;
+    use uqm_engine::sound::heart_ffi::stop_sound;
+    use uqm_engine::time::counter_abi::get_time_counter;
+    use uqm_engine::time::counter_abi::ONE_SECOND;
+    use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, IN_BATTLE};
+    use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
     const SIS_ORG_X: u32 = 7;
     const SIS_ORG_Y: u32 = 10;
 
@@ -153,7 +150,7 @@ pub(crate) mod engine {
     pub const SCALE_STEP: i32 = 0;
 
     use crate::battle::process_native::engine::redraw_queue;
-    use crate::engine::observe::Io;
+    use uqm_engine::observe::Io;
 
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
         Color {
@@ -165,9 +162,9 @@ pub(crate) mod engine {
     }
 
     fn run_away(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         io: &mut Io<'_>,
-        ship: crate::engine::battle::ShipId,
+        ship: uqm_engine::battle::ShipId,
     ) {
         let e = cx.ship_element(ship);
         let state = cx.element(e);
@@ -191,15 +188,15 @@ pub(crate) mod engine {
             cx.ship_state_mut(ship).input = 0;
             {
                 io.observer
-                    .checkpoint(&crate::engine::observe::CheckpointView::ShipEscaped);
+                    .checkpoint(&uqm_engine::observe::CheckpointView::ShipEscaped);
             };
         }
     }
 
     fn process_input(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         io: &mut Io<'_>,
-        net: &dyn crate::engine::battle::net::BattleNet,
+        net: &dyn uqm_engine::battle::net::BattleNet,
         order: [usize; 2],
     ) {
         crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| net.poll(driver));
@@ -214,17 +211,17 @@ pub(crate) mod engine {
                         .clone()
                         .unwrap_or_else(|| panic!("missing player input"));
                     let mut input = match context.source() {
-                        crate::engine::battle::input::InputSource::Human => {
+                        uqm_engine::battle::input::InputSource::Human => {
                             cx.human_input(context.player())
                         }
-                        crate::engine::battle::input::InputSource::Computer => {
+                        uqm_engine::battle::input::InputSource::Computer => {
                             crate::battle::context_access::ai_legacy::computer_intelligence(
                                 cx,
                                 context.player(),
                                 Some(ship),
                             )
                         }
-                        crate::engine::battle::input::InputSource::Network(_) => {
+                        uqm_engine::battle::input::InputSource::Network(_) => {
                             let activity = cx.world.activity_control();
                             crate::supermelee::native::protocol::with_battle_driver(
                                 cx,
@@ -260,8 +257,8 @@ pub(crate) mod engine {
     }
 
     pub(crate) fn battle_song(
-        kernel: &mut crate::engine::Kernel,
-        world: &crate::engine::World,
+        kernel: &mut uqm_engine::Kernel,
+        world: &uqm_engine::World,
         play: bool,
     ) {
         if kernel.battle_music.is_none() {
@@ -272,14 +269,14 @@ pub(crate) mod engine {
             } else {
                 c"music.battle"
             };
-            kernel.battle_music = crate::sound::resource_types::LoadedMusic::load(resource);
+            kernel.battle_music = uqm_engine::sound::resource_types::LoadedMusic::load(resource);
         }
         if play {
             crate::ui::settings::play_loaded_music(world, kernel.battle_music.as_ref(), 1, 1);
         }
     }
 
-    pub fn free_battle_song(kernel: &mut crate::engine::Kernel) {
+    pub fn free_battle_song(kernel: &mut uqm_engine::Kernel) {
         kernel.battle_music = None;
     }
 
@@ -289,11 +286,11 @@ pub(crate) mod engine {
     }
 
     fn do_battle(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         io: &mut Io<'_>,
         session: &mut BattleSession,
-        net: &dyn crate::engine::battle::net::BattleNet,
-        callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
+        net: &dyn uqm_engine::battle::net::BattleNet,
+        callback: Option<fn(&mut uqm_engine::battle::Cx<'_>, &mut Io<'_>)>,
     ) -> bool {
         cx.kernel.input_controls().set_menu_sounds(0, 0);
         let frame = net.frame();
@@ -324,7 +321,7 @@ pub(crate) mod engine {
                 });
             }
         }
-        let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
+        let context = uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context);
         let (width, height) = cx.screen_dimensions();
         let rect = Rect {
             corner: Point {
@@ -371,28 +368,31 @@ pub(crate) mod engine {
         true
     }
 
-    fn complete_observed_frame(cx: &mut crate::engine::battle::Cx<'_>, io: &mut Io<'_>) {
-        crate::engine::observe::battle::observe_tick(
+    fn complete_observed_frame(cx: &mut uqm_engine::battle::Cx<'_>, io: &mut Io<'_>) {
+        uqm_engine::observe::battle::observe_tick(
             cx,
             io,
-            crate::engine::observe::battle::BattlePhase::Advanced,
+            uqm_engine::observe::battle::BattlePhase::Advanced,
         );
         advance_observation(cx, io);
     }
 
-    fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: i16) -> u32 {
+    fn select_all_ships(cx: &mut uqm_engine::battle::Cx<'_>, count: i16) -> u32 {
         let controls = cx.kernel.player_control;
         if count == 1 {
             return crate::battle::ship_native::engine::next_star_ship(cx, None, 0);
         }
         if controls[0] & NETWORK_CONTROL != 0 && controls[1] & NETWORK_CONTROL != 0 {
-            crate::log_abi::log_message(2, "Only one side at a time can be network controlled.\n");
+            uqm_engine::log_abi::log_message(
+                2,
+                "Only one side at a time can be network controlled.\n",
+            );
             return 0;
         }
         crate::battle::ship_native::initial_star_ships(cx)
     }
 
-    fn finish_battle(cx: &mut crate::engine::battle::Cx<'_>, stop_audio: bool) {
+    fn finish_battle(cx: &mut uqm_engine::battle::Cx<'_>, stop_audio: bool) {
         if stop_audio {
             stop_ditty(cx.kernel);
             crate::ui::settings::stop_battle_music();
@@ -407,19 +407,19 @@ pub(crate) mod engine {
         seed_value: impl FnOnce(u32, u32) -> u32,
     ) {
         if activity != SUPER_MELEE as u8 {
-            crate::math::seed_random(seed_value(campaign_domain, get_time_counter()));
+            uqm_engine::math::seed_random(seed_value(campaign_domain, get_time_counter()));
         } else {
             let seed = seed_value(2, 0);
             if seed != 0 {
-                crate::math::seed_random(seed);
+                uqm_engine::math::seed_random(seed);
             }
         }
     }
 
     pub fn battle(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         io: &mut Io<'_>,
-        callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
+        callback: Option<fn(&mut uqm_engine::battle::Cx<'_>, &mut Io<'_>)>,
     ) -> bool {
         let (net, had_net) = initialize_battle(cx);
         let activity = cx.world.activity() as u8;
@@ -439,7 +439,7 @@ pub(crate) mod engine {
             cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
             reset_observation(io);
             if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
-                crate::graphics::context::ContextLease::require(cx.kernel.space_context)
+                uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context)
                     .scale_mode(cx.kernel.configuration.preferences().melee_scale);
             }
             let mut session = BattleSession {
@@ -496,18 +496,18 @@ pub use engine::{battle, free_battle_song};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::Cx;
-    use crate::engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
     use std::{cell::RefCell, rc::Rc};
+    use uqm_engine::battle::Cx;
+    use uqm_engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
 
     fn with_context(body: impl FnOnce(&mut Cx<'_>)) {
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut game = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         body(&mut Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
     }
 
@@ -543,12 +543,12 @@ mod tests {
 
         fn simulation(&mut self, _: &Cx<'_>, boundary: &str) {
             assert_eq!(boundary, "battle");
-            let frame = crate::collections::observation::current_frame();
+            let frame = uqm_engine::collections::observation::current_frame();
             self.events.borrow_mut().push(Observed::Simulated(frame));
         }
 
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {
-            let frame = crate::collections::observation::current_frame();
+            let frame = uqm_engine::collections::observation::current_frame();
             self.events.borrow_mut().push(match view {
                 CheckpointView::BattleReset => Observed::Reset(frame),
                 CheckpointView::BattleAdvanced => Observed::Advanced(frame),
@@ -607,7 +607,7 @@ mod tests {
             events: events.clone(),
             seed: None,
         };
-        crate::collections::observation::advance();
+        uqm_engine::collections::observation::advance();
         with_context(|cx| {
             let mut io = Io {
                 observer: &mut observer,
@@ -630,14 +630,14 @@ mod tests {
 
     #[test]
     fn retreat_permission_uses_the_supplied_world_and_low_activity_byte() {
-        use crate::engine::{StoryKey, World};
+        use uqm_engine::{StoryKey, World};
         let mut world = World::new();
-        world.story = Some(crate::state::game_state::StoryState::new());
+        world.story = Some(uqm_engine::state::game_state::StoryState::new());
         for activity in 0..=4 {
             for flags in [
                 0,
-                crate::engine::world::activity::activity_flags::IN_BATTLE,
-                crate::engine::world::activity::activity_flags::CHECK_ABORT,
+                uqm_engine::world::activity::activity_flags::IN_BATTLE,
+                uqm_engine::world::activity::activity_flags::CHECK_ABORT,
             ] {
                 world.set_activity(activity | flags);
                 for starbase in 0..=1 {
@@ -646,9 +646,8 @@ mod tests {
                         world.set_story_state(StoryKey::BOMB_CARRIER, bomb);
                         assert_eq!(
                             run_away_allowed(&world),
-                            (activity
-                                == crate::engine::world::activity::activity_kinds::IN_ENCOUNTER
-                                || activity == crate::engine::battle::flags::IN_LAST_BATTLE as u16)
+                            (activity == uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER
+                                || activity == uqm_engine::battle::flags::IN_LAST_BATTLE as u16)
                                 && starbase != 0
                                 && bomb == 0,
                         );
@@ -663,18 +662,18 @@ mod tests {
         for input in 0u8..=255 {
             let mut expected = 0;
             if input & 1 != 0 {
-                expected |= crate::engine::battle::ai_constants::LEFT as u8;
+                expected |= uqm_engine::battle::ai_constants::LEFT as u8;
             } else if input & 2 != 0 {
-                expected |= crate::engine::battle::ai_constants::RIGHT as u8;
+                expected |= uqm_engine::battle::ai_constants::RIGHT as u8;
             }
             if input & 4 != 0 {
-                expected |= crate::engine::battle::ai_constants::THRUST as u8;
+                expected |= uqm_engine::battle::ai_constants::THRUST as u8;
             }
             if input & 8 != 0 {
-                expected |= crate::engine::battle::ai_constants::WEAPON as u8;
+                expected |= uqm_engine::battle::ai_constants::WEAPON as u8;
             }
             if input & 16 != 0 {
-                expected |= crate::engine::battle::ai_constants::SPECIAL as u8;
+                expected |= uqm_engine::battle::ai_constants::SPECIAL as u8;
             }
             assert_eq!(ship_input(input, 1), expected);
             assert_eq!(ship_input(input, u16::MAX), expected);
@@ -704,10 +703,10 @@ mod tests {
         let both = BATTLE_LEFT | BATTLE_RIGHT | BATTLE_THRUST | BATTLE_WEAPON | BATTLE_SPECIAL;
         assert_eq!(
             ship_input(both, 1),
-            (crate::engine::battle::ai_constants::LEFT
-                | crate::engine::battle::ai_constants::THRUST
-                | crate::engine::battle::ai_constants::WEAPON
-                | crate::engine::battle::ai_constants::SPECIAL) as u8
+            (uqm_engine::battle::ai_constants::LEFT
+                | uqm_engine::battle::ai_constants::THRUST
+                | uqm_engine::battle::ai_constants::WEAPON
+                | uqm_engine::battle::ai_constants::SPECIAL) as u8
         );
         assert_eq!(ship_input(both, 0), 0);
     }

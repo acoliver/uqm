@@ -8,28 +8,28 @@ mod clock_tests;
 mod supplied_tests;
 
 use crate::comm::dispatch::{DEAD_GUY, GOOD_GUY};
-use crate::engine::clock::{
+use crate::navigation::hyper_units::{SOL_X, SOL_Y};
+use crate::navigation::hyperspace::check_hyperspace_encounter;
+use crate::planets::generate::identities::{SAMATRA_DEFINED, SPATHI_DEFINED, ZOQFOT_DEFINED};
+use uqm_engine::clock::{
     ADVANCE_ILWRATH_MISSION, ADVANCE_MYCON_MISSION, ADVANCE_PKUNK_MISSION, ADVANCE_THRADD_MISSION,
     ADVANCE_UTWIG_SUPOX_MISSION, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
     HYPERSPACE_ENCOUNTER_EVENT, KOHR_AH_GENOCIDE_EVENT, KOHR_AH_VICTORIOUS_EVENT,
     SHOFIXTI_RETURN_EVENT, SLYLANDRO_RAMP_DOWN, SLYLANDRO_RAMP_UP, SPATHI_SHIELD_EVENT,
     YEHAT_REBEL_EVENT, ZOQFOT_DEATH_EVENT, ZOQFOT_DISTRESS_EVENT,
 };
-use crate::engine::species::ship::{
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::square_root;
+use uqm_engine::species::ship::{
     BLACK_URQUAN_SHIP, DRUUGE_SHIP, ILWRATH_SHIP, MYCON_SHIP, PKUNK_SHIP, SHOFIXTI_SHIP,
     SPATHI_SHIP, SUPOX_SHIP, THRADDASH_SHIP, URQUAN_SHIP, UTWIG_SHIP, YEHAT_REBEL_SHIP, YEHAT_SHIP,
     ZOQFOTPIK_SHIP,
 };
-use crate::engine::world::activity::{activity_flags::IN_BATTLE, ActivityKind};
-use crate::engine::world::fleet::{set_race_allied, start_sphere_tracking};
-use crate::engine::world::queues::FleetInfo;
-use crate::engine::{StoryKey, World};
-use crate::graphics::geometry::Point;
-use crate::math::square_root;
-use crate::navigation::hyper_units::{SOL_X, SOL_Y};
-use crate::navigation::hyperspace::check_hyperspace_encounter;
-use crate::planets::generate::identities::{SAMATRA_DEFINED, SPATHI_DEFINED, ZOQFOT_DEFINED};
-use crate::time::clock_abi::{ABSOLUTE_EVENT, RELATIVE_EVENT, START_YEAR};
+use uqm_engine::time::clock_abi::{ABSOLUTE_EVENT, RELATIVE_EVENT, START_YEAR};
+use uqm_engine::world::activity::{activity_flags::IN_BATTLE, ActivityKind};
+use uqm_engine::world::fleet::{set_race_allied, start_sphere_tracking};
+use uqm_engine::world::queues::FleetInfo;
+use uqm_engine::{StoryKey, World};
 
 /// `ARILOU_SPACE` story values (gameev.c): the portal opens, then closes.
 const ARILOU_GATE_CLOSING: u32 = 0;
@@ -52,16 +52,16 @@ pub(crate) fn dispatcher(
 
 /// `AddEvent`: schedule a campaign event, or run it at once when it is due today.
 pub fn add_event(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     kind: u32,
     month: u16,
     day: u16,
     year: u16,
     selector: u8,
-) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>> {
+) -> Option<uqm_engine::battle::link_queue::LinkId<uqm_engine::clock::ScheduledEvent>> {
     let mut random = cx.rng;
     let mut dispatch = dispatcher(cx.screen_dimensions(), &mut random);
-    crate::time::clock_abi::schedule_event(
+    uqm_engine::time::clock_abi::schedule_event(
         cx.world,
         &mut dispatch,
         kind,
@@ -72,7 +72,7 @@ pub fn add_event(
     )
 }
 
-fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
+fn finish_clock_day(cx: &mut uqm_engine::battle::Cx<'_>) {
     crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
     let clock = &cx.world.data.game.game_clock;
     let today = (
@@ -82,21 +82,21 @@ fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
     );
     let mut random = cx.rng;
     let dispatch = dispatcher(cx.screen_dimensions(), &mut random);
-    crate::time::clock_abi::dispatch_day_events(cx.world, today, dispatch);
+    uqm_engine::time::clock_abi::dispatch_day_events(cx.world, today, dispatch);
 }
 
 /// `GameClockTick`: advance the clock one tick and run a finished day's events.
-pub fn game_clock_tick(cx: &mut crate::engine::battle::Cx<'_>) {
-    if crate::time::clock_bridge::rust_clock_tick(cx.world) {
+pub fn game_clock_tick(cx: &mut uqm_engine::battle::Cx<'_>) {
+    if uqm_engine::time::clock_bridge::rust_clock_tick(cx.world) {
         finish_clock_day(cx);
     }
 }
 
 /// `MoveGameClockDays`: run each skipped day's events, then start a fresh day.
-pub fn advance_days(cx: &mut crate::engine::battle::Cx<'_>, days: i32) {
-    crate::time::clock_bridge::log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
+pub fn advance_days(cx: &mut uqm_engine::battle::Cx<'_>, days: i32) {
+    uqm_engine::time::clock_bridge::log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
     for _ in 0..days {
-        crate::time::clock_bridge::next_clock_day_internal(&mut cx.world.data.game.game_clock);
+        uqm_engine::time::clock_bridge::next_clock_day_internal(&mut cx.world.data.game.game_clock);
         finish_clock_day(cx);
     }
     let clock = &mut cx.world.data.game.game_clock;
@@ -206,7 +206,7 @@ use crate::navigation::{get, set};
 fn fleet(
     world: &World,
     race: u8,
-) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fleet> {
+) -> uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Fleet> {
     world
         .avail_races_ref()
         .at(race as usize)
@@ -220,7 +220,7 @@ fn relative(
     year: u16,
     selector: u32,
 ) {
-    crate::time::clock_abi::schedule_event(
+    uqm_engine::time::clock_abi::schedule_event(
         world,
         &mut |world, selector| dispatch_event(world, services, selector),
         RELATIVE_EVENT,
@@ -239,7 +239,7 @@ fn at_star(world: &World, index: u8) -> bool {
 
 pub fn schedule_initial_events(world: &mut World, services: &mut EventServices<'_>) {
     relative(world, services, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
-    crate::time::clock_abi::schedule_event(
+    uqm_engine::time::clock_abi::schedule_event(
         world,
         &mut |world, selector| dispatch_event(world, services, selector),
         ABSOLUTE_EVENT,
@@ -261,7 +261,7 @@ pub fn schedule_initial_events(world: &mut World, services: &mut EventServices<'
 
 pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selector: u8) {
     if let Some(event) = apply_story_event(world, selector) {
-        crate::time::clock_abi::schedule_event(
+        uqm_engine::time::clock_abi::schedule_event(
             world,
             &mut |world, selector| dispatch_event(world, services, selector),
             event.kind,
@@ -769,11 +769,11 @@ mod tests {
 #[cfg(test)]
 mod story_event_tests {
     use super::*;
-    use crate::engine::{StoryKey, World};
+    use uqm_engine::{StoryKey, World};
 
     fn world() -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world
     }
 

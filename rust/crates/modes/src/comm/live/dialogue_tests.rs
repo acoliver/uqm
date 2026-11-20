@@ -5,7 +5,8 @@
 
 use crate::comm::lifecycle::{self, DialogueKind};
 use crate::comm::Comm;
-use crate::engine::{
+use uqm_engine::strings::{conversation::ConversationTable, owned_table::LoadedTextTable};
+use uqm_engine::{
     battle::{input::InputContext, Battle, Cx},
     input::{Frame, InputRuntime, InputSession},
     observe::{InputView, Io, Observer, Unobserved},
@@ -13,7 +14,6 @@ use crate::engine::{
     world::story::StoryState,
     Game, StoryKey, World,
 };
-use crate::strings::{conversation::ConversationTable, owned_table::LoadedTextTable};
 
 /// Runs every input frame to completion; time and presentation are free.
 struct Pacing(InputSession);
@@ -61,7 +61,7 @@ const KINDS: [DialogueKind; DialogueKind::COUNT] = {
 /// the range the scripts leave them in, and the starbase visit date is a
 /// calendar date.
 fn story_with(mut pick: impl FnMut(u32) -> u32) -> Vec<(StoryKey, u32)> {
-    let mut chosen: Vec<_> = crate::engine::world::story::GAME_STATE_FIELDS
+    let mut chosen: Vec<_> = uqm_engine::world::story::GAME_STATE_FIELDS
         .iter()
         .map(|&(name, start, end)| {
             let width = end - start + 1;
@@ -107,11 +107,15 @@ fn all_set_story() -> Vec<(StoryKey, u32)> {
     story_with(|_| 1)
 }
 
-fn campaign(world: &mut World, art: crate::graphics::drawable::FrameId, story: &[(StoryKey, u32)]) {
-    use crate::engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
+fn campaign(
+    world: &mut World,
+    art: uqm_engine::graphics::drawable::FrameId,
+    story: &[(StoryKey, u32)],
+) {
+    use uqm_engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
     *world = World::new();
     world.story = Some(StoryState::new());
-    crate::time::clock_bridge::rust_clock_init(world);
+    uqm_engine::time::clock_bridge::rust_clock_init(world);
     for species in 0..=u32::from(YEHAT_REBEL_SHIP) {
         let mut fleets = world.avail_races();
         let id = fleets.alloc().unwrap_or_else(|| panic!("fleet pool"));
@@ -211,8 +215,8 @@ const POLICIES: [fn(usize, usize) -> usize; 4] = [
 
 /// Run `body` once per campaign on the display fixture with the conversation
 /// resources installed: fixture art, fonts, panels and a pacing runtime.
-fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::drawable::FrameId)) {
-    use crate::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
+fn with_fixture(mut body: impl FnMut(&mut Game, uqm_engine::graphics::drawable::FrameId)) {
+    use uqm_engine::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
     let mut game = Game::new();
     let display = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
@@ -228,7 +232,7 @@ fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::drawable::Frame
                     .unwrap_or_else(|| panic!("tiny font fixture")),
             ));
             // Cargo and status panels the starbase and trader scripts redraw.
-            let icons = crate::graphics::drawable::LoadedDrawable::create(8, 8, 8, 128)
+            let icons = uqm_engine::graphics::drawable::LoadedDrawable::create(8, 8, 8, 128)
                 .unwrap_or_else(|| panic!("icon fixture allocation failed"));
             let first = icons
                 .lease()
@@ -242,9 +246,9 @@ fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::drawable::Frame
             game.kernel
                 .install_input_runtime(std::rc::Rc::new(Pacing(input)));
             body(game, first);
-            game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
-            game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
-            game.kernel.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
+            game.kernel.misc_data_frame = uqm_engine::graphics::drawable::FrameId::NULL;
+            game.kernel.flag_stat_frame = uqm_engine::graphics::drawable::FrameId::NULL;
+            game.kernel.font_grad_frame = uqm_engine::graphics::drawable::FrameId::NULL;
             drop(icons);
         },
     )
@@ -260,7 +264,7 @@ fn run_all(story: &[(StoryKey, u32)]) {
                 let mut battle = Battle::new();
                 let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
                 walk(&mut cx, kind, policy);
-                crate::time::clock_bridge::rust_clock_uninit(cx.world);
+                uqm_engine::time::clock_bridge::rust_clock_uninit(cx.world);
             }
         }
     });
@@ -698,7 +702,7 @@ fn every_response_handler_runs_from_its_callback_table() {
                         let mut battle = Battle::new();
                         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
                         converse(&mut cx, kind, |comm, cx| handler(comm, cx, reference));
-                        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+                        uqm_engine::time::clock_bridge::rust_clock_uninit(cx.world);
                     }
                 }
             }
@@ -719,7 +723,7 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
         syreen::api::SyreenApi, talkpet::api::TalkpetApi, umgah::api::UmgahApi,
         urquan::api::UrquanApi, zoqfot::api::ZoqApi,
     };
-    use crate::engine::species::ship::{ORZ_SHIP, PKUNK_SHIP, SPATHI_SHIP};
+    use uqm_engine::species::ship::{ORZ_SHIP, PKUNK_SHIP, SPATHI_SHIP};
     if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::host_queries_and_effects_read_and_change_the_supplied_campaign"
@@ -756,11 +760,11 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
         };
         assert!(pkunk(&cx));
 
-        crate::engine::world::fleet::add_escort_ships(
+        uqm_engine::world::fleet::add_escort_ships(
             cx.world,
             ORZ_SHIP as u16,
             2,
-            crate::engine::world::fleet::captain_name,
+            uqm_engine::world::fleet::captain_name,
         );
         host(&mut cx, DialogueKind::Orz, |h: &mut Host<'_, '_, _>| {
             h.remove_escorts(ORZ_SHIP as u16)
@@ -776,11 +780,11 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
             DialogueKind::Spahome,
             |h: &mut Host<'_, '_, _>| h.have_spathi_escort()
         ));
-        crate::engine::world::fleet::add_escort_ships(
+        uqm_engine::world::fleet::add_escort_ships(
             cx.world,
             SPATHI_SHIP as u16,
             1,
-            crate::engine::world::fleet::captain_name,
+            uqm_engine::world::fleet::captain_name,
         );
         assert!(host(
             &mut cx,
@@ -819,11 +823,11 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
         });
         assert_eq!(group, (77, 77));
 
-        crate::engine::world::fleet::add_escort_ships(
+        uqm_engine::world::fleet::add_escort_ships(
             cx.world,
             ORZ_SHIP as u16,
             12,
-            crate::engine::world::fleet::captain_name,
+            uqm_engine::world::fleet::captain_name,
         );
         assert_eq!(
             host(&mut cx, DialogueKind::Pkunk, |h: &mut Host<'_, '_, _>| h
@@ -839,7 +843,7 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
             0,
             "no Pkunk fleet, no gift"
         );
-        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+        uqm_engine::time::clock_bridge::rust_clock_uninit(cx.world);
         campaign(cx.world, art, &[]);
         cx.world.data.game.game_clock.year_index = 2157;
         cx.world.data.game.game_clock.month_index = 4;
@@ -898,7 +902,7 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
             h.refit()
         });
         assert_eq!(cx.world.data.flagship.res_units, 1_000_000);
-        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+        uqm_engine::time::clock_bridge::rust_clock_uninit(cx.world);
     });
 }
 
@@ -982,8 +986,8 @@ fn first_talk_segue_presents_once_and_consumes_only_the_load_flag() {
         });
         converse(&mut cx, DialogueKind::Arilou, |comm, cx| {
             let input = InputSession::default();
-            let mut observer = crate::engine::observe::Unobserved;
-            let mut io = crate::engine::observe::Io {
+            let mut observer = uqm_engine::observe::Unobserved;
+            let mut io = uqm_engine::observe::Io {
                 observer: &mut observer,
             };
             assert!(!comm.is_talking_finished());
@@ -997,6 +1001,6 @@ fn first_talk_segue_presents_once_and_consumes_only_the_load_flag() {
                 "responses are not offered while talking"
             );
         });
-        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+        uqm_engine::time::clock_bridge::rust_clock_uninit(cx.world);
     });
 }

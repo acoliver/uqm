@@ -1,8 +1,8 @@
 //! Retained asset snapshot for a synchronous lander trip or status preview.
 
 use super::assets::LanderSoundTable;
-use crate::engine::graphics::drawable::ContextFrame;
-use crate::engine::kernel::lander_resources::LanderResources;
+use uqm_engine::graphics::drawable::ContextFrame;
+use uqm_engine::kernel::lander_resources::LanderResources;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
@@ -42,10 +42,10 @@ impl PlanetSideAssets {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::engine::Game;
-    use crate::graphics::{
+    use uqm_engine::graphics::{
         context::ContextLease, geometry::Extent, geometry::Point, geometry::Rect,
     };
+    use uqm_engine::Game;
 
     pub(crate) fn with_packaged_resources(test: impl FnOnce(&mut Game)) {
         let mut game = Game::new();
@@ -58,7 +58,8 @@ pub(crate) mod tests {
             .unwrap();
         let mount = uqm_engine::test_support::native_session::ContentMount::new(&content_root);
         mount.load_index("uqm.rmp");
-        let palette = crate::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
+        let palette =
+            uqm_engine::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
         uqm_engine::test_support::native_probe::set_color_map(&palette);
         test(&mut game);
         uqm_engine::test_support::native_probe::flush_graphics();
@@ -69,7 +70,7 @@ pub(crate) mod tests {
     #[test]
     #[serial_test::serial]
     fn packaged_load_failures_release_each_acquired_graphic_in_reverse_order() {
-        use crate::collections::observation::{self, Event};
+        use uqm_engine::collections::observation::{self, Event};
         with_packaged_resources(|_| {
             let keys = [
                 "graphics.lander",
@@ -161,7 +162,7 @@ pub(crate) mod tests {
                 }
             }
             let radar = ContextLease::require(game.kernel.status_context);
-            radar.set_frame(crate::graphics::drawable::ContextFrame::retain(
+            radar.set_frame(uqm_engine::graphics::drawable::ContextFrame::retain(
                 game.kernel.screen,
             ));
             radar.set_clip(Rect {
@@ -171,7 +172,8 @@ pub(crate) mod tests {
                     height: 53,
                 },
             });
-            let other = crate::graphics::context::LoadedContext::create(c"preserved-selection");
+            let other =
+                uqm_engine::graphics::context::LoadedContext::create(c"preserved-selection");
             other.lease().select();
             let selected = uqm_engine::test_support::native_probe::selected_context();
             crate::planet_side::init_lander::draw_lander(

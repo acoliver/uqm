@@ -1,8 +1,8 @@
 //! Pre-UMS save layout, including its 32-bit pointer padding and packed groups.
 use super::format::*;
 use super::{decode_save, decode_summary_from, SaveFile, Summary, GAME_STATE_BYTES};
-use crate::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 use std::io::{self, Read};
+use uqm_engine::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 
 struct Reader<R> {
     input: R,
@@ -212,8 +212,8 @@ pub fn decode_legacy_payload<R: Read>(
 mod live {
     use super::*;
 
-    use crate::engine::host::FileStream;
     use crate::savegame::slots::SaveSlots;
+    use uqm_engine::host::FileStream;
     use uqm_save::lzh::Decoder;
 
     fn open_legacy_slot(slots: &SaveSlots, slot: u16) -> anyhow::Result<(FileStream, Summary)> {

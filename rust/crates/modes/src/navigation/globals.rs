@@ -1,19 +1,19 @@
 //! Ownership and lifecycle of the live navigation world, ported from globdata.c.
 
 use super::groups::{init_group_info, uninit_group_info};
-use crate::engine::battle::record::{FleetRecord, ShipInfoRecord};
-use crate::engine::world::activity::activity_flags::START_INTERPLANETARY;
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use crate::navigation::hyper_units::{SOL_X, SOL_Y};
-use crate::ships::DescriptorLoader;
-use crate::ships::{master_native::find_master_ship, types::SpeciesId};
 use crate::starbase::ids::NAMING_STRING_BASE;
 use crate::starbase::ids::{RADAR_HEIGHT, RADAR_WIDTH, SAFE_X, STATUS_WIDTH};
 use crate::ui::border::init_siscontexts;
+use uqm_content::ships::DescriptorLoader;
+use uqm_content::ships::{master_native::find_master_ship, types::SpeciesId};
+use uqm_engine::battle::record::{FleetRecord, ShipInfoRecord};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::world::activity::activity_flags::START_INTERPLANETARY;
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
 
-fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+fn load_sc2_data(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
     let (width, height) = cx.screen_dimensions();
     let radar_clip = Rect {
         corner: Point {
@@ -48,7 +48,7 @@ fn fleet_template(info: &ShipInfoRecord, fleet: &FleetRecord) -> FleetTemplate {
     }
 }
 
-fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
+fn initialize_races(cx: &mut uqm_engine::battle::Cx<'_>) {
     let kernel = &mut *cx.kernel;
     cx.world.initialize_fleets(
         FleetRoster {
@@ -56,11 +56,11 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
             last_species: SpeciesId::KohrAh as u32,
             rebel_species: SpeciesId::Yehat as u32,
             probe_species: SpeciesId::UrQuanProbe as u32,
-            rebel_slot: usize::from(crate::engine::species::ship::YEHAT_REBEL_SHIP),
+            rebel_slot: usize::from(uqm_engine::species::ship::YEHAT_REBEL_SHIP),
         },
         |world, species| {
             if species == SpeciesId::UrQuanProbe as u32 {
-                if let Some(desc) = crate::engine::battle::RaceDesc::load(world, species, false) {
+                if let Some(desc) = uqm_engine::battle::RaceDesc::load(world, species, false) {
                     let template = fleet_template(desc.info(), desc.fleet());
                     world.retain_fleet_resources(species, desc.picker_resources());
                     let assets = desc.into_campaign_probe(world);
@@ -74,7 +74,7 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
                     .unwrap_or_else(|| panic!("master species {species}"));
                 world.retain_fleet_resources(
                     species,
-                    crate::ships::master_native::engine::picker_resources(kernel, species),
+                    uqm_content::ships::master_native::engine::picker_resources(kernel, species),
                 );
                 fleet_template(&master.info, &master.fleet)
             }
@@ -82,9 +82,9 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
     );
 }
 
-fn campaign_names(kernel: &crate::engine::Kernel) -> ([u8; 16], [u8; 16]) {
+fn campaign_names(kernel: &uqm_engine::Kernel) -> ([u8; 16], [u8; 16]) {
     let copy = |offset| {
-        crate::engine::save::summary::utf8_string_copy(
+        uqm_engine::save::summary::utf8_string_copy(
             kernel
                 .game_text(NAMING_STRING_BASE as usize + offset)
                 .to_bytes(),
@@ -94,20 +94,20 @@ fn campaign_names(kernel: &crate::engine::Kernel) -> ([u8; 16], [u8; 16]) {
 }
 
 /// Initialize campaign owners before allocating the new world queues.
-pub fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+pub fn init_game_structures(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
     let battle = &mut *cx.b;
     let kernel = &mut *cx.kernel;
     let rng = cx.rng;
     cx.world.new_game(
         |world| {
-            let mut cx = crate::engine::battle::Cx::new(battle, world, kernel, rng);
+            let mut cx = uqm_engine::battle::Cx::new(battle, world, kernel, rng);
             cx.kernel.load_navigation_play();
             initialize_races(&mut cx);
             let dimensions = cx.screen_dimensions();
             init_siscontexts(cx.kernel, dimensions);
             load_sc2_data(&mut cx);
             let catalog = cx.world.catalog();
-            crate::state::ffi::rust_init_planet_info(
+            uqm_engine::state::ffi::rust_init_planet_info(
                 cx.world,
                 crate::planets::starmap::catalog_star_count(catalog) as i32,
             );
@@ -115,7 +115,7 @@ pub fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
             let (ship_name, commander_name) = campaign_names(cx.kernel);
             NewGameInputs {
                 activity: ActivityKind::InInterplanetary as u16 | START_INTERPLANETARY,
-                human_fleet: usize::from(crate::engine::species::ship::HUMAN_SHIP),
+                human_fleet: usize::from(uqm_engine::species::ship::HUMAN_SHIP),
                 log_position: (
                     crate::planets::universe_units::universe_to_logx(SOL_X),
                     crate::planets::universe_units::universe_to_logy(SOL_Y),
@@ -130,13 +130,13 @@ pub fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
 }
 
 /// Release campaign resources after the active game has stopped using them.
-pub fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
+pub fn uninit_game_structures(cx: &mut uqm_engine::battle::Cx<'_>) {
     cx.world.encounters().reinit();
     cx.world.ip_groups().reinit();
     cx.world.npc_built_ships().reinit();
     cx.world.built_ships().reinit();
     uninit_group_info(cx.world);
-    crate::state::ffi::rust_uninit_planet_info(cx.world);
+    uqm_engine::state::ffi::rust_uninit_planet_info(cx.world);
     cx.world.release_campaign_probe();
     cx.world.avail_races().reinit();
     cx.world.clear_fleet_resources();
@@ -146,14 +146,14 @@ pub fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{world::state_file::RANDGRPINFO_FILE, StoryKey, World};
+    use uqm_engine::{world::state_file::RANDGRPINFO_FILE, StoryKey, World};
     const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
 
     #[test]
     fn campaign_names_read_retained_text_and_keep_byte_truncation_and_padding() {
-        use crate::strings::owned_table::LoadedTextTable;
         use std::ffi::CString;
-        let mut kernel = crate::engine::Kernel::new();
+        use uqm_engine::strings::owned_table::LoadedTextTable;
+        let mut kernel = uqm_engine::Kernel::new();
         let mut strings = vec![CString::default(); NAMING_STRING_BASE as usize + 4];
         strings[NAMING_STRING_BASE as usize + 2] = CString::new("12345678901234é").unwrap();
         strings[NAMING_STRING_BASE as usize + 3] = CString::new("Zelnick").unwrap();
@@ -175,7 +175,7 @@ mod tests {
         world.data.game.glob_flags = 0xa5;
         world.data.flagship.fuel_on_board = 1234;
         world.set_activity(IN_HYPERSPACE);
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 2);
         other.set_activity(IN_HYPERSPACE);
         let mut queue = world.ip_groups();

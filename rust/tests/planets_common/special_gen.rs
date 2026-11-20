@@ -4,10 +4,10 @@
 //! originals' captured output must equal both.
 
 use std::fmt::Write as _;
-use uqm_rust::engine::world::planet::PlanetDesc;
+use uqm_engine::world::planet::PlanetDesc;
 
 use super::default_gen::{layout_cases, moon_cases};
-use uqm_rust::planets::generate::special::Body;
+use uqm_modes::planets::generate::special::Body;
 
 /// `STAR_COLOR` of an orange star.
 const ORANGE_STAR: u8 = 2;

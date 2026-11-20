@@ -5,19 +5,21 @@ use super::locdata::CRect;
 use super::sis_graphics::suffix;
 use super::sis_graphics::Text;
 use super::Comm;
-use crate::graphics::{context::ContextLease, font::FontLease};
-use crate::sound::trackplayer::{SubtitleIdentity, SubtitleSnapshot};
 use std::ffi::CString;
+use uqm_engine::graphics::{context::ContextLease, font::FontLease};
+use uqm_engine::sound::trackplayer::{SubtitleIdentity, SubtitleSnapshot};
 
 impl Comm {
     pub fn set_conversation_phrases(
         &mut self,
-        phrases: Option<crate::strings::conversation::ConversationTable>,
+        phrases: Option<uqm_engine::strings::conversation::ConversationTable>,
     ) {
         self.display.phrases = phrases;
     }
 
-    pub fn conversation_phrases(&self) -> Option<&crate::strings::conversation::ConversationTable> {
+    pub fn conversation_phrases(
+        &self,
+    ) -> Option<&uqm_engine::strings::conversation::ConversationTable> {
         self.display.phrases.as_ref()
     }
 }
@@ -63,7 +65,7 @@ fn layout_subtitle(comm: &Comm, cache: &ContextLease, font: &FontLease, text: &m
         );
         remaining = remaining.wrapping_sub(text.char_count).saturating_sub(1);
         input = suffix(input, fitted.next);
-        let (line, _) = crate::strings::unicode::split_utf8_prefix(
+        let (line, _) = uqm_engine::strings::unicode::split_utf8_prefix(
             text.text.to_bytes(),
             text.char_count as usize,
         );
@@ -77,7 +79,7 @@ fn layout_subtitle(comm: &Comm, cache: &ContextLease, font: &FontLease, text: &m
             font,
             &line,
             text.baseline,
-            crate::graphics::geometry::TextAlign::from_c(text.align),
+            uqm_engine::graphics::geometry::TextAlign::from_c(text.align),
             comm.data.definition.alien_text_fcolor,
             comm.data.definition.alien_text_bcolor,
         );
@@ -127,7 +129,7 @@ pub fn clear_subtitles(comm: &mut Comm) {
 
 pub fn check_subtitles(comm: &mut Comm) {
     comm.apply_phrase_events();
-    let current = crate::sound::trackplayer::subtitle_snapshot();
+    let current = uqm_engine::sound::trackplayer::subtitle_snapshot();
     let identity = current.as_ref().map(|snapshot| snapshot.identity);
     let previous = comm
         .display
@@ -146,8 +148,8 @@ pub fn check_subtitles(comm: &mut Comm) {
         comm.display.subtitle.baseline = baseline;
         comm.display.subtitle.align = align;
         if previous == identity {
-            crate::log_abi::log_message(
-                crate::log_abi::LOG_WARNING,
+            uqm_engine::log_abi::log_message(
+                uqm_engine::log_abi::LOG_WARNING,
                 "Dialog text and location changed out of sync",
             );
         }
@@ -176,11 +178,11 @@ pub fn reset_clear_subtitles(comm: &mut Comm) {
 }
 
 /// Run the conversation's speech segue for `track` on the supplied game owners.
-pub fn alien_talk_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, track: u16) {
+pub fn alien_talk_segue(comm: &mut Comm, cx: &mut uqm_engine::battle::Cx<'_>, track: u16) {
     {
         let runtime = cx.kernel.input_runtime();
         let mut observer = runtime.observer();
-        let mut io = crate::engine::observe::Io {
+        let mut io = uqm_engine::observe::Io {
             observer: &mut *observer,
         };
         super::ffi::observe_responses(comm, &mut io);
@@ -196,7 +198,7 @@ pub(crate) struct SubtitleState {
 }
 
 pub(crate) struct RuntimeState {
-    pub(crate) phrases: Option<crate::strings::conversation::ConversationTable>,
+    pub(crate) phrases: Option<uqm_engine::strings::conversation::ConversationTable>,
     pub(crate) resources: Option<super::sis_graphics::ConversationResources>,
     pub(crate) window: CRect,
     pub(crate) assets: Option<super::assets::Assets>,
@@ -273,9 +275,9 @@ mod owner_tests {
     #[serial_test::serial]
     fn subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes() {
         super::super::sis_graphics_font_tests::with_display("comm::comm_abi::owner_tests::subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes", |comm, context| {
-            use crate::graphics::context::LoadedContext;
-use crate::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::Point};
-            use crate::sound::trackplayer;
+            use uqm_engine::graphics::context::LoadedContext;
+use uqm_engine::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::Point};
+            use uqm_engine::sound::trackplayer;
             trackplayer::stop_track().unwrap();
             trackplayer::splice_track(Some("subtitle"), Some("A A"), None, None, vec![]).unwrap();
             let snapshot = trackplayer::subtitle_history().remove(0);

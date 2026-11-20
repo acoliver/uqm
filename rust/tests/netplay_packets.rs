@@ -6,19 +6,19 @@ use std::{
     io::{self, Read, Write},
     rc::Rc,
 };
+use uqm_engine::battle::net::NetState;
+use uqm_engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolPoll};
 use uqm_engine::{
     host::{Connection, Net},
     network::loopback::LoopbackNet,
 };
-use uqm_rust::engine::battle::net::NetState;
-use uqm_rust::engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolPoll};
-use uqm_rust::platform::net::NativeNet;
-use uqm_rust::supermelee::netplay::{
+use uqm_modes::supermelee::netplay::{
     checkbuf::ChecksumBuffer,
     netconnection::{NetConnection, PeerOptions, ReadyAction, Rejected},
     packet::{DecodeError, Packet},
     Effect, Event, NetplaySession, ResetReason,
 };
+use uqm_platform::net::NativeNet;
 
 #[derive(Default)]
 struct Driver {
@@ -369,7 +369,7 @@ fn battle_input_treats_a_removed_peer_as_a_disconnect() {
     let (session, script) = scripted(NetState::InBattle, vec![]);
     session.init_battle_input_buffers();
     session.close_player_with(0, &mut |_| {});
-    let world = uqm_rust::engine::World::new();
+    let world = uqm_engine::World::new();
     assert_eq!(
         session.network_battle_input(0, &world.activity_control(), &mut Driver::default()),
         0

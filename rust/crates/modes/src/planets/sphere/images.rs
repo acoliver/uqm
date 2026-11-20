@@ -1,4 +1,4 @@
-use crate::engine::graphics::{drawable::DrawableLease, drawable::LoadedDrawable};
+use uqm_engine::graphics::{drawable::DrawableLease, drawable::LoadedDrawable};
 
 pub(crate) fn image(flags: u8, width: usize, height: usize, count: u16) -> LoadedDrawable {
     let width =
@@ -56,12 +56,12 @@ impl OrbitImages {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::collections::observation::{self, Event};
+    use uqm_engine::collections::observation::{self, Event};
 
     #[test]
     #[serial_test::serial]
     fn orbit_images_release_in_the_original_teardown_order() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();

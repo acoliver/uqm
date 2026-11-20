@@ -1,12 +1,12 @@
 //! The live menu lends setup effects only for the current admitted input call.
-use crate::engine::battle::net::NetState;
-use crate::engine::world::activity::activity_flags::IN_BATTLE;
-use crate::engine::{
+use crate::supermelee::session::MeleeSession;
+use uqm_engine::battle::net::NetState;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::{
     battle::Cx,
     input::Frame,
     observe::{Injected, InputSetup, InputView, Io, Observer, PeerSetup},
 };
-use crate::supermelee::session::MeleeSession;
 
 struct Setup<'s, 'c, 'w> {
     state: &'s mut MeleeSession,

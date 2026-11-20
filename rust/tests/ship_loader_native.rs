@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
-use uqm_rust::engine::battle::RaceDesc;
-use uqm_rust::engine::species::species_id::SPECIES_ID_ARILOU_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_NUM_SPECIES_ID;
-use uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID;
-use uqm_rust::ships::DescriptorLoader;
+use uqm_content::ships::DescriptorLoader;
+use uqm_engine::battle::RaceDesc;
+use uqm_engine::species::species_id::SPECIES_ID_ARILOU_ID;
+use uqm_engine::species::species_id::SPECIES_ID_NUM_SPECIES_ID;
+use uqm_engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -16,22 +16,19 @@ use std::{
 };
 
 static UNINIT: AtomicUsize = AtomicUsize::new(0);
-fn uninit(
-    _: &mut uqm_rust::engine::battle::World,
-    stats: &mut uqm_rust::engine::battle::views::RaceStats,
-) {
+fn uninit(_: &mut uqm_engine::battle::World, stats: &mut uqm_engine::battle::views::RaceStats) {
     assert_eq!(stats.ship_info.ship_cost, 16);
-    assert!(!uqm_rust::collections::observation::drain()
+    assert!(!uqm_engine::collections::observation::drain()
         .iter()
         .any(|event| matches!(
             event,
-            uqm_rust::collections::observation::Event::ResourcesFree { .. }
+            uqm_engine::collections::observation::Event::ResourcesFree { .. }
         )));
     UNINIT.fetch_add(1, Ordering::SeqCst);
 }
-static TEARDOWN_RACE: uqm_rust::engine::battle::Race = uqm_rust::engine::battle::Race {
+static TEARDOWN_RACE: uqm_engine::battle::Race = uqm_engine::battle::Race {
     descriptor: |_| {
-        uqm_rust::engine::battle::template::RaceTemplate::default().descriptor(&TEARDOWN_RACE)
+        uqm_engine::battle::template::RaceTemplate::default().descriptor(&TEARDOWN_RACE)
     },
     preprocess: None,
     postprocess: None,
@@ -62,13 +59,15 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         index.push_str("test.invalid.code = SHIP:255\n");
         std::fs::write(fixture.path().join("ships.rmp"), &index).unwrap();
         {
-            uqm_rust::log_abi::log_init(100);
-            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            uqm_engine::log_abi::log_init(100);
+            crate::battle_context::with(|cx| {
+                uqm_engine::state::ffi::rust_init_game_state(cx.world)
+            });
             crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
             crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
             crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
             let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
-            uqm_rust::resource::init();
+            uqm_engine::resource::init();
             mount.load_index("ships.rmp");
             let keys = [
                 "arilou",
@@ -146,15 +145,15 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             .unwrap();
             assert!(loaded.race().is_some());
             loaded.set_race(&TEARDOWN_RACE);
-            uqm_rust::collections::observation::enable();
-            uqm_rust::collections::observation::drain();
+            uqm_engine::collections::observation::enable();
+            uqm_engine::collections::observation::drain();
             crate::battle_context::with(|cx| loaded.unload(cx.world, true));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
-            assert!(uqm_rust::collections::observation::drain()
+            assert!(uqm_engine::collections::observation::drain()
                 .iter()
                 .any(|event| matches!(
                     event,
-                    uqm_rust::collections::observation::Event::ResourcesFree { .. }
+                    uqm_engine::collections::observation::Event::ResourcesFree { .. }
                 )));
             let mut probe = crate::battle_context::with(|cx| {
                 RaceDesc::load(cx.world, SPECIES_ID_UR_QUAN_PROBE_ID, false)
@@ -164,7 +163,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             // The shared callback fixture expects this scalar and must run before observation.
             probe.fixture_info_mut().ship_cost = 16;
             let descriptor = probe.address();
-            uqm_rust::collections::observation::drain();
+            uqm_engine::collections::observation::drain();
             crate::battle_context::with(|cx| {
                 let world = &mut cx.world;
                 let assets = probe.into_campaign_probe(world);
@@ -173,12 +172,12 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             });
             assert_eq!(UNINIT.load(Ordering::SeqCst), 2);
             assert!(
-                matches!(uqm_rust::collections::observation::drain().as_slice(),
-                [uqm_rust::collections::observation::Event::ResourcesFree {
+                matches!(uqm_engine::collections::observation::drain().as_slice(),
+                [uqm_engine::collections::observation::Event::ResourcesFree {
                     descriptor: address, icons: false, battle: false
                 }] if *address == descriptor)
             );
-            let decoy = uqm_rust::graphics::drawable::LoadedDrawable::create(2, 0, 0, 1).unwrap();
+            let decoy = uqm_engine::graphics::drawable::LoadedDrawable::create(2, 0, 0, 1).unwrap();
             let decoy_frames = decoy.lease();
             crate::battle_context::with(|cx| {
                 let id = cx.world.avail_races().alloc().unwrap();
@@ -187,9 +186,9 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 fleets.get_mut(id).melee_icon = decoy_frames.frame(0).unwrap();
                 fleets.put(id);
             });
-            uqm_rust::collections::observation::drain();
+            uqm_engine::collections::observation::drain();
             crate::battle_context::with(|cx| {
-                uqm_rust::navigation::globals::uninit_game_structures(cx);
+                uqm_modes::navigation::globals::uninit_game_structures(cx);
                 assert_eq!(cx.world.avail_races_ref().count(), 0);
                 assert_eq!(cx.world.encounters_ref().count(), 0);
                 assert_eq!(cx.world.ip_groups_ref().count(), 0);
@@ -198,10 +197,10 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 cx.world.release_campaign_probe();
             });
             assert_eq!(UNINIT.load(Ordering::SeqCst), 2);
-            assert!(uqm_rust::collections::observation::drain().is_empty());
+            assert!(uqm_engine::collections::observation::drain().is_empty());
             assert!(decoy_frames.frame(0).is_some());
             drop(decoy);
-            uqm_rust::resource::uninit();
+            uqm_engine::resource::uninit();
             drop(mount);
         }
     })

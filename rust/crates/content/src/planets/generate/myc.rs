@@ -11,12 +11,6 @@
 //! `MYCON_VISITS`, `KNOW_ABOUT_SHATTERED`, `EGG_CASE0_ON_SHIP`,
 //! `EGG_CASE1_ON_SHIP`, `EGG_CASE2_ON_SHIP`.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{
@@ -24,6 +18,10 @@ use crate::planets::generate::identities::{
 };
 use crate::planets::generate::special::{self, Body, Story, SHATTERED_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 /// Every hook looks at planet 0.
 const WORLD: Body = Body::Planet(0);
@@ -58,7 +56,7 @@ pub trait MyconSite: HomeContactSite {
     /// `LoadStdLanderFont`, the mask and the report strings of `scene`.
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: Scene,
     );
 }
@@ -250,7 +248,7 @@ pub fn pickup_energy(
         );
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::SUN_DEVICE, 1);
@@ -262,7 +260,7 @@ pub fn pickup_energy(
         assert_eq!(which_node, 0, "an egg case is picked up from node 0");
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(egg_case_flag(star_index), 1);
@@ -282,7 +280,7 @@ fn egg_case_flag(star_index: u8) -> StoryKey {
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

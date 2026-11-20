@@ -5,25 +5,25 @@ use std::{
     collections::VecDeque,
     rc::Rc,
 };
-use uqm_engine::test_support::campaign_display;
-use uqm_engine::test_support::native_process;
-use uqm_rust::engine::battle::Battle;
-use uqm_rust::engine::battle::Cx;
-use uqm_rust::engine::input::frames::*;
-use uqm_rust::engine::input::Frame;
-use uqm_rust::engine::input::InputRuntime;
-use uqm_rust::engine::input::InputSession;
-use uqm_rust::engine::observe::CheckpointView;
-use uqm_rust::engine::observe::Injected;
-use uqm_rust::engine::observe::InputView;
-use uqm_rust::engine::observe::Io;
-use uqm_rust::engine::observe::Observer;
-use uqm_rust::engine::observe::Presented;
-use uqm_rust::engine::observe::Unobserved;
-use uqm_rust::engine::Game;
-use uqm_rust::graphics::{
+use uqm_engine::battle::Battle;
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Point,
 };
+use uqm_engine::input::frames::*;
+use uqm_engine::input::Frame;
+use uqm_engine::input::InputRuntime;
+use uqm_engine::input::InputSession;
+use uqm_engine::observe::CheckpointView;
+use uqm_engine::observe::Injected;
+use uqm_engine::observe::InputView;
+use uqm_engine::observe::Io;
+use uqm_engine::observe::Observer;
+use uqm_engine::observe::Presented;
+use uqm_engine::observe::Unobserved;
+use uqm_engine::test_support::campaign_display;
+use uqm_engine::test_support::native_process;
+use uqm_engine::Game;
 
 struct Runtime {
     input: InputSession,
@@ -78,7 +78,7 @@ impl InputRuntime for Runtime {
         self.update(cx);
         assert!(!frame.frame(cx, io));
     }
-    fn battle_input(&self, _: &uqm_rust::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, _: &uqm_engine::battle::input::InputContext) -> u8 {
         panic!("modal fixture has no ship input");
     }
 }
@@ -120,7 +120,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            uqm_rust::math::random,
+            uqm_engine::math::random,
         );
         let mut observer = Unobserved;
         let mut io = Io {
@@ -132,7 +132,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
         ] {
             runtime.keys.borrow_mut().extend(keys);
             assert_eq!(
-                uqm_rust::ui::confirm::do_confirm_exit(&mut cx, &runtime.input),
+                uqm_modes::ui::confirm::do_confirm_exit(&mut cx, &runtime.input),
                 expected
             );
             assert_eq!(
@@ -148,7 +148,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
         }
         runtime.input.set_menu_sounds(7, 11);
         runtime.keys.borrow_mut().push_back(KEY_MENU_CANCEL);
-        uqm_rust::ui::confirm::do_popup_window(&mut cx, &mut io, c"A\nA");
+        uqm_modes::ui::confirm::do_popup_window(&mut cx, &mut io, c"A\nA");
         assert_eq!(runtime.input.menu_sounds(), (7, 11));
         assert!(runtime.input.callback().is_none());
         context.flush();
@@ -166,11 +166,7 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
 #[derive(Default)]
 struct WaitObserver(usize);
 impl Observer for WaitObserver {
-    fn input_admitted(
-        &mut self,
-        view: &InputView,
-        _: &mut uqm_rust::engine::battle::Cx<'_>,
-    ) -> Injected {
+    fn input_admitted(&mut self, view: &InputView, _: &mut uqm_engine::battle::Cx<'_>) -> Injected {
         assert_eq!(*view, InputView::Nested);
         self.0 += 1;
         Injected {
@@ -213,10 +209,10 @@ fn wait_samples_initial_state_then_admits_each_nested_sample_and_flushes_once() 
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            uqm_rust::math::random,
+            uqm_engine::math::random,
         );
         assert_eq!(
-            uqm_rust::ui::util::wait_for_any_button(&mut cx, &mut io, 1, u32::MAX, 1),
+            uqm_modes::ui::util::wait_for_any_button(&mut cx, &mut io, 1, u32::MAX, 1),
             1
         );
     }

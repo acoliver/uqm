@@ -1,11 +1,11 @@
 use super::*;
-use crate::engine::{
+use std::{cell::RefCell, rc::Rc};
+use uqm_engine::{
     battle::{input::InputContext, net::ProtocolNoticeKind, Battle},
     input::{Frame, InputRuntime, InputSession},
     observe::{Observer, Unobserved},
     Game,
 };
-use std::{cell::RefCell, rc::Rc};
 
 struct Runtime {
     input: InputSession,
@@ -62,7 +62,7 @@ fn notices_and_wait_polls_borrow_the_same_live_world_synchronously() {
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
     let mut observer = Unobserved;
     let mut io = Io {

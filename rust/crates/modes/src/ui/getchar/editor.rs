@@ -1,12 +1,12 @@
 //! Bounded UTF-8 editing with synchronous borrowed callbacks.
-use crate::engine::{
-    battle::Cx,
-    input::{frames::*, InputSession},
-    observe::Io,
-};
 use std::ffi::CStr;
 use uqm_engine::input_port::sdl_input::{
     enter_character_mode, exit_character_mode, last_character, next_character,
+};
+use uqm_engine::{
+    battle::Cx,
+    input::{frames::*, InputSession},
+    observe::Io,
 };
 
 pub struct TextEntryView<'a> {
@@ -48,7 +48,7 @@ impl Alphabet {
         };
         let count = result.upper.len().min(result.lower.len());
         if result.upper.len() != result.lower.len() {
-            crate::log_abi::log_message(3, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({count})"));
+            uqm_engine::log_abi::log_message(3, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({count})"));
         }
         result.upper.truncate(count);
         result.lower.truncate(count);
@@ -56,7 +56,7 @@ impl Alphabet {
     }
 
     fn load() -> Self {
-        crate::strings::owned_table::LoadedTextTable::load(c"text.joyalpha")
+        uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.joyalpha")
             .map_or_else(Self::default, |table| {
                 Self::new(table.label(0).0, table.label(1).0, table.label(2).0)
             })
@@ -301,7 +301,7 @@ impl<'a> Editor<'a> {
         }
         while code != 0 {
             self.joystick = false;
-            if crate::strings::unicode::uni_char_is_print(code) != 0 {
+            if uqm_engine::strings::unicode::uni_char_is_print(code) != 0 {
                 if let Some(ch) = char::from_u32(code) {
                     if self.insert(ch) {
                         changed = true;

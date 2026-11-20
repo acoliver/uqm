@@ -1,10 +1,10 @@
 //! Flagship screen border, ported from uqm/border.c.
 use super::util::box_rectangles;
-use crate::engine::Kernel;
-use crate::graphics::{
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Extent,
     geometry::Point, geometry::Rect,
 };
+use uqm_engine::Kernel;
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
         r: (r << 3) | (r >> 2),
@@ -29,7 +29,7 @@ pub fn init_siscontexts(kernel: &Kernel, dimensions: (i32, i32)) {
     });
 }
 
-pub fn draw_sis_frame(kernel: &Kernel, world: &mut crate::engine::World, dimensions: (i32, i32)) {
+pub fn draw_sis_frame(kernel: &Kernel, world: &mut uqm_engine::World, dimensions: (i32, i32)) {
     let (width, height) = dimensions;
     let context = ContextLease::require(kernel.screen_context);
     let mut r = Rect {
@@ -238,8 +238,8 @@ fn draw_dark_edges(context: &ContextLease, dimensions: (i32, i32)) {
 
 /// Draw the conversation chrome without borrowing the communication runtime.
 pub(crate) fn draw_conversation_frame(
-    kernel: &crate::engine::Kernel,
-    world: &mut crate::engine::World,
+    kernel: &uqm_engine::Kernel,
+    world: &mut uqm_engine::World,
     dimensions: (i32, i32),
     starbase_title: Option<usize>,
 ) {

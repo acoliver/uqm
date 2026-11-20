@@ -2,14 +2,14 @@
 //! system's orbital, against recording fakes.
 
 use super::{generate_energy, generate_orbital, pickup_energy, BurvScenes};
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::special::{Body, Orbit, Story};
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 const HOME: Body = Body::Planet(0);
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
@@ -40,12 +40,12 @@ struct FakeScenes {
 }
 
 impl BurvScenes for FakeScenes {
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         self.ruins += 1;
     }
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     ) {
         self.broadcasters += 1;
     }
@@ -214,11 +214,10 @@ fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
     let mut sys_info: SystemInfo = Default::default();
     sys_info.planet_info.weather = 9;
     sys_info.planet_info.tectonics = 9;
-    let world: crate::engine::world::planet::PlanetDesc =
-        crate::engine::world::planet::PlanetDesc {
-            radius: 400,
-            ..Default::default()
-        };
+    let world: uqm_engine::world::planet::PlanetDesc = uqm_engine::world::planet::PlanetDesc {
+        radius: 400,
+        ..Default::default()
+    };
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,

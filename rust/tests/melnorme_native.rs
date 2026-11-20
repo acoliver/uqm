@@ -7,39 +7,39 @@ mod battle;
 mod battle_context;
 use battle::{Battle, FrameSet, PoolElement, Ship};
 use std::ffi::CStr;
-use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::IMMEDIATE_WEAPON;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_NO_MOVEMENT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_MELNORME_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::arctan;
-use uqm_rust::math::battle_types::HALF_CIRCLE;
-use uqm_rust::math::battle_types::ONE_SHIFT;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
-use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+use uqm_engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::IMMEDIATE_WEAPON;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_NO_MOVEMENT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::arctan;
+use uqm_engine::math::battle_types::HALF_CIRCLE;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_MELNORME_ID;
 
 fn trader(battle: &Battle, player: i16) -> Ship<'_> {
     {
@@ -62,7 +62,7 @@ fn trader(battle: &Battle, player: i16) -> Ship<'_> {
 fn pump(ship: &mut Ship<'_>) -> ElementId {
     let handle = ship.weapon_handles(1)[0].unwrap();
     let e = handle;
-    battle::get_mut(e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
+    battle::get_mut(e).parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
     battle::get_mut(e).next = battle::get(e).current.clone();
     battle::put(handle);
     e
@@ -234,7 +234,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
             let frame = loaded.frame(0);
             owned.ship_info.energy_level = 37;
             owned.ship_data.weapon = loaded.array();
-            owned.race_callbacks.post = uqm_rust::engine::battle::Selection::Disabled;
+            owned.race_callbacks.post = uqm_engine::battle::Selection::Disabled;
             let fresh = battle::descriptor(SPECIES_ID_MELNORME_ID);
             assert_eq!(fresh.callbacks(), d.callbacks());
             assert_eq!(fresh.ship_info.energy_level, 42);
@@ -284,7 +284,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                         && battle::get(e).collision_func.is_some()
                 );
                 assert!(
-                    battle::get(e).parent == uqm_rust::engine::battle::Parent::None,
+                    battle::get(e).parent == uqm_engine::battle::Parent::None,
                     "the firing path, not the initializer, attaches the ship"
                 );
                 assert_eq!(
@@ -382,7 +382,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     assert_eq!(ship.ship_mut().energy_counter, 4);
                     assert_eq!(
                         battle::get(p).parent,
-                        uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                        uqm_engine::battle::Parent::Ship(ship.ship_id)
                     );
                     assert!(
                         battle::get(p).preprocess_func.is_none()
@@ -628,7 +628,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                     assert_eq!(battle::get(e).player_nr, 1);
                     assert_eq!(
                         battle::get(e).parent,
-                        uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                        uqm_engine::battle::Parent::Ship(ship.ship_id)
                     );
                     assert_eq!(battle::get(e).current.image.frames, ship.frame_set(2));
                     assert_eq!((battle::get(e).current.image.frame.raw()).index(), 0);
@@ -739,7 +739,7 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                 );
                 assert_eq!(
                     battle::get(controller).parent,
-                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    uqm_engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert_eq!(
                     battle::get(controller).current.image.frames,
@@ -797,7 +797,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 battle::get_mut(e).life = 1;
                 let value = victim.ship_mut().ship_element;
                 battle::get_mut(e).target = value;
-                battle::get_mut(e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
+                battle::get_mut(e).parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
                 battle::prim_mut(e).kind = STAMP_PRIMITIVE;
                 battle::put(h);
                 candidates.push(e);

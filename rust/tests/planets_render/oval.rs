@@ -4,16 +4,16 @@
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
 use std::io::Read;
-use uqm_rust::engine::graphics::surface::CapturedSurface;
-use uqm_rust::engine::test_support::native_probe;
-use uqm_rust::graphics::context::LoadedContext;
-use uqm_rust::graphics::drawable::{ContextFrame, FrameId};
-use uqm_rust::graphics::menu;
-use uqm_rust::starbase::ids::RadarLayout;
+use uqm_engine::graphics::context::LoadedContext;
+use uqm_engine::graphics::drawable::{ContextFrame, FrameId};
+use uqm_engine::graphics::menu;
+use uqm_engine::graphics::surface::CapturedSurface;
+use uqm_engine::test_support::native_probe;
+use uqm_modes::starbase::ids::RadarLayout;
 
 struct Offscreen {
     context: Option<LoadedContext>,
-    previous_context: Option<uqm_rust::graphics::context::ContextId>,
+    previous_context: Option<uqm_engine::graphics::context::ContextId>,
     surface: Option<CapturedSurface>,
     frame: FrameId,
     width: i32,
@@ -46,7 +46,7 @@ impl Offscreen {
         }
     }
 
-    fn context(&self) -> uqm_rust::graphics::context::ContextId {
+    fn context(&self) -> uqm_engine::graphics::context::ContextId {
         self.context
             .as_ref()
             .unwrap_or_else(|| panic!("oval fixture context"))
@@ -61,7 +61,7 @@ impl Offscreen {
         );
         let target = ContextFrame::retain(self.frame);
         assert_eq!(
-            uqm_rust::graphics::context::ContextLease::retain(self.context())
+            uqm_engine::graphics::context::ContextLease::retain(self.context())
                 .target()
                 .frame(),
             target.frame()
@@ -85,7 +85,7 @@ impl Offscreen {
     }
 
     fn reset(&self) {
-        let color = uqm_rust::graphics::geometry::Color {
+        let color = uqm_engine::graphics::geometry::Color {
             r: 11,
             g: 23,
             b: 37,
@@ -113,7 +113,7 @@ impl Drop for Offscreen {
     fn drop(&mut self) {
         menu::set_frame(FrameId::NULL);
         drop(self.surface.take());
-        uqm_rust::graphics::state::flush_ex(true);
+        uqm_engine::graphics::state::flush_ex(true);
         menu::select(self.previous_context);
         drop(self.context.take());
     }
@@ -155,7 +155,7 @@ fn rects(width: i16, height: i16) -> Vec<[i16; 4]> {
 }
 
 pub fn retained_ovals_match_original_c_full_offscreen_buffers(
-    system_rng: &uqm_rust::math::RandomContext,
+    system_rng: &uqm_engine::math::RandomContext,
 ) {
     let seed_before = system_rng.seed();
     // Standard tests require every full-buffer digest. A supplied original-C
@@ -173,33 +173,33 @@ pub fn retained_ovals_match_original_c_full_offscreen_buffers(
             .enumerate()
         {
             for alpha in [255, 101] {
-                menu::foreground(uqm_rust::graphics::geometry::Color {
+                menu::foreground(uqm_engine::graphics::geometry::Color {
                     r: 71,
                     g: 131,
                     b: 197,
                     a: alpha,
                 });
                 for mode in [Some(0), Some(1), Some(7), Some(255), None] {
-                    let c_rect = uqm_rust::graphics::geometry::Rect {
-                        corner: uqm_rust::graphics::geometry::Point { x, y },
-                        extent: uqm_rust::graphics::geometry::Extent { width, height },
+                    let c_rect = uqm_engine::graphics::geometry::Rect {
+                        corner: uqm_engine::graphics::geometry::Point { x, y },
+                        extent: uqm_engine::graphics::geometry::Extent { width, height },
                     };
                     canvas.reset();
                     canvas.assert_context(alpha);
                     let context =
-                        uqm_rust::graphics::context::ContextLease::retain(canvas.context());
-                    let rectangle = uqm_rust::comm::locdata::CRect {
-                        corner: uqm_rust::comm::locdata::CPoint { x, y },
+                        uqm_engine::graphics::context::ContextLease::retain(canvas.context());
+                    let rectangle = uqm_modes::comm::locdata::CRect {
+                        corner: uqm_modes::comm::locdata::CPoint { x, y },
                         width,
                         height,
                     };
-                    let mut renderer = uqm_rust::planets::render::c_api::NativeOvalGfx::new(
+                    let mut renderer = uqm_modes::planets::render::c_api::NativeOvalGfx::new(
                         &context, screen.0, screen.1,
                     );
                     if let Some(off) = mode {
-                        uqm_rust::planets::render::oval::draw_oval(&rectangle, off, &mut renderer);
+                        uqm_modes::planets::render::oval::draw_oval(&rectangle, off, &mut renderer);
                     } else {
-                        uqm_rust::planets::render::oval::draw_filled_oval(
+                        uqm_modes::planets::render::oval::draw_filled_oval(
                             &rectangle,
                             &mut renderer,
                         );

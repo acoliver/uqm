@@ -5,20 +5,18 @@ use super::{
     value, Fields,
 };
 use crate::automation::parity::Journal;
-use crate::engine::battle::record::{
-    CharacteristicRecord, FleetRecord, IntelRecord, ShipInfoRecord,
-};
+use uqm_engine::battle::record::{CharacteristicRecord, FleetRecord, IntelRecord, ShipInfoRecord};
 mod assets;
 
 pub(super) struct Ship<'a> {
-    pub(super) observation: crate::battle::context_access::observe::ShipObservation<'a>,
+    pub(super) observation: uqm_modes::battle::context_access::observe::ShipObservation<'a>,
 }
 impl<'a> Ship<'a> {
     pub(super) fn queue(
-        queue: &'a crate::engine::battle::link_queue::RacePool,
-        elements: &crate::engine::battle::ElementTable,
+        queue: &'a uqm_engine::battle::link_queue::RacePool,
+        elements: &uqm_engine::battle::ElementTable,
     ) -> Vec<Self> {
-        crate::battle::context_access::observe::ships(queue, elements)
+        uqm_modes::battle::context_access::observe::ships(queue, elements)
             .into_iter()
             .map(|observation| Self { observation })
             .collect()
@@ -199,7 +197,7 @@ impl<'a> Race<'a> {
                 fields,
                 prefix,
                 name,
-                crate::battle::hook_registry::name_for_species(hooks, address, self.species),
+                uqm_modes::battle::hook_registry::name_for_species(hooks, address, self.species),
             );
         }
         value(fields, prefix, "race.code.loaded", self.code_loaded);
@@ -229,8 +227,8 @@ pub(super) fn characteristics(fields: &mut Fields, prefix: &str, c: &Characteris
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::record::{RaceDescriptor, ShipRecord};
-    use crate::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+    use uqm_engine::battle::record::{RaceDescriptor, ShipRecord};
+    use uqm_engine::species::species_id::SPECIES_ID_EARTHLING_ID;
 
     #[test]
     fn checked_ship_pool_serializes_the_borrowed_ship() {
@@ -239,13 +237,10 @@ mod tests {
         state.player_nr = 1;
         state.ship_facing = 31;
         state.crew_level = 17;
-        let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1, 1);
+        let mut queue = uqm_engine::battle::link_queue::RacePool::with_capacity(1, 1);
         let id = queue.fixture_pool().alloc(state).unwrap();
         queue.fixture_pool().put(id);
-        let ships = Ship::queue(
-            &queue,
-            &crate::engine::battle::ElementTable::with_capacity(0),
-        );
+        let ships = Ship::queue(&queue, &uqm_engine::battle::ElementTable::with_capacity(0));
         let ship = &ships[0];
         assert_eq!(ship.side(), 1);
         assert_eq!(ship.species(), SPECIES_ID_EARTHLING_ID);
@@ -269,7 +264,7 @@ mod tests {
         descriptor.characteristics.thrust_increment = 257;
         let assets = assets::Assets::borrow(&descriptor.ship_info, &descriptor.ship_data);
         let resources = ShipResources {
-            icons: Frame(crate::graphics::drawable::FrameId::NULL),
+            icons: Frame(uqm_engine::graphics::drawable::FrameId::NULL),
             strings: StringEntry(None),
             race: Some(Race {
                 species: SPECIES_ID_EARTHLING_ID,

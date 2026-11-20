@@ -1,11 +1,11 @@
 use crate::comm::host::Host;
 use crate::comm::races::comandr::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 
 fn api<'a, 'b>(
     comm: &'a mut Comm,
-    cx: &'a mut crate::engine::battle::Cx<'b>,
+    cx: &'a mut uqm_engine::battle::Cx<'b>,
 ) -> Host<'a, 'b, Handler> {
     Host::new(comm, cx, callback)
 }

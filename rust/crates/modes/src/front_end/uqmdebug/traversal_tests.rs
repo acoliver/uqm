@@ -1,14 +1,14 @@
 use super::traversal::BIO_CREDIT_VALUE;
 use super::*;
-use crate::engine::world::activity::ActivityKind;
+use uqm_engine::world::activity::ActivityKind;
 
 const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
-use crate::engine::{world::CStarDesc, StarId};
 use crate::planets::generate::{
     testing::{NoEffects, RecordReport},
     SiteHost, SystemGenerator,
 };
 use std::{borrow::Cow, io};
+use uqm_engine::{world::CStarDesc, StarId};
 
 struct GenerationCalls(usize);
 impl Generation for GenerationCalls {
@@ -19,7 +19,7 @@ impl Generation for GenerationCalls {
         solar: &mut SolarSystem,
         run: impl FnOnce(
             &dyn SystemGenerator,
-            &mut crate::engine::world::generation::SolarSys<'_>,
+            &mut uqm_engine::world::generation::SolarSys<'_>,
             &mut dyn SiteHost,
         ) -> R,
     ) -> R {
@@ -32,12 +32,12 @@ impl Generation for GenerationCalls {
     }
 }
 
-fn game() -> crate::engine::Game {
-    let mut game = crate::engine::Game::new();
-    game.world.story = Some(crate::engine::world::story::StoryState::new());
+fn game() -> uqm_engine::Game {
+    let mut game = uqm_engine::Game::new();
+    game.world.story = Some(uqm_engine::world::story::StoryState::new());
     let mut catalog = crate::planets::tables::STARMAP_ARRAY;
     catalog[0] = CStarDesc {
-        star_pt: crate::graphics::geometry::Point { x: 1000, y: 2000 },
+        star_pt: uqm_engine::graphics::geometry::Point { x: 1000, y: 2000 },
         star_type: 0,
         index: 0,
         prefix: 0,
@@ -74,11 +74,11 @@ fn traversal_uses_real_generation_and_restores_supplied_state_on_writer_error() 
     expected.sys.sun.rand_seed = expected.sys.rng.next_random();
     crate::planets::generate::default::Generator
         .generate_planets(&mut expected.sys, &mut NoEffects);
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("universe traversal must use per-system RNG")
     });
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -127,7 +127,7 @@ fn resource_totals_and_indices_use_actual_default_scan_nodes_in_order() {
     let mut expected_minerals = [0u16; 8];
     let mut bio_value = 0u16;
     let mut mineral_value = 0u16;
-    let mut node = crate::engine::world::planet::NodeInfo::default();
+    let mut node = uqm_engine::world::planet::NodeInfo::default();
     let bio_count = generator.generate_life(&mut solar.sys, body, u16::MAX, &mut node, &NoEffects);
     for index in 0..bio_count {
         generator.generate_life(&mut solar.sys, body, index, &mut node, &NoEffects);
@@ -156,11 +156,11 @@ fn resource_totals_and_indices_use_actual_default_scan_nodes_in_order() {
                 as u16,
         );
     }
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("campaign RNG")
     });
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -192,11 +192,11 @@ fn empty_traversal_does_not_admit_generation_or_change_supplied_state() {
     let mut game = game();
     game.world.current_star = Some(StarId(7));
     game.world.set_activity(IN_INTERPLANETARY);
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("an empty traversal cannot consume RNG")
     });
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };
@@ -230,7 +230,7 @@ fn traversal_visits_each_planet_and_moon_in_order_before_system_post() {
     }
     struct NoReport;
     impl RecordReport for NoReport {
-        fn present(&mut self, _: crate::engine::world::generation::ReportDisposition) -> bool {
+        fn present(&mut self, _: uqm_engine::world::generation::ReportDisposition) -> bool {
             panic!("default traversal must not present a discovery report")
         }
     }
@@ -242,7 +242,7 @@ fn traversal_visits_each_planet_and_moon_in_order_before_system_post() {
             solar: &mut SolarSystem,
             run: impl FnOnce(
                 &dyn SystemGenerator,
-                &mut crate::engine::world::generation::SolarSys<'_>,
+                &mut uqm_engine::world::generation::SolarSys<'_>,
                 &mut dyn SiteHost,
             ) -> R,
         ) -> R {
@@ -355,11 +355,11 @@ fn traversal_visits_each_planet_and_moon_in_order_before_system_post() {
     let mut game = game();
     game.world.current_star = Some(StarId(7));
     game.world.set_activity(IN_INTERPLANETARY);
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("traversal must not consume campaign RNG")
     });
-    let mut observer = crate::engine::observe::Unobserved;
+    let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
         observer: &mut observer,
     };

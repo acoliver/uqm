@@ -1,29 +1,29 @@
 //! Thraddash callbacks and descriptor translated from `thradd.c`.
 
 pub mod engine {
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
         World,
     };
 
-    use crate::engine::battle::ai_constants::{
-        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
-        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST,
-    };
-    use crate::engine::battle::flags::{
-        APPEARING, CHANGING, NONSOLID, PRE_PROCESS, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
-        SHIP_IN_GRAVITY_WELL,
-    };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::VELOCITY_SHIFT;
     use crate::ships::native::{
         angle_to_facing, facing_to_angle, normalize_angle, normalize_facing,
     };
+    use uqm_engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST,
+    };
+    use uqm_engine::battle::flags::{
+        APPEARING, CHANGING, NONSOLID, PRE_PROCESS, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+        SHIP_IN_GRAVITY_WELL,
+    };
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     const MAX_CREW: u16 = 8;
     const MAX_ENERGY: u8 = 24;
@@ -96,7 +96,7 @@ pub mod engine {
     }
 
     pub fn flame_napalm_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        cx.element_mut(e).velocity = crate::engine::battle::record::VelocityDesc::default();
+        cx.element_mut(e).velocity = uqm_engine::battle::record::VelocityDesc::default();
         if cx.element(e).flags & NONSOLID as u16 != 0 {
             cx.element_mut(e).flags &= !(NONSOLID as u16);
             cx.element_mut(e).flags |= APPEARING as u16;
@@ -220,12 +220,12 @@ pub mod engine {
         facing: u16,
         input: u8,
         origin: Point,
-        opponent: crate::engine::battle::views::ElementState,
+        opponent: uqm_engine::battle::views::ElementState,
         which_turn: u16,
     ) -> bool {
         let dx = opponent.next.location.x.wrapping_sub(origin.x);
         let dy = opponent.next.location.y.wrapping_sub(origin.y);
-        let dir = crate::math::arctan(dx, dy);
+        let dir = uqm_engine::math::arctan(dx, dy);
         (which_turn > 24 && input & (LEFT | RIGHT) as u8 == 0)
             || (which_turn <= 16
                 && normalize_angle(

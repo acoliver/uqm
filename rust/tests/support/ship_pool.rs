@@ -1,5 +1,5 @@
 use std::cell::RefMut;
-use uqm_rust::engine::battle::{
+use uqm_engine::battle::{
     link_queue::{LinkId, Starship},
     record::ShipRecord,
     ShipId,
@@ -30,7 +30,7 @@ impl PoolShip {
     }
     pub fn set_picker_resources(
         &mut self,
-        resources: uqm_rust::engine::battle::link_queue::ShipPickerResources,
+        resources: uqm_engine::battle::link_queue::ShipPickerResources,
     ) {
         crate::battle_context::with(|cx| {
             cx.kernel

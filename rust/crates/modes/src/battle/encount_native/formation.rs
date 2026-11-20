@@ -1,14 +1,14 @@
 //! Authored encounter icon rings in display coordinates.
 use super::ENCOUNTER_DISPLAY_POINTS;
-use crate::graphics::{geometry::Extent, geometry::Point};
-use crate::math::{arctan, cosine, sine, square_root};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point};
+use uqm_engine::math::{arctan, cosine, sine, square_root};
 
 pub(super) fn encounter_icon(
-    icon: crate::engine::battle::views::FrameRef<'_>,
-) -> Option<crate::graphics::drawable::ContextFrame> {
+    icon: uqm_engine::battle::views::FrameRef<'_>,
+) -> Option<uqm_engine::graphics::drawable::ContextFrame> {
     // The noncombat Ur-Quan drone deliberately has no encounter icon.
     let frame = icon.raw().non_null()?;
-    Some(crate::graphics::drawable::ContextFrame::retain(frame).indexed_frame(0))
+    Some(uqm_engine::graphics::drawable::ContextFrame::retain(frame).indexed_frame(0))
 }
 
 pub(super) fn encounter_icon_origin(index: usize, bounds: Extent, dimensions: (i32, i32)) -> Point {
@@ -33,8 +33,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn noncombat_drone_has_no_encounter_icon() {
-        let icon = crate::engine::battle::frames::FrameSelection::retain(
-            crate::graphics::drawable::FrameId::NULL,
+        let icon = uqm_engine::battle::frames::FrameSelection::retain(
+            uqm_engine::graphics::drawable::FrameId::NULL,
         );
         assert!(encounter_icon(icon.view()).is_none());
     }

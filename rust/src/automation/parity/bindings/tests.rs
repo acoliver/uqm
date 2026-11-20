@@ -1,11 +1,11 @@
 use super::*;
-use crate::collections::observation::{self, image, Event};
-use crate::engine::battle::record::ElementRecord as Element;
+use uqm_engine::battle::record::ElementRecord as Element;
+use uqm_engine::collections::observation::{self, image, Event};
 
 fn observed_set(
-    views: &[crate::graphics::drawable::FrameId],
-) -> crate::engine::battle::frames::Frames {
-    use crate::engine::battle::frames::{FrameArray, Frames, SharedFrames};
+    views: &[uqm_engine::graphics::drawable::FrameId],
+) -> uqm_engine::battle::frames::Frames {
+    use uqm_engine::battle::frames::{FrameArray, Frames, SharedFrames};
     Frames::shared(
         SharedFrames::Fixture(0),
         FrameArray::fixture_source(
@@ -17,9 +17,9 @@ fn observed_set(
 }
 
 fn observed_frame(
-    raw: crate::graphics::drawable::FrameId,
-) -> crate::engine::battle::frames::FrameSelection {
-    crate::engine::battle::frames::FrameArray::fixture([raw; 3], ())
+    raw: uqm_engine::graphics::drawable::FrameId,
+) -> uqm_engine::battle::frames::FrameSelection {
+    uqm_engine::battle::frames::FrameArray::fixture([raw; 3], ())
         .view(0)
         .to_owned()
 }
@@ -59,8 +59,8 @@ fn hyperspace_swaps_refresh_the_live_global_view_and_restore_its_owner() {
     let directory = crate::automation::parity_state::test_directory();
     let mut journal = Journal::create(directory.path()).expect("journal");
     let mut element = Element::default();
-    let mut stars = crate::graphics::drawable::FrameId::from_bits(200 << 16);
-    let mut ambient = crate::graphics::drawable::FrameId::from_bits(400 << 16);
+    let mut stars = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
+    let mut ambient = uqm_engine::graphics::drawable::FrameId::from_bits(400 << 16);
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
     drawable(100, stars.bits(), 7);
     drawable(300, ambient.bits(), 14);
@@ -100,7 +100,7 @@ fn rebind_history(reuse: bool) -> Fields {
     let mut journal =
         Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
     let mut element = Element::default();
-    let pointer = crate::graphics::drawable::FrameId::from_bits(200 << 16);
+    let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
     let mut views = [pointer; 3];
     let array = views.as_mut_ptr();
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
@@ -119,7 +119,7 @@ fn rebind_history(reuse: bool) -> Fields {
     let replacement = if reuse {
         pointer
     } else {
-        crate::graphics::drawable::FrameId::from_bits(300 << 16)
+        uqm_engine::graphics::drawable::FrameId::from_bits(300 << 16)
     };
     drawable(100, replacement.bits(), 99);
     views.fill(replacement);
@@ -163,7 +163,7 @@ fn rebind_history(reuse: bool) -> Fields {
     rebound
 }
 
-fn frame_set(views: &[crate::graphics::drawable::FrameId], role: &str) {
+fn frame_set(views: &[uqm_engine::graphics::drawable::FrameId], role: &str) {
     observation::record(Event::FrameSet {
         address: views.as_ptr() as usize,
         frames: views.iter().map(|frame| frame.bits()).collect(),
@@ -180,7 +180,7 @@ fn unsampled_assignments_and_individual_copies_survive_reuse() {
     let mut journal =
         Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
     let mut element = Element::default();
-    let pointer = crate::graphics::drawable::FrameId::from_bits(200 << 16);
+    let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
     let views = [pointer; 3];
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
     drawable(100, pointer.bits(), 7);
@@ -218,7 +218,7 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
     let mut journal =
         Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
     let mut element = Element::default();
-    let pointer = crate::graphics::drawable::FrameId::from_bits(200 << 16);
+    let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
     let mut views = [pointer; 3];
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
     drawable(100, pointer.bits(), 7);
@@ -231,7 +231,7 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
         owner: 100,
         index: 8,
     });
-    image!(view; views[0], crate::graphics::drawable::FrameId::from_bits(201 << 16));
+    image!(view; views[0], uqm_engine::graphics::drawable::FrameId::from_bits(201 << 16));
     image!(copy; element.next, element.current);
     journal.drain_events(&[]);
     let before = fields(&mut journal, &element);
@@ -247,7 +247,7 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
         owner: 100,
         index: 100,
     });
-    image!(view; views[0], crate::graphics::drawable::FrameId::from_bits(201 << 16));
+    image!(view; views[0], uqm_engine::graphics::drawable::FrameId::from_bits(201 << 16));
     journal.drain_events(&[]);
     let after = fields(&mut journal, &element);
     assert_eq!(after["current.farray.0.index"], "100");
@@ -263,8 +263,8 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
 #[test]
 #[serial_test::serial]
 fn raw_abi_image_and_state_copies_keep_the_source_identity() {
-    use crate::engine::battle::record::{ElementImage, ElementVisual};
-    use crate::graphics::geometry::Point;
+    use uqm_engine::battle::record::{ElementImage, ElementVisual};
+    use uqm_engine::graphics::geometry::Point;
     observation::enable();
     observation::drain();
     let directory = crate::automation::parity_state::test_directory();
@@ -273,12 +273,12 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
     let mut current = ElementVisual {
         location: Point { x: 7, y: 9 },
         image: ElementImage {
-            frame: crate::engine::battle::frames::FrameSelection::ABSENT,
-            frames: crate::engine::battle::views::Frames::ABSENT,
+            frame: uqm_engine::battle::frames::FrameSelection::ABSENT,
+            frames: uqm_engine::battle::views::Frames::ABSENT,
         },
     };
     let mut next = current.clone();
-    let pointer = crate::graphics::drawable::FrameId::from_bits(200 << 16);
+    let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
     let views = [pointer; 3];
     drawable(100, (pointer).bits(), 7);
     observation::record(Event::FrameSet {
@@ -324,7 +324,7 @@ fn element_field_assignment_is_not_an_array_edit_at_reused_storage() {
         Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
     let mut element = Element::default();
     let slot = std::ptr::from_ref(&element.current.image.frame) as usize;
-    let pointer = crate::graphics::drawable::FrameId::from_bits(200 << 16);
+    let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
     drawable(100, pointer.bits(), 7);
     observation::record(Event::FrameSet {
         address: slot,
@@ -359,7 +359,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     let mut journal = Journal::create(directory.path()).expect("journal");
     let mut source = Element::default();
     let mut cloned = Element::default();
-    let pointer = crate::graphics::drawable::FrameId::from_bits(200 << 16);
+    let pointer = uqm_engine::graphics::drawable::FrameId::from_bits(200 << 16);
     let mut views = [pointer; 3];
     observation::record(Event::Allocate(std::ptr::from_ref(&source) as usize));
     drawable(100, pointer.bits(), 7);
@@ -376,7 +376,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     let replacement = if reuse {
         pointer
     } else {
-        crate::graphics::drawable::FrameId::from_bits(300 << 16)
+        uqm_engine::graphics::drawable::FrameId::from_bits(300 << 16)
     };
     drawable(100, replacement.bits(), 99);
     views.fill(replacement);

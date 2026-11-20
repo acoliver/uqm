@@ -164,9 +164,9 @@ pub struct FailureEvidence {
 pub struct NativeBattleEvidence {
     pub frame: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tick: Option<crate::engine::observe::battle::BattleTick>,
+    pub tick: Option<uqm_engine::observe::battle::BattleTick>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub gate: Option<crate::engine::observe::battle::ReplacementGate>,
+    pub gate: Option<uqm_engine::observe::battle::ReplacementGate>,
     pub picker_active: bool,
     pub picker_generation: u64,
     pub delta_ms: Option<u64>,

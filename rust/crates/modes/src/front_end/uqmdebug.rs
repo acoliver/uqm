@@ -3,24 +3,24 @@
 
 use crate::battle::element::PLAYER_SHIP;
 use crate::comm::dispatch::RPG_PLAYER_NUM;
-use crate::engine::battle::link_queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
-use crate::engine::species::ship::{
+use crate::planets::solar_system::SolarSystem;
+use uqm_engine::battle::link_queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
+use uqm_engine::graphics::{context::ContextLease, geometry::Point};
+use uqm_engine::species::ship::{
     ARILOU_SHIP, BLACK_URQUAN_SHIP, DRUUGE_SHIP, ILWRATH_SHIP, MELNORME_SHIP, MYCON_SHIP,
     PKUNK_SHIP, SLYLANDRO_SHIP, UMGAH_SHIP, URQUAN_SHIP, VUX_SHIP, YEHAT_SHIP,
 };
-use crate::engine::world::activity::{
+use uqm_engine::world::activity::{
     activity_flags::{IN_BATTLE, START_INTERPLANETARY},
     ActivityKind,
 };
-use crate::engine::{
+use uqm_engine::{
     battle::{Cx, ElementId, ShipId},
     clock::HYPERSPACE_ENCOUNTER_EVENT,
     observe::Io,
     world::generation::Body,
     Kernel, StoryKey, World,
 };
-use crate::graphics::{context::ContextLease, geometry::Point};
-use crate::planets::solar_system::SolarSystem;
 
 mod catalog;
 pub use catalog::uqm_debug_creature_bio_value;
@@ -64,7 +64,7 @@ pub fn debug_key_pressed_synchronous(
     ] {
         let random = cx.rng;
         let added =
-            crate::engine::world::fleet::add_escort_ships(cx.world, u16::from(race), 1, || {
+            uqm_engine::world::fleet::add_escort_ships(cx.world, u16::from(race), 1, || {
                 ((random() as u16 & (NUM_CAPTAINS_NAMES - 1) as u16) + NAME_OFFSET as u16) as u8
             });
         if added.is_some() {
@@ -79,7 +79,7 @@ pub fn debug_key_pressed_synchronous(
 }
 
 pub fn forward_to_next_event(cx: &mut Cx<'_>, skip_hee: bool) {
-    if crate::time::clock_bridge::rust_clock_is_running(cx.world) == 0 {
+    if uqm_engine::time::clock_bridge::rust_clock_is_running(cx.world) == 0 {
         return;
     }
     let mut done = !skip_hee;
@@ -113,7 +113,7 @@ pub fn equip_ship(cx: &mut Cx<'_>) {
         return;
     }
     if let Some(effects) = cx.solar_flight {
-        let mut flight = crate::engine::world::generation::SolarFlight::default();
+        let mut flight = uqm_engine::world::generation::SolarFlight::default();
         equipment::update_flight(&cx.world.data.flagship, &mut flight);
         effects.set(Some(flight));
     }

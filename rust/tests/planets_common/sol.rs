@@ -1,14 +1,14 @@
 //! Complete descriptor buffers and guarded scans for the retained Sol C vtable.
 
 use std::fmt::Write as _;
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
-use uqm_rust::engine::StoryKey;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use uqm_engine::StoryKey;
 
 use super::late_gen::descriptors;
 use super::{fresh_node, scan_seeds};
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::generate::sol;
-use uqm_rust::planets::generate::special::{Body, Story};
+use uqm_engine::math::RandomContext;
+use uqm_modes::planets::generate::sol;
+use uqm_modes::planets::generate::special::{Body, Story};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Layout {

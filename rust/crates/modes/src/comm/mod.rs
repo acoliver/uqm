@@ -66,16 +66,14 @@ pub use track::{SoundChunk, TrackManager};
 pub use types::{CommData, CommError, CommIntroMode, CommResult};
 
 #[cfg(test)]
-pub(crate) fn with_test_context<R>(
-    call: impl FnOnce(&mut crate::engine::battle::Cx<'_>) -> R,
-) -> R {
-    let mut game = crate::engine::Game::new();
-    let mut battle = crate::engine::battle::Battle::new();
-    call(&mut crate::engine::battle::Cx::new(
+pub(crate) fn with_test_context<R>(call: impl FnOnce(&mut uqm_engine::battle::Cx<'_>) -> R) -> R {
+    let mut game = uqm_engine::Game::new();
+    let mut battle = uqm_engine::battle::Battle::new();
+    call(&mut uqm_engine::battle::Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     ))
 }
 

@@ -1,16 +1,16 @@
 //! UI drawing and nested input waits.
-use crate::engine::{
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
+    geometry::Point, geometry::Rect,
+};
+use uqm_engine::graphics::{state::game_active, state::quit_posted};
+use uqm_engine::sound::heart_ffi::{pause_track, playing_track, resume_track};
+use uqm_engine::time::counter_abi::{get_time_counter, ONE_SECOND};
+use uqm_engine::{
     battle::Cx,
     input::{frames::KEY_PAUSE, InputSession},
     observe::Io,
 };
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
-    geometry::Point, geometry::Rect,
-};
-use crate::sound::heart_ffi::{pause_track, playing_track, resume_track};
-use uqm_engine::graphics::{state::game_active, state::quit_posted};
-use uqm_engine::time::counter_abi::{get_time_counter, ONE_SECOND};
 
 pub(crate) fn box_rectangles(
     rect: Rect,
@@ -115,7 +115,7 @@ pub fn draw_starcon_box(
 
 pub fn seed_random_numbers() -> u32 {
     let now = get_time_counter();
-    crate::math::seed_random(now);
+    uqm_engine::math::seed_random(now);
     now
 }
 
@@ -266,7 +266,7 @@ pub fn sleep_game(cx: &mut Cx<'_>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::{geometry::Extent, geometry::Point};
+    use uqm_engine::graphics::{geometry::Extent, geometry::Point};
 
     fn rectangles(border: i16, fill: bool) -> Vec<(u8, i16, i16, i16, i16)> {
         let mut draws = Vec::new();

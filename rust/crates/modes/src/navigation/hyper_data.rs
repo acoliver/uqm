@@ -1,11 +1,11 @@
 //! Hyperspace graphics resources and entry/exit lifecycle.
 use super::color;
-use crate::engine::world::activity::activity_flags::CHECK_LOAD;
-use crate::engine::{
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::world::activity::activity_flags::CHECK_LOAD;
+use uqm_engine::{
     battle::{hyperspace as resources, Cx},
     StoryKey,
 };
-use crate::graphics::geometry::Point;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntryDisplay {
@@ -17,10 +17,10 @@ pub enum EntryDisplay {
     ClearRadar,
 }
 
-pub use crate::engine::battle::hyperspace::free_hyper_data;
+pub use uqm_engine::battle::hyperspace::free_hyper_data;
 
 pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, EntryDisplay)) {
-    cx.world.hyper_distance = crate::engine::world::FuelDistance {
+    cx.world.hyper_distance = uqm_engine::world::FuelDistance {
         dx: 0,
         dy: 0,
         extra: 0,
@@ -64,7 +64,7 @@ mod tests {
     use super::*;
     #[test]
     fn empty_resource_lifecycle_needs_no_published_game() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         free_hyper_data(&mut game.kernel);
         resources::free_hyperspace(&mut game.kernel);
         assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));

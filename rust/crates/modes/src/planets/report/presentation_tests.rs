@@ -1,20 +1,20 @@
 use super::live::discovery_report;
-use crate::engine::{
+use crate::planet_side::report_adapter::{DiscoveryReport, DiscoveryReportPort, ReportDisposition};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
+    geometry::Point, geometry::TextAlign,
+};
+use uqm_engine::{
     battle::{input::InputContext, Battle, Cx},
     input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
     observe::{CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved},
     strings::owned_table::LoadedTextTable,
     world::generation::ReportSlot,
     Game,
-};
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color,
-    geometry::Point, geometry::TextAlign,
-};
-use crate::planet_side::report_adapter::{DiscoveryReport, DiscoveryReportPort, ReportDisposition};
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
 };
 
 struct Driver {
@@ -76,11 +76,7 @@ struct Recording {
     nested: usize,
 }
 impl Observer for Recording {
-    fn input_admitted(
-        &mut self,
-        view: &InputView,
-        _: &mut crate::engine::battle::Cx<'_>,
-    ) -> Injected {
+    fn input_admitted(&mut self, view: &InputView, _: &mut uqm_engine::battle::Cx<'_>) -> Injected {
         assert!(self.active, "report input escaped its visibility scope");
         assert!(matches!(view, InputView::Nested));
         self.nested += 1;
@@ -100,7 +96,7 @@ impl Observer for Recording {
 fn real_report_presents_before_nested_input_and_restores_retained_background() {
     for style in [0, 2] {
         let mut game = Game::new();
-        crate::state::ffi::rust_init_game_state(&mut game.world);
+        uqm_engine::state::ffi::rust_init_game_state(&mut game.world);
         game.world.set_catalog(std::borrow::Cow::Borrowed(
             &crate::planets::tables::STARMAP_ARRAY,
         ));

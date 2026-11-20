@@ -4,10 +4,10 @@
 //! Values and layouts match the frozen C fixtures. Gameplay borrows these
 //! immutable definitions directly.
 
-use crate::engine::graphics::geometry::Point as CPoint;
-use crate::engine::world::planet::{ElementEntry, PlanetFrame};
-use crate::engine::world::{CStarDesc, CATALOG_LEN};
 use std::ffi::CStr;
+use uqm_engine::graphics::geometry::Point as CPoint;
+use uqm_engine::world::planet::{ElementEntry, PlanetFrame};
+use uqm_engine::world::{CStarDesc, CATALOG_LEN};
 
 /// Entries of `starmap_array`, including the terminating sentinel.
 pub const STAR_CATALOG_LEN: usize = CATALOG_LEN;

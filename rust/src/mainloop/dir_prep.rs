@@ -8,8 +8,8 @@
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 
-use crate::engine::host::Files;
-use crate::io::{Dir, Match, MountId, Placement, Vfs};
+use uqm_engine::host::Files;
+use uqm_engine::io::{Dir, Match, MountId, Placement, Vfs};
 
 // ---------------------------------------------------------------------------
 // Error type
@@ -139,7 +139,7 @@ pub(crate) fn config_path(explicit: Option<&str>) -> Result<PathBuf, DirPrepErro
         .or_else(|| std::env::var("UQM_CONFIG_DIR").ok());
     match override_path.as_deref() {
         Some(raw) => expand_path(raw),
-        None => Ok(crate::platform::default_config_dir()),
+        None => Ok(uqm_platform::default_config_dir()),
     }
 }
 

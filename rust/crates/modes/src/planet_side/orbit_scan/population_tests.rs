@@ -50,17 +50,17 @@ impl SurfaceGenerator for Generator {
 #[test]
 #[serial_test::serial]
 fn real_population_preserves_category_and_reverse_node_order_and_retrieval() {
-    let misc = crate::graphics::drawable::LoadedDrawable::create(0, 0, 0, 48).unwrap();
-    let scene = crate::graphics::drawable::LoadedDrawable::create(0, 0, 0, 6).unwrap();
+    let misc = uqm_engine::graphics::drawable::LoadedDrawable::create(0, 0, 0, 48).unwrap();
+    let scene = uqm_engine::graphics::drawable::LoadedDrawable::create(0, 0, 0, 6).unwrap();
     let frames = std::array::from_fn(|index| Frame::retain(scene.lease().frame(index).unwrap()));
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     game.kernel.misc_data_frame = misc.lease().frame(0).unwrap();
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let cx = std::cell::RefCell::new(Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     ));
     let mut generator = Generator::default();
     generate_planet_side(
@@ -101,13 +101,13 @@ fn real_population_preserves_category_and_reverse_node_order_and_retrieval() {
 #[test]
 #[serial_test::serial]
 fn absent_misc_frame_does_not_call_the_supplied_generator() {
-    let mut game = crate::engine::Game::new();
-    let mut battle = crate::engine::battle::Battle::new();
+    let mut game = uqm_engine::Game::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let cx = std::cell::RefCell::new(Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     ));
     let mut generator = Generator::default();
     let frames = std::array::from_fn(|_| Frame::ABSENT);

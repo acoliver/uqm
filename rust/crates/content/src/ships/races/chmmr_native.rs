@@ -1,8 +1,8 @@
 //! Chmmr callbacks for the live engine, ported from `ships/chmmr/chmmr.c`.
 
 fn tractor_shadow_flags() -> u16 {
-    use crate::engine::battle::ai_constants::IGNORE_SIMILAR;
-    use crate::engine::battle::flags::{CHANGING, FINITE_LIFE, NONSOLID, POST_PROCESS};
+    use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+    use uqm_engine::battle::flags::{CHANGING, FINITE_LIFE, NONSOLID, POST_PROCESS};
     // POST_PROCESS shadows skip preprocessing. Their first projection must not
     // reuse the previous occupant's primitive frame, even at zero velocity.
     (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS | CHANGING) as u16
@@ -12,7 +12,7 @@ fn tractor_shadow_flags() -> u16 {
 mod tests {
     #[test]
     fn stationary_new_tractor_shadow_projects_a_fresh_primitive() {
-        use crate::engine::battle::flags::{APPEARING, CHANGING, POST_PROCESS};
+        use uqm_engine::battle::flags::{APPEARING, CHANGING, POST_PROCESS};
         let flags = super::tractor_shadow_flags();
         assert_ne!(
             flags & POST_PROCESS as u16,
@@ -25,29 +25,29 @@ mod tests {
 }
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::IGNORE_SIMILAR;
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_angle, sine};
+    use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, FIRES_FORE, IMMEDIATE_WEAPON, MAX_CREW_SIZE, MAX_ENERGY_SIZE,
         MAX_SHIP_MASS, POINT_DEFENSE, SEEKING_SPECIAL, SPECIAL, WEAPON,
     };
-    use crate::engine::battle::flags::{APPEARING, CHANGING, FINITE_LIFE, NONSOLID};
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{APPEARING, CHANGING, FINITE_LIFE, NONSOLID};
+    use uqm_engine::battle::flags::{
         COLLISION, DISAPPEARING, HYPERJUMP_LIFE, NEUTRAL_PLAYER_NUM, NORMAL_LIFE,
         SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::hooks::animation_preprocess;
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::LINE_PRIMITIVE;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::VELOCITY_SHIFT;
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_angle, sine};
+    use uqm_engine::battle::hooks::animation_preprocess;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::LINE_PRIMITIVE;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
 
-    use crate::engine::battle::views::Laser;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Laser;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, Selection, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static CHMMR: Race = Race {
@@ -72,7 +72,7 @@ pub mod engine {
         }
     }
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags =
             (FIRES_FORE | IMMEDIATE_WEAPON | SEEKING_SPECIAL | POINT_DEFENSE) as u16;
@@ -145,9 +145,9 @@ pub mod engine {
                         cx.element_mut(spot).turn = 0;
                         cx.element_mut(spot).thrust = 0;
                         cx.element_mut(spot).life = 9;
-                        let angle = i32::from(crate::math::arctan(dx, dy));
+                        let angle = i32::from(uqm_engine::math::arctan(dx, dy));
                         let magnitude = (i32::from(cx.random() as u16)
-                            % (i32::from(crate::math::square_root(dist as u32)) + 1 - minimum)
+                            % (i32::from(uqm_engine::math::square_root(dist as u32)) + 1 - minimum)
                             + minimum) as u16;
                         cx.element_mut(spot).current.location.x = cx
                             .element(ship)
@@ -298,7 +298,7 @@ pub mod engine {
                         + i32::from(sine(a, LASER_RANGE / 3 + (CHMMR_OFFSET << ONE_SHIFT)))
                         - i32::from(cx.element(target).next.location.y))
                         as i16;
-                    let angle = i32::from(crate::math::arctan(dx, dy));
+                    let angle = i32::from(uqm_engine::math::arctan(dx, dy));
                     let magnitude =
                         ((12 << VELOCITY_SHIFT) / i32::from(cx.element(target).mass)) as u16;
                     cx.element_mut(target).velocity.delta_components(
@@ -406,7 +406,7 @@ pub mod engine {
                     i32::from(((i32::from(dy) << VELOCITY_SHIFT) as i16) as i16),
                 );
             } else {
-                let angle = i32::from(crate::math::arctan(dx, dy));
+                let angle = i32::from(uqm_engine::math::arctan(dx, dy));
                 cx.element_mut(e).velocity.set_components(
                     i32::from((cosine(angle, (20 << ONE_SHIFT) << VELOCITY_SHIFT)) as i16),
                     i32::from((sine(angle, (20 << ONE_SHIFT) << VELOCITY_SHIFT)) as i16),

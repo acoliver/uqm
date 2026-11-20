@@ -8,45 +8,45 @@ mod battle_context;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 use battle::{Battle, FrameSet, PoolElement, PoolShip, Ship};
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_NO_MOVEMENT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::CREW_OBJECT;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::MAX_TIME_VALUE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::NORMAL_LIFE;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::flags::PRE_PROCESS;
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
-use uqm_rust::engine::battle::motion::inertial_thrust;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::battle::STAMP_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_THRADDASH_ID;
-use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
-use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, sine};
+use uqm_engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_NO_MOVEMENT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::CREW_OBJECT;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::MAX_TIME_VALUE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::NORMAL_LIFE;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::flags::PRE_PROCESS;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_IN_GRAVITY_WELL;
+use uqm_engine::battle::motion::inertial_thrust;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_THRADDASH_ID;
+use uqm_engine::test_support::native_probe::{graphics_status, set_graphics_status};
 
 fn burn(ship: &mut Ship<'_>) -> ElementId {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
@@ -211,7 +211,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
             assert!(d.callbacks()[2] == 0 && d.callbacks()[0] == 0);
             let mut owned = battle::descriptor(SPECIES_ID_THRADDASH_ID);
             owned.ship_info.energy_level = 17;
-            owned.race_callbacks.pre = uqm_rust::engine::battle::Selection::Disabled;
+            owned.race_callbacks.pre = uqm_engine::battle::Selection::Disabled;
             let fresh = battle::descriptor(SPECIES_ID_THRADDASH_ID);
             assert_eq!(fresh.callbacks(), d.callbacks());
             assert_eq!(fresh.ship_info.energy_level, 24);
@@ -271,7 +271,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                         && battle::get(e).death_func.is_none()
                 );
                 assert!(battle::get(e).collision_func.is_some());
-                assert!(battle::get(e).parent == uqm_rust::engine::battle::Parent::None);
+                assert!(battle::get(e).parent == uqm_engine::battle::Parent::None);
                 assert_eq!(battle::prim(e).kind, STAMP_PRIMITIVE);
                 assert_eq!(queued(), vec![ship.id]);
                 battle_context::dispose(h);
@@ -329,7 +329,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
             for e in [first, second] {
                 assert_eq!(
                     battle::get(e).parent,
-                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    uqm_engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert!(battle::get(e).target.is_none());
                 assert_eq!(
@@ -400,7 +400,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 ),
             ] {
                 ship.ship_mut().ship_facing = face;
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(ship.id).velocity,
                     speed,
                     0,
@@ -430,7 +430,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 let expected = PoolElement::new();
                 crate::battle_context::with(|cx| cx.copy_allocated_element(expected.id, ship.id));
                 battle::get_mut(expected.id).parent =
-                    uqm_rust::engine::battle::Parent::Ship(expected_ss.ship_id);
+                    uqm_engine::battle::Parent::Ship(expected_ss.ship_id);
                 let thrust_status =
                     crate::battle_context::with(|cx| inertial_thrust(cx, expected.id));
                 with_rng(7, 0, || burn(&mut ship));
@@ -550,8 +550,8 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let e = burn(&mut ship);
             let next_frames = FrameSet::new(10);
-            battle::get_mut(e).next.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
-                uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+            battle::get_mut(e).next.image.frames = uqm_engine::battle::frames::Frames::shared(
+                uqm_engine::battle::frames::SharedFrames::Fixture(0),
                 next_frames.array(),
             );
             battle::get_mut(e).next.image.frame = next_frames.selection(7);
@@ -829,10 +829,9 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             battle::get_mut(trail).life = 20;
             // Avoid a spawn overlap, so the unfixed traversal reaches its callback.
             battle::get_mut(enemy.id).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
-            battle::get_mut(enemy.id).collision_func =
-                Some(uqm_rust::engine::battle::CollisionHook::Native(
-                    uqm_rust::engine::battle::motion::collision,
-                ));
+            battle::get_mut(enemy.id).collision_func = Some(
+                uqm_engine::battle::CollisionHook::Native(uqm_engine::battle::motion::collision),
+            );
             battle::get_mut(enemy.id).current.location = battle::get(trail).current.location;
             battle::get_mut(enemy.id).next = battle::get(enemy.id).current.clone();
             ship.make_opaque(2);
@@ -843,15 +842,14 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
                 .intersect_stamp
                 .frame = enemy.raw_frame(0, 0);
             battle::get_mut(ship.id).life = 0;
-            battle::get_mut(ship.id).death_func =
-                Some(uqm_rust::engine::battle::ElementHook::Native(
-                    uqm_rust::battle::tactrans_native::cleanup_dead_ship,
-                ));
+            battle::get_mut(ship.id).death_func = Some(uqm_engine::battle::ElementHook::Native(
+                uqm_modes::battle::tactrans_native::cleanup_dead_ship,
+            ));
             set_graphics_status(graphics_status() | 4);
             let result = crate::battle_context::with(|cx| {
                 let next = Some(ship.id);
                 let element = trail;
-                uqm_rust::battle::process_native::process_collisions(
+                uqm_modes::battle::process_native::process_collisions(
                     cx,
                     next,
                     element,
@@ -937,8 +935,8 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     battle::get_mut(t).hits = hp;
                     battle::get_mut(t).mass = mass;
                     battle::get_mut(t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
-                        Some(uqm_rust::engine::battle::CollisionHook::Native(
-                            uqm_rust::engine::battle::motion::collision,
+                        Some(uqm_engine::battle::CollisionHook::Native(
+                            uqm_engine::battle::motion::collision,
                         ))
                     } else {
                         None
@@ -947,12 +945,12 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     battle::get_mut(t).intersect_control.intersect_stamp.frame =
                         target.raw_frame(0, 0);
                     let context =
-                        uqm_rust::graphics::context::LoadedContext::create(c"collision fixture");
-                    let old_context = uqm_rust::graphics::menu::select(Some(context.context()));
+                        uqm_engine::graphics::context::LoadedContext::create(c"collision fixture");
+                    let old_context = uqm_engine::graphics::menu::select(Some(context.context()));
                     crate::battle_context::with(|cx| {
                         let next = Some(target.id);
                         let element = weapon;
-                        uqm_rust::battle::process_native::process_collisions(
+                        uqm_modes::battle::process_native::process_collisions(
                             cx,
                             next,
                             element,
@@ -960,7 +958,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                             PRE_PROCESS as u16,
                         )
                     });
-                    uqm_rust::graphics::menu::select(old_context);
+                    uqm_engine::graphics::menu::select(old_context);
                     drop(context);
                     let expected = if damage {
                         hp - if napalm { 2.min(hp) } else { 1 }

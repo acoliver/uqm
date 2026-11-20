@@ -4,7 +4,7 @@
 
 use crate::comm::Comm;
 /// Dialogue callback receiving the selected response reference.
-pub type ResponseFunc = fn(&mut Comm, &mut crate::engine::battle::Cx<'_>, u16);
+pub type ResponseFunc = fn(&mut Comm, &mut uqm_engine::battle::Cx<'_>, u16);
 
 /// A response option in a conversation
 #[derive(Clone)]
@@ -117,8 +117,8 @@ impl ResponseSystem {
     pub fn choices(
         &self,
         name: impl Fn(u16) -> Option<String>,
-    ) -> crate::engine::observe::ResponseChoices {
-        crate::engine::observe::ResponseChoices(
+    ) -> uqm_engine::observe::ResponseChoices {
+        uqm_engine::observe::ResponseChoices(
             self.responses
                 .iter()
                 .map(|response| {
@@ -216,7 +216,7 @@ impl ResponseSystem {
     pub fn execute_selected(
         &self,
         comm: &mut Comm,
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
     ) -> Option<u16> {
         let response = self.get_selected()?;
         let func = response.response_func?;
@@ -232,7 +232,7 @@ impl ResponseSystem {
 mod tests {
     use super::*;
 
-    fn test_callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _ref: u16) {}
+    fn test_callback(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, _ref: u16) {}
 
     #[test]
     fn test_response_entry_new() {
@@ -370,7 +370,7 @@ mod tests {
 
     fn recording_callback(
         _comm: &mut Comm,
-        _cx: &mut crate::engine::battle::Cx<'_>,
+        _cx: &mut uqm_engine::battle::Cx<'_>,
         response_ref: u16,
     ) {
         CALLBACK_ARG.store(response_ref, Ordering::SeqCst);
@@ -417,7 +417,7 @@ mod tests {
 #[cfg(test)]
 mod phrase_selection_tests {
     use super::*;
-    fn callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
+    fn callback(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, _: u16) {}
     fn name(reference: u16) -> Option<String> {
         match reference {
             55 => Some("we_will_transfer_now".into()),

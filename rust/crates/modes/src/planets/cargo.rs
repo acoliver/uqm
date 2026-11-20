@@ -23,9 +23,9 @@ fn next_element(current: u8, back: bool, forward: bool) -> u8 {
 
 pub(crate) mod live {
     use super::next_element;
-    use crate::engine::{battle::Cx, observe::Io};
-    use crate::input::frames::*;
     use std::ffi::CString;
+    use uqm_engine::input_port::frames::*;
+    use uqm_engine::{battle::Cx, observe::Io};
 
     const CARGO_STRINGS: i32 = 162;
 
@@ -46,7 +46,7 @@ pub(crate) mod live {
 
     fn discard(
         cx: &mut Cx<'_>,
-        input: &crate::engine::input::InputSession,
+        input: &uqm_engine::input::InputSession,
         menu: &mut Menu,
         display: &super::display::CargoDisplay,
     ) -> i32 {
@@ -102,14 +102,14 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
+    use std::{cell::Cell, rc::Rc};
+    use uqm_engine::graphics::{context::ContextLease, drawable::LoadedDrawable, font::LoadedFont};
+    use uqm_engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
         observe::{Io, Observer, Unobserved},
         Game,
     };
-    use crate::graphics::{context::ContextLease, drawable::LoadedDrawable, font::LoadedFont};
-    use std::{cell::Cell, rc::Rc};
 
     struct Fixture {
         game: Game,
@@ -161,7 +161,7 @@ mod tests {
         } = fixture();
         let cargo = super::display::CargoDisplay::new(&game.kernel);
         drop((icons, heading));
-        let mut other = crate::engine::Game::new();
+        let mut other = uqm_engine::Game::new();
         game.world.data.flagship.module_slots[0] =
             crate::starbase::sis_modules::ModuleType::StorageBay as u8;
         game.world.data.flagship.total_element_mass = 1;
@@ -195,7 +195,7 @@ mod tests {
         assert_eq!(other.world.data.flagship.element_amounts[0], 2);
         drop((cargo, context, canvas, other));
         game.kernel.star_con_font = None;
-        game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.misc_data_frame = uqm_engine::graphics::drawable::FrameId::NULL;
         display.finish(game);
     }
 
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn cargo_menu_navigates_discards_and_leaves_on_cancel() {
-        use crate::input::frames::*;
+        use uqm_engine::input_port::frames::*;
         let Fixture {
             mut game,
             display,
@@ -309,8 +309,8 @@ mod tests {
         assert_eq!(game.world.data.flagship.total_element_mass, 1);
         drop((runtime, icons, heading, context, canvas));
         game.kernel.star_con_font = None;
-        game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
-        game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.misc_data_frame = uqm_engine::graphics::drawable::FrameId::NULL;
+        game.kernel.flag_stat_frame = uqm_engine::graphics::drawable::FrameId::NULL;
         drop(panel);
         display.finish(game);
     }

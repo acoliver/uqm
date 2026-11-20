@@ -1,6 +1,6 @@
 use super::special::Story;
 use super::{default, sam, shof, sol, special};
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 impl<S: Story, H> Story for (&mut S, &mut H) {
     fn flag(&self, name: StoryKey) -> u32 {
@@ -47,7 +47,7 @@ impl<S: Story, H: default::Npcs> default::Npcs for (&mut S, &mut H) {
     }
     fn for_each_ip_group(
         &mut self,
-        visit: &mut dyn FnMut(&mut crate::engine::world::queues::IpGroup),
+        visit: &mut dyn FnMut(&mut uqm_engine::world::queues::IpGroup),
     ) {
         self.1.for_each_ip_group(visit)
     }
@@ -71,7 +71,7 @@ impl<S: Story, H: special::FleetGroups> special::FleetGroups for (&mut S, &mut H
     }
     fn head_ip_group(
         &mut self,
-        visit: &mut dyn FnMut(&mut crate::engine::world::queues::IpGroup),
+        visit: &mut dyn FnMut(&mut uqm_engine::world::queues::IpGroup),
     ) -> bool {
         self.1.head_ip_group(visit)
     }
@@ -120,19 +120,19 @@ impl<S: Story, H: sam::GuardSite> sam::GuardSite for (&mut S, &mut H) {
     fn init_ip_groups(&mut self, reference: u32) {
         self.1.init_ip_groups(reference)
     }
-    fn planet_outer_location(&self, planet: u16) -> crate::graphics::geometry::Point {
+    fn planet_outer_location(&self, planet: u16) -> uqm_engine::graphics::geometry::Point {
         self.1.planet_outer_location(planet)
     }
     fn for_each_ip_group(
         &mut self,
-        visit: &mut dyn FnMut(&mut crate::engine::world::queues::IpGroup),
+        visit: &mut dyn FnMut(&mut uqm_engine::world::queues::IpGroup),
     ) {
         self.1.for_each_ip_group(visit)
     }
-    fn ip_location(&self) -> crate::graphics::geometry::Point {
+    fn ip_location(&self) -> uqm_engine::graphics::geometry::Point {
         self.1.ip_location()
     }
-    fn set_and_transform_ip_location(&mut self, location: crate::graphics::geometry::Point) {
+    fn set_and_transform_ip_location(&mut self, location: uqm_engine::graphics::geometry::Point) {
         self.1.set_and_transform_ip_location(location)
     }
 }

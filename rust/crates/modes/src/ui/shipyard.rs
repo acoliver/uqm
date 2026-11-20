@@ -9,17 +9,6 @@ use super::shipyard_selection::{
     dms_set_mode, ModifyMode, SOUND_ARROWS, SOUND_SELECT,
 };
 use super::{shipyard_frame as frame, shipyard_hangar as hangar};
-use crate::engine::battle::{link_queue::LinkId, Cx};
-use crate::engine::input::frames::*;
-use crate::engine::observe::Io;
-use crate::engine::world::activity::activity_flags;
-use crate::engine::world::queues::Fragment;
-use crate::engine::{input::InputSession, World};
-use crate::graphics::{
-    drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color, geometry::Extent,
-    geometry::Point, geometry::Rect, geometry::TextAlign, intersection::Stamp, menu as draw,
-    palette_cycle::PaletteCycle,
-};
 use crate::starbase::ids;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
@@ -36,6 +25,17 @@ use sis::{
     set_menu_flash,
 };
 use std::{cell::RefCell, rc::Rc};
+use uqm_engine::battle::{link_queue::LinkId, Cx};
+use uqm_engine::graphics::{
+    drawable::ContextFrame, drawable::LoadedDrawable, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect, geometry::TextAlign, intersection::Stamp, menu as draw,
+    palette_cycle::PaletteCycle,
+};
+use uqm_engine::input::frames::*;
+use uqm_engine::observe::Io;
+use uqm_engine::world::activity::activity_flags;
+use uqm_engine::world::queues::Fragment;
+use uqm_engine::{input::InputSession, World};
 
 use uqm_engine::time::counter_abi::ONE_SECOND;
 const HANGAR_ANIM_RATE: u32 = 15;
@@ -74,7 +74,7 @@ fn animate_power_lines(menu: &ShipyardSession, force: bool) {
 }
 
 fn draw_race_strings(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     menu: &mut ShipyardSession,
     mut race: u8,
 ) {
@@ -90,7 +90,7 @@ fn draw_race_strings(
                 - ids::RADAR_HEIGHT) as i16
                 - r.corner.y,
         },
-        frame: crate::graphics::drawable::FrameId::NULL,
+        frame: uqm_engine::graphics::drawable::FrameId::NULL,
     };
     r.corner.x = stamp.origin.x - 1;
     r.corner.y = stamp.origin.y - 11;
@@ -216,7 +216,7 @@ fn show_combat_ship(
 }
 
 fn dms_spin_ship(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     menu: &mut ShipyardSession,
     ship: Option<LinkId<Fragment>>,
     io: &mut Io<'_>,
@@ -242,7 +242,7 @@ fn dms_spin_ship(
         return false;
     };
     clear_flash(cx.kernel);
-    use crate::ships::master_native::find;
+    use uqm_content::ships::master_native::find;
     let species = spin_ship.species_id;
     let (context, index) = (
         cx.kernel.screen_context,
@@ -591,8 +591,8 @@ fn draw_blue_print(
     cx: &mut Cx<'_>,
     input: &InputSession,
     menu: &mut ShipyardSession,
-    flagship: &crate::engine::world::SisState,
-    context: &crate::graphics::context::ContextLease,
+    flagship: &uqm_engine::world::SisState,
+    context: &uqm_engine::graphics::context::ContextLease,
 ) {
     let blueprints = LoadedDrawable::load(c"graphics.blueprints")
         .unwrap_or_else(|| panic!("blueprints missing"));
@@ -692,7 +692,7 @@ fn do_shipyard(
     input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
     if !menu.initialized {
         let flagship = cx.world.data.flagship;
-        let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
+        let context = uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context);
         {
             menu.page = ShipyardPage::Main;
             menu.assets.modules = LoadedDrawable::load(c"graphics.shipyard");
@@ -702,7 +702,8 @@ fn do_shipyard(
                     .unwrap_or_else(|| panic!("hangar palette missing")),
                 next_time: 0,
             })));
-            menu.assets.music = crate::sound::resource_types::LoadedMusic::load(c"music.shipyard");
+            menu.assets.music =
+                uqm_engine::sound::resource_types::LoadedMusic::load(c"music.shipyard");
             draw::transition_source();
             draw::batch();
             crate::ui::border::draw_sis_frame(cx.kernel, cx.world, size);
@@ -766,14 +767,14 @@ struct ShipyardSession {
 }
 fn with_built_ships<R>(
     world: &mut World,
-    operation: impl FnOnce(&mut crate::engine::battle::link_queue::LinkQueue<'_, Fragment, 12>) -> R,
+    operation: impl FnOnce(&mut uqm_engine::battle::link_queue::LinkQueue<'_, Fragment, 12>) -> R,
 ) -> R {
     operation(&mut world.built_ships())
 }
 fn with_avail_races<R>(
     world: &World,
     operation: impl FnOnce(
-        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Fleet, 24>,
+        &uqm_engine::battle::link_queue::LinkQueue<'_, uqm_engine::world::queues::Fleet, 24>,
     ) -> R,
 ) -> R {
     operation(&world.avail_races_ref())
@@ -782,7 +783,7 @@ pub fn run(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     services: &super::MenuServices,
-) -> Option<crate::sound::resource_types::LoadedMusic> {
+) -> Option<uqm_engine::sound::resource_types::LoadedMusic> {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut menu = ShipyardSession {

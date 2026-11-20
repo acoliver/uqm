@@ -2,9 +2,9 @@
 
 use super::Harness;
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
-pub(super) use uqm_rust::planets::generate::sol::Generator as generateSolFunctions;
-use uqm_rust::state::game_state_keys::get_game_state;
+use uqm_engine::state::game_state_keys::get_game_state;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+pub(super) use uqm_modes::planets::generate::sol::Generator as generateSolFunctions;
 
 impl Ops for Harness {
     fn planets(&mut self, case: Layout, descs: &mut [PlanetDesc; 16]) -> (bool, u8, u32) {
@@ -62,13 +62,13 @@ impl Ops for Harness {
         self.set_star(0, 0);
         crate::battle_context::with(|cx| {
             cx.world.set_story_state(
-                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
+                uqm_engine::StoryKey::FOUND_PLUTO_SPATHI,
                 u32::from(case.pluto),
             )
         });
         crate::battle_context::with(|cx| {
             cx.world.set_story_state(
-                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
+                uqm_engine::StoryKey::MOONBASE_DESTROYED,
                 u32::from(case.destroyed),
             )
         });
@@ -76,9 +76,9 @@ impl Ops for Harness {
         self.state.sys.planets = Default::default();
         self.state.sys.moons = Default::default();
         let generate =
-            |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
+            |view: &mut uqm_engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,
-             host: &mut dyn uqm_rust::planets::generate::SiteHost| {
+             host: &mut dyn uqm_modes::planets::generate::SiteHost| {
                 if case.life {
                     generateSolFunctions.generate_life(view, case.body, case.which, info, host)
                 } else {
@@ -107,14 +107,14 @@ impl Ops for Harness {
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
+                uqm_engine::StoryKey::FOUND_PLUTO_SPATHI
             )),
             u32::from(case.pluto)
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
+                uqm_engine::StoryKey::MOONBASE_DESTROYED
             )),
             u32::from(case.destroyed)
         );
@@ -124,7 +124,7 @@ impl Ops for Harness {
     }
 }
 
-pub fn check(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
+pub fn check(table: &[uqm_engine::world::planet::PlanetFrame]) {
     let mut c = Harness::new();
     let layout = sol::render_layout(&mut c);
     let scans = sol::render_scans(&mut c);
@@ -140,4 +140,4 @@ pub fn check(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
     );
 }
 
-use uqm_rust::planets::generate::SystemGenerator;
+use uqm_modes::planets::generate::SystemGenerator;

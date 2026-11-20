@@ -1,9 +1,9 @@
 //! Terrain generation, elevation conditioning and relative lighting from `planets/plangen.c`.
 
 use crate::comm::locdata::{CPoint, CRect};
-use crate::math::RandomContext;
 use crate::planets::topography::delta_topography;
 use crate::starbase::ids::SAFE_Y;
+use uqm_engine::math::RandomContext;
 
 /// `MAP_HEIGHT` in `planets.h`. Width is the current SIS screen width.
 pub const MAP_HEIGHT: usize = 75 - SAFE_Y as usize;

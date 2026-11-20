@@ -1,16 +1,16 @@
 //! Splash, introduction, victory and ship-spin presentations, ported from uqm/fmv.c.
 
 use super::intro::show_presentation;
-use crate::engine::battle::Cx;
-use crate::engine::observe::Io;
-use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-use crate::graphics::{context::ContextLease, drawable::LoadedDrawable, geometry::Point};
-use crate::sound::music;
-use crate::sound::music::MusicRequest;
-use crate::sound::resource_types::LoadedMusic;
 use crate::ui::util::wait_for_any_button;
 use std::ffi::CString;
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::{context::ContextLease, drawable::LoadedDrawable, geometry::Point};
+use uqm_engine::observe::Io;
+use uqm_engine::sound::music;
+use uqm_engine::sound::music::MusicRequest;
+use uqm_engine::sound::resource_types::LoadedMusic;
 use uqm_engine::time::counter_abi::ONE_SECOND;
+use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
 
 fn fade(cx: &mut Cx<'_>, context: &ContextLease, kind: u32, interval: u32) {
     let deadline = context.fade_screen(kind, interval as i16);
@@ -22,9 +22,9 @@ pub fn do_ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: u16, music: Option<
         .selected_context()
         .unwrap_or_else(|| panic!("ship spin requires the selected game context"));
     let (width, height) = context.screen_dimensions();
-    let screen = crate::graphics::geometry::Rect {
+    let screen = uqm_engine::graphics::geometry::Rect {
         corner: Point { x: 0, y: 0 },
-        extent: crate::graphics::geometry::Extent {
+        extent: uqm_engine::graphics::geometry::Extent {
             width: width as i16,
             height: height as i16,
         },
@@ -33,7 +33,7 @@ pub fn do_ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: u16, music: Option<
     if music.is_some() {
         music::stop_requested_music();
     }
-    crate::engine::battle::hyperspace::free_hyper_data(cx.kernel);
+    uqm_engine::battle::hyperspace::free_hyper_data(cx.kernel);
     let name = CString::new(format!("slides.spins.{index:02}"))
         .unwrap_or_else(|error| panic!("ship spin resource contains NUL: {error}"));
     show_presentation(cx, io, &name);

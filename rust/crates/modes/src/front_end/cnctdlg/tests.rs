@@ -1,8 +1,8 @@
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
 #[test]
 #[serial_test::serial]
 fn editor_keeps_initial_49_bytes_but_inserts_only_up_to_48_utf8_bytes() {
-    use crate::engine::{battle::Battle, observe::Unobserved, Game};
+    use uqm_engine::{battle::Battle, observe::Unobserved, Game};
     let display = Display::new();
     for count in [46, 47, 49] {
         let original = "a".repeat(count);
@@ -166,7 +166,7 @@ fn sequential_dialogs_start_with_their_own_values_and_focus() {
 #[test]
 fn input_priority_keeps_the_first_pressed_menu_key() {
     let input = InputSession::default();
-    let mut pulse = crate::engine::input::frames::InputState::default();
+    let mut pulse = uqm_engine::input::frames::InputState::default();
     pulse.menu[KEY_MENU_UP as usize] = 1;
     pulse.menu[KEY_MENU_SELECT as usize] = 1;
     pulse.menu[KEY_MENU_CANCEL as usize] = 1;
@@ -175,8 +175,8 @@ fn input_priority_keeps_the_first_pressed_menu_key() {
 }
 
 struct Display {
-    context: crate::graphics::context::LoadedContext,
-    screen: crate::graphics::drawable::LoadedDrawable,
+    context: uqm_engine::graphics::context::LoadedContext,
+    screen: uqm_engine::graphics::drawable::LoadedDrawable,
     player: Option<LoadedFont>,
     button: Option<LoadedFont>,
     _graphics: uqm_engine::test_support::native_session::Graphics,
@@ -196,8 +196,9 @@ impl Display {
                 LoadedFont::load(c"fixture.font").unwrap(),
             )
         };
-        let context = crate::graphics::context::LoadedContext::create(c"connection fixture");
-        let screen = crate::graphics::drawable::LoadedDrawable::create(8, 320, 240, 1).unwrap();
+        let context = uqm_engine::graphics::context::LoadedContext::create(c"connection fixture");
+        let screen =
+            uqm_engine::graphics::drawable::LoadedDrawable::create(8, 320, 240, 1).unwrap();
         context.lease().set_frame(screen.lease().context_frame(0));
         Self {
             context,
@@ -271,12 +272,12 @@ struct Driver {
     sleeps: std::cell::Cell<usize>,
 }
 
-impl crate::engine::input::InputRuntime for Driver {
+impl uqm_engine::input::InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn crate::engine::observe::Observer> {
-        Box::new(crate::engine::observe::Unobserved)
+    fn observer(&self) -> Box<dyn uqm_engine::observe::Observer> {
+        Box::new(uqm_engine::observe::Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {
         panic!("unexpected yield");
@@ -296,7 +297,7 @@ impl crate::engine::input::InputRuntime for Driver {
     fn update(&self, _: &mut Cx<'_>) {
         panic!("unexpected update");
     }
-    fn battle_input(&self, _: &crate::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, _: &uqm_engine::battle::input::InputContext) -> u8 {
         panic!("unexpected battle input");
     }
     fn run(
@@ -304,7 +305,7 @@ impl crate::engine::input::InputRuntime for Driver {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         reset: bool,
-        frame: &mut dyn crate::engine::input::Frame,
+        frame: &mut dyn uqm_engine::input::Frame,
     ) {
         assert!(reset);
         loop {
@@ -314,7 +315,7 @@ impl crate::engine::input::InputRuntime for Driver {
                 .pop_front()
                 .expect("input script exhausted");
             self.input.clear_menu_state();
-            let mut pulse = crate::engine::input::frames::InputState::default();
+            let mut pulse = uqm_engine::input::frames::InputState::default();
             if key == usize::MAX {
                 uqm_engine::test_support::native_session::text_input("é");
             } else {
@@ -331,7 +332,7 @@ impl crate::engine::input::InputRuntime for Driver {
 #[test]
 #[serial_test::serial]
 fn dialog_frames_commit_cancel_and_abort_with_independent_sessions() {
-    use crate::engine::{battle::Battle, observe::Unobserved, Game};
+    use uqm_engine::{battle::Battle, observe::Unobserved, Game};
     let display = Display::new();
     for (side, keys, abort, confirmed, server, sleeps) in [
         (0, vec![KEY_MENU_SELECT], false, true, true, 1),
@@ -378,8 +379,8 @@ fn dialog_frames_commit_cancel_and_abort_with_independent_sessions() {
 #[test]
 #[serial_test::serial]
 fn safe_editor_applies_utf8_deletions_and_rolls_back_cancelled_edits() {
-    use crate::engine::{battle::Battle, observe::Unobserved, Game};
-    use crate::input::frames::{KEY_MENU_EDIT_CANCEL, KEY_MENU_HOME};
+    use uqm_engine::input_port::frames::{KEY_MENU_EDIT_CANCEL, KEY_MENU_HOME};
+    use uqm_engine::{battle::Battle, observe::Unobserved, Game};
     let display = Display::new();
     for (end, expected) in [(KEY_MENU_SELECT, "é"), (KEY_MENU_EDIT_CANCEL, "é漢")] {
         let mut session = NetplaySession::default();

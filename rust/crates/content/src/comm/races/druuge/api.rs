@@ -1,4 +1,4 @@
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 pub(crate) const EGG_CASES: [StoryKey; 3] = [
     StoryKey::EGG_CASE0_ON_SHIP,
@@ -8,7 +8,7 @@ pub(crate) const EGG_CASES: [StoryKey; 3] = [
 
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-use crate::engine::world::SisState as CSisState;
+use uqm_engine::world::SisState as CSisState;
 
 pub trait DruugeApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;

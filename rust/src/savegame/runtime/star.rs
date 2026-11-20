@@ -31,14 +31,14 @@ use std::fmt;
 use crate::savegame::types::{Point, StarDesc};
 
 /// The systems, a sentinel, the quasispace portals and a second sentinel.
-pub use crate::engine::world::CATALOG_LEN;
+pub use uqm_engine::world::CATALOG_LEN;
 /// `NUM_HYPER_VORTICES` (starmap.c, inside `FindStar`): the index of the last
 /// quasispace portal, so the portals number one more.
-pub use crate::engine::world::NUM_HYPER_VORTICES;
+pub use uqm_engine::world::NUM_HYPER_VORTICES;
 /// `NUM_SOLAR_SYSTEMS` (starmap.h).
-pub use crate::engine::world::NUM_SOLAR_SYSTEMS;
+pub use uqm_engine::world::NUM_SOLAR_SYSTEMS;
 
-pub use crate::engine::world::CStarDesc;
+pub use uqm_engine::world::CStarDesc;
 
 const _: () = {
     assert!(std::mem::size_of::<CStarDesc>() == 8);

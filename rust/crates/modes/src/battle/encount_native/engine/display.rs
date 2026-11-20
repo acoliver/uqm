@@ -1,6 +1,6 @@
 //! Encounter location text over retained display resources.
 
-pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {
+pub(super) fn draw_title(cx: &mut uqm_engine::battle::Cx<'_>) {
     let width = cx.screen_dimensions().0;
     if cx.world.in_hqspace() {
         crate::ui::sis::draw_hyper_coords(cx.kernel, width, cx.world.data.game.ship_stamp.origin);
@@ -19,16 +19,16 @@ pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::battle::Battle;
-    use crate::engine::battle::Cx;
-    use crate::engine::world::activity::activity_kinds::IN_INTERPLANETARY;
-    use crate::engine::world::StarId;
-    use crate::engine::world::IN_HYPERSPACE;
-    use crate::engine::world::{CStarDesc, CATALOG_LEN};
-    use crate::engine::Game;
-    use crate::graphics::geometry::Point;
     use crate::ui;
+    use uqm_engine::battle::Battle;
+    use uqm_engine::battle::Cx;
+    use uqm_engine::graphics::geometry::Point;
     use uqm_engine::test_support::campaign_display;
+    use uqm_engine::world::activity::activity_kinds::IN_INTERPLANETARY;
+    use uqm_engine::world::StarId;
+    use uqm_engine::world::IN_HYPERSPACE;
+    use uqm_engine::world::{CStarDesc, CATALOG_LEN};
+    use uqm_engine::Game;
 
     fn title_pixels(game: &Game) -> Vec<(u8, u8, u8)> {
         uqm_engine::test_support::native_probe::flush_graphics();
@@ -52,7 +52,7 @@ mod tests {
         let display = campaign_display::CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("campaign panel fixture failed: {error}"));
         let context =
-            crate::graphics::context::ContextLease::require(game.kernel.off_screen_context);
+            uqm_engine::graphics::context::ContextLease::require(game.kernel.off_screen_context);
         let before = title_pixels(&game);
         super::super::draw_encounter_fleet(&game.world, &context, (320, 240));
         assert_eq!(title_pixels(&game), before);

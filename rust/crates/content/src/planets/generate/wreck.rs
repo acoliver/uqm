@@ -3,11 +3,11 @@
 //! Overridden: `generateOrbital`, `generateEnergy`, `pickupEnergy`. Story
 //! flags: `PORTAL_KEY`, `PORTAL_KEY_ON_SHIP`.
 
-use crate::engine::world::planet::{NodeInfo, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{Body, Story};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WRECK: Body = Body::Planet(6);
 
@@ -17,7 +17,7 @@ pub trait WreckSite {
     /// the report started at `first_report`.
     fn load_wreck_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         first_report: u16,
     );
     /// `set_lander_takeoff ()`.
@@ -66,7 +66,7 @@ pub fn pickup_energy(
     assert_eq!(which_node, 0, "the wreck has a single energy node");
     site.report(
         system,
-        crate::engine::world::generation::ReportDisposition::Cycle,
+        uqm_engine::world::generation::ReportDisposition::Cycle,
     );
     if site.flag(StoryKey::PORTAL_KEY) == 0 {
         site.lander_takeoff();
@@ -78,7 +78,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

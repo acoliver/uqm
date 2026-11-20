@@ -13,7 +13,7 @@
 
 use super::fuel::FuelKey;
 use super::input::MenuPulses;
-use crate::engine::world::activity::{activity_flags, ActivityValue};
+use uqm_engine::world::activity::{activity_flags, ActivityValue};
 
 /// `OUTFIT_FUEL` .. `OUTFIT_DOFUEL` (`outfit.c:38-45`).
 #[repr(u8)]

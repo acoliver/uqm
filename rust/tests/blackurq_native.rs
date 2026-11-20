@@ -5,24 +5,24 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::CREW_OBJECT;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::flags::POST_PROCESS;
-use uqm_rust::engine::battle::flags::PRE_PROCESS;
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::species::species_id::SPECIES_ID_KOHR_AH_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::ONE_SHIFT;
-use uqm_rust::math::velocity::VelocityDesc;
+use uqm_engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::CREW_OBJECT;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::flags::POST_PROCESS;
+use uqm_engine::battle::flags::PRE_PROCESS;
+use uqm_engine::battle::Concern;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::species::species_id::SPECIES_ID_KOHR_AH_ID;
 
 #[test]
 fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
@@ -164,7 +164,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 );
                 assert_eq!(battle::get(e).turn, 1);
                 let mut expected: VelocityDesc = VelocityDesc::new();
-                uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 16, face as u16);
+                uqm_modes::battle::velocity::set_velocity_vector(&mut expected, 16, face as u16);
                 expected.delta_components(41, -21);
                 assert_eq!(velocity(&battle::get(e).velocity), velocity(&expected));
                 hooks::invoke_element(battle::get(e).preprocess_func.unwrap(), e);

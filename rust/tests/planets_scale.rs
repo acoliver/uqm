@@ -1,11 +1,11 @@
 //! Full-buffer fixtures from the original TopoScale4x, including its persistent RNG.
 #![forbid(unsafe_code)]
 use sha2::{Digest, Sha256};
-use uqm_rust::planets::render::topo_scale::TopoScaler;
+use uqm_modes::planets::render::topo_scale::TopoScaler;
 
 #[test]
 fn original_c_four_consecutive_maps() {
-    let kernel = uqm_rust::engine::Kernel::new();
+    let kernel = uqm_engine::Kernel::new();
     let mut scaler = TopoScaler::with_seed(kernel.planet_animation.topography_seed());
     let hashes = [
         "c0e0ab5bdf8d76a0ef75a289518aef715df00006e7f8c61c0f33198a1cbecdba",
@@ -34,8 +34,8 @@ fn original_c_four_consecutive_maps() {
 
 #[test]
 fn resumed_scaler_keeps_rng_sequence_in_one_kernel_only() {
-    let first = uqm_rust::engine::Kernel::new();
-    let second = uqm_rust::engine::Kernel::new();
+    let first = uqm_engine::Kernel::new();
+    let second = uqm_engine::Kernel::new();
     let initial_seed = first.planet_animation.topography_seed();
     let mut continuous = TopoScaler::with_seed(initial_seed);
     for source in [[0, 20, -20, 127], [-128, 1, 2, 3], [9, -4, 5, 6]] {

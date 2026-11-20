@@ -31,8 +31,8 @@ pub mod zoqfot_native;
 #[path = "samatra_native.rs"]
 pub mod samatra;
 
-pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
-    use crate::engine::species::species_id::{
+pub fn race(species: u32) -> Option<&'static uqm_engine::battle::Race> {
+    use uqm_engine::species::species_id::{
         SPECIES_ID_ANDROSYNTH_ID, SPECIES_ID_ARILOU_ID, SPECIES_ID_CHENJESU_ID,
         SPECIES_ID_CHMMR_ID, SPECIES_ID_DRUUGE_ID, SPECIES_ID_EARTHLING_ID, SPECIES_ID_ILWRATH_ID,
         SPECIES_ID_KOHR_AH_ID, SPECIES_ID_MELNORME_ID, SPECIES_ID_MMRNMHRM_ID, SPECIES_ID_MYCON_ID,

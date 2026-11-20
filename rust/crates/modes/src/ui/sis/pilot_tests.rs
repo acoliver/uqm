@@ -1,9 +1,9 @@
 use super::*;
-use crate::engine::Game;
-use crate::graphics::{
+use uqm_engine::graphics::{
     drawable::ContextFrame, geometry::Color, geometry::Point, geometry::TextAlign,
 };
 use uqm_engine::test_support::campaign_display::CampaignDisplay;
+use uqm_engine::Game;
 
 #[test]
 #[serial_test::serial]

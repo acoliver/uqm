@@ -2,12 +2,12 @@
 
 use super::{fresh_node, scan_seeds};
 use std::fmt::Write as _;
-use uqm_rust::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use uqm_rust::engine::StoryKey;
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::generate::special::{Body, Story};
-use uqm_rust::planets::generate::{sam, spa, vux};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
+use uqm_modes::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
+use uqm_modes::planets::generate::special::{Body, Story};
+use uqm_modes::planets::generate::{sam, spa, vux};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {

@@ -1,12 +1,12 @@
 //! Invoke the production Rust ABI tables against retained C fixtures.
 use super::Harness;
 use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use uqm_rust::planets::generate::sam::Generator as generateSaMatraFunctions;
-use uqm_rust::planets::generate::spa::Generator as generateSpathiFunctions;
-use uqm_rust::planets::generate::vux::Generator as generateVuxFunctions;
-use uqm_rust::planets::generate::SystemGenerator;
-use uqm_rust::state::game_state_keys::get_game_state;
+use uqm_engine::state::game_state_keys::get_game_state;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_modes::planets::generate::sam::Generator as generateSaMatraFunctions;
+use uqm_modes::planets::generate::spa::Generator as generateSpathiFunctions;
+use uqm_modes::planets::generate::vux::Generator as generateVuxFunctions;
+use uqm_modes::planets::generate::SystemGenerator;
 
 fn table(kind: Kind) -> &'static dyn SystemGenerator {
     match kind {
@@ -23,7 +23,7 @@ impl Ops for Harness {
         self.state.sys.sun.num_planets = 0;
         crate::battle_context::with(|cx| {
             cx.world.set_story_state(
-                uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
+                uqm_engine::StoryKey::SPATHI_SHIELDED_SELVES,
                 u32::from(case.shielded),
             )
         });
@@ -72,8 +72,8 @@ impl Ops for Harness {
         self.star_index = case.star;
         self.set_star(0, 0);
         for key in [
-            uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
-            uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
+            uqm_engine::StoryKey::SHOFIXTI_MAIDENS,
+            uqm_engine::StoryKey::UMGAH_BROADCASTERS,
         ] {
             crate::battle_context::with(|cx| cx.world.set_story_state(key, u32::from(case.taken)));
         }
@@ -81,17 +81,17 @@ impl Ops for Harness {
         self.state.sys.moons = Default::default();
         self.state.sys.info = *info;
         match case.body {
-            uqm_rust::planets::generate::special::Body::Planet(p) => {
+            uqm_modes::planets::generate::special::Body::Planet(p) => {
                 self.state.sys.planets[usize::from(p)].data_index = case.frame
             }
-            uqm_rust::planets::generate::special::Body::Moon { moon, .. } => {
+            uqm_modes::planets::generate::special::Body::Moon { moon, .. } => {
                 self.state.sys.moons[usize::from(moon)].data_index = case.frame
             }
         }
         let generate =
-            |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
+            |view: &mut uqm_engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,
-             host: &mut dyn uqm_rust::planets::generate::SiteHost| {
+             host: &mut dyn uqm_modes::planets::generate::SiteHost| {
                 if case.life {
                     table(case.kind).generate_life(view, case.body, case.which, info, host)
                 } else {
@@ -115,8 +115,8 @@ impl Ops for Harness {
             "scan input changed: {case:?}"
         );
         for key in [
-            uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
-            uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
+            uqm_engine::StoryKey::SHOFIXTI_MAIDENS,
+            uqm_engine::StoryKey::UMGAH_BROADCASTERS,
         ] {
             assert_eq!(
                 crate::battle_context::with(|cx| get_game_state(cx.world, key)),

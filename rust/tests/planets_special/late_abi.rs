@@ -1,15 +1,15 @@
 //! Headless checks of the selected production tables and safely callable effects.
 
 use super::Harness;
-use uqm_rust::battle::gendef::*;
-use uqm_rust::planets::generate::myc::Generator as GENERATE_MYCON_FUNCTIONS;
-use uqm_rust::planets::generate::sam::Generator as GENERATE_SAMATRA_FUNCTIONS;
-use uqm_rust::planets::generate::spa::Generator as GENERATE_SPATHI_FUNCTIONS;
-use uqm_rust::planets::generate::surface::BIOLOGICAL_SCAN;
-use uqm_rust::planets::generate::utw::Generator as GENERATE_UTWIG_FUNCTIONS;
-use uqm_rust::planets::generate::vux::Generator as GENERATE_VUX_FUNCTIONS;
-use uqm_rust::planets::generate::{generator, SystemGenerator};
-use uqm_rust::state::game_state_keys::get_game_state;
+use uqm_engine::state::game_state_keys::get_game_state;
+use uqm_modes::battle::gendef::*;
+use uqm_modes::planets::generate::myc::Generator as GENERATE_MYCON_FUNCTIONS;
+use uqm_modes::planets::generate::sam::Generator as GENERATE_SAMATRA_FUNCTIONS;
+use uqm_modes::planets::generate::spa::Generator as GENERATE_SPATHI_FUNCTIONS;
+use uqm_modes::planets::generate::surface::BIOLOGICAL_SCAN;
+use uqm_modes::planets::generate::utw::Generator as GENERATE_UTWIG_FUNCTIONS;
+use uqm_modes::planets::generate::vux::Generator as GENERATE_VUX_FUNCTIONS;
+use uqm_modes::planets::generate::{generator, SystemGenerator};
 
 pub fn check() {
     for (indexes, table, _overrides) in [
@@ -66,15 +66,15 @@ pub fn check() {
     for retrieved in 0..=32 {
         crate::battle_context::with(|cx| {
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
+                .set_story_state(uqm_engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
         });
         crate::battle_context::with(|cx| {
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
+                .set_story_state(uqm_engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
         });
         crate::battle_context::with(|cx| {
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+                .set_story_state(uqm_engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
         harness.state.sys.info.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32
         {
@@ -88,7 +88,7 @@ pub fn check() {
             |view, host| {
                 GENERATE_SPATHI_FUNCTIONS.pickup_life(
                     view,
-                    uqm_rust::planets::generate::special::Body::Planet(0),
+                    uqm_modes::planets::generate::special::Body::Planet(0),
                     0,
                     host,
                 )
@@ -97,14 +97,14 @@ pub fn check() {
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
+                uqm_engine::StoryKey::SPATHI_CREATURES_EXAMINED
             )),
             1
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED
+                uqm_engine::StoryKey::SPATHI_CREATURES_ELIMINATED
             )),
             u32::from(retrieved == 31)
         );
@@ -117,14 +117,14 @@ pub fn check() {
 
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+            .set_story_state(uqm_engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
     assert!(crate::invoke_generation(
         &mut harness.state,
         |view, host| {
             GENERATE_SPATHI_FUNCTIONS.pickup_life(
                 view,
-                uqm_rust::planets::generate::special::Body::Planet(1),
+                uqm_modes::planets::generate::special::Body::Planet(1),
                 u16::MAX,
                 host,
             )
@@ -133,7 +133,7 @@ pub fn check() {
     assert_eq!(
         crate::battle_context::with(|cx| get_game_state(
             cx.world,
-            uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
+            uqm_engine::StoryKey::SPATHI_CREATURES_EXAMINED
         )),
         0
     );
@@ -143,7 +143,7 @@ pub fn check() {
         crate::invoke_generation(&mut harness.state, |view, host| {
             GENERATE_MYCON_FUNCTIONS.generate_life(
                 view,
-                uqm_rust::planets::generate::special::Body::Planet(0),
+                uqm_modes::planets::generate::special::Body::Planet(0),
                 u16::MAX,
                 &mut crate::planets_common::fresh_node(),
                 host,
@@ -159,8 +159,8 @@ pub fn check() {
 }
 
 fn check_live_queues(harness: &mut Harness) {
-    use uqm_rust::planets::generate::sam::GuardSite;
-    const SCREEN_HEIGHT: i32 = uqm_rust::graphics::state::SCREEN_HEIGHT;
+    use uqm_modes::planets::generate::sam::GuardSite;
+    const SCREEN_HEIGHT: i32 = uqm_engine::graphics::state::SCREEN_HEIGHT;
     let (saved_queues, ids, first) = crate::battle_context::with(|cx| {
         let saved = std::mem::take(&mut cx.world.queues);
         let mut groups = cx.world.ip_groups();
@@ -193,7 +193,7 @@ fn check_live_queues(harness: &mut Harness) {
     harness.set_star(0, 0);
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0)
+            .set_story_state(uqm_engine::StoryKey::UTWIG_BOMB, 0)
     });
     let before = format!("{:?}", crate::generation_data(&harness.state));
     assert!(crate::invoke_generation(
@@ -218,14 +218,14 @@ fn check_live_queues(harness: &mut Harness) {
     assert_eq!(
         crate::battle_context::with(|cx| get_game_state(
             cx.world,
-            uqm_rust::engine::StoryKey::UTWIG_BOMB
+            uqm_engine::StoryKey::UTWIG_BOMB
         )),
         0
     );
     assert_eq!(harness.rng_position(), 104729);
     crate::battle_context::with(|cx| cx.world.queues = saved_queues);
 
-    use uqm_rust::engine::graphics::geometry::Point;
+    use uqm_engine::graphics::geometry::Point;
     let saved_race = crate::battle_context::with(|cx| cx.world.encounter_race);
     let saved_group = crate::battle_context::with(|cx| cx.world.encounter_group);
     crate::battle_context::with(|cx| {
@@ -254,7 +254,7 @@ fn check_live_queues(harness: &mut Harness) {
     let saved_planet = harness.state.sys.planets[4];
     // units.h and solarsys.c: SIS height = screen height - 13;
     // DISPLAY_TO_LOC = ((SIS width >> 1) - 8) >> 1.
-    let half_width = i32::from(uqm_rust::planets::generate::consts::MAP_WIDTH) >> 1;
+    let half_width = i32::from(uqm_modes::planets::generate::consts::MAP_WIDTH) >> 1;
     let half_height = (SCREEN_HEIGHT - 13) >> 1;
     let display_to_loc = (half_width - 8) >> 1;
     harness.state.sys.sun.radius = (display_to_loc * 10) as i16;

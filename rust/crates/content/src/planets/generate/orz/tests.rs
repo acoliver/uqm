@@ -1,26 +1,24 @@
 //! The Orz systems' story gating and conversation flow against recording
 //! fakes.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 use super::{
     generate_energy, generate_orbital, pickup_energy, OrzSite, ORZ_TALK_FLAGS, TAALO_TALK_FLAGS,
 };
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::generation::ReportDisposition;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
 use crate::planets::generate::special::{Body, Orbit, Story};
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::generation::ReportDisposition;
 
 const WORLD: Body = Body::Planet(0);
 const DEVICE: Body = Body::Moon { planet: 1, moon: 2 };
@@ -313,7 +311,7 @@ impl HomeContactSite for Site {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         artifact_taken: bool,
     ) {
         self.record(Call::LoadRuinsScene(artifact_taken));
@@ -329,7 +327,7 @@ impl OrzSite for Site {
     }
     fn load_taalo_device_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     ) {
         self.record(Call::LoadTaaloScene);
     }

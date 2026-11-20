@@ -5,25 +5,25 @@ mod screen;
 pub(crate) mod search;
 mod state;
 
+use screen::{enlarge, repair_rectangle, Display};
+use state::MapState;
+use std::ffi::{c_long, CStr, CString};
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect,
+};
 #[cfg(test)]
-use crate::engine::observe_port::starmap::signed_div_with_error;
-use crate::engine::observe_port::starmap::Projection;
-use crate::engine::time::counter_abi::get_time_counter;
-use crate::engine::world::{CStarDesc, NUM_SOLAR_SYSTEMS};
-use crate::engine::{
+use uqm_engine::observe_port::starmap::signed_div_with_error;
+use uqm_engine::observe_port::starmap::Projection;
+use uqm_engine::time::counter_abi::get_time_counter;
+use uqm_engine::world::{CStarDesc, NUM_SOLAR_SYSTEMS};
+use uqm_engine::{
     battle::{link_queue::LinkId, Cx},
     input::{Frame, InputSession},
     observe::{CheckpointView, Injected, InputView, Io, StarMapView},
     world::queues::{Fleet, FleetInfo},
     Kernel, StoryKey, World,
 };
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
-    geometry::Extent, geometry::Point, geometry::Rect,
-};
-use screen::{enlarge, repair_rectangle, Display};
-use state::MapState;
-use std::ffi::{c_long, CStr, CString};
 
 const ONE_SECOND: u32 = 840;
 const MAX_ZOOM_SHIFT: i32 = 4;
@@ -182,7 +182,7 @@ impl StarMap {
             current_location(world, self.dimensions()),
             self.state.cursor,
             which_space(world),
-            crate::math::square_root,
+            uqm_engine::math::square_root,
         );
         let mut text = kernel.game_text(439).to_bytes().to_vec();
         text.extend_from_slice(format!(" {}.{}", fuel / 100, (fuel % 100) / 10).as_bytes());

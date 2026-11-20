@@ -6,8 +6,8 @@
 //! /COORD conversions the C macros perform.
 
 #[cfg(test)]
-use crate::math::battle_types::SIN_SHIFT;
-use crate::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT};
+use uqm_engine::math::battle_types::SIN_SHIFT;
+use uqm_engine::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT};
 
 /// `MAX_REDUCTION` from `units.h`: how far the battle view can zoom out.
 const MAX_REDUCTION: i32 = 3;
@@ -73,20 +73,20 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
 
 pub mod engine {
     use super::*;
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, IMMEDIATE_WEAPON, LEFT,
         MOVEMENT_STATE_ENTICE, RIGHT, SEEKING_SPECIAL, SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, CREW_OBJECT, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
         SHIP_AT_MAX_SPEED,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::{Concerns, Cx, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::velocity::VelocityDesc;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::{Concerns, Cx, ShipId, WeaponOrigin, WeaponSpawn};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::velocity::VelocityDesc;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     // Core characteristics
     const MAX_CREW: u16 = 6;
@@ -110,9 +110,9 @@ pub mod engine {
     const SPECIAL_WAIT: u8 = 2;
     const HYPER_LIFE: u16 = 5;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
-        let d = crate::engine::battle::template::RaceTemplate {
-            info: crate::engine::battle::views::Info {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        let d = uqm_engine::battle::template::RaceTemplate {
+            info: uqm_engine::battle::views::Info {
                 ship_flags: IMMEDIATE_WEAPON as u16,
                 ship_cost: 16,
                 crew_level: MAX_CREW,
@@ -120,7 +120,7 @@ pub mod engine {
                 energy_level: MAX_ENERGY,
                 max_energy: MAX_ENERGY,
             },
-            resources: crate::engine::battle::template::RaceResources {
+            resources: uqm_engine::battle::template::RaceResources {
                 strings: Some(c"ship.arilou.text"),
                 icons: Some(c"ship.arilou.icons"),
                 melee_icon: Some(c"ship.arilou.meleeicons"),
@@ -154,7 +154,7 @@ pub mod engine {
                 special_wait: SPECIAL_WAIT,
                 ship_mass: SHIP_MASS,
             },
-            intelligence: crate::engine::battle::views::Intelligence {
+            intelligence: uqm_engine::battle::views::Intelligence {
                 weapon_range: (LASER_RANGE >> 1) as u16,
                 ..Default::default()
             },
@@ -163,7 +163,7 @@ pub mod engine {
         d.descriptor(&ARILOU)
     }
 
-    pub static ARILOU: crate::engine::battle::Race = crate::engine::battle::Race {
+    pub static ARILOU: uqm_engine::battle::Race = uqm_engine::battle::Race {
         descriptor,
         preprocess: Some(arilou_preprocess),
         postprocess: None,
@@ -185,7 +185,7 @@ pub mod engine {
         }
         origin.target = None;
         let angle = facing_to_angle(i32::from(face));
-        vec![cx.spawn_laser(crate::engine::battle::views::Laser {
+        vec![cx.spawn_laser(uqm_engine::battle::views::Laser {
             origin: origin.next.location,
             end: Point {
                 x: crate::ships::native::cosine(angle, LASER_RANGE),

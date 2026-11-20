@@ -1,12 +1,12 @@
 //! Lander status drawing from supplied campaign or save-preview values.
 
 use super::resources::{LanderGraphic, PlanetSideAssets};
-use crate::engine::StoryKey;
-use crate::engine::World;
-use crate::graphics::{
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Extent,
     geometry::Point, geometry::Rect,
 };
+use uqm_engine::StoryKey;
+use uqm_engine::World;
 
 const MAX_SCROUNGED: u16 = 50;
 const RADAR_WIDTH: i16 = 56;
@@ -38,7 +38,7 @@ impl LanderStatus {
         }
     }
 
-    pub fn preview(ship: &crate::engine::world::SisState, flags: u8) -> Self {
+    pub fn preview(ship: &uqm_engine::world::SisState, flags: u8) -> Self {
         Self {
             landers: ship.num_landers,
             shield_flags: flags & 15,
@@ -49,7 +49,7 @@ impl LanderStatus {
     }
 }
 
-fn free_space(ship: &crate::engine::world::SisState) -> u16 {
+fn free_space(ship: &uqm_engine::world::SisState) -> u16 {
     let capacity = crate::ui::sis::capacity::storage_capacity(ship);
     capacity.wrapping_sub(ship.total_element_mass)
 }
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn live_and_preview_status_use_the_supplied_owners() {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world.data.flagship.num_landers = 2;
         world.set_story_state(StoryKey::LANDER_SHIELDS, 5);
         world.set_story_state(StoryKey::IMPROVED_LANDER_CARGO, 1);

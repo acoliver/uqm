@@ -1,11 +1,11 @@
 //! Planet and moon orbit layout, ported from `planets/orbits.c`.
 
-use crate::engine::math::battle_types::{cosine, sine};
-use crate::engine::world::planet::PlanetDesc;
-use crate::math::RandomContext;
 use crate::planets::generate::orbit_tables::{
     BLUE, GREEN, NUMBER_OF_PLANET_TYPES, ORANGE, RED, WHITE, YELLOW,
 };
+use uqm_engine::math::battle_types::{cosine, sine};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::PlanetDesc;
 
 const FIRST_LARGE_ROCKY_WORLD: u8 = 29;
 pub const FIRST_GAS_GIANT: u8 = (NUMBER_OF_PLANET_TYPES - 9) as u8;

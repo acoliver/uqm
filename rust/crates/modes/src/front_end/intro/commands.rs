@@ -1,5 +1,5 @@
 use super::{args::Arguments, records::PresentationState, *};
-use crate::graphics::{font::LoadedFont, geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::graphics::{font::LoadedFont, geometry::Extent, geometry::Point, geometry::Rect};
 
 pub(super) enum Step {
     Input(bool),

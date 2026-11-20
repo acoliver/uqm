@@ -1,13 +1,13 @@
 //! Scene, report, lander and planet-display effects.
 
 use super::*;
-use crate::engine::graphics::surface::CapturedSurface;
-use crate::engine::{world::generation::Body, StoryKey};
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::{andro, burv, spa, vault, wreck};
 use crate::planets::orbit::live::load_planet;
 use crate::planets::report::live::discovery_report;
+use uqm_engine::graphics::surface::CapturedSurface;
+use uqm_engine::{world::generation::Body, StoryKey};
 
 impl LanderTakeoff for Site<'_, '_, '_> {
     fn lander_takeoff(&mut self) {
@@ -65,9 +65,9 @@ impl wreck::WreckSite for Site<'_, '_, '_> {
 
 impl andro::AndrosynthSite for Site<'_, '_, '_> {
     fn load_ruins_story(&mut self, system: &mut SolarSys<'_>, visits: u32) {
-        use crate::engine::graphics::drawable::LoadedDrawable;
-        use crate::engine::strings::owned_table::LoadedTextTable;
-        use crate::engine::world::generation::ReportSlot;
+        use uqm_engine::graphics::drawable::LoadedDrawable;
+        use uqm_engine::strings::owned_table::LoadedTextTable;
+        use uqm_engine::world::generation::ReportSlot;
         self.report_resources.load();
         {
             system.frames[1] = LoadedDrawable::load(c"graphics.ruins");
@@ -134,7 +134,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             definition,
             (reports, self.background.clone()),
             |system, report_context| {
-                use crate::engine::battle::views::FrameSelection;
+                use uqm_engine::battle::views::FrameSelection;
                 let unscaled = self
                     .game
                     .borrow()
@@ -181,11 +181,11 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
 
     pub(super) fn discovery_report<'slot>(
         &self,
-        slot: &'slot mut crate::engine::world::generation::ReportSlot,
+        slot: &'slot mut uqm_engine::world::generation::ReportSlot,
     ) -> crate::planet_side::report_adapter::DiscoveryReport<
         'slot,
         'observer,
-        impl FnMut(&crate::engine::strings::owned_table::TextEntry) + 'a + use<'a, 'game, 'observer>,
+        impl FnMut(&uqm_engine::strings::owned_table::TextEntry) + 'a + use<'a, 'game, 'observer>,
     >
     where
         'a: 'slot,

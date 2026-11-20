@@ -1,7 +1,7 @@
 //! Star catalog lookup and cluster naming, ported from starmap.c.
 
 use crate::comm::dispatch::CPoint;
-use crate::engine::world::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
+use uqm_engine::world::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
 
 pub(crate) fn catalog_star_count(catalog: &[CStarDesc]) -> usize {
     catalog
@@ -66,14 +66,14 @@ fn find_star_index(
 }
 
 pub fn find_star_id(
-    world: &crate::engine::World,
-    catalog: &[CStarDesc; crate::engine::world::CATALOG_LEN],
-    last: Option<crate::engine::StarId>,
+    world: &uqm_engine::World,
+    catalog: &[CStarDesc; uqm_engine::world::CATALOG_LEN],
+    last: Option<uqm_engine::StarId>,
     point: CPoint,
     xb: i16,
     yb: i16,
-) -> Option<crate::engine::StarId> {
-    let (base, hi) = if world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+) -> Option<uqm_engine::StarId> {
+    let (base, hi) = if world.story_state(uqm_engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
         (0, NUM_SOLAR_SYSTEMS - 1)
     } else {
         (NUM_SOLAR_SYSTEMS + 1, NUM_HYPER_VORTICES)
@@ -83,15 +83,15 @@ pub fn find_star_id(
             .unwrap_or_else(|| panic!("star search resumed outside its space"))
     });
     find_star_index(&catalog[base..], last, point, xb, yb, hi)
-        .map(|index| crate::engine::StarId(base + index))
+        .map(|index| uqm_engine::StarId(base + index))
 }
 
 pub(crate) mod naming {
     use super::*;
 
     pub(crate) fn name_near(
-        kernel: &crate::engine::Kernel,
-        catalog: &[CStarDesc; crate::engine::world::CATALOG_LEN],
+        kernel: &uqm_engine::Kernel,
+        catalog: &[CStarDesc; uqm_engine::world::CATALOG_LEN],
         point: CPoint,
     ) -> Option<(std::ffi::CString, CPoint)> {
         let index = find_star_index(catalog, None, point, 1, 1, NUM_SOLAR_SYSTEMS - 1)?;
@@ -107,7 +107,7 @@ pub(crate) mod naming {
     }
 
     pub(crate) fn cluster_name(
-        kernel: &crate::engine::Kernel,
+        kernel: &uqm_engine::Kernel,
         star: &CStarDesc,
         prefix_base: usize,
     ) -> std::ffi::CString {
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn universe_catalog_is_one_immutable_complete_table() {
-        let stars: &'static [CStarDesc; crate::engine::world::CATALOG_LEN] =
+        let stars: &'static [CStarDesc; uqm_engine::world::CATALOG_LEN] =
             &crate::planets::tables::STARMAP_ARRAY;
         assert_eq!(catalog_star_count(stars), NUM_SOLAR_SYSTEMS);
     }

@@ -1,17 +1,17 @@
 //! Live zoqfotpik callbacks translated from ships/zoqfot/zoqfot.c.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_AVOID,
         MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
     };
-    use crate::engine::battle::flags::{CHANGING, NONSOLID, PLAYER_SHIP};
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::VELOCITY_SHIFT;
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    use uqm_engine::battle::flags::{CHANGING, NONSOLID, PLAYER_SHIP};
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32) as _;
         d.info.ship_cost = 6;
@@ -56,8 +56,8 @@ pub mod engine {
         d.intelligence.weapon_range = (((10) << ONE_SHIFT as i32) * (10)) as u16;
         d.descriptor(&ZOQFOT)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static ZOQFOT: Race = Race {
@@ -218,7 +218,9 @@ pub mod engine {
                     .y
                     .wrapping_sub(concerns.subject.next.location.y);
                 if cx.ship_state(ss).facing
-                    == normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))))
+                    == normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(
+                        dx, dy,
+                    ))))
                 {
                     cx.ship_state_mut(ss).input |= SPECIAL as u8;
                 }

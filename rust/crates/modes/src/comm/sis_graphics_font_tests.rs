@@ -1,7 +1,7 @@
 //! Exercise the production conversation renderer with registered fonts and pixel storage.
 
 use super::Comm;
-use crate::graphics::{
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, font::LoadedFont, geometry::Extent,
     geometry::Point, geometry::Rect,
 };
@@ -10,7 +10,7 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
     if !uqm_engine::test_support::native_process::own_graphics_process(name) {
         return;
     }
-    let mut game = crate::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
         || {},
@@ -24,7 +24,8 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
                     height: 240,
                 },
             });
-            let original = crate::graphics::font::FontLease::retain(game.kernel.tiny_font.unwrap());
+            let original =
+                uqm_engine::graphics::font::FontLease::retain(game.kernel.tiny_font.unwrap());
             context.set_font(&original);
             let font = LoadedFont::load(c"fixture.tiny").unwrap();
             let mut comm = Comm::new();
@@ -32,7 +33,8 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
             comm.presentation.space_context = Some(context.context());
             comm.presentation.tiny_font = game.kernel.tiny_font;
             comm.admit_conversation_names(&game.world).unwrap();
-            let history = crate::graphics::font::FontLease::retain(game.kernel.tiny_font.unwrap());
+            let history =
+                uqm_engine::graphics::font::FontLease::retain(game.kernel.tiny_font.unwrap());
             let display = super::sis_graphics::ConversationDisplay {
                 space: context.clone(),
                 player_font: font.lease(),
@@ -46,7 +48,8 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
                 },
             };
             comm.display.resources.as_mut().unwrap().display = Some(display);
-            let activity = crate::graphics::drawable::LoadedDrawable::create(6, 8, 6, 10).unwrap();
+            let activity =
+                uqm_engine::graphics::drawable::LoadedDrawable::create(6, 8, 6, 10).unwrap();
             comm.presentation.activity_frame = activity.lease().frame(0).unwrap();
             comm.presentation.radar_context = Some(context.context());
             comm.presentation.off_screen_context = Some(context.context());

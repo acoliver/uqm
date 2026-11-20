@@ -1,40 +1,42 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
 #![forbid(unsafe_code)]
 
-use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::POINT_DEFENSE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SEEKING_SPECIAL;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::ElementId;
-use uqm_rust::math::seed_random;
-use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
+use uqm_content::ships::races::{intruder_preprocess, marine_collision};
+use uqm_engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::POINT_DEFENSE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SEEKING_SPECIAL;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::ElementId;
+use uqm_engine::math::seed_random;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
 #[path = "support/battle.rs"]
 mod battle;
 use battle::{Battle, Ship};
-use uqm_rust::engine::battle::flags::{
+use uqm_content::ships::native::{
+    angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+};
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM,
     NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, POST_PROCESS, PRE_PROCESS, SHIP_AT_MAX_SPEED,
     SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL, STAMPFILL_PRIMITIVE,
 };
-use uqm_rust::engine::battle::Concern;
-use uqm_rust::engine::battle::{CollisionFn, ElementFn};
-use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-use uqm_rust::engine::species::species_id::SPECIES_ID_ORZ_ID;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
-use uqm_rust::math::{arctan, random};
-use uqm_rust::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::{CollisionFn, ElementFn};
+use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+use uqm_engine::math::{arctan, random};
+use uqm_engine::species::species_id::SPECIES_ID_ORZ_ID;
 
 fn orz(battle: &Battle, player: i16) -> Ship<'_> {
     let mut ship = Ship::with_frames(battle, SPECIES_ID_ORZ_ID, player, [16, 16, 32], [4, 4]);
@@ -62,7 +64,7 @@ impl OrzFixture for Ship<'_> {
         let turret = battle::succ(self.id).unwrap();
         assert_eq!(
             battle::get(turret).parent,
-            uqm_rust::engine::battle::Parent::Ship(self.ship_id)
+            uqm_engine::battle::Parent::Ship(self.ship_id)
         );
         turret
     }
@@ -97,8 +99,8 @@ impl OrzFixture for Ship<'_> {
     fn missile(&mut self) -> ElementId {
         let out = self.weapon_handles(1)[0].unwrap();
         let e = out;
-        assert!(battle::get(e).parent == uqm_rust::engine::battle::Parent::None);
-        battle::get_mut(e).parent = uqm_rust::engine::battle::Parent::Ship(self.ship_id);
+        assert!(battle::get(e).parent == uqm_engine::battle::Parent::None);
+        battle::get_mut(e).parent = uqm_engine::battle::Parent::Ship(self.ship_id);
         battle::get_mut(e).next = battle::get(e).current.clone();
         out
     }
@@ -156,7 +158,7 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
 
 fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
     let mut v = VelocityDesc::new();
-    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+    uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
     velocity_fields(&v)
 }
 
@@ -520,7 +522,7 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
             );
             assert_eq!(
                 battle::get(flash).parent,
-                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                uqm_engine::battle::Parent::Ship(ship.ship_id)
             );
             let a = facing_to_angle(4);
             assert_eq!(
@@ -596,7 +598,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                 assert_eq!(battle::get(marine).current.image.frames, ship.frame_set(2));
                 assert_eq!(
                     battle::get(marine).parent,
-                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    uqm_engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert_eq!(battle::prim(marine).kind, STAMP_PRIMITIVE);
                 assert_eq!(velocity_fields(&battle::get(marine).velocity), [0; 9]);
@@ -940,9 +942,8 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
                 for seed in 1..17 {
                     battle::get_mut(marine).state_flags = (IGNORE_SIMILAR | NONSOLID) as u16;
                     battle::get_mut(marine).thrust = 0;
-                    battle::get_mut(marine).preprocess_func = Some(
-                        uqm_rust::engine::battle::ElementHook::Native(intruder_preprocess),
-                    );
+                    battle::get_mut(marine).preprocess_func =
+                        Some(uqm_engine::battle::ElementHook::Native(intruder_preprocess));
                     battle::prim_mut(marine).kind = EMPTY_PRIMITIVE;
                     seed_random(seed);
                     let facing = normalize_facing(i32::from(random() as u8));
@@ -1083,7 +1084,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
             assert_eq!(battle::get(ion).player_nr, NEUTRAL_PLAYER_NUM as i16);
             assert_eq!(
                 battle::get(ion).parent,
-                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                uqm_engine::battle::Parent::Ship(ship.ship_id)
             );
             assert_eq!(
                 battle::get(ion).state_flags,
@@ -1215,7 +1216,7 @@ fn marine_prediction_uses_wrapped_distance_but_unwrapped_future_position_with_si
             }
             ship.at(4000, 4000);
             battle::get_mut(marine).current.location = Point { x: 4000, y: 4500 };
-            uqm_rust::battle::velocity::set_velocity_vector(
+            uqm_modes::battle::velocity::set_velocity_vector(
                 &mut battle::get_mut(ship.id).velocity,
                 64,
                 4,
@@ -1250,7 +1251,7 @@ fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_o
             for seed in 1..17 {
                 battle::get_mut(marine).turn = (face << 4) as u8;
                 battle::get_mut(marine).thrust = 0;
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(marine).velocity,
                     8,
                     face,
@@ -1629,7 +1630,7 @@ fn marine_without_target_clears_stale_gravity_and_decelerates_only_when_overspee
                 battle::get_mut(marine).thrust = ((SHIP_IN_GRAVITY_WELL
                     | if overspeed { SHIP_BEYOND_MAX_SPEED } else { 0 })
                     >> 6) as u8;
-                uqm_rust::battle::velocity::set_velocity_vector(
+                uqm_modes::battle::velocity::set_velocity_vector(
                     &mut battle::get_mut(marine).velocity,
                     40,
                     8,

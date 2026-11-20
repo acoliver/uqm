@@ -4,11 +4,11 @@ use super::{
     widgets::{MenuState, Widget},
     NameEntry,
 };
-use crate::graphics::{
+use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::LoadedDrawable, font::FontLease, geometry::Color,
     geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
-use std::ffi::{CStr, CString};
 
 pub struct SetupResources {
     pub(super) context: ContextLease,

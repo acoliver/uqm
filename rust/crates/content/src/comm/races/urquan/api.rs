@@ -1,6 +1,6 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 pub trait UrquanApi: EncounterApi<Handler> {
     fn group_battle(&self, state_key: StoryKey) -> bool;

@@ -1,14 +1,4 @@
 //! Starbase encounters, menus and retained flagship drawing.
-use crate::engine::input::{frames::*, InputSession};
-use crate::engine::world::activity::activity_flags;
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::{
-    battle::Cx,
-    observe::{CheckpointView, Io},
-    StoryKey, World,
-};
-use crate::graphics::{drawable::LoadedDrawable, geometry::Color, menu as draw};
-use crate::sound::resource_types::LoadedMusic;
 use crate::starbase::draw::draw_base_state_strings;
 use crate::starbase::draw::rotate_starbase;
 use crate::starbase::draw::StarbaseAnimation;
@@ -17,7 +7,17 @@ use crate::starbase::platform::StatusMessageMode;
 use crate::starbase::starbase_menu::StarbaseState;
 use crate::ui::settings::stop_music;
 use crate::ui::sis;
+use uqm_engine::graphics::{drawable::LoadedDrawable, geometry::Color, menu as draw};
+use uqm_engine::input::{frames::*, InputSession};
+use uqm_engine::sound::resource_types::LoadedMusic;
 use uqm_engine::time::counter_abi::ONE_SECOND;
+use uqm_engine::world::activity::activity_flags;
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::{
+    battle::Cx,
+    observe::{CheckpointView, Io},
+    StoryKey, World,
+};
 const CROSSFADE_SCREEN: u32 = 2;
 const FADE_IN_SCREEN: u32 = 3;
 const SOUND_ARROWS: u16 = 0x0f;
@@ -60,7 +60,7 @@ fn activate_starbase_selection(
             (services.communicate)(
                 cx,
                 io,
-                crate::engine::species::conv::COMMANDER,
+                uqm_engine::species::conv::COMMANDER,
                 Default::default(),
             );
             io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
@@ -180,7 +180,7 @@ fn talk_to_commander(
     (services.communicate)(
         cx,
         io,
-        crate::engine::species::conv::COMMANDER,
+        uqm_engine::species::conv::COMMANDER,
         crate::comm::CommOptions {
             intro,
             ..Default::default()
@@ -200,7 +200,7 @@ fn prepare_starbase_visit(
     }
     if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
-            crate::engine::species::conv::COMMANDER,
+            uqm_engine::species::conv::COMMANDER,
         ));
         talk_to_commander(cx, io, services, (CROSSFADE_SCREEN, 0));
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
@@ -211,7 +211,7 @@ fn prepare_starbase_visit(
         }
         let ship = crate::comm::dispatch::clone_npc_fragment(
             cx.world,
-            crate::engine::species::ship::ILWRATH_SHIP,
+            uqm_engine::species::ship::ILWRATH_SHIP,
             7,
         )
         .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
@@ -219,7 +219,7 @@ fn prepare_starbase_visit(
         (services.communicate)(
             cx,
             io,
-            crate::engine::species::conv::ILWRATH,
+            uqm_engine::species::conv::ILWRATH,
             Default::default(),
         );
         if cx.world.data.flagship.crew_enlisted == u16::MAX
@@ -245,7 +245,7 @@ fn prepare_starbase_visit(
             return None;
         }
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
-            crate::engine::species::conv::COMMANDER,
+            uqm_engine::species::conv::COMMANDER,
         ));
         talk_to_commander(cx, io, services, (FADE_IN_SCREEN, ONE_SECOND * 2));
         if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {

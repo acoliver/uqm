@@ -3,17 +3,17 @@
 
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
-use uqm_rust::comm::locdata::{CPoint, CRect};
-use uqm_rust::engine::graphics::surface::CapturedSurface;
-use uqm_rust::engine::test_support::native_probe;
-use uqm_rust::graphics::context::{ContextLease, LoadedContext};
-use uqm_rust::graphics::drawable::{ContextFrame, FrameId};
-use uqm_rust::graphics::geometry::{Color, DrawMode, Extent, Point, Rect};
-use uqm_rust::graphics::menu;
-use uqm_rust::planets::render::c_api::render_native_topography;
-use uqm_rust::planets::render::topography::*;
-use uqm_rust::planets::sphere::palette::SurfacePalette;
-use uqm_rust::planets::tables::PLANET_ARRAY;
+use uqm_engine::graphics::context::{ContextLease, LoadedContext};
+use uqm_engine::graphics::drawable::{ContextFrame, FrameId};
+use uqm_engine::graphics::geometry::{Color, DrawMode, Extent, Point, Rect};
+use uqm_engine::graphics::menu;
+use uqm_engine::graphics::surface::CapturedSurface;
+use uqm_engine::test_support::native_probe;
+use uqm_modes::comm::locdata::{CPoint, CRect};
+use uqm_modes::planets::render::c_api::render_native_topography;
+use uqm_modes::planets::render::topography::*;
+use uqm_modes::planets::sphere::palette::SurfacePalette;
+use uqm_modes::planets::tables::PLANET_ARRAY;
 
 thread_local! { static TRACE: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) }; }
 fn record(bytes: &[u8]) {
@@ -68,7 +68,7 @@ fn batch(points: &[TopographyPoint; 64], first: usize) {
     record(&u16::MAX.to_le_bytes());
     let selected = menu::selected();
     let context = ContextLease::require(selected);
-    context.draw_preserving_scale(&mut uqm_rust::planets::render::c_api::topography_batch(
+    context.draw_preserving_scale(&mut uqm_modes::planets::render::c_api::topography_batch(
         points, first,
     ));
 }
@@ -113,7 +113,7 @@ impl TopographyGfx for Observed {
 
 struct Ram {
     context: Option<LoadedContext>,
-    old_context: Option<uqm_rust::graphics::context::ContextId>,
+    old_context: Option<uqm_engine::graphics::context::ContextId>,
     previous: FrameId,
     target: Option<CapturedSurface>,
     old_frame: Option<CapturedSurface>,
@@ -222,7 +222,7 @@ impl Drop for Ram {
         menu::set_frame(FrameId::NULL);
         drop(self.target.take());
         drop(self.old_frame.take());
-        uqm_rust::graphics::state::flush_ex(true);
+        uqm_engine::graphics::state::flush_ex(true);
         menu::select(self.old_context);
         drop(self.context.take());
     }
@@ -326,7 +326,7 @@ fn cases() -> Vec<Case> {
     cases
 }
 
-pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomContext) {
+pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_engine::math::RandomContext) {
     host_errors_preserve_real_context_and_pixels();
     let fixture = include_bytes!("../fixtures/planets/render-topography.bin");
     let mut offset = 0;
@@ -337,8 +337,8 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
     let cases = cases();
     assert_eq!(cases.len(), 108);
     let system_seed = system_rng.seed();
-    uqm_rust::math::seed_random(90210);
-    let mut independent = uqm_rust::math::RandomContext::with_seed(90210);
+    uqm_engine::math::seed_random(90210);
+    let mut independent = uqm_engine::math::RandomContext::with_seed(90210);
     for (index, case) in cases.iter().enumerate() {
         {
             let ram = if case.cropped {
@@ -371,7 +371,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
                 colors[0] = 16;
                 colors[1] = 47;
             }
-            let desc = uqm_rust::engine::world::planet::PlanetDesc {
+            let desc = uqm_engine::world::planet::PlanetDesc {
                 data_index: case.planet as u8 | if case.shielded { 0x80 } else { 0 },
                 ..Default::default()
             };
@@ -388,7 +388,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
             let before = depth.clone();
             let color_before = colors.clone();
             let xlat_before = translation.clone();
-            let mode = uqm_rust::graphics::geometry::DrawMode {
+            let mode = uqm_engine::graphics::geometry::DrawMode {
                 kind: case.mode,
                 factor: case.factor,
             };
@@ -453,7 +453,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
             assert_eq!(colors, color_before);
             assert_eq!(translation, xlat_before);
             assert_eq!(system_rng.seed(), system_seed);
-            assert_eq!(uqm_rust::math::random(), independent.next_random());
+            assert_eq!(uqm_engine::math::random(), independent.next_random());
         }
     }
     assert_eq!(offset, fixture.len());
@@ -468,7 +468,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
 fn host_errors_preserve_real_context_and_pixels() {
     {
         let ram = Ram::new(9, 7);
-        let mode = uqm_rust::graphics::geometry::DrawMode {
+        let mode = uqm_engine::graphics::geometry::DrawMode {
             kind: 2,
             factor: 101,
         };

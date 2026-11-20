@@ -1,13 +1,13 @@
 //! Headless calls through Sol's actual exported table and drawable ABI.
 
 use super::Harness;
-use uqm_rust::battle::gendef::SOL_DEFINED;
-use uqm_rust::engine::graphics::surface::CapturedSurface;
-use uqm_rust::engine::test_support::native_probe;
-use uqm_rust::planets::c_api;
-use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
-use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
-use uqm_rust::planets::generate::{generator, SystemGenerator};
+use uqm_engine::graphics::surface::CapturedSurface;
+use uqm_engine::test_support::native_probe;
+use uqm_modes::battle::gendef::SOL_DEFINED;
+use uqm_modes::planets::c_api;
+use uqm_modes::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
+use uqm_modes::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
+use uqm_modes::planets::generate::{generator, SystemGenerator};
 
 pub fn check() {
     let table = generator(SOL_DEFINED);
@@ -18,21 +18,21 @@ pub fn check() {
     assert!(!crate::invoke_generation(&mut h.state, |view, host| table
         .pickup_energy(
             view,
-            uqm_rust::planets::generate::special::Body::Planet(0),
+            uqm_modes::planets::generate::special::Body::Planet(0),
             u16::MAX,
             host
         )));
     assert!(crate::invoke_generation(&mut h.state, |view, host| table
         .pickup_minerals(
             view,
-            uqm_rust::planets::generate::special::Body::Planet(0),
+            uqm_modes::planets::generate::special::Body::Planet(0),
             u16::MAX,
             host
         )));
     assert!(crate::invoke_generation(&mut h.state, |view, host| table
         .pickup_life(
             view,
-            uqm_rust::planets::generate::special::Body::Planet(0),
+            uqm_modes::planets::generate::special::Body::Planet(0),
             u16::MAX,
             host
         )));
@@ -47,15 +47,15 @@ pub fn check() {
 fn check_initialized_identity(h: &mut Harness) {
     h.star_index = SOL_DEFINED;
     h.set_star(0, 0);
-    h.star[0].index = uqm_rust::battle::gendef::SHOFIXTI_DEFINED;
+    h.star[0].index = uqm_modes::battle::gendef::SHOFIXTI_DEFINED;
     crate::battle_context::with(|cx| cx.world.set_catalog(std::borrow::Cow::Owned(*h.star)));
     let generated = crate::battle_context::with(|cx| {
-        let mut observer = uqm_rust::engine::observe::Unobserved;
-        let mut io = uqm_rust::engine::observe::Io {
+        let mut observer = uqm_engine::observe::Unobserved;
+        let mut io = uqm_engine::observe::Io {
             observer: &mut observer,
         };
-        uqm_rust::front_end::uqmdebug::Generation::invoke(
-            &mut uqm_rust::planets::solarsys::site::dispatch::DebugGeneration,
+        uqm_modes::front_end::uqmdebug::Generation::invoke(
+            &mut uqm_modes::planets::solarsys::site::dispatch::DebugGeneration,
             cx,
             &mut io,
             &mut h.state,
@@ -77,20 +77,19 @@ fn check_initialized_identity(h: &mut Harness) {
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
     let old_bomb = crate::battle_context::with(|cx| {
-        cx.world
-            .story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE)
+        cx.world.story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE)
     });
     let old_probe = crate::battle_context::with(|cx| {
         cx.world
-            .story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED)
+            .story_state(uqm_engine::StoryKey::PROBE_MESSAGE_DELIVERED)
     });
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3)
+            .set_story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE, 3)
     });
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
+            .set_story_state(uqm_engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
     let saved = crate::battle_context::with(|cx| {
         let saved = (
@@ -112,18 +111,16 @@ fn check_bomb_queue(h: &mut Harness) {
     });
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
+            .set_story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
     });
     crate::battle_context::with(|cx| {
-        cx.world.set_story_state(
-            uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
-            old_probe,
-        )
+        cx.world
+            .set_story_state(uqm_engine::StoryKey::PROBE_MESSAGE_DELIVERED, old_probe)
     });
 }
 
 fn allocations() -> (usize, usize) {
-    uqm_rust::graphics::state::flush_ex(true);
+    uqm_engine::graphics::state::flush_ex(true);
     native_probe::allocations()
 }
 
@@ -180,14 +177,14 @@ fn check_drawable_ownership(h: &mut Harness) {
     let quiet = crate::battle_context::with(|cx| cx.kernel.diagnostics.suppress_interaction());
     {
         crate::battle_context::with(|cx| {
-            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let mut observer = uqm_engine::observe::Unobserved;
             let game = std::cell::RefCell::new(cx.reborrow());
-            let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
+            let io = std::cell::RefCell::new(uqm_engine::observe::Io {
                 observer: &mut observer,
             });
             let definition = CapturedSurface::pixmap(map_width / 2, map_height / 2, 2);
-            let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
-            let mut site = uqm_rust::planets::solarsys::site::Site::new(
+            let mut pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
+            let mut site = uqm_modes::planets::solarsys::site::Site::new(
                 &game,
                 &io,
                 h.state.star(),
@@ -200,7 +197,7 @@ fn check_drawable_ownership(h: &mut Harness) {
                 assert!(c_api::load_planet(
                     &game,
                     system,
-                    uqm_rust::engine::world::generation::Body::Planet(0),
+                    uqm_engine::world::generation::Body::Planet(0),
                     false,
                     definition.into_drawable(),
                     (Default::default(), None),

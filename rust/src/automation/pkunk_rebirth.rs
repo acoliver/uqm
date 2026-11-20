@@ -1,7 +1,7 @@
 //! Ordered observations of one live Pkunk, without invoking its lifecycle hooks.
 
-use crate::engine::observe::battle::{BattlePhase, BattleShip, BattleTick};
 use serde::{Deserialize, Serialize};
+use uqm_engine::observe::battle::{BattlePhase, BattleShip, BattleTick};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -87,7 +87,7 @@ impl Tracker {
 
     fn observe_ship(&mut self, side: u8, tick: u64, counters: [u8; 2], ship: Option<BattleShip>) {
         let Some(ship) = ship
-            .filter(|ship| ship.species == crate::engine::species::species_id::SPECIES_ID_PKUNK_ID)
+            .filter(|ship| ship.species == uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID)
         else {
             self.living = None;
             self.death = None;
@@ -210,8 +210,8 @@ fn pkunk_sample<'a>(
     label: &str,
     key: &str,
     crew: Option<u16>,
-) -> Option<(usize, &'a crate::engine::observe::battle::BattleTick)> {
-    use crate::engine::observe::battle::BattlePhase;
+) -> Option<(usize, &'a uqm_engine::observe::battle::BattleTick)> {
+    use uqm_engine::observe::battle::BattlePhase;
     let [side, slot, generation, _, _] = pkunk_identity(label)?;
     let frame = number(label, key)?;
     records.iter().enumerate().find_map(|(index, record)| {
@@ -224,7 +224,7 @@ fn pkunk_sample<'a>(
         (evidence.frame == frame
             && tick.phase == BattlePhase::Advanced
             && tick.activity & (1 << 9) != 0
-            && ship.species == crate::engine::species::species_id::SPECIES_ID_PKUNK_ID
+            && ship.species == uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID
             && ship.identity.map(u64::from) == [slot, generation]
             && crew.map_or(ship.crew > 0, |crew| ship.crew == crew))
         .then_some((index, tick))
@@ -288,7 +288,7 @@ mod tests {
         let mut ships = [None; 2];
         ships[side] = Some(BattleShip {
             identity: [3, 7],
-            species: crate::engine::species::species_id::SPECIES_ID_PKUNK_ID,
+            species: uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID,
             position: [0; 2],
             velocity: [0; 2],
             facing: 0,

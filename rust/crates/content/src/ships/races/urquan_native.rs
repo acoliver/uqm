@@ -1,25 +1,25 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
-        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE,
-        MAX_ENERGY_SIZE, MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
-        POINT_DEFENSE, RIGHT, SEEKING_SPECIAL, SLOW_SHIP, SPECIAL,
-    };
-    use crate::engine::battle::flags::{
-        APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID,
-        PLAYER_SHIP, PRE_PROCESS, SHIP_BEYOND_MAX_SPEED,
-    };
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::VELOCITY_SHIFT;
     use crate::ships::native::{
         angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
         wrap_delta,
     };
+    use uqm_engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE,
+        MAX_ENERGY_SIZE, MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
+        POINT_DEFENSE, RIGHT, SEEKING_SPECIAL, SLOW_SHIP, SPECIAL,
+    };
+    use uqm_engine::battle::flags::{
+        APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID,
+        PLAYER_SHIP, PRE_PROCESS, SHIP_BEYOND_MAX_SPEED,
+    };
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
     const fn color(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -28,7 +28,7 @@ pub mod engine {
             a: 255,
         }
     }
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32 | SEEKING_SPECIAL as i32) as _;
         d.info.ship_cost = 30;
@@ -73,8 +73,8 @@ pub mod engine {
         d.intelligence.weapon_range = (((20) << ONE_SHIFT as i32) * (20)) as u16;
         d.descriptor(&URQUAN)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static URQUAN: Race = Race {
@@ -109,7 +109,7 @@ pub mod engine {
     pub fn fighter_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let face = u16::from(cx.element(e).thrust);
-        let laser = crate::engine::battle::views::Laser {
+        let laser = uqm_engine::battle::views::Laser {
             origin: cx.element(e).next.location,
             end: Point {
                 x: cosine(facing_to_angle(i32::from(face)), 44 << ONE_SHIFT),
@@ -159,7 +159,8 @@ pub mod engine {
                     destination.y.wrapping_sub(position.y),
                     height << (ONE_SHIFT + 3),
                 );
-                face = normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                face =
+                    normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))));
                 cx.element_mut(e).flags &= !(IGNORE_SIMILAR as u16);
                 enroute = false;
             }
@@ -185,9 +186,9 @@ pub mod engine {
                     && i32::from(dy).abs() < RANGE
                     && i32::from(dx) * i32::from(dx) + i32::from(dy) * i32::from(dy) < RANGE * RANGE
                 {
-                    cx.element_mut(e).thrust =
-                        normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))))
-                            as u8;
+                    cx.element_mut(e).thrust = normalize_facing(angle_to_facing(i32::from(
+                        uqm_engine::math::arctan(dx, dy),
+                    ))) as u8;
                     cx.element_mut(e).post = Some(ElementHook::Native(fighter_postprocess));
                 }
                 if enroute {
@@ -199,8 +200,9 @@ pub mod engine {
                     };
                     dx = dx.wrapping_add(cosine(facing_to_angle(offset_face), 30 << ONE_SHIFT));
                     dy = dy.wrapping_add(sine(facing_to_angle(offset_face), 30 << ONE_SHIFT));
-                    face =
-                        normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                    face = normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(
+                        dx, dy,
+                    ))));
                 }
             }
             cx.element_mut(e).flags |= CHANGING as u16;
@@ -232,7 +234,7 @@ pub mod engine {
                 cx.copy_visual_to_next(fighter, current);
                 let mut travel = cx.element(fighter).velocity.travel_angle;
                 let delta = normalize_angle(
-                    i32::from(crate::math::arctan(
+                    i32::from(uqm_engine::math::arctan(
                         (pb).x.wrapping_sub((pa).x),
                         (pb).y.wrapping_sub((pa).y),
                     )) - i32::from(travel),

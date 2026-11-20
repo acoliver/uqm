@@ -1,8 +1,8 @@
 //! Per-body scan masks for the selected solar-system location.
 
-use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
-use crate::engine::World;
 use crate::planets::solar_system::SolarSystem;
+use uqm_engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
+use uqm_engine::World;
 
 pub fn get_planet_info(world: &mut World, solar: &mut SolarSystem) {
     let location = solar.selected_location();
@@ -45,7 +45,7 @@ pub fn put_planet_info(world: &mut World, solar: &SolarSystem) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
+    use uqm_engine::{
         world::{generation::Body, StarId},
         World,
     };

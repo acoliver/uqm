@@ -9,12 +9,12 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     }
     crate::mainloop::input_frame::rust_begin_input_loop();
     loop {
-        crate::engine::host::process_async();
-        crate::graphics::events::process_events();
+        uqm_engine::host::process_async();
+        uqm_engine::graphics::events::process_events();
         process_utility_keys(controls);
-        super::yield_input_loop(crate::threading::yield_task);
+        super::yield_input_loop(uqm_engine::threading::yield_task);
         if step
-            .input(crate::engine::observe::InputView::BeforeUpdate)
+            .input(uqm_engine::observe::InputView::BeforeUpdate)
             .stop
         {
             break;
@@ -22,7 +22,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         update_input_state(step.cx, controls);
         let activity = step.cx.world.activity();
         if step
-            .input(crate::engine::observe::InputView::AfterUpdate(activity))
+            .input(uqm_engine::observe::InputView::AfterUpdate(activity))
             .stop
         {
             break;
@@ -40,32 +40,29 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
 }
 
 /// The abort and fullscreen utility keys, applied after immediate input is sampled.
-fn process_utility_keys(input: &crate::engine::input::InputSession) {
-    use crate::engine::input::frames::{KEY_ABORT, KEY_FULLSCREEN};
+fn process_utility_keys(input: &uqm_engine::input::InputSession) {
+    use uqm_engine::input::frames::{KEY_ABORT, KEY_FULLSCREEN};
     let state = input.immediate();
     if state.menu[KEY_ABORT as usize] != 0 {
-        crate::log_abi::log_show_box(false, false);
+        uqm_engine::log_abi::log_show_box(false, false);
         std::process::exit(0);
     }
     if state.menu[KEY_FULLSCREEN as usize] != 0 {
         flush_input(input);
-        crate::graphics::present::toggle_fullscreen();
+        uqm_engine::graphics::present::toggle_fullscreen();
     }
 }
 
 struct InputLoop<'a, 'b, 'c, 'd> {
-    cx: &'a mut crate::engine::battle::Cx<'b>,
-    io: &'a mut crate::engine::observe::Io<'c>,
-    frame: &'a mut (dyn crate::engine::input::Frame + 'd),
-    input: &'a crate::engine::input::InputSession,
+    cx: &'a mut uqm_engine::battle::Cx<'b>,
+    io: &'a mut uqm_engine::observe::Io<'c>,
+    frame: &'a mut (dyn uqm_engine::input::Frame + 'd),
+    input: &'a uqm_engine::input::InputSession,
     automation: Option<&'a crate::automation::AutomationObserver>,
 }
 
 impl InputLoop<'_, '_, '_, '_> {
-    fn input(
-        &mut self,
-        view: crate::engine::observe::InputView,
-    ) -> crate::engine::observe::Injected {
+    fn input(&mut self, view: uqm_engine::observe::InputView) -> uqm_engine::observe::Injected {
         let injected = self.frame.admit(self.cx, self.io, view);
         if let Some(observer) = self.automation {
             observer.complete_save_capture(self.cx);
@@ -79,11 +76,11 @@ impl InputLoop<'_, '_, '_, '_> {
         if flags & (first | second) != 0 {
             if let Some(bank) = self.cx.kernel.menu_sound_bank() {
                 let index = u16::from(flags & second != 0);
-                crate::ui::settings::play_loaded_sound(
+                uqm_modes::ui::settings::play_loaded_sound(
                     self.cx.world,
                     &bank.clip(index),
                     0,
-                    crate::sound::types::SoundPosition::non_positional(),
+                    uqm_engine::sound::types::SoundPosition::non_positional(),
                     0,
                     0,
                 );
@@ -112,65 +109,65 @@ impl InputLoop<'_, '_, '_, '_> {
 
 pub struct NativeInputRuntime {
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
-    input: crate::engine::input::InputSession,
+    input: uqm_engine::input::InputSession,
 }
 
 impl NativeInputRuntime {
     pub fn new(
         observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
-        controls: crate::engine::input::InputControls,
+        controls: uqm_engine::input::InputControls,
         configuration: uqm_engine::configuration::Configuration,
     ) -> Self {
         Self {
             observer,
-            input: crate::engine::input::InputSession::new(controls, configuration),
+            input: uqm_engine::input::InputSession::new(controls, configuration),
         }
     }
 }
 
-impl crate::engine::input::InputRuntime for NativeInputRuntime {
-    fn input(&self) -> &crate::engine::input::InputSession {
+impl uqm_engine::input::InputRuntime for NativeInputRuntime {
+    fn input(&self) -> &uqm_engine::input::InputSession {
         &self.input
     }
 
-    fn observer(&self) -> Box<dyn crate::engine::observe::Observer> {
+    fn observer(&self) -> Box<dyn uqm_engine::observe::Observer> {
         match &self.observer {
             Some(observer) => Box::new(crate::automation::observer::Handle(observer.clone())),
-            None => Box::new(crate::engine::observe::Unobserved),
+            None => Box::new(uqm_engine::observe::Unobserved),
         }
     }
 
-    fn yield_poll(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
-        crate::engine::host::process_async();
-        crate::threading::yield_task();
+    fn yield_poll(&self, _cx: &mut uqm_engine::battle::Cx<'_>) {
+        uqm_engine::host::process_async();
+        uqm_engine::threading::yield_task();
     }
 
-    fn sleep(&self, _cx: &mut crate::engine::battle::Cx<'_>, ticks: u32) {
-        crate::threading::pacing::linked::sleep_thread(ticks);
+    fn sleep(&self, _cx: &mut uqm_engine::battle::Cx<'_>, ticks: u32) {
+        uqm_engine::threading::pacing::linked::sleep_thread(ticks);
     }
 
-    fn sleep_until(&self, _cx: &mut crate::engine::battle::Cx<'_>, deadline: u32) {
-        crate::threading::pacing::linked::sleep_thread_until(deadline);
+    fn sleep_until(&self, _cx: &mut uqm_engine::battle::Cx<'_>, deadline: u32) {
+        uqm_engine::threading::pacing::linked::sleep_thread_until(deadline);
     }
 
     fn flush(&self) {
         flush_input(&self.input);
     }
 
-    fn confirm_exit(&self, cx: &mut crate::engine::battle::Cx<'_>) -> bool {
+    fn confirm_exit(&self, cx: &mut uqm_engine::battle::Cx<'_>) -> bool {
         confirm_exit(cx, &self.input) != 0
     }
 
-    fn update(&self, cx: &mut crate::engine::battle::Cx<'_>) {
+    fn update(&self, cx: &mut uqm_engine::battle::Cx<'_>) {
         update_input_state(cx, &self.input);
     }
 
     fn run(
         &self,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
         reset: bool,
-        frame: &mut dyn crate::engine::input::Frame,
+        frame: &mut dyn uqm_engine::input::Frame,
     ) {
         run_loop(
             reset,
@@ -184,7 +181,7 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
         );
     }
 
-    fn battle_input(&self, input: &crate::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, input: &uqm_engine::battle::input::InputContext) -> u8 {
         self.input.current_battle_input(input.player())
     }
 }

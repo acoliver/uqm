@@ -3,7 +3,7 @@ use super::*;
 impl AutomationObserver {
     pub(super) fn service_device(
         &self,
-        world: &crate::engine::observe::CampaignView,
+        world: &uqm_engine::observe::CampaignView,
         inner: &mut CoordInner,
         step: crate::automation::story_actions::UseDeviceStep,
         event: SchedulerEvent,
@@ -60,7 +60,7 @@ mod tests {
         )
         .unwrap();
         let output = tempfile::tempdir().unwrap();
-        let game = crate::engine::Game::new();
+        let game = uqm_engine::Game::new();
         let observer = AutomationObserver::init_with_native_checkpoints(
             script,
             output.path().into(),
@@ -69,7 +69,7 @@ mod tests {
             Default::default(),
             Default::default(),
         );
-        let world = crate::engine::observe::CampaignView::from_world(&game.world);
+        let world = uqm_engine::observe::CampaignView::from_world(&game.world);
         let mut observation = DeviceObservation {
             list: Some(vec![Device::PortalSpawner.id()]),
             activation: Some((1, Device::PortalSpawner.id(), "old".into(), true)),

@@ -1,8 +1,6 @@
 use super::{netconnection::NetConnection, packet::Packet, NetplaySession};
-use crate::engine::battle::net::NetState;
-use crate::engine::battle::net::{
-    ProtocolDriver, ProtocolNotice, ProtocolNoticeKind, ProtocolPoll,
-};
+use uqm_engine::battle::net::NetState;
+use uqm_engine::battle::net::{ProtocolDriver, ProtocolNotice, ProtocolNoticeKind, ProtocolPoll};
 use uqm_engine::{
     host::{Connection, Net},
     network::loopback::LoopbackNet,

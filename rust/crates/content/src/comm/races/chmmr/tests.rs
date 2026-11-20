@@ -2,7 +2,7 @@ use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -97,7 +97,7 @@ fn proceed_refits_and_transports_to_starbase_without_marking_bomb_processed() {
     assert_eq!(f.get(StoryKey::CHMMR_HOME_VISITS), 0);
     assert_eq!(f.get(StoryKey::CHMMR_STACK), 0);
     assert!(f.effects.contains(&Effect::Allied(
-        crate::engine::species::ship::CHMMR_SHIP as u16,
+        uqm_engine::species::ship::CHMMR_SHIP as u16,
         true
     )));
 }

@@ -4,7 +4,7 @@ pub(super) const MAX_SAVED_GAMES: usize = 50;
 pub(super) const SAVES_PER_PAGE: u16 = 5;
 
 pub(super) struct PickerState {
-    pub summary: [crate::engine::save::summary_record::SummaryDesc; MAX_SAVED_GAMES],
+    pub summary: [uqm_engine::save::summary_record::SummaryDesc; MAX_SAVED_GAMES],
     pub saving: bool,
     pub success: bool,
     pub slot: u8,
@@ -12,7 +12,7 @@ pub(super) struct PickerState {
 
 impl PickerState {
     pub fn new(
-        summary: [crate::engine::save::summary_record::SummaryDesc; MAX_SAVED_GAMES],
+        summary: [uqm_engine::save::summary_record::SummaryDesc; MAX_SAVED_GAMES],
         saving: bool,
         slot: u8,
     ) -> Self {

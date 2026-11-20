@@ -21,13 +21,13 @@ fn graphics_config(parsed: &super::options::ParsedOptions) -> (i32, i32) {
 
 use crate::automation::input_ffi::graphics_options;
 use crate::mainloop::{dir_prep, options, options_abi as globals};
-use crate::sound::volume_globals::update_sound_options;
 use std::ffi::CString;
+use uqm_engine::sound::volume_globals::update_sound_options;
 
 /// Bring every subsystem up on the SDL owner thread, once, after command-line
 /// parsing. Returns the process exit status: zero when the game may start.
 pub fn initialize(
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
     args: &[String],
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
@@ -35,8 +35,8 @@ pub fn initialize(
     if !start_services(parsed, args) {
         return 1;
     }
-    let vfs = crate::io::Vfs::new();
-    crate::io::install(vfs.clone());
+    let vfs = uqm_engine::io::Vfs::new();
+    uqm_engine::io::install(vfs.clone());
     apply_options(input, parsed);
     if !prepare_directories(&vfs, input, parsed) {
         return 1;
@@ -49,10 +49,10 @@ pub fn initialize(
 
 /// Logging, SDL, memory and the game thread.
 fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
-    crate::log_abi::log_init(15);
-    crate::bridge_log::rust_bridge_init();
+    uqm_engine::log_abi::log_init(15);
+    uqm_engine::bridge_log::rust_bridge_init();
     if let Some(path) = &parsed.log_file {
-        if let Err(error) = crate::platform::os::stderr::redirect_stderr(path.as_ref()) {
+        if let Err(error) = uqm_platform::os::stderr::redirect_stderr(path.as_ref()) {
             eprintln!("Could not open logfile: {error}");
             return false;
         }
@@ -62,7 +62,7 @@ fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
     }
     log::info!("The Ur-Quan Masters v{}\nThis software comes with ABSOLUTELY NO WARRANTY; for details see the included 'COPYING' file.", env!("CARGO_PKG_VERSION"));
     tracing::info!("Initializing base SDL functionality.");
-    match crate::platform::os::sdl::init_video() {
+    match uqm_platform::os::sdl::init_video() {
         Ok(version) => tracing::info!(
             "Using SDL version {}.{}.{} (compiled with {}.{}.{})",
             version.major,
@@ -77,14 +77,14 @@ fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
             return false;
         }
     }
-    crate::threading::init_game_thread();
+    uqm_engine::threading::init_game_thread();
     true
 }
 
 /// The config, content, melee and save directories and the addon shadows.
 fn prepare_directories(
-    vfs: &crate::io::Vfs,
-    input: &crate::engine::input::InputSession,
+    vfs: &uqm_engine::io::Vfs,
+    input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
 ) -> bool {
     if let Err(error) = dir_prep::prepare_config_dir(vfs, parsed.config_dir.as_deref()) {
@@ -126,10 +126,10 @@ fn prepare_directories(
 
 /// Copy the parsed options into the sound options, the player controls and the
 /// preferences the game reads.
-fn apply_options(input: &crate::engine::input::InputSession, parsed: &options::ParsedOptions) {
+fn apply_options(input: &uqm_engine::input::InputSession, parsed: &options::ParsedOptions) {
     input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
     input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
-    crate::input::sdl_input::forget_template_names();
+    uqm_engine::input_port::sdl_input::forget_template_names();
     update_sound_options(|options| {
         options.driver = parsed.sound_driver;
         options.flags = parsed.sound_quality;
@@ -159,12 +159,12 @@ fn apply_options(input: &crate::engine::input::InputSession, parsed: &options::P
 
 /// Graphics, colour maps and input.
 fn start_media(
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
 ) -> bool {
     let (driver, flags) = graphics_config(parsed);
-    crate::graphics::present::init_graphics(
+    uqm_engine::graphics::present::init_graphics(
         driver,
         flags,
         graphics_options(observer),
@@ -179,7 +179,7 @@ fn start_media(
     input
         .configuration
         .update_preferences(|preferences| preferences.gamma = gamma);
-    if let Err(error) = crate::input::sdl_input::init_input(input.controls()) {
+    if let Err(error) = uqm_engine::input_port::sdl_input::init_input(input.controls()) {
         log::error!("{error}");
         return false;
     }

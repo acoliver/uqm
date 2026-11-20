@@ -1,7 +1,7 @@
 //! Owned protocol state for one remote player.
 use super::{checkbuf::ChecksumBuffer, packet::Packet, packetq::PacketQueue};
-use crate::engine::battle::net::NetState;
 use crate::supermelee::netplay::{CHECKSUM_INTERVAL, READ_BUFFER_SIZE};
+use uqm_engine::battle::net::NetState;
 
 #[derive(Debug, Clone)]
 pub struct PeerOptions {

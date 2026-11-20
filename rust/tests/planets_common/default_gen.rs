@@ -2,7 +2,7 @@
 //! (`GenerateDefault_*`), shared by the Rust port and the linked C original.
 
 use std::fmt::Write as _;
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 
 use super::{fresh_node, scan_seeds, write_node, WorldCase};
 

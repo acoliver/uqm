@@ -9,12 +9,12 @@
 //! `GetNamedPlanetaryBody`/`GetPlanetOrMoonName` read from solarsys.c.
 
 use super::solar::*;
-use crate::engine::save::summary as summary_values;
-use crate::engine::world::generation::Body;
-use crate::planets::generate::identities;
-use crate::planets::solar_system::SolarSystem;
 use crate::savegame::types::SIS_NAME_SIZE;
 use std::ops::{Deref, DerefMut};
+use uqm_engine::save::summary as summary_values;
+use uqm_engine::world::generation::Body;
+use uqm_modes::planets::generate::identities;
+use uqm_modes::planets::solar_system::SolarSystem;
 
 /// STAR 133 + DEVICE 29 + CARGO 10 + ELEMENTS 133 + SCAN 56 + STAR_NUMBER 14.
 const PLANET_BASE: u16 = 133 + 29 + 10 + 133 + 56 + 14;
@@ -52,11 +52,11 @@ impl DerefMut for System {
 }
 impl System {
     pub(super) fn outer() -> Self {
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         world.set_catalog(std::borrow::Cow::Borrowed(
-            &crate::planets::tables::STARMAP_ARRAY,
+            &uqm_modes::planets::tables::STARMAP_ARRAY,
         ));
-        let mut solar = SolarSystem::new(&world, crate::engine::StarId(0));
+        let mut solar = SolarSystem::new(&world, uqm_engine::StarId(0));
         solar.sys.sun.num_planets = 16;
         for planet in &mut solar.sys.planets {
             planet.num_planets = 4;

@@ -1,5 +1,5 @@
-use crate::graphics::{geometry::Point, geometry::Rect};
 use std::ffi::CString;
+use uqm_engine::graphics::{geometry::Point, geometry::Rect};
 
 pub(in crate::front_end) fn owned_lines(bytes: &[u8], capacity: usize) -> Vec<CString> {
     let end = bytes
@@ -60,7 +60,7 @@ pub(super) fn layout(mut clip: Rect, count: i32, leading: i16, alignment: i32) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::geometry::Extent;
+    use uqm_engine::graphics::geometry::Extent;
 
     #[test]
     fn position_lines_updates_baselines_without_changing_the_text() {

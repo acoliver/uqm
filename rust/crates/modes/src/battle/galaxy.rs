@@ -1,9 +1,9 @@
 //! Three live parallax star planes, with the original sort and wrap order.
 
-use crate::graphics::geometry::Color;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
 
-pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;
+pub use uqm_engine::battle::kernel::StarPlane as STAR_BLOCK;
 
 fn projected_coords(point: Point, dx: i16, dy: i16, reduction: u16, step: bool) -> (i32, i32) {
     let x = i32::from(point.x) - i32::from(dx);
@@ -174,11 +174,11 @@ impl StarPlaneOps for STAR_BLOCK {
 
 pub(crate) mod engine {
     use super::*;
-    use crate::engine::battle::flags::POINT_PRIMITIVE;
-    use crate::engine::battle::Cx;
+    use uqm_engine::battle::flags::POINT_PRIMITIVE;
+    use uqm_engine::battle::Cx;
 
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::math::battle_types::{
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::math::battle_types::{
         BACKGROUND_SHIFT, MAX_REDUCTION, MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ONE_SHIFT, ZOOM_SHIFT,
     };
 
@@ -186,7 +186,7 @@ pub(crate) mod engine {
 
     pub fn init_galaxy(cx: &mut Cx<'_>) {
         let (screen_width, screen_height) = cx.screen_dimensions();
-        let stars = crate::engine::battle::frames::FrameSelection::retain(cx.kernel.stars_in_space);
+        let stars = uqm_engine::battle::frames::FrameSelection::retain(cx.kernel.stars_in_space);
         let mut factor = ONE_SHIFT + MAX_REDUCTION + (BACKGROUND_SHIFT - 3);
         let mut p = 0;
         for (plane, count) in COUNTS.into_iter().enumerate() {
@@ -208,7 +208,7 @@ pub(crate) mod engine {
                     color(21, 21, 21)
                 } else if cx
                     .world
-                    .story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
+                    .story_state(uqm_engine::StoryKey::ARILOU_SPACE_SIDE)
                     <= 1
                 {
                     color(20, 0, 0)
@@ -236,7 +236,7 @@ pub(crate) mod engine {
     /// InitGalaxy must have completed; all display primitives and frames remain live.
     fn change_star_frames(cx: &mut Cx<'_>, step: bool, reduction: u16) {
         let star_frame =
-            crate::engine::battle::frames::FrameSelection::retain(cx.kernel.stars_in_space);
+            uqm_engine::battle::frames::FrameSelection::retain(cx.kernel.stars_in_space);
         if cx.world.activity() as u8 == 3 {
             let mut p = 0;
             for (plane, offset) in [58, 26].into_iter().enumerate() {

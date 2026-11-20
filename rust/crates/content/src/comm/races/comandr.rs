@@ -5,7 +5,7 @@ pub(crate) use super::script::{
     ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
 };
 pub use crate::comm::races::descriptor::CommDescriptor;
-pub use crate::engine::StoryKey;
+pub use uqm_engine::StoryKey;
 
 pub(crate) const GLAD_WHEN_YOU_COME_BACK: u16 = 1;
 pub(crate) const GIVE_FUEL: u16 = 2;

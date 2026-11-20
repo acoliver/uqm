@@ -1,12 +1,14 @@
-use crate::engine::world::activity::activity_flags;
-use crate::engine::Kernel;
-use crate::engine::World;
-use crate::graphics::{context::ContextLease, geometry::Extent, geometry::Point, geometry::Rect};
 use crate::starbase::ids;
 use crate::ui::palette::pilot_color;
 use crate::ui::rgb15;
 use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
+    context::ContextLease, geometry::Extent, geometry::Point, geometry::Rect,
+};
 use uqm_engine::time::counter_abi::ONE_SECOND;
+use uqm_engine::world::activity::activity_flags;
+use uqm_engine::Kernel;
+use uqm_engine::World;
 
 pub(crate) mod gauges;
 pub use gauges::{delta_sis_gauges, draw_flagship_name};
@@ -50,11 +52,11 @@ pub use stats_display::draw_flagship_stats;
 
 pub fn draw_autopilot_message(
     kernel: &Kernel,
-    world: &crate::engine::World,
+    world: &uqm_engine::World,
     width: i32,
     now: impl FnMut() -> u32,
 ) {
-    use crate::engine::kernel::PilotUpdate;
+    use uqm_engine::kernel::PilotUpdate;
     let autopilot = world.data.game.autopilot;
     let fuel_empty = world.data.flagship.fuel_on_board == 0;
     let on = (autopilot.x != -1 && autopilot.y != -1) || fuel_empty;
@@ -82,7 +84,7 @@ pub fn draw_autopilot_message(
 }
 
 pub fn set_flash_rect(
-    highlight: &crate::engine::kernel::SisHighlight,
+    highlight: &uqm_engine::kernel::SisHighlight,
     screen: &ContextLease,
     clip: Rect,
     rect: Option<Rect>,

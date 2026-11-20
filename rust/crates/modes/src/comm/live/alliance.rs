@@ -1,9 +1,9 @@
 use crate::comm::host::Host;
 use crate::comm::races::alliance::*;
 
-use crate::engine::world::fleet::set_race_allied;
+use uqm_engine::world::fleet::set_race_allied;
 
-use crate::engine::world::fleet::start_sphere_tracking;
+use uqm_engine::world::fleet::start_sphere_tracking;
 
 impl<H> AllianceApi<H> for Host<'_, '_, H> {
     fn set_allied(&mut self, race: u16, allied: bool) {
