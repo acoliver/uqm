@@ -189,6 +189,17 @@ mod tests {
     };
 
     #[test]
+    fn an_ephemeral_listener_holds_its_bound_port_until_a_peer_connects() {
+        let mut net = NativeNet::default();
+        let endpoint = net.listen("0").unwrap();
+        let port = net.local_port(endpoint).unwrap();
+        assert_ne!(port, 0);
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_err());
+        let peer = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        assert_eq!(peer.peer_addr().unwrap().port(), port);
+    }
+
+    #[test]
     fn nonblocking_listener_and_client_exchange_bytes_and_close() {
         let mut server = NativeNet::default();
         let listener = server.listen("0").unwrap();

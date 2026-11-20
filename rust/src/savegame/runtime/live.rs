@@ -25,10 +25,8 @@ impl GameStrings for LiveGameStrings<'_> {
 
 /// Supply the active solar session to the owned engine snapshot.
 ///
-/// # Safety
-/// Game thread only; the solar-system pointer and star catalog must remain
-/// valid for this synchronous capture.
-pub unsafe fn capture_prepared(
+/// Capture the running game for a save, on the game thread.
+pub fn capture_prepared(
     world: &mut World,
     kernel: &Kernel,
     star: StarDesc,

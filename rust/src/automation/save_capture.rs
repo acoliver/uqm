@@ -106,9 +106,7 @@ impl Request {
         let tick = crate::engine::host::now_ms();
         // SAFETY: the main loop has resolved CHECK_LOAD to NextActivity and
         // initialized the mode; its first admitted input has not been consumed.
-        let save = unsafe {
-            crate::savegame::live::save::capture(cx, cx.solar_frame, b"runtime-capture")?
-        };
+        let save = crate::savegame::live::save::capture(cx, cx.solar_frame, b"runtime-capture")?;
         anyhow::ensure!(
             tick == crate::engine::host::now_ms(),
             "capture advanced replay clock"

@@ -9,9 +9,9 @@ use crate::engine::world::generation::SolarSnapshot;
 use crate::navigation::groups::put_group_info;
 use uqm_save::SlotError;
 
-/// # Safety
-/// The game thread retains the active solar session and initialized star catalog.
-pub(crate) unsafe fn capture(
+/// Capture the running game for a save; the game thread retains the active
+/// solar session and initialized star catalog.
+pub(crate) fn capture(
     cx: &mut Cx<'_>,
     solar: Option<SolarSnapshot>,
     name: &[u8],
@@ -21,7 +21,8 @@ pub(crate) unsafe fn capture(
     if cx.world.in_hqspace() {
         crate::engine::save::hyper_save::prepare_hyper_state(cx.world, cx.kernel)?;
     } else if let Some(solar) = solar {
-        live::prepare_live_solar_location(cx.world, &solar)?;
+        // SAFETY: the game thread keeps the campaign's ship frame live.
+        unsafe { live::prepare_live_solar_location(cx.world, &solar)? };
     }
     if groups::saves_ip_group_queue(cx.world.activity()) {
         put_group_info(cx.world, 0, u8::MAX);
@@ -39,8 +40,7 @@ pub fn save_game(
     let result = (|| -> anyhow::Result<()> {
         let files = uqm_engine::io::save_dir().ok_or(SlotError::NoSaveDir)?;
         let slots = SaveSlots::new(&files);
-        // SAFETY: the supplied context retains campaign and native solar resources.
-        let mut save = unsafe { capture(cx, solar, name.to_bytes())? };
+        let mut save = capture(cx, solar, name.to_bytes())?;
         *summary = SummaryDesc::from(&save.summary);
         runtime::prepare_summary_for_write(&mut save.summary);
         slots.write(usize::from(slot), &save)?;
