@@ -1,6 +1,8 @@
 //! Planetary generation records shared by content and solar-system modes.
 
-use crate::graphics::native_abi::{Color, BYTE, COUNT, DWORD, POINT, SIZE, STAMP, STRING, UWORD};
+use crate::graphics::geometry::{Color, Point};
+use crate::graphics::intersection::Stamp;
+use crate::strings::string_table::StringPtr;
 
 pub type PlanetDesc = PlanetDescriptor;
 pub type NodeInfo = NodeRecord;
@@ -8,22 +10,22 @@ pub type NodeInfo = NodeRecord;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ElementEntry {
-    pub element_type: BYTE,
-    pub density: BYTE,
+    pub element_type: u8,
+    pub density: u8,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct PlanetFrame {
-    pub type_: BYTE,
-    pub base_tectonics: BYTE,
-    pub atmo_and_density: BYTE,
+    pub type_: u8,
+    pub base_tectonics: u8,
+    pub atmo_and_density: u8,
     pub useful_elements: [ElementEntry; 8usize],
     pub cmap_instance: &'static std::ffi::CStr,
     pub xlat_tab_instance: &'static std::ffi::CStr,
-    pub num_faults: COUNT,
-    pub fault_depth: SIZE,
-    pub num_blemishes: COUNT,
-    pub base_elevation: SIZE,
+    pub num_faults: u16,
+    pub fault_depth: i16,
+    pub num_blemishes: u16,
+    pub base_elevation: i16,
 }
 
 impl PlanetFrame {
@@ -53,21 +55,21 @@ impl Default for PlanetFrame {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PlanetInfo {
-    pub axial_tilt: SIZE,
-    pub tectonics: UWORD,
-    pub weather: UWORD,
-    pub planet_density: UWORD,
-    pub planet_radius: UWORD,
-    pub gravity: UWORD,
-    pub temperature: SIZE,
-    pub rotation_period: UWORD,
-    pub atmo_density: UWORD,
-    pub life_chance: SIZE,
-    pub planet_to_sun_dist: UWORD,
+    pub axial_tilt: i16,
+    pub tectonics: u16,
+    pub weather: u16,
+    pub planet_density: u16,
+    pub planet_radius: u16,
+    pub gravity: u16,
+    pub temperature: i16,
+    pub rotation_period: u16,
+    pub atmo_density: u16,
+    pub life_chance: i16,
+    pub planet_to_sun_dist: u16,
     pub plan_data_ptr: *const PlanetFrame,
-    pub scan_seed: [DWORD; 3usize],
-    pub scan_retrieve_mask: [DWORD; 3usize],
-    pub discovery_string: STRING,
+    pub scan_seed: [u32; 3usize],
+    pub scan_retrieve_mask: [u32; 3usize],
+    pub discovery_string: StringPtr,
 }
 
 impl Default for PlanetInfo {
@@ -95,30 +97,30 @@ impl Default for PlanetInfo {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SystemInfo {
-    pub star_size: BYTE,
-    pub star_intensity: BYTE,
-    pub star_energy: UWORD,
+    pub star_size: u8,
+    pub star_intensity: u8,
+    pub star_energy: u16,
     pub planet_info: PlanetInfo,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct PlanetDescriptor {
-    pub rand_seed: DWORD,
-    pub data_index: BYTE,
-    pub num_planets: BYTE,
-    pub radius: SIZE,
-    pub location: POINT,
+    pub rand_seed: u32,
+    pub data_index: u8,
+    pub num_planets: u8,
+    pub radius: i16,
+    pub location: Point,
     pub temp_color: Color,
-    pub next_index: COUNT,
-    pub image: STAMP,
+    pub next_index: u16,
+    pub image: Stamp,
     pub prev_desc: *mut PlanetDesc,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct NodeRecord {
-    pub loc_pt: POINT,
-    pub density: COUNT,
-    pub type_: COUNT,
+    pub loc_pt: Point,
+    pub density: u16,
+    pub type_: u16,
 }

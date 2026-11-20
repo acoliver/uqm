@@ -88,21 +88,14 @@ fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
 #[test]
 #[serial_test::serial]
 fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
-    use uqm_rust::{
-        engine::world::activity::activity_flags::CHECK_LOAD,
-        engine::{
-            battle::{Battle, Cx},
-            world::story::StoryState,
-            StoryKey,
-        },
-        graphics::native_abi::POINT,
-        graphics::{
-            context_abi::{CreateContextAux, DestroyContext},
-            drawable_abi::{AllocDrawable, DestroyDrawable},
-            pixmap_abi::{CaptureDrawable, ReleaseDrawable},
-        },
-        navigation::hyper_data::{load_hyperspace, EntryDisplay},
-    };
+    use uqm_rust::engine::battle::Battle;
+    use uqm_rust::engine::battle::Cx;
+    use uqm_rust::engine::world::activity::activity_flags::CHECK_LOAD;
+    use uqm_rust::engine::world::story::StoryState;
+    use uqm_rust::engine::StoryKey;
+    use uqm_rust::graphics::{context::LoadedContext, drawable::LoadedDrawable, geometry::Point};
+    use uqm_rust::navigation::hyper_data::load_hyperspace;
+    use uqm_rust::navigation::hyper_data::EntryDisplay;
     for activity in [0, CHECK_LOAD, CHECK_LOAD | 3] {
         for side in [0, 3] {
             let mut game = Game::new();
@@ -113,24 +106,17 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
             game.world
                 .set_story_state(StoryKey::BROADCASTER_RESPONSE, 1);
             game.world.hyper_distance.dx = 123;
-            game.world.data.game.autopilot = POINT { x: -1, y: 200 };
+            game.world.data.game.autopilot = Point { x: -1, y: 200 };
             game.kernel.last_activity = activity;
-            // SAFETY: this serialized fixture owns every registered allocation until teardown.
-            unsafe {
-                game.kernel.hyperstars =
-                    std::array::from_fn(|_| CaptureDrawable(AllocDrawable(1).cast()));
-                game.kernel.stars_in_space = CaptureDrawable(AllocDrawable(1).cast());
-                #[cfg(feature = "debug-process")]
-                {
-                    game.kernel.radar_context = CreateContextAux(c"hyper-entry-radar".as_ptr());
-                    game.kernel.space_context = CreateContextAux(c"hyper-entry-space".as_ptr());
-                }
-                #[cfg(not(feature = "debug-process"))]
-                {
-                    game.kernel.radar_context = CreateContextAux();
-                    game.kernel.space_context = CreateContextAux();
-                }
-            }
+            let star_frame = || {
+                LoadedDrawable::create(0, 1, 1, 1)
+                    .unwrap_or_else(|| panic!("star fixture"))
+                    .into_frame()
+            };
+            game.kernel.hyperstars = std::array::from_fn(|_| star_frame());
+            game.kernel.stars_in_space = star_frame();
+            game.kernel.radar_context = Some(LoadedContext::create(c"hyper-entry-radar").into_id());
+            game.kernel.space_context = Some(LoadedContext::create(c"hyper-entry-space").into_id());
             let ambient = game.kernel.hyperstars[0];
             let stars = game.kernel.stars_in_space;
             let mut battle = Battle::new();
@@ -169,11 +155,9 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
             uqm_rust::engine::battle::hyperspace::free_hyperspace(cx.kernel);
             assert_eq!(cx.kernel.stars_in_space, stars);
             hyper_data::free_hyper_data(cx.kernel);
-            // SAFETY: entry leases have dropped; the fixture releases its remaining context/star owners.
-            unsafe {
-                DestroyDrawable(ReleaseDrawable(cx.kernel.stars_in_space));
-                DestroyContext(cx.kernel.radar_context);
-                DestroyContext(cx.kernel.space_context);
+            drop(LoadedDrawable::from_frame(cx.kernel.stars_in_space));
+            for context in [cx.kernel.radar_context, cx.kernel.space_context] {
+                drop(context.map(LoadedContext::from_id));
             }
         }
     }
@@ -192,23 +176,23 @@ fn loaded_flagship_keeps_its_hooks_and_skips_the_entry_animation() {
 }
 
 fn flagship_entry(loading: bool) {
-    use uqm_rust::{
-        battle::{
-            element::{APPEARING, NONSOLID, PLAYER_SHIP},
-            ship_native::{ship_postprocess, ship_preprocess},
-        },
-        engine::battle::{
-            views::{FrameSelection, Frames, SharedFrames},
-            Battle, Cx, ElementHook,
-        },
-        engine::world::activity::{activity_flags::CHECK_LOAD, ActivityKind},
-        graphics::{
-            drawable_abi::{AllocDrawable, DestroyDrawable},
-            pixmap_abi::CaptureDrawable,
-        },
-        navigation::hyper_transition::{hyper_transition, save_sis_hyper_state},
-        ships::types::SpeciesId,
-    };
+    use uqm_rust::battle::element::APPEARING;
+    use uqm_rust::battle::element::NONSOLID;
+    use uqm_rust::battle::element::PLAYER_SHIP;
+    use uqm_rust::battle::ship_native::ship_postprocess;
+    use uqm_rust::battle::ship_native::ship_preprocess;
+    use uqm_rust::engine::battle::views::FrameSelection;
+    use uqm_rust::engine::battle::views::Frames;
+    use uqm_rust::engine::battle::views::SharedFrames;
+    use uqm_rust::engine::battle::Battle;
+    use uqm_rust::engine::battle::Cx;
+    use uqm_rust::engine::battle::ElementHook;
+    use uqm_rust::engine::world::activity::activity_flags::CHECK_LOAD;
+    use uqm_rust::engine::world::activity::ActivityKind;
+    use uqm_rust::graphics::drawable::LoadedDrawable;
+    use uqm_rust::navigation::hyper_transition::hyper_transition;
+    use uqm_rust::navigation::hyper_transition::save_sis_hyper_state;
+    use uqm_rust::ships::types::SpeciesId;
     const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
     let mut game = Game::new();
     game.world.data.game.ship_facing = 1;
@@ -223,17 +207,8 @@ fn flagship_entry(loading: bool) {
         .build(SpeciesId::SisShip as u32)
         .unwrap_or_else(|| panic!("flagship fixture ship capacity exhausted"));
     let ship = game.kernel.ships(0).ship_id(ship);
-    // SAFETY: the serialized fixture owns all animation frame records and their drawable.
-    let drawable = unsafe {
-        let drawable = AllocDrawable(32);
-        (*drawable).MaxIndex = 31;
-        for index in 0..32 {
-            (*(*drawable).Frame.add(index)).Index = index as u16;
-        }
-        drawable
-    };
-    // SAFETY: the drawable remains owned until the context releases its element frames.
-    let base = unsafe { CaptureDrawable(drawable.cast()) };
+    let drawable = LoadedDrawable::create(0, 1, 1, 32).unwrap_or_else(|| panic!("frames fixture"));
+    let base = drawable.first_frame();
     let mut battle = Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("transition RNG")
@@ -285,18 +260,14 @@ fn flagship_entry(loading: bool) {
     assert_eq!(cx.world.data.game.ship_facing, 1);
     cx.set_ship_element(ship, None);
     cx.dispose(element);
-    // SAFETY: no element retains an animation view after disposal.
-    unsafe {
-        DestroyDrawable(drawable.cast());
-    }
+    drop(drawable);
 }
 
 fn load_palette_fixture(
 ) -> Result<[Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2], Box<dyn std::error::Error>>
 {
-    use uqm_rust::{
-        graphics::palette_cycle::PaletteCycle, resource::ffi_bridge::InitResourceSystem,
-    };
+    use uqm_rust::graphics::palette_cycle::PaletteCycle;
+    use uqm_rust::resource::ffi_bridge::InitResourceSystem;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     std::fs::create_dir_all(&root)?;
     let directory = tempfile::tempdir_in(root)?;
@@ -339,50 +310,37 @@ fn load_palette_fixture(
 #[serial_test::serial]
 fn owned_palette_selection_uses_the_supplied_tables_and_status_context(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use uqm_rust::{
-        engine::battle::hyperspace as resources,
-        graphics::{cmap_abi::*, context_abi::*, native_abi::Color},
-    };
+    use uqm_rust::engine::battle::hyperspace as resources;
+    use uqm_rust::engine::test_support::native_probe;
+    use uqm_rust::graphics::{context::LoadedContext, geometry::Color};
     let mut game = Game::new();
     game.kernel.cmaps = load_palette_fixture()?;
     let select: fn(&uqm_rust::engine::Kernel, bool) = resources::select_palette;
-    // SAFETY: the fixture owns the context and all acquired palette references.
-    unsafe {
-        InitColorMaps();
-        for (side, channel) in [12u8, 90].into_iter().enumerate() {
-            select(&game.kernel, side != 0);
-            let selected = TFB_GetColorMap(17);
-            assert!((0..256).all(|index| {
-                let color = uqm_rust::graphics::sdl::palette::GetNativePaletteColor(
-                    (*selected).palette,
-                    index,
-                );
-                (color.r, color.g, color.b) == (channel, channel, channel)
-            }));
-            TFB_ReturnColorMap(selected);
-        }
-        #[cfg(feature = "debug-process")]
-        let context = CreateContextAux(c"hyperspace status fixture".as_ptr());
-        #[cfg(not(feature = "debug-process"))]
-        let context = CreateContextAux();
-        game.kernel.status_context = context;
-        let retained = resources::status_context(&game.kernel);
-        retained.select();
-        retained.set_background(Color {
-            r: 12,
-            g: 34,
-            b: 56,
-            a: 255,
-        });
-        let selected = SetContextBackGroundColor(Color::default());
-        assert_eq!((selected.r, selected.g, selected.b), (12, 34, 56));
-        drop(retained);
-        SetContext(std::ptr::null_mut());
-        DestroyContext(context);
-        game.kernel.status_context = std::ptr::null_mut();
-        resources::free_hyper_data(&mut game.kernel);
-        assert!(game.kernel.cmaps.iter().all(Option::is_none));
-        UninitColorMaps();
+    let _graphics = native_probe::DrawQueue::init();
+    for (side, channel) in [12u8, 90].into_iter().enumerate() {
+        select(&game.kernel, side != 0);
+        let palette = native_probe::color_map_palette(17);
+        assert!(palette
+            .iter()
+            .all(|color| (color.r, color.g, color.b) == (channel, channel, channel)));
     }
+    let context = LoadedContext::create(c"hyperspace status fixture");
+    game.kernel.status_context = Some(context.context());
+    let retained = resources::status_context(&game.kernel);
+    retained.select();
+    retained.set_background(Color {
+        r: 12,
+        g: 34,
+        b: 56,
+        a: 255,
+    });
+    let selected = retained.background(Color::default());
+    assert_eq!((selected.r, selected.g, selected.b), (12, 34, 56));
+    drop(retained);
+    uqm_rust::graphics::menu::select(None);
+    drop(context);
+    game.kernel.status_context = None;
+    resources::free_hyper_data(&mut game.kernel);
+    assert!(game.kernel.cmaps.iter().all(Option::is_none));
     Ok(())
 }

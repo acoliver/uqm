@@ -1,12 +1,12 @@
 //! Explicit mode effects used by content-owned race callbacks.
 use super::views::BattleSoundBank;
 use super::{Cx, ElementId, ShipId};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 #[derive(Clone, Copy)]
 pub struct StarContact {
     pub star: crate::StarId,
-    pub position: POINT,
+    pub position: Point,
     pub current: bool,
 }
 

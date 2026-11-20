@@ -1,7 +1,7 @@
 //! Scene, report, lander and planet-display effects.
 
 use super::*;
-use crate::engine::graphics::native_surface::CapturedSurface;
+use crate::engine::graphics::surface::CapturedSurface;
 use crate::engine::{world::generation::Body, StoryKey};
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
@@ -65,10 +65,9 @@ impl wreck::WreckSite for Site<'_, '_, '_> {
 
 impl andro::AndrosynthSite for Site<'_, '_, '_> {
     fn load_ruins_story(&mut self, system: &mut SolarSys<'_>, visits: u32) {
-        use crate::engine::{
-            graphics::drawable_abi::LoadedDrawable, strings::owned_table::LoadedTextTable,
-            world::generation::ReportSlot,
-        };
+        use crate::engine::graphics::drawable::LoadedDrawable;
+        use crate::engine::strings::owned_table::LoadedTextTable;
+        use crate::engine::world::generation::ReportSlot;
         self.report_resources.load();
         {
             system.frames[1] = LoadedDrawable::load(c"graphics.ruins");

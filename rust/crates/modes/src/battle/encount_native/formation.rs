@@ -1,17 +1,17 @@
 //! Authored encounter icon rings in display coordinates.
 use super::ENCOUNTER_DISPLAY_POINTS;
-use crate::graphics::native_abi::{EXTENT, POINT};
+use crate::graphics::{geometry::Extent, geometry::Point};
 use crate::math::{arctan, cosine, sine, square_root};
 
 pub(super) fn encounter_icon(
     icon: crate::engine::battle::views::FrameRef<'_>,
-) -> Option<crate::graphics::context_abi::ContextFrame> {
+) -> Option<crate::graphics::drawable::ContextFrame> {
     // The noncombat Ur-Quan drone deliberately has no encounter icon.
-    let frame = std::ptr::NonNull::new(icon.raw())?;
-    Some(crate::graphics::context_abi::ContextFrame::retain(Some(frame)).indexed_frame(0))
+    let frame = icon.raw().non_null()?;
+    Some(crate::graphics::drawable::ContextFrame::retain(frame).indexed_frame(0))
 }
 
-pub(super) fn encounter_icon_origin(index: usize, bounds: EXTENT, dimensions: (i32, i32)) -> POINT {
+pub(super) fn encounter_icon_origin(index: usize, bounds: Extent, dimensions: (i32, i32)) -> Point {
     let (mut x, mut y) = ENCOUNTER_DISPLAY_POINTS[index % ENCOUNTER_DISPLAY_POINTS.len()];
     if index >= ENCOUNTER_DISPLAY_POINTS.len() {
         let radius = (square_root((i64::from(x).pow(2) + i64::from(y).pow(2)) as u32) as usize
@@ -20,7 +20,7 @@ pub(super) fn encounter_icon_origin(index: usize, bounds: EXTENT, dimensions: (i
         x = cosine(i32::from(angle), i32::from(radius));
         y = sine(i32::from(angle), i32::from(radius));
     }
-    POINT {
+    Point {
         x: (i32::from(x) + (dimensions.0 >> 1) - (i32::from(bounds.width) >> 1)) as i16,
         y: (i32::from(y) + (dimensions.1 >> 1) - (i32::from(bounds.height) >> 1)) as i16,
     }
@@ -33,13 +33,15 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn noncombat_drone_has_no_encounter_icon() {
-        let icon = crate::engine::battle::frames::FrameSelection::retain(std::ptr::null_mut());
+        let icon = crate::engine::battle::frames::FrameSelection::retain(
+            crate::graphics::drawable::FrameId::NULL,
+        );
         assert!(encounter_icon(icon.view()).is_none());
     }
 
     #[test]
     fn formation_centers_icons_without_changing_the_authored_first_ring() {
-        let bounds = EXTENT {
+        let bounds = Extent {
             width: 8,
             height: 12,
         };

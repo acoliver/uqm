@@ -1,7 +1,7 @@
 //! Campaign-lifetime interplanetary art, palettes and music.
 
 use crate::{
-    graphics::drawable_abi::LoadedDrawable,
+    graphics::drawable::LoadedDrawable,
     sound::{music::MusicRequest, resource_types::LoadedMusic},
     strings::sresins::load_binary_entries,
 };
@@ -85,14 +85,14 @@ fn install_palette(bytes: &[u8]) {
         panic!("interplanetary palette has no range")
     };
     assert!(start <= end, "interplanetary palette range is reversed");
-    let colors =
-        (usize::from(end) - usize::from(start) + 1) * crate::graphics::cmap::NUMBER_OF_PLUTVALS * 3;
+    let colors = (usize::from(end) - usize::from(start) + 1)
+        * crate::graphics::colormap::NUMBER_OF_PLUTVALS
+        * 3;
     assert!(
         bytes.len() >= colors + 2,
         "interplanetary palette is truncated"
     );
-    // SAFETY: this owned slice includes all RGB triplets described by its range.
-    unsafe { crate::graphics::cmap_abi::SetColorMap(bytes.as_ptr()) };
+    crate::graphics::state::set_color_map(bytes);
 }
 
 #[cfg(test)]

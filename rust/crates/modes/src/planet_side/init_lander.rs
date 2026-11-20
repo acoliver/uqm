@@ -1,12 +1,11 @@
 //! Lander status drawing from supplied campaign or save-preview values.
 
 use super::resources::{LanderGraphic, PlanetSideAssets};
-use crate::{
-    engine::{StoryKey, World},
-    graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::{Color, EXTENT, POINT, RECT},
-    },
+use crate::engine::StoryKey;
+use crate::engine::World;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect,
 };
 
 const MAX_SCROUNGED: u16 = 50;
@@ -59,9 +58,9 @@ pub fn draw_lander(context: &ContextLease, assets: &PlanetSideAssets, status: La
     context.draw_batch(|| {
         context.fill_rectangle(
             BLACK_COLOR,
-            RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: RADAR_WIDTH,
                     height: RADAR_HEIGHT,
                 },
@@ -74,7 +73,7 @@ pub fn draw_lander(context: &ContextLease, assets: &PlanetSideAssets, status: La
 }
 
 fn draw_lander_status(context: &ContextLease, lander: &ContextFrame, status: LanderStatus) {
-    let draw = |index| context.draw_stamp(&lander.wrapped_frame(index), POINT { x: 0, y: 0 });
+    let draw = |index| context.draw_stamp(&lander.wrapped_frame(index), Point { x: 0, y: 0 });
     draw(32);
     let flags = status.override_flags;
     if flags != 0 {
@@ -99,9 +98,9 @@ fn draw_lander_status(context: &ContextLease, lander: &ContextFrame, status: Lan
             .saturating_add(1);
         context.fill_rectangle(
             BLACK_COLOR,
-            RECT {
-                corner: POINT { x: 1, y: 0 },
-                extent: EXTENT {
+            Rect {
+                corner: Point { x: 1, y: 0 },
+                extent: Extent {
                     width: 4,
                     height: height as i16,
                 },

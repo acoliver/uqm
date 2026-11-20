@@ -105,7 +105,7 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
         journal.write_element_frame(
             &identity,
             name,
-            pointer as usize,
+            pointer.bits(),
             fields,
             &format!("{prefix}.{name}"),
         );
@@ -118,10 +118,10 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
         if address != 0 && journal.frame_set(address).is_none() {
             let first = array.view(0).raw();
             let mut frame = Fields::new();
-            journal.write_frame(first as usize, &mut frame, "frame");
+            journal.write_frame(first.bits(), &mut frame, "frame");
             journal.register_frame_set(
                 address,
-                vec![first as usize],
+                vec![first.bits()],
                 format!("frame-single:{}", frame["frame.owner"]),
             );
         }
@@ -140,14 +140,16 @@ mod tests {
     use super::*;
     use crate::engine::battle::record::ElementRecord as Element;
 
-    fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
+    fn observed_set(
+        views: &[crate::graphics::drawable::FrameId],
+    ) -> crate::engine::battle::frames::Frames {
         use crate::engine::battle::frames::{FrameArray, Frames, SharedFrames};
         Frames::shared(
             SharedFrames::Fixture(0),
             FrameArray::fixture_source(
                 std::array::from_fn(|index| {
                     // SAFETY: journal fixtures use these retained handles only as opaque identities.
-                    views[index.min(views.len() - 1)].cast()
+                    views[index.min(views.len() - 1)]
                 }),
                 (),
                 Some(views.as_ptr() as usize),
@@ -160,9 +162,10 @@ mod tests {
         super::visuals(fields, prefix, &observation, journal);
     }
 
-    use crate::graphics::native_abi::frame_desc;
-    fn observed_frame<T>(raw: *mut T) -> crate::engine::battle::frames::FrameSelection {
-        crate::engine::battle::frames::FrameArray::fixture([raw.cast(); 3], ())
+    fn observed_frame(
+        raw: crate::graphics::drawable::FrameId,
+    ) -> crate::engine::battle::frames::FrameSelection {
+        crate::engine::battle::frames::FrameArray::fixture([raw; 3], ())
             .view(0)
             .to_owned()
     }
@@ -172,12 +175,11 @@ mod tests {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create visual test journal: {error}"));
-        let mut storage = 0u8;
-        let views = [std::ptr::from_mut(&mut storage).cast::<std::ffi::c_void>()];
+        let views = [crate::graphics::drawable::FrameId::from_bits(7 << 16)];
         let mut element = Element::default();
         element.current.image.frame = observed_frame(views[0]);
         element.current.image.frames = observed_set(&views);
-        journal.register_frame(views[0] as usize, 0, 7);
+        journal.register_frame(views[0].bits(), 0, 7);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
@@ -190,28 +192,27 @@ mod tests {
     fn linked_element_keeps_retired_frame_binding_when_allocator_reuses_address() {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path()).expect("journal");
-        let mut storage = 0u8;
-        let pointer = std::ptr::from_mut(&mut storage).cast::<std::ffi::c_void>();
+        let pointer = crate::graphics::drawable::FrameId::from_bits(9 << 16);
         let views = [pointer];
         let mut element = Element::default();
         element.current.image.frame = observed_frame(pointer);
         element.current.image.frames = observed_set(&views);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let owner = journal.register_resource(100, "drawable");
-        journal.register_frame(pointer as usize, 100, 7);
+        journal.register_frame(pointer.bits(), 100, 7);
         journal.register_frame_set(
             views.as_ptr() as usize,
-            vec![pointer as usize],
+            vec![pointer.bits()],
             "old-set".into(),
         );
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
         journal.retire_drawable(100);
         journal.register_resource(100, "drawable");
-        journal.register_frame(pointer as usize, 100, 99);
+        journal.register_frame(pointer.bits(), 100, 99);
         journal.register_frame_set(
             views.as_ptr() as usize,
-            vec![pointer as usize],
+            vec![pointer.bits()],
             "new-set".into(),
         );
         visuals(&mut fields, "element", &element, &mut journal);
@@ -237,7 +238,7 @@ mod tests {
         for reuse in [false, true] {
             let directory = super::super::test_directory();
             let mut journal = Journal::create(directory.path()).expect("journal");
-            let mut views = [std::ptr::null_mut(); 3];
+            let mut views = [crate::graphics::drawable::FrameId::NULL; 3];
             let mut element = Element::default();
             journal.allocate(std::ptr::from_ref(&element) as usize);
             let generation = journal.identity(std::ptr::from_ref(&element) as usize);
@@ -245,19 +246,17 @@ mod tests {
                 let mut owners = Vec::new();
                 for (view, frame) in views.iter_mut().enumerate() {
                     let owner = 100 + view + if reuse { 0 } else { cycle * 10 };
-                    let address = 200 + view + if reuse { 0 } else { cycle * 10 };
+                    let address = (200 + view + if reuse { 0 } else { cycle * 10 }) << 16;
                     observation::record(Event::Drawable(owner));
                     observation::record(Event::Frame {
                         address,
                         owner,
                         index: 0,
                     });
-                    *frame = address as *mut frame_desc;
+                    *frame = crate::graphics::drawable::FrameId::from_bits(address);
                     owners.push(owner);
                 }
-                observe_views(&views, "engine-global:test-animation", |frame| {
-                    *frame as usize
-                });
+                observe_views(&views, "engine-global:test-animation", |frame| frame.bits());
                 observation::assign_frame(
                     &mut element.current.image.frame,
                     observed_frame(views[0]),
@@ -287,10 +286,8 @@ mod tests {
                     );
                     observation::record(Event::DrawableFree(owner));
                 }
-                views.fill(std::ptr::null_mut());
-                observe_views(&views, "engine-global:test-animation", |frame| {
-                    *frame as usize
-                });
+                views.fill(crate::graphics::drawable::FrameId::NULL);
+                observe_views(&views, "engine-global:test-animation", |frame| frame.bits());
                 journal.drain_events(&[]);
                 visuals(&mut fields, "element", &element, &mut journal);
                 assert_eq!(fields["element.current.frame.retired"], "true");

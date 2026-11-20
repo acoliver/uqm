@@ -146,8 +146,8 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
         return;
     }
     use crate::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::{Color, EXTENT, POINT, RECT},
+        context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Extent,
+        geometry::Point, geometry::Rect,
     };
     let mut game = Game::new();
     let mut menu = RestartMenu::default();
@@ -162,12 +162,10 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
         |game| {
             let context = ContextLease::require(game.kernel.status_context);
             game.kernel.screen_context = game.kernel.status_context;
-            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-                game.kernel.screen,
-            )));
-            context.set_clip(RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            context.set_frame(ContextFrame::retain(game.kernel.screen));
+            context.set_clip(Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: 320,
                     height: 240,
                 },
@@ -200,11 +198,11 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
                 let Color { r, g, b, a } = target.pixel(point);
                 (r, g, b, a)
             };
-            assert_eq!(rgba(POINT { x: 159, y: 119 }), (255, 255, 255, 255));
-            assert_eq!(rgba(POINT { x: 160, y: 119 }), (0, 0, 0, 255));
+            assert_eq!(rgba(Point { x: 159, y: 119 }), (255, 255, 255, 255));
+            assert_eq!(rgba(Point { x: 160, y: 119 }), (0, 0, 0, 255));
             assert!(
                 (230..240)
-                    .any(|y| (300..320).any(|x| rgba(POINT { x, y }) == (255, 255, 255, 255))),
+                    .any(|y| (300..320).any(|x| rgba(Point { x, y }) == (255, 255, 255, 255))),
                 "the version label must render with the retained tiny font"
             );
             drop(std::mem::replace(game, Game::new()));
@@ -219,10 +217,10 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
             ops.draw_restart_menu_graphic();
             ops.unbatch_graphics();
             context.flush();
-            assert_eq!(rgba(POINT { x: 159, y: 119 }), (255, 255, 255, 255));
+            assert_eq!(rgba(Point { x: 159, y: 119 }), (255, 255, 255, 255));
             assert!(
                 (230..240)
-                    .any(|y| (300..320).any(|x| rgba(POINT { x, y }) == (255, 255, 255, 255))),
+                    .any(|y| (300..320).any(|x| rgba(Point { x, y }) == (255, 255, 255, 255))),
                 "the version label must survive campaign font teardown"
             );
             ops.destroy_menu_graphic();

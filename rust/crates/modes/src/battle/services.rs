@@ -2,7 +2,7 @@
 use crate::engine::battle::services::PrimitiveServices;
 use crate::engine::battle::views::FrameSelection;
 use crate::engine::battle::{Cx, ElementId, ShipId};
-use crate::graphics::native_abi::{POINT, RECT, SIZE};
+use crate::graphics::{geometry::Point, geometry::Rect};
 use crate::ships::native::abi::OPT_PC;
 
 pub fn install(kernel: &mut crate::engine::Kernel) {
@@ -16,8 +16,10 @@ impl PrimitiveServices for ModeServices {
             return;
         }
         let y = cx.status_offset(ship);
-        let context = std::ptr::NonNull::new(cx.kernel.status_context)
-            .map(crate::graphics::context_abi::ContextLease::retain)
+        let context = cx
+            .kernel
+            .status_context
+            .map(crate::graphics::context::ContextLease::retain)
             .and_then(|context| context.selected_context());
         let font = cx.kernel.battle_font();
         let mut info = cx.desc(ship).ship_info;
@@ -34,12 +36,14 @@ impl PrimitiveServices for ModeServices {
         stats.ship_info.crew_level = info.crew_level;
         stats.ship_info.energy_level = info.energy_level;
     }
-    fn init_ship_status(&self, cx: &mut Cx<'_>, ship: ShipId, clip: Option<RECT>) {
+    fn init_ship_status(&self, cx: &mut Cx<'_>, ship: ShipId, clip: Option<Rect>) {
         crate::ui::shipstat::draw_battle_status(cx, ship, clip);
         if clip.is_none() {
-            let context = std::ptr::NonNull::new(cx.kernel.status_context)
-                .map(crate::graphics::context_abi::ContextLease::retain);
-            let height = (cx.screen_dimensions().1 >> 1) as SIZE;
+            let context = cx
+                .kernel
+                .status_context
+                .map(crate::graphics::context::ContextLease::retain);
+            let height = (cx.screen_dimensions().1 >> 1) as i16;
             let pc_menu = cx.kernel.configuration.preferences().menu == OPT_PC as i32;
             crate::battle::status_native::draw_captains_window(
                 cx,
@@ -54,7 +58,7 @@ impl PrimitiveServices for ModeServices {
         &self,
         cx: &mut Cx<'_>,
         source: ElementId,
-        origin: POINT,
+        origin: Point,
         frame: FrameSelection,
         flags: u8,
     ) {

@@ -29,7 +29,7 @@ fn on_battle_frame(
         crate::ui::sis::draw_hyper_coords(
             cx.kernel,
             cx.screen_dimensions().0,
-            crate::graphics::native_abi::POINT {
+            crate::graphics::geometry::Point {
                 x: universe.x,
                 y: universe.y,
             },

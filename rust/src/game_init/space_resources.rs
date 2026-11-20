@@ -5,9 +5,8 @@ fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
 }
 
 pub(crate) mod live {
+    use crate::graphics::{context::ContextLease, drawable::ContextFrame};
     use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID};
-
-    use crate::graphics::context_abi::{ContextFrame, ContextLease};
 
     fn remaining_battle_crew(cx: &crate::engine::battle::Cx<'_>) -> u16 {
         let mut crew = 0u16;
@@ -101,20 +100,23 @@ pub(crate) mod live {
         fn retain(kernel: &crate::engine::Kernel, hyperspace: bool) -> Self {
             Self {
                 status: ContextLease::retain(
-                    std::ptr::NonNull::new(kernel.status_context)
+                    kernel
+                        .status_context
                         .unwrap_or_else(|| panic!("missing status context")),
                 ),
                 space: ContextLease::retain(
-                    std::ptr::NonNull::new(kernel.space_context)
+                    kernel
+                        .space_context
                         .unwrap_or_else(|| panic!("missing space context")),
                 ),
                 viewport: (!hyperspace).then(|| {
                     (
                         ContextLease::retain(
-                            std::ptr::NonNull::new(kernel.screen_context)
+                            kernel
+                                .screen_context
                                 .unwrap_or_else(|| panic!("missing screen context")),
                         ),
-                        ContextFrame::retain(std::ptr::NonNull::new(kernel.screen)),
+                        ContextFrame::retain(kernel.screen),
                     )
                 }),
             }
@@ -130,11 +132,11 @@ pub(crate) mod live {
                 return;
             };
             self.space.set_frame(frame);
-            self.space.set_clip(crate::graphics::native_abi::RECT {
-                corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
-                extent: crate::graphics::native_abi::EXTENT { width, height },
+            self.space.set_clip(crate::graphics::geometry::Rect {
+                corner: crate::graphics::geometry::Point { x: 0, y: 0 },
+                extent: crate::graphics::geometry::Extent { width, height },
             });
-            let black = crate::graphics::native_abi::Color {
+            let black = crate::graphics::geometry::Color {
                 r: 0,
                 g: 0,
                 b: 0,

@@ -1,5 +1,6 @@
 use super::*;
 use crate::engine::Game;
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 
 #[test]
 fn records_keep_row_first_column_order_and_bounded_formats() {
@@ -21,10 +22,22 @@ fn records_keep_row_first_column_order_and_bounded_formats() {
         ]
     );
     let formats = formats(&parsed.alignment, 320, 8);
-    assert_eq!((formats[0].align, formats[0].x), (0, 2));
-    assert_eq!((formats[1].align, formats[1].x), (1, 160));
-    assert_eq!((formats[2].align, formats[2].x), (2, 77));
-    assert_eq!((formats[3].align, formats[3].x), (0, 5));
+    assert_eq!(
+        (formats[0].align, formats[0].x),
+        (crate::graphics::geometry::TextAlign::Left, 2)
+    );
+    assert_eq!(
+        (formats[1].align, formats[1].x),
+        (crate::graphics::geometry::TextAlign::Center, 160)
+    );
+    assert_eq!(
+        (formats[2].align, formats[2].x),
+        (crate::graphics::geometry::TextAlign::Right, 77)
+    );
+    assert_eq!(
+        (formats[3].align, formats[3].x),
+        (crate::graphics::geometry::TextAlign::Left, 5)
+    );
     for bytes in [b"".as_slice(), b"0 L A", b"13", b"13 L", b"bad L A"] {
         assert!(record(bytes).is_none());
     }
@@ -51,12 +64,10 @@ fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
     assert!(loaded.background.is_some());
     assert!(loaded.fonts.iter().all(Option::is_some));
     let context = ContextLease::require(game.kernel.status_context);
-    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-        game.kernel.screen,
-    )));
-    context.set_clip(RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
+    context.set_clip(Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 320,
             height: 240,
         },
@@ -78,7 +89,7 @@ fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
         fonts: loaded.fonts,
     });
     let window = Rc::new(Cell::new(CRect {
-        corner: POINT { x: 7, y: 5 },
+        corner: Point { x: 7, y: 5 },
         width: 306,
         height: 80,
     }));
@@ -114,7 +125,7 @@ fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
     context.flush();
     let extent = frame.rect().extent;
     assert!((0..extent.height).any(|y| (0..extent.width).any(|x| {
-        let pixel = frame.pixel(POINT { x, y });
+        let pixel = frame.pixel(Point { x, y });
         (pixel.r, pixel.g, pixel.b) == (255, 255, 255)
     })));
     for (start, direction, expected) in [
@@ -137,8 +148,8 @@ fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
     session.borrow().render_screen(window.get());
     context.flush();
     let composed = session.borrow().frame.lease().context_frame(0);
-    assert_eq!(composed.pixel(POINT { x: 0, y: 0 }).r, 255);
-    assert_eq!(composed.pixel(POINT { x: 8, y: 6 }).b, 255);
+    assert_eq!(composed.pixel(Point { x: 0, y: 0 }).r, 255);
+    assert_eq!(composed.pixel(Point { x: 8, y: 6 }).b, 255);
     assert_eq!(independent.controls.rate, 9);
     let input = InputSession::default();
     let calls = Rc::new(Cell::new(0));

@@ -1,9 +1,8 @@
 //! Retained asset snapshot for a synchronous lander trip or status preview.
 
 use super::assets::LanderSoundTable;
-use crate::engine::{
-    graphics::context_abi::ContextFrame, kernel::lander_resources::LanderResources,
-};
+use crate::engine::graphics::drawable::ContextFrame;
+use crate::engine::kernel::lander_resources::LanderResources;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
@@ -43,12 +42,9 @@ impl PlanetSideAssets {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{
-        engine::Game,
-        graphics::{
-            context_abi::ContextLease,
-            native_abi::{EXTENT, POINT, RECT},
-        },
+    use crate::engine::Game;
+    use crate::graphics::{
+        context::ContextLease, geometry::Extent, geometry::Point, geometry::Rect,
     };
 
     pub(crate) fn with_packaged_resources(test: impl FnOnce(&mut Game)) {
@@ -165,17 +161,17 @@ pub(crate) mod tests {
                 }
             }
             let radar = ContextLease::require(game.kernel.status_context);
-            radar.set_frame(crate::graphics::context_abi::ContextFrame::retain(
-                std::ptr::NonNull::new(game.kernel.screen),
+            radar.set_frame(crate::graphics::drawable::ContextFrame::retain(
+                game.kernel.screen,
             ));
-            radar.set_clip(RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
+            radar.set_clip(Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: Extent {
                     width: 56,
                     height: 53,
                 },
             });
-            let other = crate::graphics::context_abi::LoadedContext::create(c"preserved-selection");
+            let other = crate::graphics::context::LoadedContext::create(c"preserved-selection");
             other.lease().select();
             let selected = uqm_engine::test_support::native_probe::selected_context();
             crate::planet_side::init_lander::draw_lander(

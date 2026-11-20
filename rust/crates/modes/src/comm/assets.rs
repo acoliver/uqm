@@ -1,12 +1,11 @@
 //! Loaded conversation assets and their ordered release authority.
 
-use super::{races::descriptor::CommDescriptor, sis_graphics::SubtitleCache, Comm};
+use super::races::descriptor::CommDescriptor;
+use super::sis_graphics::SubtitleCache;
+use super::Comm;
 use crate::graphics::{
-    context_abi::{ContextLease, LoadedContext},
-    drawable_abi::LoadedDrawable,
-    native_abi::Color,
-    native_font::{FontLease, LoadedFont},
-    palette_cycle::PaletteCycle,
+    context::ContextLease, context::LoadedContext, drawable::LoadedDrawable, font::FontLease,
+    font::LoadedFont, geometry::Color, palette_cycle::PaletteCycle,
 };
 use crate::sound::resource_types::LoadedMusic;
 
@@ -20,7 +19,7 @@ pub(crate) struct Assets {
     pub cache_frame: LoadedDrawable,
     pub animation: Option<LoadedContext>,
     pub old_font: Option<FontLease>,
-    pub intro_batch: Option<crate::graphics::context_abi::BatchGuard>,
+    pub intro_batch: Option<crate::graphics::context::BatchGuard>,
 }
 
 impl Assets {

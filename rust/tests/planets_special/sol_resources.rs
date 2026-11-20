@@ -1,7 +1,8 @@
 //! Real packaged resources and cleanup, without a window or gameplay loop.
 
 use super::Harness;
-use uqm_rust::engine::graphics::{dcqueue_abi as queue, native_surface::CapturedSurface};
+use uqm_rust::engine::graphics::surface::CapturedSurface;
+use uqm_rust::engine::test_support::native_probe;
 use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
@@ -15,7 +16,6 @@ pub fn check(h: &mut Harness) {
         .unwrap();
     unsafe {
         c_api::log_init(100);
-        super::shield_additive::check();
         let mount = uqm_engine::test_support::native_session::ContentMount::new(&content);
         let Some(dir) = uqm_rust::io::content_dir() else {
             panic!("checked-in content directory must open");
@@ -25,29 +25,29 @@ pub fn check(h: &mut Harness) {
         names(h);
         binary_palettes();
         scenes(h);
-        let baseline = sdl2::sys::SDL_GetNumAllocations();
+        uqm_rust::graphics::state::flush_ex(true);
+        let baseline = native_probe::allocations();
         indexed_rescale();
         let earth = CapturedSurface::load(c"graphics.earthmask");
         assert!(
-            !earth.as_frame().is_null(),
+            !earth.first_frame().is_null(),
             "real Earth definition must load"
         );
-        let raw = earth.as_frame();
+        let raw = earth.first_frame();
         let before_tint = frame_rgb(raw);
-        let expected_tint = super::shield_additive::earth_expected(raw);
         let earth = earth
             .into_definition(MAP_WIDTH as i16, MAP_HEIGHT as i16)
             .unwrap();
         assert_eq!(
             (
-                (*earth.as_frame()).Bounds.width,
-                (*earth.as_frame()).Bounds.height
+                native_probe::frame_bounds(earth.first_frame()).0.width,
+                native_probe::frame_bounds(earth.first_frame()).0.height
             ),
             (MAP_WIDTH as i16, MAP_HEIGHT as i16)
         );
         println!(
-            "real Earth resource: source={raw:p}, normalized={:p}",
-            earth.as_frame()
+            "real Earth resource: source={raw:?}, normalized={:?}",
+            earth.first_frame()
         );
         let system = &raw mut *h.state;
         let world = &raw mut (*system).sys.planets[2];
@@ -72,7 +72,7 @@ pub fn check(h: &mut Harness) {
                 rng: &mut (*system).sys.rng,
                 planet: &*world,
                 info: &(*system).sys.info.planet_info,
-                location: uqm_rust::graphics::drawable::Point::new(
+                location: uqm_rust::graphics::geometry::Point::new(
                     (*world).location.x,
                     (*world).location.y,
                 ),
@@ -101,10 +101,6 @@ pub fn check(h: &mut Harness) {
         assert_eq!(sphere.sphere_frame().rect().extent.width, 75);
         let after_tint = frame_rgb(topo_frame);
         assert_eq!(after_tint.len(), before_tint.len());
-        assert_eq!(
-            super::shield_additive::frame_bytes(topo_frame),
-            expected_tint
-        );
         for (index, (before, after)) in before_tint.iter().zip(&after_tint).enumerate() {
             assert_eq!(
                 *after,
@@ -112,47 +108,34 @@ pub fn check(h: &mut Harness) {
                 "Earth shield tint pixel {index}"
             );
         }
-        println!("real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]; complete buffer equals isolated Rust additive core", after_tint.len());
+        println!(
+            "real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]",
+            after_tint.len()
+        );
         let planet_system = &mut *system;
         crate::battle_context::with(|cx| c_api::free_planet(cx, planet_system));
         assert_eq!(sphere.elevation()[0], first_elevation);
         drop(topography);
         drop(sphere);
-        queue::TFB_FlushGraphicsEx(1);
+        uqm_rust::graphics::state::flush_ex(true);
         println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then FreePlanet plus owned release cleared surface/sphere/topography allocations");
         assert_eq!(
-            sdl2::sys::SDL_GetNumAllocations(),
+            native_probe::allocations(),
             baseline,
-            "real Earth generation/rescale/cleanup must release all SDL surface allocations"
+            "real Earth generation/rescale/cleanup must release all graphics allocations"
         );
         ffi_bridge::UninitResourceSystem();
         drop(mount);
     }
 }
 
-unsafe fn frame_rgb(frame: *mut uqm_rust::graphics::native_abi::FRAME_DESC) -> Vec<[u8; 3]> {
-    let surface = (*frame).image.cast::<*mut sdl2::sys::SDL_Surface>().read();
-    let info = uqm_rust::graphics::sdl_capture::query_surface_info(surface);
-    let format = &*(*surface).format;
-    println!("Earth canvas: {info:?}, palette={:p}", format.palette);
-    assert_eq!(format.BytesPerPixel, 4);
-    assert_eq!(sdl2::sys::SDL_LockSurface(surface), 0);
-    let mut result = Vec::new();
-    for y in 0..(*surface).h {
-        for x in 0..(*surface).w {
-            let pixel = (*surface)
-                .pixels
-                .cast::<u8>()
-                .add((y * (*surface).pitch + x * 4) as usize)
-                .cast::<u32>()
-                .read_unaligned();
-            let (mut r, mut g, mut b) = (0, 0, 0);
-            sdl2::sys::SDL_GetRGB(pixel, (*surface).format, &mut r, &mut g, &mut b);
-            result.push([r, g, b]);
-        }
-    }
-    sdl2::sys::SDL_UnlockSurface(surface);
-    result
+fn frame_rgb(frame: uqm_rust::graphics::drawable::FrameId) -> Vec<[u8; 3]> {
+    let (bounds, _) = native_probe::frame_bounds(frame);
+    native_probe::read_pixels(frame, i32::from(bounds.width), i32::from(bounds.height))
+        .unwrap_or_else(|| panic!("Earth frame"))
+        .into_iter()
+        .map(|p| [p.r, p.g, p.b])
+        .collect()
 }
 
 unsafe fn names(h: &mut Harness) {
@@ -162,7 +145,7 @@ unsafe fn names(h: &mut Harness) {
             uqm_rust::engine::strings::owned_table::LoadedTextTable::load(c"text.starcon").unwrap();
         crate::battle_context::with(|cx| {
             assert!(cx.kernel.game_strings.is_null());
-            assert!(cx.kernel.micro_font.is_null());
+            assert!(cx.kernel.micro_font.is_none());
             cx.kernel.install_game_text(strings_owner);
         });
         let system = &raw mut *h.state;
@@ -220,7 +203,7 @@ unsafe fn names(h: &mut Harness) {
         crate::battle_context::with(|cx| {
             uqm_rust::engine::Kernel::release_encounter_text(cx.kernel)
         });
-        queue::TFB_FlushGraphicsEx(1);
+        uqm_rust::graphics::state::flush_ex(true);
         println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
     }
 }
@@ -289,8 +272,8 @@ unsafe fn scenes(h: &mut Harness) {
         let effect = typography.effect();
         let measured = font.measure(
             c"A",
-            uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
-            0,
+            uqm_rust::graphics::geometry::Point { x: 0, y: 0 },
+            uqm_rust::graphics::geometry::TextAlign::Left,
             1,
         );
         assert!(
@@ -305,21 +288,21 @@ unsafe fn scenes(h: &mut Harness) {
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
         let planet_system = &mut *system;
         crate::battle_context::with(|cx| c_api::free_planet(cx, planet_system));
-        queue::TFB_FlushGraphicsEx(1);
+        uqm_rust::graphics::state::flush_ex(true);
         assert!((*system).sys.report.current().is_none());
         drop(typography);
         assert!(
             font.measure(
                 c"A",
-                uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
-                0,
+                uqm_rust::graphics::geometry::Point { x: 0, y: 0 },
+                uqm_rust::graphics::geometry::TextAlign::Left,
                 1
             )
             .visible
         );
         assert!(effect.frame_rect(0).extent.width > 0);
         drop((font, effect));
-        queue::TFB_FlushGraphicsEx(1);
+        uqm_rust::graphics::state::flush_ex(true);
         assert!((*system).sys.frames.iter().all(|frame| frame.is_none()));
         println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then explicit font leases survive FreePlanet and release after their final user", if pluto { "Pluto" } else { "moonbase" });
     }
@@ -328,14 +311,10 @@ unsafe fn scenes(h: &mut Harness) {
 unsafe fn indexed_rescale() {
     let original = CapturedSurface::load(c"graphics.earthmask");
     let mut pixels = vec![0; usize::from(MAP_WIDTH) * usize::from(MAP_HEIGHT)];
-    assert_ne!(
-        uqm_rust::graphics::drawable_abi::ReadFramePixelIndexes(
-            original.as_frame().add(1).cast(),
-            pixels.as_mut_ptr(),
-            i32::from(MAP_WIDTH),
-            i32::from(MAP_HEIGHT)
-        ),
-        0
+    uqm_rust::graphics::drawable::ContextFrame::retain(original.first_frame().at(1)).read_indexes(
+        &mut pixels,
+        i32::from(MAP_WIDTH),
+        i32::from(MAP_HEIGHT),
     );
     let width = MAP_WIDTH / 2;
     let height = MAP_HEIGHT / 2;
@@ -343,15 +322,8 @@ unsafe fn indexed_rescale() {
         .into_definition(width as i16, height as i16)
         .unwrap();
     let mut actual = vec![0; usize::from(width) * usize::from(height)];
-    assert_ne!(
-        uqm_rust::graphics::drawable_abi::ReadFramePixelIndexes(
-            normalized.as_frame().add(1).cast(),
-            actual.as_mut_ptr(),
-            i32::from(width),
-            i32::from(height)
-        ),
-        0
-    );
+    uqm_rust::graphics::drawable::ContextFrame::retain(normalized.first_frame().at(1))
+        .read_indexes(&mut actual, i32::from(width), i32::from(height));
     let dx = ((u32::from(MAP_WIDTH) - 1) << 16) / (u32::from(width) - 1);
     let dy = ((u32::from(MAP_HEIGHT) - 1) << 16) / (u32::from(height) - 1);
     for y in 0..u32::from(height) {
@@ -365,7 +337,7 @@ unsafe fn indexed_rescale() {
         }
     }
     drop(normalized);
-    queue::TFB_FlushGraphicsEx(1);
+    uqm_rust::graphics::state::flush_ex(true);
     println!("real Earth rescale: every indexed elevation pixel matches nearest-neighbor mapping and both frame owners released");
 }
 

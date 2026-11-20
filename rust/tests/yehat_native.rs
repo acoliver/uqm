@@ -8,7 +8,6 @@ mod special_hooks;
 use battle::*;
 use std::mem;
 use uqm_rust::collections::observation;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::abi::*;
 #[test]
 fn descriptor_and_twin_missile_launch() {
@@ -76,7 +75,7 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
             assert_eq!(ship.ship_mut().special_counter, 2);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 10);
             assert_eq!((*e).next.image.frames, ship.frame_set(2));
-            assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 7);
+            assert_eq!(((*e).next.image.frame.raw()).index(), 7);
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 7);
             ship.ship_mut().special_counter = 0;
@@ -92,7 +91,7 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
             }
             assert_eq!((*e).life, 1);
             assert_eq!((*e).next.image.frames, ship.frame_set(0));
-            assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 7);
+            assert_eq!(((*e).next.image.frame.raw()).index(), 7);
             ship.postprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);

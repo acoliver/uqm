@@ -9,7 +9,6 @@ mod battle;
 use battle::{Battle, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::engine::battle::{CollisionFn, ElementFn};
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
@@ -465,7 +464,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
                     (*turret).current.image.frame.raw()
                 );
                 assert_eq!(
-                    GetFrameIndex((*turret).current.image.frame.raw().cast()),
+                    ((*turret).current.image.frame.raw()).index(),
                     normalize_facing(15 + i32::from(expected_offset))
                 );
                 assert_eq!(

@@ -58,6 +58,14 @@ mod fresh_press;
 // tests compile without real C linkage.
 pub(super) mod c_bridge {
     use super::Comm;
+    pub use crate::comm::comm_abi::check_subtitles;
+    pub use crate::comm::comm_abi::clear_subtitles;
+    pub use crate::comm::comm_abi::clear_subtitles_pending;
+    pub use crate::comm::comm_abi::comm_redraw_subtitles;
+    pub use crate::comm::comm_abi::reset_clear_subtitles;
+    pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
+    pub use crate::comm::commanim_abi::runtime::init_comm_animations;
+    pub use crate::comm::commanim_abi::runtime::process_comm_animations;
     pub use crate::sound::heart_ffi::fade_music as FadeMusic;
     pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
     pub use crate::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
@@ -71,22 +79,6 @@ pub(super) mod c_bridge {
     use crate::sound::music::{remember_music, MusicRequest};
     use std::ffi::c_int;
     pub use uqm_engine::host as clock;
-
-    pub use crate::comm::comm_abi::check_subtitles;
-
-    pub use crate::comm::comm_abi::clear_subtitles;
-
-    pub use crate::comm::comm_abi::clear_subtitles_pending;
-
-    pub use crate::comm::comm_abi::reset_clear_subtitles;
-
-    pub use crate::comm::commanim_abi::runtime::process_comm_animations;
-
-    pub use crate::comm::comm_abi::comm_redraw_subtitles;
-
-    pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
-
-    pub use crate::comm::commanim_abi::runtime::init_comm_animations;
 
     pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
         input.pulsed().menu[key_index as usize]
@@ -783,7 +775,8 @@ pub fn alien_talk_first_call_init(comm: &mut Comm, cx: &mut Cx<'_>) {
     cx.kernel.last_activity &= !0x1000;
 }
 
-use crate::comm::ffi::{rust_init_speech_graphics, rust_update_speech_graphics};
+use crate::comm::ffi::rust_init_speech_graphics;
+use crate::comm::ffi::rust_update_speech_graphics;
 
 /// Fade music to foreground volume after talk segue finishes (no lock needed).
 /// # Safety
@@ -1126,10 +1119,8 @@ fn init_speech_graphics(comm: &mut Comm) {
 }
 
 fn set_slider_image_frame(comm: &mut Comm, index: u16) {
-    let frame = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-        comm.presentation.activity_frame,
-    ))
-    .wrapped_frame(index);
+    let frame = crate::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame)
+        .wrapped_frame(index);
     super::oscill_abi::runtime::set_slider_image(comm, frame);
 }
 
@@ -1377,12 +1368,12 @@ fn comm_intro_transition(_comm: &mut Comm) {
                 drop(intro_batch);
             }
             IntroTransition::CrossfadeSpace => {
-                let rect = crate::graphics::native_abi::RECT {
+                let rect = crate::graphics::geometry::Rect {
                     corner: crate::comm::locdata::CPoint {
                         x: sis_org_x as i16,
                         y: sis_org_y as i16,
                     },
-                    extent: crate::graphics::native_abi::EXTENT {
+                    extent: crate::graphics::geometry::Extent {
                         width: sis_screen_width as i16,
                         height: sis_screen_height as i16,
                     },
@@ -1392,9 +1383,9 @@ fn comm_intro_transition(_comm: &mut Comm) {
             }
             IntroTransition::CrossfadeWindow => {
                 let window = _comm.display.window;
-                context.transition(Some(crate::graphics::native_abi::RECT {
+                context.transition(Some(crate::graphics::geometry::Rect {
                     corner: window.corner,
-                    extent: crate::graphics::native_abi::EXTENT {
+                    extent: crate::graphics::geometry::Extent {
                         width: window.width,
                         height: window.height,
                     },

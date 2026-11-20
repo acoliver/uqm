@@ -1671,24 +1671,19 @@ pub(crate) fn record_native_window_presentation(
     let Some(config) = active_native_window_config() else {
         return Ok(());
     };
-    let window = crate::graphics::ffi::with_gfx_state(|canvas, _, _| {
-        if committed_presentation == 1 {
-            canvas.window_mut().show();
-            canvas.window_mut().raise();
-        }
-        let (x, y) = canvas.window().position();
-        let (width, height) = canvas.window().size();
-        (
-            canvas.window().id(),
-            NativeWindowBounds {
-                x,
-                y,
-                width,
-                height,
-            },
-        )
-    })
-    .ok_or_else(|| "graphics state is unavailable for native-window proof".to_string())?;
+    let window = crate::graphics::present::native_window(committed_presentation == 1)
+        .map(|(id, (x, y, width, height))| {
+            (
+                id,
+                NativeWindowBounds {
+                    x,
+                    y,
+                    width,
+                    height,
+                },
+            )
+        })
+        .ok_or_else(|| "graphics state is unavailable for native-window proof".to_string())?;
     let (trace_record_count, accepted_player_inputs, verified_battle_frames) =
         observer.native_window_semantic_snapshot();
     let state = NativeWindowChildState {

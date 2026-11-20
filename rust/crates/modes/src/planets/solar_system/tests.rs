@@ -46,10 +46,8 @@ fn selected_body_names_preserve_sol_moons_and_samatra() {
 #[test]
 #[serial_test::serial]
 fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
-    use crate::engine::{
-        graphics::drawable_abi::{retain_frame_allocations, LoadedDrawable},
-        kernel::solar_resources::SolarResources,
-    };
+    use crate::engine::graphics::drawable::LoadedDrawable;
+    use crate::engine::kernel::solar_resources::SolarResources;
     fn image() -> LoadedDrawable {
         LoadedDrawable::create(2, 0, 0, 2)
             .unwrap_or_else(|| panic!("fixture drawable allocation failed"))
@@ -95,26 +93,33 @@ fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
         .unwrap_or_else(|| panic!("fixture frame missing"));
     visit.clear_system_image();
     assert!(visit.system_image.is_none());
-    assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[cached])).is_err());
+    assert!(
+        std::panic::catch_unwind(|| crate::graphics::drawable::retain_frames(&[cached])).is_err()
+    );
     assert_eq!(
-        retain_frame_allocations(&[background])[0].frame(0),
+        crate::graphics::drawable::retain_frames(&[background])[0].frame(0),
         Some(background)
     );
     drop(visit);
-    assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[background])).is_err());
+    assert!(
+        std::panic::catch_unwind(|| crate::graphics::drawable::retain_frames(&[background]))
+            .is_err()
+    );
     assert_eq!(
-        retain_frame_allocations(&[shared])[0].frame(0),
+        crate::graphics::drawable::retain_frames(&[shared])[0].frame(0),
         Some(shared)
     );
     let second = SolarSystem::new(&game.world, StarId(82));
     assert!(second.stars.is_none());
     assert!(second.system_image.is_none());
     assert_eq!(
-        retain_frame_allocations(&[shared])[0].frame(0),
+        crate::graphics::drawable::retain_frames(&[shared])[0].frame(0),
         Some(shared)
     );
     game.kernel.solar_presentation.assets = None;
-    assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[shared])).is_err());
+    assert!(
+        std::panic::catch_unwind(|| crate::graphics::drawable::retain_frames(&[shared])).is_err()
+    );
     assert_eq!(game.kernel.solar_presentation.frame_deadline, 47);
 }
 

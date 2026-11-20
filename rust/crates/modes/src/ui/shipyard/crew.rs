@@ -6,7 +6,9 @@ use crate::engine::{
     world::queues::Fragment,
     StoryKey, World,
 };
-use crate::graphics::{menu as draw, native_abi::*};
+use crate::graphics::{
+    geometry::Color, geometry::Point, geometry::Rect, geometry::TextAlign, menu as draw,
+};
 use crate::starbase::shipyard::SHIP_COST;
 use crate::ui::{
     rgb15,
@@ -16,14 +18,14 @@ use crate::ui::{
 
 const BLACK: Color = rgb15(0, 0, 0);
 
-pub(super) fn purchased_crew(world: &World) -> SIZE {
+pub(super) fn purchased_crew(world: &World) -> i16 {
     u16::from_le_bytes([
-        world.story_state(StoryKey::CREW_PURCHASED0) as BYTE,
-        world.story_state(StoryKey::CREW_PURCHASED1) as BYTE,
-    ]) as SIZE
+        world.story_state(StoryKey::CREW_PURCHASED0) as u8,
+        world.story_state(StoryKey::CREW_PURCHASED1) as u8,
+    ]) as i16
 }
 
-pub(super) fn crew_transaction(cx: &mut Cx<'_>, delta: SIZE, redraw: impl FnOnce(&mut Cx<'_>)) {
+pub(super) fn crew_transaction(cx: &mut Cx<'_>, delta: i16, redraw: impl FnOnce(&mut Cx<'_>)) {
     if delta == 0 {
         return;
     }
@@ -45,11 +47,11 @@ pub(super) fn crew_transaction(cx: &mut Cx<'_>, delta: SIZE, redraw: impl FnOnce
     }
     if crate::engine::world::fleet::check_alliance(
         cx.world,
-        crate::engine::species::ship::SHOFIXTI_SHIP as COUNT,
-    ) != (crate::starbase::platform::AlliedState::GoodGuy as u16) as COUNT
+        crate::engine::species::ship::SHOFIXTI_SHIP as u16,
+    ) != (crate::starbase::platform::AlliedState::GoodGuy as u16)
     {
         cx.world
-            .set_story_state(StoryKey::CREW_PURCHASED0, bought as BYTE as u32);
+            .set_story_state(StoryKey::CREW_PURCHASED0, bought as u8 as u32);
         cx.world
             .set_story_state(StoryKey::CREW_PURCHASED1, ((bought as u16) >> 8) as u32);
     }
@@ -74,10 +76,10 @@ pub(super) fn label(world: &mut World, id: LinkId<Fragment>) -> (bool, String) {
     (ship.crew_level != 0, buffer)
 }
 
-pub(super) fn show_ship_crew(world: &mut World, id: LinkId<Fragment>, rect: &RECT) {
+pub(super) fn show_ship_crew(world: &mut World, id: LinkId<Fragment>, rect: &Rect) {
     let (has_crew, buffer) = label(world, id);
     let mut r = *rect;
-    let baseline = POINT {
+    let baseline = Point {
         x: r.corner.x + (r.extent.width >> 1),
         y: r.corner.y + r.extent.height - 1,
     };
@@ -93,10 +95,10 @@ pub(super) fn show_ship_crew(world: &mut World, id: LinkId<Fragment>, rect: &REC
     } else {
         rgb15(0x12, 0, 0)
     });
-    super::session::text(&buffer, baseline, TEXT_ALIGN_ALIGN_CENTER);
+    super::session::text(&buffer, baseline, TextAlign::Center);
 }
 
-pub(super) fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -> SIZE {
+pub(super) fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -> i16 {
     let res_units = cx.world.data.flagship.res_units;
     let crew_cost = cx.world.data.game.crew_cost;
     let ship = *cx.world.built_ships().get(id);
@@ -107,7 +109,7 @@ pub(super) fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -
         };
         races.get(template).crew_level
     };
-    if res_units < crew_cost as DWORD {
+    if res_units < crew_cost as u32 {
         return 0;
     }
     if ship.crew_level >= ship.max_crew || ship.crew_level >= max_crew {
@@ -128,14 +130,14 @@ pub(super) fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -
     1
 }
 
-pub(super) fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -> SIZE {
+pub(super) fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -> i16 {
     let ship = *cx.world.built_ships().get(id);
     let mut delta = 0;
     if ship.crew_level > 0 {
         let cost = if ship.crew_level > 1 {
             let bought = purchased_crew(cx.world);
             cx.world.data.game.crew_cost as i32
-                - if bought == crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as SIZE {
+                - if bought == crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as i16 {
                     2
                 } else {
                     0
@@ -157,15 +159,15 @@ pub(super) fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>
     delta
 }
 
-pub(super) fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE {
+pub(super) fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> i16 {
     let Some(cell) = super::sis::capacity::crew_cell(
         &cx.world.data.flagship,
         input.preferences().fonts == crate::ui::settings::OPT_PC,
     ) else {
         return 0;
     };
-    let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
-    if cx.world.data.flagship.res_units < cx.world.data.game.crew_cost as DWORD {
+    let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
+    if cx.world.data.flagship.res_units < cx.world.data.game.crew_cost as u32 {
         context.set_foreground(cell.foreground);
         return 0;
     }
@@ -177,7 +179,7 @@ pub(super) fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> 
     1
 }
 
-pub(super) fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE {
+pub(super) fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> i16 {
     let highlight = cx.kernel.sis_highlight.clone();
     if cx.world.data.flagship.crew_enlisted == 0 {
         return 0;
@@ -185,7 +187,7 @@ pub(super) fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) 
     let bought = purchased_crew(cx.world);
     highlight.pre_update_flash_rect();
     let cost = cx.world.data.game.crew_cost as i32
-        - if bought == crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as SIZE {
+        - if bought == crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as i16 {
             2
         } else {
             0
@@ -199,7 +201,7 @@ pub(super) fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) 
         input.preferences().fonts == crate::ui::settings::OPT_PC,
     )
     .unwrap_or_else(|| panic!("dismissed flagship crew exceeds capacity"));
-    let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+    let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
     context.set_foreground(cell.foreground);
     context.draw_point(BLACK, cell.point);
     -1

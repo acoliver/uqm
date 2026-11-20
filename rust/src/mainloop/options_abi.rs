@@ -50,7 +50,7 @@ pub fn prepareAddons(content: &Dir, addons: &[CString]) {
 }
 
 pub fn setGammaCorrection(gamma: f32) -> bool {
-    let set = crate::graphics::sdl::platform_abi::TFB_SetGamma(gamma);
+    let set = crate::graphics::present::set_gamma(gamma);
     if set {
         log::info!("Gamma correction set to {gamma:.4}.");
     } else {

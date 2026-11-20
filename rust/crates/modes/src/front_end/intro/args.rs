@@ -63,7 +63,7 @@ impl<'a> Arguments<'a> {
     }
 }
 
-pub(in crate::front_end) fn rgb(bytes: &[u8]) -> Option<crate::graphics::native_abi::Color> {
+pub(in crate::front_end) fn rgb(bytes: &[u8]) -> Option<crate::graphics::geometry::Color> {
     let mut args = Arguments::new(bytes);
     args.whitespace();
     let negative = args.bytes.first() == Some(&b'-');
@@ -91,7 +91,7 @@ pub(in crate::front_end) fn rgb(bytes: &[u8]) -> Option<crate::graphics::native_
     if negative {
         value = value.wrapping_neg();
     }
-    Some(crate::graphics::native_abi::Color {
+    Some(crate::graphics::geometry::Color {
         r: (value >> 16) as u8,
         g: (value >> 8) as u8,
         b: value as u8,

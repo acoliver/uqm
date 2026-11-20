@@ -36,7 +36,7 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 pub(crate) mod live {
     use super::{presentation::OrbitPresentation, submenu_selection};
     use crate::comm::locdata::CRect;
-    use crate::engine::graphics::context_abi::ContextLease;
+    use crate::engine::graphics::context::ContextLease;
     use crate::engine::world::activity::activity_flags::{
         CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER,
     };
@@ -44,25 +44,17 @@ pub(crate) mod live {
         battle::Cx,
         observe::{CheckpointView, Io},
     };
+    use crate::planets::plangen::live::generate_planet_surface;
+    use crate::planets::pstarmap::star_map;
+    use crate::planets::render::draw_star_background;
+    use crate::planets::scan::live::scan_system;
+    use crate::planets::scan::state::ScanState;
     use crate::planets::solar_system::SolarSystem;
+    use crate::planets::sphere::live::draw_default_planet_sphere;
+    use crate::planets::sphere::live::rotate_planet_sphere;
+    use crate::planets::sphere::live::zoom_in_planet_sphere;
     use crate::starbase::gfx::{ContextId, Gfx, Point, Rect, Rgba, Stamp};
     use crate::starbase::graphics::Graphics;
-
-    use crate::planets::scan::state::ScanState;
-
-    use crate::planets::render::draw_star_background;
-
-    use crate::planets::sphere::live::draw_default_planet_sphere;
-
-    use crate::planets::sphere::live::zoom_in_planet_sphere;
-
-    use crate::planets::sphere::live::rotate_planet_sphere;
-
-    use crate::planets::plangen::live::generate_planet_surface;
-
-    use crate::planets::scan::live::scan_system;
-
-    use crate::planets::pstarmap::star_map;
 
     fn black() -> crate::comm::locdata::CColor {
         crate::comm::locdata::CColor {
@@ -96,11 +88,11 @@ pub(crate) mod live {
                         x: state.current.location.x,
                         y: state.current.location.y,
                     },
-                    frame: state.next.image.frame.raw() as usize,
+                    frame: (state.next.image.frame.raw()).bits(),
                 };
                 crate::graphics::menu::stamp(
-                    stamp.frame as _,
-                    crate::graphics::native_abi::POINT {
+                    crate::graphics::drawable::FrameId::from_bits(stamp.frame),
+                    crate::graphics::geometry::Point {
                         x: stamp.origin.x,
                         y: stamp.origin.y,
                     },
@@ -192,13 +184,12 @@ pub(crate) mod live {
         {
             if mode == WAIT {
                 scan.context().select();
-                let frame = crate::engine::graphics::drawable_abi::LoadedDrawable::load(
-                    c"graphics.orbitenter",
-                )
-                .unwrap_or_else(|| panic!("missing orbit entry graphic"));
+                let frame =
+                    crate::engine::graphics::drawable::LoadedDrawable::load(c"graphics.orbitenter")
+                        .unwrap_or_else(|| panic!("missing orbit entry graphic"));
                 scan.context().draw_stamp(
                     &frame.lease().context_frame(0),
-                    crate::graphics::native_abi::POINT { x: 0, y: 0 },
+                    crate::graphics::geometry::Point { x: 0, y: 0 },
                 );
             } else if mode == FULL {
                 draw_default_planet_sphere(planet, &scan.sphere.borrow());
@@ -207,12 +198,12 @@ pub(crate) mod live {
                 scan.context().select();
                 scan.draw_surface(0, black());
             }
-            let region = crate::graphics::native_abi::RECT {
-                corner: crate::graphics::native_abi::POINT {
+            let region = crate::graphics::geometry::Rect {
+                corner: crate::graphics::geometry::Point {
                     x: r.corner.x,
                     y: r.corner.y,
                 },
-                extent: crate::graphics::native_abi::EXTENT {
+                extent: crate::graphics::geometry::Extent {
                     width: r.width,
                     height: r.height,
                 },
@@ -239,10 +230,10 @@ pub(crate) mod live {
         system: &mut crate::engine::world::generation::SolarSys<'_>,
         body: crate::engine::world::generation::Body,
         in_orbit: bool,
-        surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
+        surface: Option<crate::engine::graphics::drawable::LoadedDrawable>,
         resources: (
             crate::planets::report::typography::ReportResources,
-            Option<crate::graphics::context_abi::ContextFrame>,
+            Option<crate::graphics::drawable::ContextFrame>,
         ),
         populate: impl FnOnce(
             &mut crate::engine::world::generation::SolarSys<'_>,
@@ -283,7 +274,7 @@ pub(crate) mod live {
                         rng: data.rng,
                         planet: data.world,
                         info: &data.info.planet_info,
-                        location: crate::graphics::drawable::Point::new(location.x, location.y),
+                        location: crate::graphics::geometry::Point::new(location.x, location.y),
                         width: width as usize,
                     },
                     surface,

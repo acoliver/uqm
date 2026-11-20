@@ -1,7 +1,6 @@
 //! Pixel-mask collision geometry independent of the legacy C collision ABI.
 
 use super::model::SurfacePoint;
-use crate::graphics::tfb_draw::{Canvas, CanvasPixelFormat, TFImage};
 
 /// Owned 1-bit collision mask with a signed hotspot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,54 +49,6 @@ impl CollisionMask {
         self.bits[index / 8] & (1 << (index % 8)) != 0
     }
 
-    /// Extract opacity from a Rust graphics canvas.
-    pub fn from_canvas(canvas: &Canvas, hotspot: SurfacePoint) -> Result<Self, GeometryError> {
-        let extent = canvas.extent();
-        let width = u16::try_from(extent.width).map_err(|_| GeometryError::InvalidExtent)?;
-        let height = u16::try_from(extent.height).map_err(|_| GeometryError::InvalidExtent)?;
-        if width == 0 || height == 0 {
-            return Err(GeometryError::InvalidExtent);
-        }
-        let pixels = canvas.pixels();
-        let format = canvas.format();
-        let occupancy = match format.kind {
-            CanvasPixelFormat::Rgba => pixels
-                .chunks_exact(format.bytes_per_pixel as usize)
-                .map(|pixel| u8::from(pixel.get(3).copied().unwrap_or(0) != 0))
-                .collect::<Vec<_>>(),
-            CanvasPixelFormat::Paletted => {
-                let transparent = canvas.transparent_index();
-                let palette = canvas.palette();
-                pixels
-                    .iter()
-                    .map(|index| {
-                        let visible_index = transparent != Some(*index);
-                        let visible_alpha = palette
-                            .as_ref()
-                            .map(|colors| colors[usize::from(*index)].a != 0)
-                            .unwrap_or(true);
-                        u8::from(visible_index && visible_alpha)
-                    })
-                    .collect::<Vec<_>>()
-            }
-            CanvasPixelFormat::Rgb => vec![1; usize::from(width) * usize::from(height)],
-        };
-        Self::from_occupancy(width, height, hotspot, &occupancy)
-    }
-
-    /// Extract the normal canvas and hotspot from a Rust `TFImage`.
-    pub fn from_image(image: &TFImage) -> Result<Self, GeometryError> {
-        let canvas = image.normal().ok_or(GeometryError::MissingCanvas)?;
-        let hotspot = image.normal_hot_spot();
-        Self::from_canvas(
-            &canvas,
-            SurfacePoint {
-                x: hotspot.x,
-                y: hotspot.y,
-            },
-        )
-    }
-
     #[must_use]
     pub const fn width(&self) -> u16 {
         self.width
@@ -114,7 +65,6 @@ impl CollisionMask {
 pub enum GeometryError {
     InvalidPixelCount { expected: usize, actual: usize },
     InvalidExtent,
-    MissingCanvas,
 }
 
 /// True when two opaque pixels overlap after applying each mask's hotspot.
@@ -313,34 +263,6 @@ mod tests {
             SurfacePoint { x: 99, y: 0 },
             &lander,
             100,
-        ));
-    }
-
-    #[test]
-    fn rgba_canvas_uses_alpha_for_occupancy() {
-        let mut canvas = Canvas::new_rgba(2, 1);
-        canvas
-            .with_pixels_mut(|pixels| {
-                pixels.copy_from_slice(&[255, 0, 0, 0, 0, 0, 0, 255]);
-            })
-            .unwrap();
-        let mask = CollisionMask::from_canvas(&canvas, SurfacePoint::default()).unwrap();
-        assert!(!mask.is_opaque(0, 0));
-        assert!(mask.is_opaque(1, 0));
-    }
-
-    #[test]
-
-    fn image_extraction_preserves_hotspot() {
-        let image = TFImage::new_rgba(1, 1);
-        image.set_normal_hot_spot(crate::graphics::tfb_draw::HotSpot::new(2, 3));
-        let image_mask = CollisionMask::from_image(&image).unwrap();
-        let other = mask(1, 1, &[1]);
-        assert!(!masks_intersect(
-            SurfacePoint { x: 2, y: 3 },
-            &image_mask,
-            SurfacePoint::default(),
-            &other
         ));
     }
 }

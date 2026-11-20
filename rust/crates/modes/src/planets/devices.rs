@@ -1,19 +1,22 @@
 //! Devices menu, ported from `planets/devices.c`.
 
 use super::device_effects::{effect_state, repair_ultron, ULTRON_COMPONENTS};
-use crate::engine::{battle::Cx, observe::Io};
-use crate::engine::{StoryKey, World};
-
-use crate::engine::world::activity::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
-use crate::graphics::context_abi::ContextLease;
-
 use crate::comm::locdata::{CColor, CRect};
 use crate::engine::species::ship;
+use crate::engine::world::activity::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
+use crate::engine::{battle::Cx, observe::Io};
+use crate::engine::{StoryKey, World};
+use crate::graphics::context::ContextLease;
 use crate::planets::generate::identities::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
-use crate::starbase::{
-    gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, TextDraw},
-    graphics::Graphics,
-};
+use crate::starbase::gfx::Align;
+use crate::starbase::gfx::ContextId;
+use crate::starbase::gfx::FontId;
+use crate::starbase::gfx::Gfx;
+use crate::starbase::gfx::Point;
+use crate::starbase::gfx::Rect;
+use crate::starbase::gfx::Rgba;
+use crate::starbase::gfx::TextDraw;
+use crate::starbase::graphics::Graphics;
 use crate::state::game_state_keys::{get_game_state as get, set_game_state as set};
 
 fn publish(kernel: &crate::engine::Kernel, io: &mut Io<'_>) {
@@ -23,13 +26,10 @@ fn publish(kernel: &crate::engine::Kernel, io: &mut Io<'_>) {
         ));
 }
 
-use crate::navigation::hyper_transition::save_sis_hyper_state;
-
 use crate::engine::world::fleet::start_sphere_tracking;
-
-use crate::navigation::groups::put_group_info;
-
 use crate::engine::world::generation::Body;
+use crate::navigation::groups::put_group_info;
+use crate::navigation::hyper_transition::save_sis_hyper_state;
 use crate::planets::solar_system::SolarSystem;
 
 /// The solar visit a device acts in, with its owner's location save.
@@ -48,8 +48,8 @@ impl SolarVisit<'_> {
 use crate::ui::util::draw_starcon_box;
 
 struct Menu {
-    icons: crate::graphics::context_abi::ContextFrame,
-    context: crate::graphics::context_abi::ContextLease,
+    icons: crate::graphics::drawable::ContextFrame,
+    context: crate::graphics::context::ContextLease,
     list: Vec<u8>,
     selected: usize,
     top: usize,
@@ -108,9 +108,9 @@ fn draw(menu: &Menu, g: &Graphics, old: Option<usize>, refresh: bool) {
         };
         draw_starcon_box(
             &menu.context,
-            crate::graphics::native_abi::RECT {
+            crate::graphics::geometry::Rect {
                 corner: rect.corner,
-                extent: crate::graphics::native_abi::EXTENT {
+                extent: crate::graphics::geometry::Extent {
                     width: rect.width,
                     height: rect.height,
                 },
@@ -130,7 +130,7 @@ fn draw(menu: &Menu, g: &Graphics, old: Option<usize>, refresh: bool) {
         for (pos, id) in menu.list.iter().skip(menu.top).take(5).enumerate() {
             menu.context.draw_stamp(
                 &menu.icons.indexed_frame(77 + usize::from(*id)),
-                crate::graphics::native_abi::POINT {
+                crate::graphics::geometry::Point {
                     x: 4,
                     y: 34 + pos as i16 * 18,
                 },
@@ -391,10 +391,8 @@ fn prepare_devices_menu(cx: &mut Cx<'_>) -> Option<Menu> {
         return None;
     }
     let menu = Menu {
-        icons: crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-            cx.kernel.misc_data_frame,
-        )),
-        context: crate::graphics::context_abi::ContextLease::require(cx.kernel.status_context),
+        icons: crate::graphics::drawable::ContextFrame::retain(cx.kernel.misc_data_frame),
+        context: crate::graphics::context::ContextLease::require(cx.kernel.status_context),
         list,
         selected: 0,
         top: 0,

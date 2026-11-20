@@ -8,15 +8,13 @@
 //! (`C_WRITTEN_SAVE`, read with a separate script) and from `races.h`, not
 //! from the encoder.
 
-use std::ops::{Deref, DerefMut};
-
 use super::queues::*;
-use crate::engine::clock::NUM_EVENTS;
-
 use crate::comm::dispatch::{CPoint, INFINITE_FLEET};
+use crate::engine::clock::NUM_EVENTS;
 use crate::engine::world::queues::{FleetInfo as CFleetInfo, ShipFragment as CShipFragment};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
+use std::ops::{Deref, DerefMut};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 pub(super) const C_WRITTEN_SAVE: &[u8] =
@@ -41,6 +39,11 @@ pub(super) struct LiveGame(crate::engine::World);
 pub(super) fn handle(race: usize, which: usize) -> *mut std::ffi::c_void {
     (0x1_0000 + race * 0x100 + which * 0x10) as *mut std::ffi::c_void
 }
+
+/// A distinct frame identity for fixture icons; only identity is compared.
+pub(super) fn frame_handle(race: usize, which: usize) -> crate::graphics::drawable::FrameId {
+    crate::graphics::drawable::FrameId::from_bits((0x100 + race * 0x10 + which) << 16)
+}
 impl LiveGame {
     pub(super) fn new() -> Self {
         let mut game = Self::bare();
@@ -58,8 +61,8 @@ impl LiveGame {
                 max_energy: 30 + race as u8,
                 loc: CPoint { x: -1, y: -2 },
                 race_strings: handle(race, 1).cast(),
-                icons: handle(race, 2).cast(),
-                melee_icon: handle(race, 3).cast(),
+                icons: frame_handle(race, 2),
+                melee_icon: frame_handle(race, 3),
                 actual_strength: 0xa4a4,
                 known_strength: 0xa5a5,
                 known_loc: CPoint { x: -3, y: -4 },
@@ -381,8 +384,8 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
         let t = game.template(race);
         assert_eq!(t.species_id, race as u32 + 1, "race {race}");
         assert_eq!(t.race_strings, handle(race, 1).cast(), "race {race}");
-        assert_eq!(t.icons, handle(race, 2).cast(), "race {race}");
-        assert_eq!(t.melee_icon, handle(race, 3).cast(), "race {race}");
+        assert_eq!(t.icons, frame_handle(race, 2), "race {race}");
+        assert_eq!(t.melee_icon, frame_handle(race, 3), "race {race}");
     }
     assert_eq!(game.avail_races_ref().count(), RACES);
     assert_eq!(free_slots(&game.avail_races_ref()), 0);
@@ -398,8 +401,8 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     assert_eq!((ship.energy_level, ship.max_energy), (0, 18));
     assert_eq!(ship.species_id, 3);
     assert_eq!(ship.race_strings, handle(2, 1).cast());
-    assert_eq!(ship.icons, handle(2, 2).cast());
-    assert_eq!(ship.melee_icon, handle(2, 3).cast());
+    assert_eq!(ship.icons, frame_handle(2, 2));
+    assert_eq!(ship.melee_icon, frame_handle(2, 3));
     // One captain draw for the clone, whatever name the save then put on top.
     assert_eq!(draws.get(), 1);
     assert!(game.npc_fragments().is_empty());

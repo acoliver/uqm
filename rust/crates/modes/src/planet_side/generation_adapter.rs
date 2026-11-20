@@ -375,8 +375,7 @@ mod tests {
         let io = RefCell::new(Io {
             observer: &mut observer,
         });
-        let scan =
-            crate::engine::graphics::context_abi::LoadedContext::create(c"generation-test-scan");
+        let scan = crate::engine::graphics::context::LoadedContext::create(c"generation-test-scan");
         run(
             &game,
             &io,
@@ -396,7 +395,7 @@ mod tests {
             system.sys.sun.num_planets = 1;
             system.enter_inner(0);
             system.enter_orbit(Body::Planet(0));
-            let report_color = crate::graphics::native_abi::Color {
+            let report_color = crate::graphics::geometry::Color {
                 r: 3,
                 g: 5,
                 b: 7,

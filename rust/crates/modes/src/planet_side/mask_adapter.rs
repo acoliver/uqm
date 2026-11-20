@@ -1,7 +1,7 @@
 //! Collision masks from retained native frames.
 
 use super::{geometry::CollisionMask, model::SurfacePoint, runtime::AdapterError};
-use crate::graphics::context_abi::ContextFrame;
+use crate::graphics::drawable::ContextFrame;
 
 pub fn extract_frame_mask(frame: &ContextFrame) -> Result<CollisionMask, AdapterError> {
     let occupancy = frame
@@ -29,10 +29,7 @@ pub fn extract_lander_masks(base: &ContextFrame) -> Result<Vec<CollisionMask>, A
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::{
-        drawable_abi::LoadedDrawable,
-        native_abi::{Color, HOT_SPOT},
-    };
+    use crate::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::HotSpot};
 
     #[test]
     #[serial_test::serial]
@@ -47,10 +44,10 @@ mod tests {
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
-        let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+        let frame = ContextFrame::retain(game.kernel.screen);
         assert!(
             std::thread::spawn(|| {
-                assert!(ContextFrame::retain(None).alpha_occupancy().is_none());
+                assert!(ContextFrame::default().alpha_occupancy().is_none());
             })
             .join()
             .is_ok(),
@@ -70,7 +67,7 @@ mod tests {
                 .unwrap();
         let owner = LoadedDrawable::create(8, 2, 2, 16).unwrap();
         let lease = owner.lease();
-        lease.set_hotspot(0, HOT_SPOT { x: 1, y: -2 });
+        lease.set_hotspot(0, HotSpot { x: 1, y: -2 });
         let pixels = [0, 1, 127, 255].map(|a| Color {
             r: 0,
             g: 0,
@@ -95,7 +92,7 @@ mod tests {
         );
         assert_eq!(extract_lander_masks(&frame).unwrap().len(), 16);
         assert_eq!(
-            extract_frame_mask(&ContextFrame::retain(None)),
+            extract_frame_mask(&ContextFrame::default()),
             Err(AdapterError::new("collision_frame_invalid"))
         );
         drop(frame);

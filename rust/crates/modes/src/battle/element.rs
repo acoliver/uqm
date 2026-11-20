@@ -55,7 +55,7 @@ impl Point {
 pub use super::velocity::Extent;
 
 /// Frame handle (opaque pointer to graphics frame)
-pub type FrameHandle = *mut std::ffi::c_void;
+pub type FrameHandle = crate::graphics::drawable::FrameId;
 
 /// Stamp (visual representation with position and frame)
 #[derive(Debug, Clone, Copy)]
@@ -176,7 +176,7 @@ pub struct Element {
 
 impl From<&crate::engine::battle::record::ElementRecord> for Element {
     fn from(record: &crate::engine::battle::record::ElementRecord) -> Self {
-        fn point(p: crate::graphics::native_abi::POINT) -> Point {
+        fn point(p: crate::graphics::geometry::Point) -> Point {
             Point::new(p.x, p.y)
         }
         fn visual(s: &crate::engine::battle::record::STATE) -> ElementVisualState {
@@ -205,7 +205,7 @@ impl From<&crate::engine::battle::record::ElementRecord> for Element {
                 end_point: point(record.IntersectControl.EndPoint),
                 intersect_stamp: Stamp {
                     origin: point(record.IntersectControl.IntersectStamp.origin),
-                    frame: record.IntersectControl.IntersectStamp.frame.cast(),
+                    frame: record.IntersectControl.IntersectStamp.frame,
                 },
             },
             prim_index: record.PrimIndex,
@@ -240,7 +240,7 @@ impl Element {
                 last_time_val: 0,
                 intersect_stamp: Stamp {
                     origin: Point::zero(),
-                    frame: std::ptr::null_mut(),
+                    frame: crate::graphics::drawable::FrameId::NULL,
                 },
                 end_point: Point::zero(),
             },
@@ -394,7 +394,7 @@ impl Element {
         if !self.current.frame.is_absent() {
             Some(Stamp {
                 origin: self.current.location,
-                frame: self.current.frame.raw().cast(),
+                frame: self.current.frame.raw(),
             })
         } else {
             None
@@ -406,7 +406,7 @@ impl Element {
         if !self.next.frame.is_absent() {
             Some(Stamp {
                 origin: self.next.location,
-                frame: self.next.frame.raw().cast(),
+                frame: self.next.frame.raw(),
             })
         } else {
             None
@@ -971,9 +971,9 @@ mod tests {
     fn live_intersection_fields_are_read_at_their_native_offsets() {
         let mut native = crate::ships::native::abi::ElementRecord::default();
         native.IntersectControl.last_time_val = 17;
-        native.IntersectControl.EndPoint = crate::graphics::native_abi::POINT { x: 31, y: -47 };
+        native.IntersectControl.EndPoint = crate::graphics::geometry::Point { x: 31, y: -47 };
         native.IntersectControl.IntersectStamp.origin =
-            crate::graphics::native_abi::POINT { x: -3, y: 91 };
+            crate::graphics::geometry::Point { x: -3, y: 91 };
         let model = Element::from(&native);
         assert_eq!(model.intersect_control.last_time_val, 17);
         assert_eq!(model.intersect_control.end_point, Point::new(31, -47));

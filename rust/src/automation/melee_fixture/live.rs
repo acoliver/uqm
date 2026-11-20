@@ -7,7 +7,7 @@ use crate::battle::element::ElementFlags;
 use crate::engine::battle::views::{FrameSelection, Frames};
 use crate::engine::battle::Cx;
 use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
-use crate::graphics::native_abi::POINT as Point;
+use crate::graphics::geometry::Point;
 use crate::ships::native::abi::*;
 use std::mem;
 

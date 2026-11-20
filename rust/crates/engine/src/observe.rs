@@ -48,10 +48,7 @@ impl CampaignView {
                 .flatten()
                 .and_then(|facing| u8::try_from(facing).ok());
         if !game.ship_stamp.frame.is_null() {
-            // SAFETY: the supplied world retains this game-thread graphics frame.
-            view.ship_facing = i32::from(unsafe {
-                crate::graphics::pixmap_abi::GetFrameIndex(game.ship_stamp.frame.cast())
-            });
+            view.ship_facing = i32::from(game.ship_stamp.frame.index());
         }
         let ships = kernel.ships_ref(0);
         // Entry/exit transitions suppress SIS callbacks while leaving velocity at zero.

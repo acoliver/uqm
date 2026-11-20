@@ -32,7 +32,7 @@ pub struct ShipObservation<'a> {
     pub element: usize,
     #[cfg(test)]
     lifetime: std::marker::PhantomData<&'a ()>,
-    pub icons: Option<&'a crate::graphics::native_abi::frame_desc>,
+    pub icons: crate::graphics::drawable::FrameId,
     pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
     pub race: Option<DescriptorObservation<'a>>,
 }

@@ -21,10 +21,10 @@ pub struct MeleeSession {
     pub(crate) files: Option<MeleeFiles>,
     pub(crate) build_picker: Option<crate::supermelee::native::build_picker::live::BuildPicker>,
     pub(crate) fleet_picker: Option<crate::supermelee::native::battle_picker::live::FleetPicker>,
-    pub(crate) menu_graphic: Option<uqm_engine::graphics::drawable_abi::LoadedDrawable>,
-    pub(crate) menu_context: Option<uqm_engine::graphics::context_abi::ContextLease>,
-    pub(crate) menu_target: Option<uqm_engine::graphics::context_abi::ContextFrame>,
-    pub(crate) menu_font: Option<uqm_engine::graphics::native_font::FontLease>,
+    pub(crate) menu_graphic: Option<uqm_engine::graphics::drawable::LoadedDrawable>,
+    pub(crate) menu_context: Option<uqm_engine::graphics::context::ContextLease>,
+    pub(crate) menu_target: Option<uqm_engine::graphics::drawable::ContextFrame>,
+    pub(crate) menu_font: Option<uqm_engine::graphics::font::FontLease>,
     next_selection_flash: u32,
     selection_highlighted: bool,
     pub activity: crate::engine::world::activity::ActivityControl,
@@ -100,7 +100,7 @@ impl MeleeSession {
         Some(self.selection_highlighted)
     }
 
-    pub(crate) fn menu_frames(&self) -> uqm_engine::graphics::drawable_abi::DrawableLease {
+    pub(crate) fn menu_frames(&self) -> uqm_engine::graphics::drawable::DrawableLease {
         self.menu_graphic
             .as_ref()
             .unwrap_or_else(|| panic!("menu graphics not admitted"))

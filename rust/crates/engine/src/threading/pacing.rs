@@ -164,22 +164,20 @@ pub fn sleep_for(env: &mut impl PacingEnv, duration: u32) {
 
 /// Game-thread pacing admitted by a retained graphics context.
 pub struct GameThreadPacer {
-    _context: crate::graphics::context_abi::ContextLease,
+    _context: crate::graphics::context::ContextLease,
 }
 impl GameThreadPacer {
-    pub fn new(context: crate::graphics::context_abi::ContextLease) -> Self {
+    pub fn new(context: crate::graphics::context::ContextLease) -> Self {
         Self { _context: context }
     }
     pub fn now(&self) -> u32 {
         crate::time::counter_abi::GetTimeCounter()
     }
     pub fn sleep_for(&mut self, duration: u32) {
-        crate::graphics::dcqueue_abi::require_presentation(&self._context);
         linked::sleep_thread(duration);
     }
 
     pub fn sleep_until(&mut self, deadline: u32) {
-        crate::graphics::dcqueue_abi::require_presentation(&self._context);
         linked::sleep_thread_until(deadline);
     }
 }
@@ -224,8 +222,8 @@ pub mod linked {
         }
 
         fn pump_and_flush(&mut self) {
-            crate::host::display::process_events();
-            crate::host::display::flush_draws();
+            crate::graphics::sdl::process_events();
+            crate::graphics::state::flush();
         }
 
         fn now_ticks(&self) -> u32 {

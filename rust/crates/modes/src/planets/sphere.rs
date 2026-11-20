@@ -42,8 +42,8 @@ pub struct SphereState {
     pub(crate) width: usize,
     pub(crate) shielded: bool,
     pub(crate) elevation: Vec<i8>,
-    pub(crate) colors: Vec<crate::engine::graphics::native_abi::Color>,
-    pub(crate) scratch: Vec<crate::engine::graphics::native_abi::Color>,
+    pub(crate) colors: Vec<crate::engine::graphics::geometry::Color>,
+    pub(crate) scratch: Vec<crate::engine::graphics::geometry::Color>,
 }
 
 impl Default for SphereState {
@@ -76,15 +76,15 @@ impl SphereState {
             .unwrap_or_else(|| panic!("orbit images are not initialized"))
     }
 
-    pub fn topography(&self) -> crate::engine::graphics::drawable_abi::DrawableLease {
+    pub fn topography(&self) -> crate::engine::graphics::drawable::DrawableLease {
         self.images().topography()
     }
 
-    pub fn zoomed_topography(&self) -> crate::engine::graphics::drawable_abi::DrawableLease {
+    pub fn zoomed_topography(&self) -> crate::engine::graphics::drawable::DrawableLease {
         self.images().zoom.lease()
     }
 
-    pub fn sphere_frame(&self) -> crate::engine::graphics::context_abi::ContextFrame {
+    pub fn sphere_frame(&self) -> crate::engine::graphics::drawable::ContextFrame {
         self.images()
             .sphere
             .lease()
@@ -101,7 +101,7 @@ impl SphereState {
     }
 
     pub(crate) fn render_pixels(&mut self, offset: i32, throb: bool) {
-        use crate::engine::graphics::{cmap::Color, native_abi::Color as NativeColor};
+        use crate::engine::graphics::{geometry::Color, geometry::Color as NativeColor};
         use crate::planets::render::sphere_geometry as sphere;
         let width = self.width;
         let pixels = &self.colors[offset as usize..];
@@ -179,12 +179,12 @@ impl SphereState {
         &self.elevation
     }
 
-    pub fn colors(&self) -> &[crate::engine::graphics::native_abi::Color] {
+    pub fn colors(&self) -> &[crate::engine::graphics::geometry::Color] {
         &self.colors
     }
 
     pub(crate) fn allocate_pixels(&mut self, width: usize, shielded: bool) {
-        let transparent = crate::engine::graphics::native_abi::Color {
+        let transparent = crate::engine::graphics::geometry::Color {
             r: 0,
             g: 0,
             b: 0,
@@ -197,7 +197,7 @@ impl SphereState {
         self.scratch = vec![transparent; 89 * 89];
     }
 
-    pub fn generate(&mut self, location: crate::engine::graphics::drawable::Point, tilt: i32) {
+    pub fn generate(&mut self, location: crate::engine::graphics::geometry::Point, tilt: i32) {
         use crate::planets::render::sphere_geometry;
         sphere_geometry::generate_sphere_mask(location, &mut self.light);
         sphere_geometry::create_sphere_tilt_map(tilt, &mut self.mapping);
@@ -215,20 +215,13 @@ fn zoom_scale(frame: i32, frame_count: i32) -> f64 {
 pub(crate) mod live {
     use super::{zoom_scale, SphereState};
     use crate::comm::locdata::{CColor, CRect};
-    use crate::graphics::{
-        menu as draw,
-        native_abi::{Color, DrawMode, POINT},
-    };
-    use std::cell::RefCell;
-
-    use crate::engine::graphics::context_abi::ContextLease;
+    use crate::engine::graphics::context::ContextLease;
     use crate::engine::time::counter_abi::GetTimeCounter;
-
+    use crate::graphics::{geometry::Color, geometry::DrawMode, geometry::Point, menu as draw};
     use crate::planets::plangen::live::render_sphere;
-
     use crate::planets::plangen::live::set_shield_throb_effect;
-
     use crate::planets::scan::repair_back_rect;
+    use std::cell::RefCell;
 
     fn draw_planet_sphere(state: &SphereState, x: i32, y: i32) {
         let images = state.images();
@@ -238,8 +231,8 @@ pub(crate) mod live {
                 .sphere
                 .lease()
                 .context_frame(state.rotation.frame as usize)
-                .as_raw(),
-            POINT {
+                .frame(),
+            Point {
                 x: x as i16,
                 y: y as i16,
             },
@@ -251,8 +244,8 @@ pub(crate) mod live {
                 0
             };
             draw::stamp(
-                object.context_frame(index).as_raw(),
-                POINT {
+                object.context_frame(index).frame(),
+                Point {
                     x: x as i16,
                     y: y as i16,
                 },
@@ -398,7 +391,7 @@ pub(crate) mod live {
             offscreen.set_frame(state.images().tint.lease().context_frame(0));
             offscreen.clear_clip();
             let rect = offscreen.clip_rect();
-            offscreen.draw_stamp(&state.topography().context_frame(0), POINT { x: 0, y: 0 });
+            offscreen.draw_stamp(&state.topography().context_frame(0), Point { x: 0, y: 0 });
             offscreen.with_draw_mode(
                 DrawMode {
                     kind: 1,
@@ -440,8 +433,8 @@ pub(crate) mod live {
             },
         ) {
             draw::stamp(
-                state.topography().context_frame(0).as_raw(),
-                POINT { x: 0, y: 0 },
+                state.topography().context_frame(0).frame(),
+                Point { x: 0, y: 0 },
             );
         } else {
             let frame = state.images().tint.lease().context_frame(0);
@@ -466,20 +459,20 @@ pub(crate) mod live {
             }
             if tint_y < height - 1 {
                 draw::stamp(
-                    state.topography().context_frame(0).as_raw(),
-                    POINT { x: 0, y: 0 },
+                    state.topography().context_frame(0).frame(),
+                    Point { x: 0, y: 0 },
                 );
             }
             if tint_y >= 0 {
                 let old = draw::clip();
-                draw::set_clip(crate::graphics::native_abi::RECT {
-                    extent: crate::graphics::native_abi::EXTENT {
+                draw::set_clip(crate::graphics::geometry::Rect {
+                    extent: crate::graphics::geometry::Extent {
                         height: (tint_y + 1) as i16,
                         ..old.extent
                     },
                     ..old
                 });
-                draw::stamp(frame.as_raw(), POINT { x: 0, y: 0 });
+                draw::stamp(frame.frame(), Point { x: 0, y: 0 });
                 draw::set_clip(old);
             }
         }
@@ -503,7 +496,7 @@ mod tests {
     }
     #[test]
     fn rasterizes_owned_pixels_with_elevation_interpolation_and_shield_throb() {
-        use crate::engine::graphics::{drawable::Point, native_abi::Color};
+        use crate::engine::graphics::{geometry::Color, geometry::Point};
         let mut state = SphereState::default();
         state.allocate_pixels(242, false);
         let points = [
@@ -577,10 +570,10 @@ mod tests {
     fn separate_orbits_keep_their_lookup_maps_and_rotation_state() {
         let mut first = SphereState::default();
         let mut second = SphereState::default();
-        first.generate(crate::engine::graphics::drawable::Point::new(100, 0), 0);
+        first.generate(crate::engine::graphics::geometry::Point::new(100, 0), 0);
         let first_light = first.light.clone();
         let first_mapping = first.mapping.clone();
-        second.generate(crate::engine::graphics::drawable::Point::new(0, 100), 23);
+        second.generate(crate::engine::graphics::geometry::Point::new(0, 100), 23);
         assert_eq!(first.light, first_light);
         assert_eq!(first.mapping, first_mapping);
         assert_ne!(first.light, second.light);

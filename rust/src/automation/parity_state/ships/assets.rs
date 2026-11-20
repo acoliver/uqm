@@ -3,7 +3,6 @@ use super::super::{
     resources::{Frame, Resource, StringEntry},
     value, Fields,
 };
-use crate::graphics::native_abi::frame_desc;
 use crate::{
     automation::parity::Journal,
     ships::native::abi::{DATA_STUFF, FRAME, RESOURCE, SHIP_INFO},
@@ -12,7 +11,7 @@ use std::ffi::CStr;
 
 pub(super) struct Assets<'a> {
     keys: Vec<(&'static str, Resource<'a>)>,
-    frames: Vec<(&'static str, Frame<'a>)>,
+    frames: Vec<(&'static str, Frame)>,
     strings: StringEntry<'a>,
     sounds: StringEntry<'a>,
     music: usize,
@@ -38,14 +37,7 @@ impl<'a> Assets<'a> {
             .collect();
         let frames = frame_handles(info, data)
             .into_iter()
-            .map(|(name, pointer)| {
-                (
-                    name,
-                    // SAFETY: each non-null handle belongs to the descriptor graph
-                    // held live and immutable by the caller for this borrow.
-                    Frame(unsafe { pointer.cast::<frame_desc>().as_ref() }),
-                )
-            })
+            .map(|(name, pointer)| (name, Frame(pointer)))
             .collect();
         // SAFETY: both string entries belong to the immutable descriptor graph.
         let (strings, sounds) = unsafe { (info.race_strings.as_ref(), data.ship_sounds.as_ref()) };
@@ -81,7 +73,7 @@ impl<'a> Assets<'a> {
                 views
                     .views()
                     .iter()
-                    .map(|frame| frame.raw() as usize)
+                    .map(|frame| frame.raw().bits())
                     .collect(),
                 format!("frame-set:{owner}:{role}"),
             );
@@ -163,7 +155,8 @@ mod tests {
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create frame-source journal: {error}"));
         let mut descriptor = RaceDescriptor::EMPTY;
-        descriptor.ship_data.ship = FrameArray::fixture([std::ptr::null_mut(); 3], ());
+        descriptor.ship_data.ship =
+            FrameArray::fixture([crate::graphics::drawable::FrameId::NULL; 3], ());
         // SAFETY: the local descriptor retains all its null resources and the present ship array.
         let assets = unsafe { Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
         assets.register(&mut journal, "test");

@@ -32,7 +32,7 @@ fn full_diagnostics_use_the_live_site_and_restore_the_unpublished_campaign() {
         .install_game_text(LoadedTextTable::fixture(vec![b"Name\0".to_vec(); 600]));
     let mut catalog = uqm_rust::planets::tables::STARMAP_ARRAY;
     catalog[..NUM_SOLAR_SYSTEMS].fill(CStarDesc {
-        star_pt: uqm_rust::graphics::native_abi::POINT { x: 1000, y: 2000 },
+        star_pt: uqm_rust::graphics::geometry::Point { x: 1000, y: 2000 },
         star_type: 0,
         index: 0,
         prefix: 0,

@@ -17,8 +17,6 @@
 //! production collision adapter and its telemetry verdict counters.  The fixture
 //! itself never calls a telemetry increment and never declares a collision.
 
-use crate::battle::velocity::VelocityDesc;
-
 use super::assembly::{insert_surface_entity, EntityVisual, SharedSurface};
 use super::creatures::CreatureKind;
 use super::entities::{SurfaceEntity, SurfaceEntityKind};
@@ -26,6 +24,7 @@ use super::model::SurfacePoint;
 use super::runtime::AdapterError;
 use super::session::PlanetSideSession;
 use super::world::WORLD_WIDTH;
+use crate::battle::velocity::VelocityDesc;
 
 /// Automation gate that mirrors the live Rust PlanetSide controller.
 ///
@@ -333,7 +332,6 @@ impl PlanetSideFixture {
 mod tests {
     use super::*;
     use crate::engine::observe_port::planet_side::FixtureLayout;
-
     use crate::planet_side::assembly::{share_surface, SurfaceAssembly, WorldVisualPort};
     use crate::planet_side::cargo::{BioCargo, MineralCargo};
     use crate::planet_side::collision::{
@@ -345,7 +343,8 @@ mod tests {
     use crate::planet_side::entities::SurfaceWorld;
     use crate::planet_side::generation::ScanType;
     use crate::planet_side::geometry::CollisionMask;
-    use crate::planet_side::graphics_adapter::{SurfaceFrame, SurfaceFrameRegistry};
+    use crate::planet_side::graphics_adapter::SurfaceFrame;
+    use crate::planet_side::graphics_adapter::SurfaceFrameRegistry;
     use crate::planet_side::hazards::{HazardKind, SoundCue};
     use crate::planet_side::model::{CrewCount, LanderUpgrades};
     use crate::planet_side::runtime::{PlanetSideAudio, PlanetSideCollision};
@@ -396,7 +395,7 @@ mod tests {
             };
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: frame,
                 },
                 mask: solid(),
@@ -410,7 +409,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask: brainbox_mask(animation_frame),
@@ -431,7 +430,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -451,7 +450,7 @@ mod tests {
         fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: u16::from(facing),
                 },
                 mask: solid(),
@@ -464,7 +463,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -474,7 +473,7 @@ mod tests {
         fn hazard_visual(&mut self, _kind: HazardKind) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -488,7 +487,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask: brainbox_mask(animation_frame),

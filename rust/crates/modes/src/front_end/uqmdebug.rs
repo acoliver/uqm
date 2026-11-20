@@ -19,8 +19,7 @@ use crate::engine::{
     world::generation::Body,
     Kernel, StoryKey, World,
 };
-use crate::graphics::context_abi::ContextLease;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::{context::ContextLease, geometry::Point};
 use crate::planets::solar_system::SolarSystem;
 
 mod catalog;
@@ -236,7 +235,7 @@ pub fn move_flagship(world: &mut World, dimensions: (i32, i32)) {
             world.set_activity(world.activity() | START_INTERPLANETARY);
         }
     }
-    world.data.game.autopilot = POINT { x: -1, y: -1 };
+    world.data.game.autopilot = Point { x: -1, y: -1 };
 }
 
 #[cfg(test)]

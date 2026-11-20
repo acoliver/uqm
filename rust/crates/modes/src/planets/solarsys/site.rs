@@ -25,7 +25,7 @@ pub struct Site<'a, 'game, 'observer> {
     index: u8,
     in_orbit: bool,
     presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
-    background: Option<crate::graphics::context_abi::ContextFrame>,
+    background: Option<crate::graphics::drawable::ContextFrame>,
     report_context: Option<crate::planets::report::typography::ReportContext>,
     report_resources: crate::planets::report::typography::ReportResources,
 }
@@ -102,10 +102,9 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     }
 
     fn load_scene(&self, system: &mut SolarSys<'_>, graphics: &CStr, strings: &CStr, report: u16) {
-        use crate::engine::{
-            graphics::drawable_abi::LoadedDrawable, strings::owned_table::LoadedTextTable,
-            world::generation::ReportSlot,
-        };
+        use crate::engine::graphics::drawable::LoadedDrawable;
+        use crate::engine::strings::owned_table::LoadedTextTable;
+        use crate::engine::world::generation::ReportSlot;
         self.report_resources.load();
         {
             system.frames[1] = LoadedDrawable::load(graphics);

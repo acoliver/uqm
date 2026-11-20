@@ -124,7 +124,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         begin_urquan_encounter(self.game.borrow_mut().world, loc)
     }
     fn fade_to_black(&mut self) {
-        let context = crate::engine::graphics::context_abi::ContextLease::require(
+        let context = crate::engine::graphics::context::ContextLease::require(
             self.game.borrow().kernel.screen_context,
         );
         fade_to_black_for_two_seconds(context)
@@ -155,7 +155,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         crate::ui::sis::draw_hyper_coords(
             cx.kernel,
             cx.screen_dimensions().0,
-            crate::graphics::native_abi::POINT { x: loc.0, y: loc.1 },
+            crate::graphics::geometry::Point { x: loc.0, y: loc.1 },
         );
     }
     fn finish_encounter(&mut self) {}

@@ -2,9 +2,8 @@
 
 use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
 use crate::graphics::{
-    context_abi::ContextLease,
-    native_abi::{Color, EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER, TEXT_ALIGN_ALIGN_LEFT},
-    native_font::{FontLease, LoadedFont},
+    context::ContextLease, font::FontLease, font::LoadedFont, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 use crate::input::frames::{
     KEY_MENU_CANCEL, KEY_MENU_DELETE, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT,
@@ -190,12 +189,12 @@ impl DialogResources {
     }
 
     fn draw(&self, values: &DialogValues) {
-        let rect = RECT {
-            corner: POINT {
+        let rect = Rect {
+            corner: Point {
                 x: (self.width - MCD_WIDTH) >> 1,
                 y: (self.height - MCD_HEIGHT) >> 1,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: MCD_WIDTH,
                 height: MCD_HEIGHT,
             },
@@ -231,8 +230,8 @@ impl DialogResources {
                 self.context.draw_text(
                     &self.button_font,
                     &self.labels[label],
-                    POINT { x: 160, y },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    Point { x: 160, y },
+                    TextAlign::Center,
                     Self::color(focused),
                 );
             })
@@ -255,18 +254,18 @@ impl DialogResources {
                 self.context.draw_text(
                     &self.player_font,
                     &self.labels[5],
-                    POINT { x, y },
-                    TEXT_ALIGN_ALIGN_LEFT,
+                    Point { x, y },
+                    TextAlign::Left,
                     color,
                 );
                 self.context.fill_rectangle(
                     color,
-                    RECT {
-                        corner: POINT {
+                    Rect {
+                        corner: Point {
                             x: x + 3 * tick,
                             y: y - 4,
                         },
-                        extent: EXTENT {
+                        extent: Extent {
                             width: 3 * tick,
                             height: 2,
                         },
@@ -274,13 +273,13 @@ impl DialogResources {
                 );
                 self.context.fill_rectangle(
                     color,
-                    RECT {
-                        corner: POINT {
+                    Rect {
+                        corner: Point {
                             x: (i32::from(x + 3 * tick) + i32::from(3 * tick) * values.delay / 9
                                 - 1) as i16,
                             y: y - 7,
                         },
-                        extent: EXTENT {
+                        extent: Extent {
                             width: 3,
                             height: 8,
                         },
@@ -291,8 +290,8 @@ impl DialogResources {
                 self.context.draw_text(
                     &self.player_font,
                     &value,
-                    POINT { x: x + 7 * tick, y },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    Point { x: x + 7 * tick, y },
+                    TextAlign::Center,
                     color,
                 );
             })
@@ -307,8 +306,8 @@ impl DialogResources {
                     self.context.draw_text(
                         &self.player_font,
                         label,
-                        POINT { x, y },
-                        TEXT_ALIGN_ALIGN_LEFT,
+                        Point { x, y },
+                        TextAlign::Left,
                         color,
                     );
                     if value.editing {
@@ -317,8 +316,8 @@ impl DialogResources {
                         self.context.draw_text(
                             &self.player_font,
                             value.text(),
-                            POINT { x: 160, y },
-                            TEXT_ALIGN_ALIGN_CENTER,
+                            Point { x: 160, y },
+                            TextAlign::Center,
                             color,
                         );
                     }
@@ -328,7 +327,7 @@ impl DialogResources {
     }
 
     fn draw_edit(&self, value: &TextValue, x: i16, y: i16) {
-        let baseline = POINT { x: x + 90, y };
+        let baseline = Point { x: x + 90, y };
         let count = value
             .text()
             .to_str()
@@ -338,15 +337,15 @@ impl DialogResources {
         let measured = self.player_font.measure_bounded::<TEXT_WIDTH>(
             value.text(),
             baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
+            TextAlign::Left,
             count as u16,
         );
-        let mut rect = RECT {
-            corner: POINT {
+        let mut rect = Rect {
+            corner: Point {
                 x: baseline.x - 1,
                 y: baseline.y - measured.leading + 2,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: MCD_WIDTH - baseline.x + 1 - 10,
                 height: measured.leading + 2,
             },
@@ -372,7 +371,7 @@ impl DialogResources {
             &self.player_font,
             value.text(),
             baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
+            TextAlign::Left,
             MENU_TEXT_COLOR,
             count as u16,
         );

@@ -1,37 +1,37 @@
 //! Crew and energy record changes before the supplied presentation effect.
 use super::flags::{IN_LAST_BATTLE, LOW_ON_ENERGY, NPC_PLAYER_NUM};
 use super::{Cx, ElementId};
-use crate::graphics::native_abi::{BYTE, COUNT, SIZE};
-fn energy_delta(current: BYTE, maximum: BYTE, delta: SIZE) -> (bool, SIZE) {
+
+fn energy_delta(current: u8, maximum: u8, delta: i16) -> (bool, i16) {
     if delta >= 0 {
-        if current.wrapping_add(delta as BYTE) > maximum {
-            (true, SIZE::from(maximum) - SIZE::from(current))
+        if current.wrapping_add(delta as u8) > maximum {
+            (true, i16::from(maximum) - i16::from(current))
         } else {
             (true, delta)
         }
     } else {
-        ((-i32::from(delta)) as BYTE <= current, delta)
+        ((-i32::from(delta)) as u8 <= current, delta)
     }
 }
-fn crew_delta(current: COUNT, original: COUNT, maximum: COUNT, delta: SIZE) -> (bool, COUNT, SIZE) {
+fn crew_delta(current: u16, original: u16, maximum: u16, delta: i16) -> (bool, u16, i16) {
     if delta > 0 {
-        let updated = current.wrapping_add(delta as COUNT);
+        let updated = current.wrapping_add(delta as u16);
         if updated > maximum {
-            (true, maximum, maximum.wrapping_sub(original) as SIZE)
+            (true, maximum, maximum.wrapping_sub(original) as i16)
         } else {
             (true, updated, delta)
         }
     } else if delta < 0 {
-        if current > (-i32::from(delta)) as COUNT {
-            (true, current.wrapping_add(delta as COUNT), delta)
+        if current > (-i32::from(delta)) as u16 {
+            (true, current.wrapping_add(delta as u16), delta)
         } else {
-            (false, 0, (-i32::from(current as SIZE)) as SIZE)
+            (false, 0, (-i32::from(current as i16)) as i16)
         }
     } else {
         (true, current, 0)
     }
 }
-pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
+pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: i16) -> bool {
     let ship = cx.owner(e);
     let info = cx.race_stats(ship).ship_info;
     let (success, adjusted) = energy_delta(info.energy_level, info.max_energy, delta);
@@ -44,9 +44,9 @@ pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
     }
     success
 }
-pub fn delta_crew(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
-    if cx.world.activity() as BYTE == IN_LAST_BATTLE as BYTE
-        && cx.element(e).player == NPC_PLAYER_NUM as SIZE
+pub fn delta_crew(cx: &mut Cx<'_>, e: ElementId, delta: i16) -> bool {
+    if cx.world.activity() as u8 == IN_LAST_BATTLE as u8
+        && cx.element(e).player == NPC_PLAYER_NUM as i16
     {
         return true;
     }

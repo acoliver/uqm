@@ -2,13 +2,10 @@
 
 use crate::engine::{Kernel, World};
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_abi::{
-        Color, EXTENT, POINT, RECT, TEXT_ALIGN, TEXT_ALIGN_ALIGN_CENTER, TEXT_ALIGN_ALIGN_RIGHT,
-    },
-    native_font::FontLease,
+    context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
+    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
-use std::{ffi::CString, ptr::NonNull};
+use std::ffi::CString;
 
 const BACK: Color = rgb15(0, 0, 20);
 const WORTH: Color = rgb15(10, 10, 31);
@@ -48,10 +45,11 @@ impl CargoDisplay {
                 .tiny_font_lease()
                 .unwrap_or_else(|| panic!("cargo tiny font is not loaded")),
             heading: FontLease::retain(
-                NonNull::new(kernel.star_con_font)
+                kernel
+                    .star_con_font
                     .unwrap_or_else(|| panic!("cargo heading font is not loaded")),
             ),
-            icons: ContextFrame::retain(NonNull::new(kernel.misc_data_frame)),
+            icons: ContextFrame::retain(kernel.misc_data_frame),
             title: kernel.game_text(CARGO_STRINGS).to_owned(),
             capacity_label: kernel.game_text(CARGO_STRINGS + 1).to_owned(),
         }
@@ -60,18 +58,18 @@ impl CargoDisplay {
     fn fill(&self, x: i16, y: i16, width: i16, height: i16, color: Color) {
         self.context.fill_rectangle(
             color,
-            RECT {
-                corner: POINT { x, y },
-                extent: EXTENT { width, height },
+            Rect {
+                corner: Point { x, y },
+                extent: Extent { width, height },
             },
         );
     }
 
-    fn text(&self, x: i16, y: i16, align: TEXT_ALIGN, value: impl ToString, color: Color) {
+    fn text(&self, x: i16, y: i16, align: TextAlign, value: impl ToString, color: Color) {
         let text =
             CString::new(value.to_string()).unwrap_or_else(|_| panic!("cargo text contains a NUL"));
         self.context
-            .draw_text(&self.tiny, &text, POINT { x, y }, align, color);
+            .draw_text(&self.tiny, &text, Point { x, y }, align, color);
     }
 
     fn amount(&self, world: &World, element: u8, selected: bool) {
@@ -87,7 +85,7 @@ impl CargoDisplay {
             self.text(
                 32,
                 y + 6,
-                TEXT_ALIGN_ALIGN_RIGHT,
+                TextAlign::Right,
                 world.data.game.element_worth[usize::from(element)],
                 if selected { AMOUNT } else { WORTH },
             );
@@ -96,7 +94,7 @@ impl CargoDisplay {
         self.text(
             58,
             y + 6,
-            TEXT_ALIGN_ALIGN_RIGHT,
+            TextAlign::Right,
             amount,
             if selected { SELECTED } else { AMOUNT },
         );
@@ -107,21 +105,15 @@ impl CargoDisplay {
             self.context.set_font(&self.tiny);
             self.context.with_batch(|| {
                 self.fill(40, 107, 20, 7, BACK);
-                self.text(
-                    59,
-                    113,
-                    TEXT_ALIGN_ALIGN_RIGHT,
-                    remaining_capacity(world),
-                    WORTH,
-                );
+                self.text(59, 113, TextAlign::Right, remaining_capacity(world), WORTH);
             });
         });
     }
 
     fn display(&self, world: &World) {
-        let rectangle = RECT {
-            corner: POINT { x: 2, y: 20 },
-            extent: EXTENT {
+        let rectangle = Rect {
+            corner: Point { x: 2, y: 20 },
+            extent: Extent {
                 width: 60,
                 height: 109,
             },
@@ -137,15 +129,15 @@ impl CargoDisplay {
         self.context.draw_text(
             &self.heading,
             &self.title,
-            POINT { x: 31, y: 27 },
-            TEXT_ALIGN_ALIGN_CENTER,
+            Point { x: 31, y: 27 },
+            TextAlign::Center,
             SELECTED,
         );
         self.context.set_font(&self.tiny);
         let mut frame = self.icons.indexed_frame(11);
         let bounds = frame.rect();
-        self.text(32, 34, TEXT_ALIGN_ALIGN_RIGHT, "$", WORTH);
-        self.text(58, 34, TEXT_ALIGN_ALIGN_RIGHT, "#", WORTH);
+        self.text(32, 34, TextAlign::Right, "$", WORTH);
+        self.text(58, 34, TextAlign::Right, "#", WORTH);
         for element in 0..8 {
             let y = 35 + i16::from(element) * 9;
             self.fill(
@@ -157,7 +149,7 @@ impl CargoDisplay {
             );
             self.context.draw_stamp(
                 &frame,
-                POINT {
+                Point {
                     x: 7 + (bounds.extent.width >> 1),
                     y: y + (bounds.extent.height >> 1),
                 },
@@ -174,7 +166,7 @@ impl CargoDisplay {
         );
         self.context.draw_stamp(
             &frame.indexed_frame(68),
-            POINT {
+            Point {
                 x: 7 + (bounds.extent.width >> 1),
                 y: 119 + (bounds.extent.height >> 1),
             },
@@ -184,8 +176,8 @@ impl CargoDisplay {
         self.context.draw_text(
             &self.tiny,
             &self.capacity_label,
-            POINT { x: 5, y: 113 },
-            crate::graphics::native_abi::TEXT_ALIGN_ALIGN_LEFT,
+            Point { x: 5, y: 113 },
+            crate::graphics::geometry::TextAlign::Left,
             WORTH,
         );
         self.show_capacity(world);

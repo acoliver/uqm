@@ -1,6 +1,6 @@
 //! Sa-Matra's guards, moon and final encounter, ported from `gensam.c`.
 
-use crate::engine::graphics::native_abi::POINT;
+use crate::engine::graphics::geometry::Point;
 use crate::engine::math::battle_types::{arctan, cosine, sine};
 use crate::engine::world::activity::activity_flags::{
     CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
@@ -34,12 +34,12 @@ pub trait GuardSite {
     fn store_group(&mut self, reference: u32, group: u8);
     fn reinit_built_queue(&mut self);
     fn init_ip_groups(&mut self, reference: u32);
-    fn planet_outer_location(&self, planet: u16) -> POINT;
+    fn planet_outer_location(&self, planet: u16) -> Point;
     /// Visit in queue order, preserving all fields not changed by the visitor.
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP));
-    fn ip_location(&self) -> POINT;
+    fn ip_location(&self) -> Point;
     /// Set ip_location, then XFormIPLoc into ShipStamp.origin, ToDisplay=TRUE.
-    fn set_and_transform_ip_location(&mut self, location: POINT);
+    fn set_and_transform_ip_location(&mut self, location: Point);
 }
 
 pub trait SamatraSite: HomeContactSite {
@@ -138,7 +138,7 @@ pub fn reinit_npcs(site: &mut (impl GuardSite + Story + ?Sized)) -> bool {
             i32::from(location.x) - i32::from(origin.x),
             i32::from(location.y) - i32::from(origin.y),
         );
-        site.set_and_transform_ip_location(POINT {
+        site.set_and_transform_ip_location(Point {
             x: (i32::from(origin.x) + cosine(angle, 3000)) as i16,
             y: (i32::from(origin.y) + sine(angle, 3000)) as i16,
         });

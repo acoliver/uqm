@@ -3,8 +3,9 @@ use super::checkbuf::*;
 use super::crc::*;
 use crate::battle::netplay::CrcState;
 use crate::engine::battle::views::{ElementState, Visual};
+use crate::graphics::{geometry::Extent, geometry::Point};
 
-pub fn crc_process_extent(state: &mut CrcState, value: &EXTENT) {
+pub fn crc_process_extent(state: &mut CrcState, value: &Extent) {
     crc_process_u16(state, value.width as u16);
     crc_process_u16(state, value.height as u16);
 }
@@ -17,7 +18,7 @@ pub fn crc_process_velocity(state: &mut CrcState, value: &VELOCITY_DESC) {
     crc_process_extent(state, &value.incr);
 }
 
-pub fn crc_process_point(state: &mut CrcState, value: &POINT) {
+pub fn crc_process_point(state: &mut CrcState, value: &Point) {
     crc_process_u16(state, value.x as u16);
     crc_process_u16(state, value.y as u16);
 }
@@ -136,7 +137,7 @@ mod tests {
     fn c_element_checksum_vector_excludes_background_objects() {
         use crate::engine::battle::views::{FrameSelection, Frames, Image};
         let visual = Visual {
-            location: POINT { x: 0, y: 0 },
+            location: Point { x: 0, y: 0 },
             image: Image {
                 frame: FrameSelection::ABSENT,
                 frames: Frames::default(),
@@ -166,24 +167,24 @@ mod tests {
         element.turn = 17;
         element.thrust = 33;
         element.velocity.travel_angle = 42;
-        element.velocity.vector = EXTENT {
+        element.velocity.vector = Extent {
             width: -123,
             height: 456,
         };
-        element.velocity.fract = EXTENT {
+        element.velocity.fract = Extent {
             width: -1,
             height: 32767,
         };
-        element.velocity.error = EXTENT {
+        element.velocity.error = Extent {
             width: -32768,
             height: 123,
         };
-        element.velocity.incr = EXTENT {
+        element.velocity.incr = Extent {
             width: 15,
             height: -25,
         };
-        element.current.location = POINT { x: -456, y: 789 };
-        element.next.location = POINT {
+        element.current.location = Point { x: -456, y: 789 };
+        element.next.location = Point {
             x: 30000,
             y: -30000,
         };

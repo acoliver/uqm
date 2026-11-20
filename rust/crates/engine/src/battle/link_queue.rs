@@ -483,7 +483,7 @@ pub struct PickerResources<'a> {
     owner: &'a ShipPickerResources,
 }
 impl PickerResources<'_> {
-    pub fn strings(&self) -> crate::graphics::native_abi::STRING {
+    pub fn strings(&self) -> crate::strings::string_table::StringPtr {
         self.owner
             .strings
             .as_ref()
@@ -534,21 +534,9 @@ mod picker_owner_tests {
     #[serial_test::serial]
     fn picker_labels_and_icons_remain_owned_after_the_admitting_view_drops() {
         use crate::battle::frames::FrameSelection;
-        use crate::graphics::{
-            context_abi::ContextFrame,
-            drawable_abi::{AllocDrawable, DestroyDrawable},
-            pixmap_abi::CaptureDrawable,
-        };
-        // SAFETY: this serialized fixture owns the registered allocation and initializes its frame.
-        let (drawable, icon) = unsafe {
-            let drawable = AllocDrawable(1);
-            let icon = CaptureDrawable(drawable);
-            (*icon).Bounds = crate::graphics::native_abi::EXTENT {
-                width: 2,
-                height: 3,
-            };
-            (drawable, icon)
-        };
+        use crate::graphics::drawable::ContextFrame;
+        let drawable = crate::graphics::drawable::LoadedDrawable::create(0, 2, 3, 1).unwrap();
+        let icon = drawable.first_frame();
         let resources = ShipPickerResources::new(
             crate::strings::owned_table::LoadedTextTable::fixture(vec![
                 c"captain".to_bytes_with_nul().to_vec(),
@@ -560,19 +548,19 @@ mod picker_owner_tests {
         let mut world = crate::World::default();
         world.retain_fleet_resources(1, resources);
         let fragment = world.npc_built_ships().alloc().unwrap();
-        world.npc_built_ships().get_mut(fragment).icons = std::ptr::dangling_mut();
+        world.npc_built_ships().get_mut(fragment).icons =
+            crate::graphics::drawable::FrameId::from_bits(1 << 16);
         world.npc_built_ships().get_mut(fragment).race_strings = std::ptr::dangling_mut();
         let mut pool = RacePool::with_capacity(0, 1);
         let mut ships = LinkQueue::<Starship>::new(&mut pool);
         let id = ships.build(1).unwrap();
         ships.set_picker_resources(id, world.fleet_resources(1));
         world.clear_fleet_resources();
-        // SAFETY: the fixture consumes its native release authority; the picker retains the allocation.
-        unsafe { DestroyDrawable(drawable) };
+        drop(drawable);
         assert_eq!(ships.resources(id).label(2), (c"captain", 7));
         assert_eq!(ships.resources(id).label(1), (c"", 0));
         assert_eq!(ships.resources(id).icon().raw(), icon);
-        let frame = ContextFrame::retain(std::ptr::NonNull::new(icon));
+        let frame = ContextFrame::retain(icon);
         assert_eq!(frame.rect().extent.width, 2);
         assert_eq!(frame.rect().extent.height, 3);
         drop(frame);

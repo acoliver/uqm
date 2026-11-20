@@ -3,8 +3,7 @@
 //! The expected values are worked out here from solarsys.c and state.c, not
 //! produced by the code under test:
 //!
-//! * `ShipFacing` is the frame's `Index` plus one, the frame being a
-//!   `FRAME_DESC` in the field order of drawable.h;
+//! * `ShipFacing` is the frame's index plus one;
 //! * `STARINFO` is a table of one 32-bit offset per star followed, for each
 //!   star that was written, by 12-byte scan records: a planet's record, then
 //!   one per moon of that planet, planet after planet;
@@ -14,17 +13,16 @@
 //!
 //! Fixtures use the production owning session and its copied save input.
 
-use crate::engine::world::generation::Body;
-use crate::engine::World;
-use std::ops::{Deref, DerefMut};
-
 use super::location::{prepare_solar_location, LocationError};
 use super::solar::SolarError;
 use super::solar_tests::System;
 use crate::comm::locdata::CGameState;
+use crate::engine::world::generation::Body;
 use crate::engine::world::state_file::{StateFileError, STARINFO_FILE};
-use crate::graphics::native_abi::{EXTENT, FRAME_DESC, POINT};
+use crate::engine::World;
+use crate::graphics::{drawable::FrameId, geometry::Point};
 use crate::state::ffi::{replace_game_state, rust_init_game_state, snapshot_game_state};
+use std::ops::{Deref, DerefMut};
 
 unsafe fn save_solar_location(
     world: &mut World,
@@ -38,20 +36,9 @@ unsafe fn save_solar_location(
     crate::engine::save::location::apply_solar_location(world, location)
 }
 
-/// A frame as C lays it out: the generated `FRAME_DESC`, so the tests read and
-/// write the same `Index` the code under test does.
-fn frame(index: u16) -> Box<FRAME_DESC> {
-    Box::new(FRAME_DESC {
-        Type: 3,
-        Index: index,
-        HotSpot: POINT { x: 0, y: 0 },
-        Bounds: EXTENT {
-            width: 64,
-            height: 64,
-        },
-        image: std::ptr::null_mut(),
-        parent: std::ptr::null_mut(),
-    })
+/// The frame at `index` of a drawable; only the index is read.
+fn frame(index: u16) -> FrameId {
+    FrameId::from_bits(1 << 16 | usize::from(index))
 }
 
 /// A flagship with a recognisable value in every field the step may touch or
@@ -72,12 +59,11 @@ impl DerefMut for GameFixture {
     }
 }
 
-fn game(ship_frame: Option<&mut FRAME_DESC>) -> GameFixture {
+fn game(ship_frame: Option<FrameId>) -> GameFixture {
     let mut game = GameFixture {
         world: World::new(),
     };
-    game.ship_stamp.frame =
-        ship_frame.map_or(std::ptr::null_mut(), |f| std::ptr::from_mut(f).cast());
+    game.ship_stamp.frame = ship_frame.unwrap_or_default();
     game.ship_stamp.origin.x = 301;
     game.ship_stamp.origin.y = -302;
     game.ip_location.x = 4000;
@@ -93,7 +79,7 @@ fn game(ship_frame: Option<&mut FRAME_DESC>) -> GameFixture {
 }
 
 /// Same as [`game`] with `ip_planet` set as stage one leaves it.
-fn game_in_system(ship_frame: Option<&mut FRAME_DESC>, ip_planet: u8) -> GameFixture {
+fn game_in_system(ship_frame: Option<FrameId>, ip_planet: u8) -> GameFixture {
     let mut game = game(ship_frame);
     game.ip_planet = ip_planet;
     game
@@ -184,12 +170,12 @@ fn with_masks(mut system: System, masks: [u32; 3]) -> System {
 
 #[test]
 fn the_outer_system_records_the_frame_index_plus_one_and_no_planet() {
-    let mut ship = frame(5);
-    let mut game = game(Some(&mut ship));
+    let ship = frame(5);
+    let mut game = game(Some(ship));
     let before = copy_of(&game);
     let system = System::outer();
 
-    // SAFETY: the frame is a live `FRAME_DESC`.
+    // SAFETY: the location step reads only live solar state.
     unsafe { save_solar_location(&mut game.world, &system, 0) }.unwrap();
 
     assert_eq!(game.ship_facing, 6);
@@ -211,19 +197,19 @@ fn a_ship_without_a_frame_faces_one() {
 
 #[test]
 fn the_largest_frame_index_that_fits_is_kept() {
-    let mut ship = frame(65534);
-    let mut game = game(Some(&mut ship));
-    // SAFETY: the frame is a live `FRAME_DESC`.
+    let ship = frame(65534);
+    let mut game = game(Some(ship));
+    // SAFETY: the location step reads only live solar state.
     unsafe { save_solar_location(&mut game.world, &System::outer(), 0) }.unwrap();
     assert_eq!(game.ship_facing, 65535);
 }
 
 #[test]
 fn a_frame_index_that_would_wrap_the_facing_to_zero_is_refused() {
-    let mut ship = frame(65535);
-    let mut game = game(Some(&mut ship));
+    let ship = frame(65535);
+    let mut game = game(Some(ship));
     let before = copy_of(&game);
-    // SAFETY: the frame is a live `FRAME_DESC`.
+    // SAFETY: the location step reads only live solar state.
     let result = unsafe { save_solar_location(&mut game.world, &System::outer(), 0) };
     assert_eq!(result, Err(LocationError::FrameIndexOverflow));
     unchanged_apart_from(&game, &before, &[]);
@@ -232,13 +218,13 @@ fn a_frame_index_that_would_wrap_the_facing_to_zero_is_refused() {
 #[test]
 fn an_inner_system_records_one_based_planet_and_the_suns_location() {
     for planet in 0..16usize {
-        let mut ship = frame(12);
-        let mut game = game(Some(&mut ship));
+        let ship = frame(12);
+        let mut game = game(Some(ship));
         let before = copy_of(&game);
         let mut system = System::inner(planet);
-        system.sys.sun.location = POINT { x: 11, y: -22 };
+        system.sys.sun.location = Point { x: 11, y: -22 };
 
-        // SAFETY: the frame is a live `FRAME_DESC`.
+        // SAFETY: the location step reads only live solar state.
         unsafe { save_solar_location(&mut game.world, &system, 0) }.unwrap();
 
         assert_eq!(game.ip_planet as usize, planet + 1, "planet {planet}");
@@ -301,14 +287,14 @@ fn a_body_from_another_inner_system_is_refused_without_writing_game_state() {
 fn orbiting_a_planet_stores_one_and_nothing_else() {
     // SAFETY: the test retains each frame and solar table for the synchronous read.
     unsafe {
-        let mut ship = frame(9);
-        let mut game = game_in_system(Some(&mut ship), 3);
+        let ship = frame(9);
+        let mut game = game_in_system(Some(ship), 3);
         fresh_starinfo(&mut game.world, 4);
         let before = copy_of(&game);
         let mut system = System::orbiting_planet(2);
-        system.sys.sun.location = POINT { x: 5, y: 5 };
+        system.sys.sun.location = Point { x: 5, y: 5 };
 
-        // SAFETY: the frame is a live `FRAME_DESC`.
+        // SAFETY: the location step reads only live solar state.
         { save_solar_location(&mut game.world, &system, 1) }.unwrap();
 
         assert_eq!(game.in_orbit, 1);

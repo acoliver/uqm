@@ -398,3 +398,35 @@ fn resource_data_refuses_compressed_short_and_empty_requests() {
         assert!(GetResourceData(STREAM_SENTINEL, 8).is_null());
     }
 }
+
+/// #952: a cached string table released through the type's registered free
+/// callback goes back to its own allocator, and the resource loads again.
+#[test]
+#[serial]
+fn cached_string_tables_release_through_their_owner() {
+    let content = Content::new(&[
+        ("text.rmp", b"test.strings = STRTAB:strings.txt\n"),
+        ("strings.txt", b"#(first)\nhello\n#(second)\nworld\n"),
+    ]);
+    unsafe {
+        content.mount.vfs().set_content_dir(content.dir.clone());
+        assert!(!InitResourceSystem().is_null());
+        crate::strings::sresins::install_resource_types();
+        load(&content, "text.rmp", None);
+        let key = c("test.strings");
+        for _ in 0..2 {
+            let table = res_GetResource(key.as_ptr());
+            assert!(!table.is_null());
+            let text = crate::strings::owned_table::LoadedTextTable::retain(
+                std::ptr::NonNull::new(crate::strings::string_table::CaptureStringTable(
+                    table.cast(),
+                ))
+                .unwrap(),
+            );
+            assert_eq!(text.text(1), Some(c"world"));
+            drop(text);
+            // the registered release must free the table's own storage
+            res_FreeResource(key.as_ptr());
+        }
+    }
+}

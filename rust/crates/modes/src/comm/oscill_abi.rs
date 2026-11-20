@@ -8,8 +8,7 @@ pub(crate) mod runtime {
     use super::button_y;
     use crate::comm::Comm;
     use crate::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::{Color, POINT},
+        context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Point,
     };
 
     #[derive(Default)]
@@ -21,8 +20,8 @@ pub(crate) mod runtime {
         pub(crate) scope_height: i16,
         pub(crate) slider: Option<ContextFrame>,
         pub(crate) button: Option<ContextFrame>,
-        pub(crate) slider_origin: POINT,
-        pub(crate) button_origin: POINT,
+        pub(crate) slider_origin: Point,
+        pub(crate) button_origin: Point,
         pub(crate) slider_changed: bool,
         pub(crate) last_offset: Option<i32>,
         pub(crate) slider_space: i32,
@@ -31,7 +30,7 @@ pub(crate) mod runtime {
     pub fn init_oscilloscope(comm: &mut Comm, background: ContextFrame) {
         if comm.scope.scope_work.is_none() {
             let size = background.rect().extent;
-            comm.scope.scope_color = background.pixel(POINT {
+            comm.scope.scope_color = background.pixel(Point {
                 x: size.width / 2,
                 y: size.height / 2,
             });
@@ -74,16 +73,16 @@ pub(crate) mod runtime {
             context.set_frame(work.clone());
             context.clear_clip();
             context.with_selected(|| {
-                context.draw_stamp(background, POINT { x: 0, y: 0 });
+                context.draw_stamp(background, Point { x: 0, y: 0 });
                 context.set_foreground(comm.scope.scope_color);
                 for i in 0..i32::from(comm.scope.scope_width) - 1 {
                     context.draw_line(
                         comm.scope.scope_color,
-                        POINT {
+                        Point {
                             x: (i + 1) as i16,
                             y: i16::from(data[i as usize]) + 1,
                         },
-                        POINT {
+                        Point {
                             x: (i + 2) as i16,
                             y: i16::from(data[i as usize + 1]) + 1,
                         },
@@ -95,7 +94,7 @@ pub(crate) mod runtime {
             background
         };
         let context = ContextLease::require(comm.presentation.radar_context);
-        context.draw_stamp(frame, POINT { x: 0, y: 0 });
+        context.draw_stamp(frame, Point { x: 0, y: 0 });
     }
 
     pub fn init_slider(
@@ -110,11 +109,11 @@ pub(crate) mod runtime {
         let button_size = button.rect().extent;
         comm.scope.slider = Some(slider);
         comm.scope.button = Some(button);
-        comm.scope.slider_origin = POINT {
+        comm.scope.slider_origin = Point {
             x: x as i16,
             y: y as i16,
         };
-        comm.scope.button_origin = POINT {
+        comm.scope.button_origin = Point {
             x: x as i16,
             y: button_y(y, button_size.height, slider_size.height),
         };
@@ -158,7 +157,7 @@ pub(crate) mod runtime {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::graphics::drawable_abi::LoadedDrawable;
+        use crate::graphics::drawable::LoadedDrawable;
 
         #[test]
         #[serial_test::serial]
@@ -170,12 +169,12 @@ pub(crate) mod runtime {
             let background = LoadedDrawable::create(6, 8, 6, 1).ok_or("missing background")?;
             let frame = background.lease().context_frame(0);
             init_oscilloscope(&mut comm, frame.clone());
-            let work = comm.scope.scope_work.as_ref().unwrap().as_raw();
+            let work = comm.scope.scope_work.as_ref().unwrap().frame();
             assert!(!work.is_null());
             init_oscilloscope(&mut comm, frame.clone());
             assert_eq!(
                 (
-                    comm.scope.scope_work.as_ref().unwrap().as_raw(),
+                    comm.scope.scope_work.as_ref().unwrap().frame(),
                     comm.scope.scope_width,
                     comm.scope.scope_height
                 ),
@@ -264,7 +263,7 @@ mod lifetime_tests {
     use super::runtime::*;
     use crate::collections::observation::{self, Event};
     use crate::comm::Comm;
-    use crate::graphics::drawable_abi::LoadedDrawable;
+    use crate::graphics::drawable::LoadedDrawable;
 
     #[test]
     #[serial_test::serial]
@@ -281,7 +280,7 @@ mod lifetime_tests {
         init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
         set_slider_image(&mut comm, frame.clone());
         let work = uqm_engine::test_support::native_probe::release_drawable(
-            comm.scope.scope_work.as_ref().unwrap().as_raw(),
+            comm.scope.scope_work.as_ref().unwrap().frame(),
         );
         assert_eq!(comm.scope.slider_origin.x, 3);
         assert_eq!(comm.scope.slider_space, 12);
@@ -296,7 +295,7 @@ mod lifetime_tests {
         next.presentation = crate::comm::presentation::Presentation::from(&kernel);
         init_oscilloscope(&mut next, frame.clone());
         let next_work = uqm_engine::test_support::native_probe::release_drawable(
-            next.scope.scope_work.as_ref().unwrap().as_raw(),
+            next.scope.scope_work.as_ref().unwrap().frame(),
         );
         assert_eq!(next_work, work);
         drop(next);

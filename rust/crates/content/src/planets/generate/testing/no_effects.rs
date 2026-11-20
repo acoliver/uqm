@@ -1,6 +1,6 @@
 use super::*;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 impl crate::planets::generate::spa::SpathiSite for NoEffects {
     fn load_broadcasters_scene(
         &mut self,
@@ -345,16 +345,16 @@ impl crate::planets::generate::sam::GuardSite for NoEffects {
     fn init_ip_groups(&mut self, _reference: u32) {
         panic!("unexpected dispatch effect")
     }
-    fn planet_outer_location(&self, _planet: u16) -> POINT {
+    fn planet_outer_location(&self, _planet: u16) -> Point {
         panic!("unexpected dispatch effect")
     }
     fn for_each_ip_group(&mut self, _visit: &mut dyn FnMut(&mut IP_GROUP)) {
         panic!("unexpected dispatch effect")
     }
-    fn ip_location(&self) -> POINT {
+    fn ip_location(&self) -> Point {
         panic!("unexpected dispatch effect")
     }
-    fn set_and_transform_ip_location(&mut self, _location: POINT) {
+    fn set_and_transform_ip_location(&mut self, _location: Point) {
         panic!("unexpected dispatch effect")
     }
 }

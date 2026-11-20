@@ -4,10 +4,9 @@
 use super::descriptor::Descriptor;
 use super::ffi::TFB_VideoClip;
 use crate::resource::ffi_bridge::InstallResTypeVectors;
+use crate::sound::resource_types::LoadedMusic;
 use std::ffi::{c_int, CStr};
 use std::ptr;
-
-use crate::sound::resource_types::LoadedMusic;
 use std::ptr::NonNull;
 
 pub struct LoadedVideo(Descriptor);
@@ -19,7 +18,6 @@ impl LoadedVideo {
     }
 
     pub fn play(&self) -> Option<VideoPlayback> {
-        crate::graphics::ffi::assert_owner_thread();
         // SAFETY: the descriptor retains its pathname on the admitted graphics thread.
         let video =
             NonNull::new(unsafe { super::control::_init_video_file(self.0.video.as_ptr()) })?;
@@ -59,7 +57,6 @@ enum Operation {
 
 impl VideoPlayback {
     fn operation(&self, operation: Operation) -> u32 {
-        crate::graphics::ffi::assert_owner_thread();
         let video = self.video.as_ptr();
         let audio = self
             .audio

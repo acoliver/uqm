@@ -1,14 +1,11 @@
 //! Campaign labels borrow unpublished owners and retain their display resources.
-use std::{ffi::CString, ptr};
-use uqm_rust::{
-    engine::Game,
-    graphics::{
-        context_abi::*,
-        dcqueue_abi::TFB_FlushGraphics,
-        drawable_abi::*,
-        native_abi::*,
-        sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
-    },
+use std::ffi::CString;
+use uqm_rust::engine::test_support::native_probe::{frame_pixel as GetFramePixel, selected_clip};
+use uqm_rust::engine::Game;
+use uqm_rust::graphics::context::{ContextLease, LoadedContext};
+use uqm_rust::graphics::{
+    drawable::LoadedDrawable, geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
+    geometry::TextAlign, menu::select as SetContext, present::GraphicsOptions,
 };
 
 #[test]
@@ -29,39 +26,23 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     // SAFETY: this test process owns SDL, its UIO mount and all native fixture allocations.
     unsafe {
-        assert_eq!(
-            TFB_InitGraphics(
-                1,
-                0,
-                ptr::from_ref(&GraphicsOptions::default()).cast(),
-                320,
-                240
-            ),
-            0
-        );
+        uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         content.init_resources("fixture.rmp");
-        let font = uqm_rust::graphics::native_font::LoadedFont::load(c"fixture.tiny").unwrap();
+        let font = uqm_rust::graphics::font::LoadedFont::load(c"fixture.tiny").unwrap();
         let glyph = font
             .lease()
-            .measure(
-                c"A",
-                POINT { x: 27, y: 6 },
-                TEXT_ALIGN_ALIGN_CENTER,
-                u16::MAX,
-            )
+            .measure(c"A", Point { x: 27, y: 6 }, TextAlign::Center, u16::MAX)
             .rect;
         drop(content);
-        #[cfg(feature = "debug-process")]
-        let context = CreateContextAux(c"campaign title".as_ptr());
-        #[cfg(not(feature = "debug-process"))]
-        let context = CreateContextAux();
-        #[cfg(feature = "debug-process")]
-        let previous = CreateContextAux(c"previous context".as_ptr());
-        #[cfg(not(feature = "debug-process"))]
-        let previous = CreateContextAux();
+        let context_owner = LoadedContext::create(c"campaign title");
+        let previous_owner = LoadedContext::create(c"previous context");
+        let (context, previous) = (
+            Some(context_owner.context()),
+            Some(previous_owner.context()),
+        );
         let drawable = LoadedDrawable::create(8, 320, 240, 1).unwrap();
-        let screen = drawable.lease().frame(0).unwrap();
+        let screen = drawable.first_frame();
         let selected = ContextLease::require(context);
         selected.set_frame(drawable.lease().context_frame(0));
         selected.set_background(Color {
@@ -78,33 +59,33 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         game.kernel.install_tiny_font(font);
         uqm_rust::ui::sis::draw_title(&game.kernel, 320, c"A");
         assert_eq!(SetContext(previous), previous);
-        TFB_FlushGraphics();
+        uqm_rust::graphics::state::flush();
         for (point, expected) in [
-            (POINT { x: 193, y: 2 }, (0, 0, 165)),
-            (POINT { x: 247, y: 8 }, (0, 0, 165)),
-            (POINT { x: 192, y: 2 }, (9, 17, 25)),
-            (POINT { x: 193, y: 9 }, (9, 17, 25)),
+            (Point { x: 193, y: 2 }, (0, 0, 165)),
+            (Point { x: 247, y: 8 }, (0, 0, 165)),
+            (Point { x: 192, y: 2 }, (9, 17, 25)),
+            (Point { x: 193, y: 9 }, (9, 17, 25)),
         ] {
             let pixel = GetFramePixel(screen, point);
             assert_eq!((pixel.r, pixel.g, pixel.b), expected);
         }
         let text_pixel = GetFramePixel(
             screen,
-            POINT {
+            Point {
                 x: 193 + glyph.corner.x,
                 y: 2 + glyph.corner.y,
             },
         );
         assert_eq!((text_pixel.r, text_pixel.g, text_pixel.b), (222, 0, 222));
         SetContext(context);
-        let mut clip = RECT::default();
-        assert_eq!(GetContextClipRect(&mut clip), 0);
+        let (mut clip, set) = selected_clip();
+        assert!(!set);
         assert_eq!((clip.extent.width, clip.extent.height), (320, 240));
         let status = ContextLease::require(previous);
         status.set_frame(drawable.lease().context_frame(0));
-        status.set_clip(RECT {
-            corner: POINT { x: 10, y: 20 },
-            extent: EXTENT {
+        status.set_clip(Rect {
+            corner: Point { x: 10, y: 20 },
+            extent: Extent {
                 width: 64,
                 height: 180,
             },
@@ -113,13 +94,13 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         SetContext(context);
         uqm_rust::ui::sis::draw_status_message(&game.kernel, &game.world, Some(c"A"));
         assert_eq!(SetContext(context), context);
-        TFB_FlushGraphics();
+        uqm_rust::graphics::state::flush();
         for (point, expected) in [
-            (POINT { x: 12, y: 150 }, (0, 66, 0)),
-            (POINT { x: 71, y: 156 }, (0, 66, 0)),
-            (POINT { x: 11, y: 150 }, (9, 17, 25)),
+            (Point { x: 12, y: 150 }, (0, 66, 0)),
+            (Point { x: 71, y: 156 }, (0, 66, 0)),
+            (Point { x: 11, y: 150 }, (9, 17, 25)),
             (
-                POINT {
+                Point {
                     x: 12 + glyph.corner.x + 3,
                     y: 150 + glyph.corner.y,
                 },
@@ -129,7 +110,9 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             let pixel = GetFramePixel(screen, point);
             assert_eq!((pixel.r, pixel.g, pixel.b), expected);
         }
-        assert_eq!(GetContextClipRect(&mut clip), 0);
+        let set;
+        (clip, set) = selected_clip();
+        assert!(!set);
         assert_eq!((clip.extent.width, clip.extent.height), (320, 240));
         assert!(uqm_rust::ui::sis::draw_message(
             &game.kernel,
@@ -140,8 +123,8 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             0
         ));
         assert_eq!(SetContext(context), context);
-        TFB_FlushGraphics();
-        let pixel = GetFramePixel(screen, POINT { x: 8, y: 3 });
+        uqm_rust::graphics::state::flush();
+        let pixel = GetFramePixel(screen, Point { x: 8, y: 3 });
         assert_eq!((pixel.r, pixel.g, pixel.b), (0, 0, 165));
         let long_label = CString::new("A".repeat(100))
             .unwrap_or_else(|error| panic!("invalid fixture label: {error}"));
@@ -154,8 +137,8 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             0
         ));
         assert_eq!(SetContext(context), context);
-        assert_eq!(GetContextClipRect(&mut clip), 0);
-        let icons = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(2, 1, 1, 8)
+        assert!(!selected_clip().1);
+        let icons = uqm_rust::graphics::drawable::LoadedDrawable::create(2, 1, 1, 8)
             .unwrap_or_else(|| panic!("fixture icon allocation failed"));
         let retained = icons.lease();
         game.kernel.play_frame = retained
@@ -171,9 +154,9 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
                 .width,
             1
         );
-        status.set_clip(RECT {
-            corner: POINT { x: 256, y: 0 },
-            extent: EXTENT {
+        status.set_clip(Rect {
+            corner: Point { x: 256, y: 0 },
+            extent: Extent {
                 width: 64,
                 height: 240,
             },
@@ -187,8 +170,8 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             0,
         );
         assert_eq!(SetContext(context), context);
-        TFB_FlushGraphics();
-        let pixel = GetFramePixel(screen, POINT { x: 259, y: 173 });
+        uqm_rust::graphics::state::flush();
+        let pixel = GetFramePixel(screen, Point { x: 259, y: 173 });
         assert_eq!((pixel.r, pixel.g, pixel.b), (82, 82, 82));
         game.kernel
             .configuration
@@ -213,18 +196,19 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         SetContext(previous);
         uqm_rust::ui::border::init_siscontexts(&game.kernel, (320, 240));
         assert_eq!(SetContext(context), context);
-        assert_eq!(GetContextClipRect(&mut clip), 1);
+        let set;
+        (clip, set) = selected_clip();
+        assert!(set);
         assert_eq!((clip.corner.x, clip.corner.y), (7, 10));
         assert_eq!((clip.extent.width, clip.extent.height), (242, 227));
         drop(status);
-        SetContext(ptr::null_mut());
+        SetContext(None);
         drop(game);
         drop(selected);
-        DestroyContext(context);
-        DestroyContext(previous);
+        drop((context_owner, previous_owner));
         uqm_rust::resource::ffi_bridge::UninitResourceSystem();
         drop(drawable);
-        TFB_UninitGraphics();
+        uqm_rust::graphics::present::uninit_graphics();
     }
 }
 
@@ -317,7 +301,7 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
     strings[STAR_NUMBER_BASE as usize] = b"Alpha\0".to_vec();
     strings[2] = b"Centauri\0".to_vec();
     let catalog = [CStarDesc {
-        star_pt: POINT { x: 0, y: 0 },
+        star_pt: Point { x: 0, y: 0 },
         star_type: 0,
         index: 0,
         prefix: 1,

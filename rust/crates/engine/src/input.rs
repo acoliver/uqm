@@ -1,12 +1,10 @@
 //! The input driver supplied by the application and owned by the kernel.
 
 use super::{battle::input::InputContext, battle::Cx, observe::Io};
-use std::rc::Rc;
-
+pub use crate::input_port::session::InputFrameHook;
 pub use crate::input_port::*;
 pub use crate::input_port::{controls::InputControls, session::InputSession};
-
-pub use crate::input_port::session::InputFrameHook;
+use std::rc::Rc;
 
 pub trait Frame {
     fn admit(

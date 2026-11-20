@@ -5,7 +5,7 @@ use super::super::world::state_file::StateFileError;
 use super::super::world::story::GameStateOwnerError;
 use super::super::{StoryKey, World};
 use super::summary::SolarError;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -47,7 +47,7 @@ pub struct OrbitLocation {
 pub enum SolarLocation {
     NonOrbital {
         ship_facing: u16,
-        inner: Option<(u8, POINT)>,
+        inner: Option<(u8, Point)>,
     },
     Orbit(OrbitLocation),
 }

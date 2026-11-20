@@ -7,7 +7,7 @@ const BEYOND_SPEED: u16 = SHIP_BEYOND_MAX_SPEED as u16;
 const GRAVITY: u16 = SHIP_IN_GRAVITY_WELL as u16;
 use super::flags::{COLLISION, FINITE_LIFE};
 use super::{Cx, ElementId};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 const GRAVITY_MASS_NATIVE: u16 = 100;
 const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
 const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
@@ -132,7 +132,7 @@ pub fn inertial_thrust(cx: &mut Cx<'_>, e: ElementId) -> u16 {
     cx.element_mut(e).velocity = velocity;
     result
 }
-pub fn collision(cx: &mut Cx<'_>, e0: ElementId, _p0: &mut POINT, e1: ElementId, _p1: &mut POINT) {
+pub fn collision(cx: &mut Cx<'_>, e0: ElementId, _p0: &mut Point, e1: ElementId, _p1: &mut Point) {
     if cx.element(e1).flags & FINITE_LIFE as u16 == 0 {
         cx.element_mut(e0).flags |= COLLISION as u16;
         if u16::from(cx.element(e1).mass_points()) > GRAVITY_MASS_NATIVE {

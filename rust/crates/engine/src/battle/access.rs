@@ -4,7 +4,7 @@ impl Cx<'_> {
         let allocated = self.kernel.elements.alloc();
         let address = if let Some(id) = allocated {
             self.assign_primitive(id);
-            self.primitive_style_mut(id).kind = crate::graphics::native_abi::EMPTY_PRIMITIVE;
+            self.primitive_style_mut(id).kind = 7;
             self.kernel.elements.raw(id) as usize
         } else {
             0
@@ -249,22 +249,13 @@ impl Cx<'_> {
     pub fn draw_final_captain(&mut self, ship: ShipId) {
         let frame = self.desc_mut(ship).take_captain_background();
         let old = crate::graphics::menu::select(self.kernel.status_context);
-        crate::graphics::menu::stamp(frame, crate::graphics::native_abi::POINT { x: 0, y: 0 });
-        let _allocation = crate::graphics::drawable_abi::retain_frame_allocations(&[frame]);
-        if !frame.is_null() {
-            // SAFETY: the descriptor transferred this captured captain's release authority.
-            unsafe {
-                crate::graphics::drawable_abi::DestroyDrawable(
-                    crate::graphics::pixmap_abi::ReleaseDrawable(frame),
-                )
-            };
-        }
+        crate::graphics::menu::stamp(frame, crate::graphics::geometry::Point { x: 0, y: 0 });
+        drop(crate::graphics::drawable::LoadedDrawable::from_frame(frame));
         crate::graphics::menu::select(old);
     }
 }
 
-use crate::graphics::native_abi::FRAME;
-use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIndex};
+use crate::graphics::drawable::FrameId;
 impl Cx<'_> {
     pub(super) fn ship_array(&self, ship: ShipId, role: usize) -> &super::frames::FrameArray {
         let data = &self.desc(ship).ship_data;
@@ -275,21 +266,17 @@ impl Cx<'_> {
             _ => panic!("invalid frame role {role}"),
         }
     }
-    pub(super) fn abs_frame(&self, frame: FRAME, index: u16) -> FRAME {
-        // SAFETY: resource handles come from this battle's loaded descriptors.
-        unsafe { SetAbsFrameIndex(frame, index) }
+    pub(super) fn abs_frame(&self, frame: FrameId, index: u16) -> FrameId {
+        frame.at(index)
     }
-    pub(super) fn equ_frame(&self, frame: FRAME, source: FRAME) -> FRAME {
-        // SAFETY: both resource handles remain loaded for this battle.
-        unsafe { SetEquFrameIndex(frame, source) }
+    pub(super) fn equ_frame(&self, frame: FrameId, source: FrameId) -> FrameId {
+        frame.equal_index(source)
     }
-    pub(super) fn inc_frame(&self, frame: FRAME) -> FRAME {
-        // SAFETY: the current element's resource remains loaded.
-        unsafe { IncFrameIndex(frame) }
+    pub(super) fn inc_frame(&self, frame: FrameId) -> FrameId {
+        frame.next()
     }
-    pub(super) fn frame_index(&self, frame: FRAME) -> u16 {
-        // SAFETY: this battle retains the element's loaded frame resources.
-        unsafe { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) }
+    pub(super) fn frame_index(&self, frame: FrameId) -> u16 {
+        frame.index()
     }
 }
 
@@ -377,56 +364,37 @@ impl Cx<'_> {
         index: u16,
     ) -> ZoomSample {
         assert!(view < 3, "fixture zoom view");
-        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
-        unsafe {
-            let frame = &*self.element(element).current.image.frame.raw();
-            let expected = &**frames.raw().add(view);
-            let mipmap = (view == 1).then(|| {
-                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
-                    (*frames.raw().add(view + 1)).cast(),
-                    index,
-                );
-                let selected = &*frame.image;
-                let adjacent = &*adjacent.image;
-                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
-            });
-            (
-                (frame.parent as usize, frame.Index),
-                (expected.parent as usize, index),
-                mipmap,
-            )
-        }
+        let frame = self.element(element).current.image.frame.raw();
+        let expected = frames.view(view).raw();
+        let mipmap = (view == 1).then(|| {
+            let adjacent = frames.view(view + 1).raw().at(index);
+            let selected = frame
+                .image_identity()
+                .unwrap_or_else(|| panic!("zoom frame has no image"));
+            let adjacent = adjacent
+                .image_identity()
+                .unwrap_or_else(|| panic!("zoom frame has no image"));
+            (selected.1.unwrap_or(0) as usize, adjacent.0 as usize)
+        });
+        let owner = |frame: FrameId| frame.drawable().map_or(0, |drawable| drawable.bits());
+        (
+            (owner(frame), frame.index()),
+            (owner(expected), index),
+            mipmap,
+        )
     }
 
     pub fn frame_count(&self, frame: FrameRef<'_>) -> u16 {
-        // SAFETY: opaque frames originate in retained battle resources, or are absent.
-        unsafe { crate::graphics::pixmap_abi::GetFrameCount(frame.raw().cast()) }
+        frame.raw().count()
     }
     pub fn retreat_frame(&self, frame: FrameRef<'_>) -> FrameSelection {
-        let raw = frame.raw().cast();
-        // SAFETY: the selection retains the frame's drawable.
-        let previous = unsafe { crate::graphics::pixmap_abi::DecFrameIndex(raw).cast() };
-        frame.to_owned().with_raw(previous)
+        frame.to_owned().with_raw(frame.raw().previous())
     }
     pub fn relative_frame(&self, frame: FrameRef<'_>, offset: i16) -> FrameSelection {
-        let raw = frame.raw().cast();
-        // SAFETY: the selection retains the frame's drawable.
-        let relative = unsafe { crate::graphics::pixmap_abi::SetRelFrameIndex(raw, offset).cast() };
-        frame.to_owned().with_raw(relative)
+        frame.to_owned().with_raw(frame.raw().relative(offset))
     }
-    pub fn frame_rect(&self, frame: FrameRef<'_>) -> crate::graphics::native_abi::RECT {
-        let mut rect = crate::graphics::native_abi::RECT {
-            corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
-            extent: crate::graphics::native_abi::EXTENT {
-                width: 0,
-                height: 0,
-            },
-        };
-        // SAFETY: the resource owner retains the frame and rect is local output.
-        unsafe {
-            crate::graphics::drawable_abi::GetFrameRect(frame.raw().cast(), &mut rect);
-        }
-        rect
+    pub fn frame_rect(&self, frame: FrameRef<'_>) -> crate::graphics::geometry::Rect {
+        frame.raw().rect().unwrap_or_default()
     }
     pub fn set_ship_frame(
         &mut self,
@@ -538,12 +506,10 @@ pub mod table;
 
 impl Cx<'_> {
     pub fn screen_dimensions(&self) -> (i32, i32) {
-        use crate::graphics::gfx_common_abi::{ScreenHeight, ScreenWidth};
-        // SAFETY: dimensions are initialized by the owning game thread.
-        unsafe { (ScreenWidth, ScreenHeight) }
+        crate::graphics::state::screen_dimensions()
     }
 
-    pub fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
+    pub fn sound_point(&self, id: ElementId) -> crate::graphics::geometry::Point {
         let index = usize::from(self.elements()[id].PrimIndex);
         let primitive = self.kernel.display.get(index as u16);
         primitive.point()
@@ -551,14 +517,14 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
-    pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
+    pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::intersection::Stamp {
         self.primitive(id).stamp()
     }
 
     pub fn project_display_stamp(
         &mut self,
         id: ElementId,
-        origin: crate::graphics::native_abi::POINT,
+        origin: crate::graphics::geometry::Point,
     ) {
         let element = &self.kernel.elements[id];
         self.kernel
@@ -570,7 +536,7 @@ impl Cx<'_> {
     pub fn set_primitive_stamp(
         &mut self,
         id: ElementId,
-        stamp: crate::graphics::native_abi::STAMP,
+        stamp: crate::graphics::intersection::Stamp,
     ) {
         self.primitive(id).set_stamp(stamp);
     }
@@ -621,14 +587,11 @@ impl Cx<'_> {
     pub fn intersect_elements(&mut self, a: ElementId, b: ElementId, time: u16) -> u16 {
         assert_ne!(a, b, "collision operands alias");
         let (left, right) = self.kernel.elements.pair_mut(a, b);
-        // SAFETY: checked distinct slots and loaded frames remain live during the synchronous geometry call.
-        unsafe {
-            crate::graphics::geometry_ffi::DrawablesIntersect(
-                &mut left.IntersectControl,
-                &mut right.IntersectControl,
-                time,
-            )
-        }
+        crate::graphics::intersection::drawables_intersect(
+            &mut left.IntersectControl,
+            &mut right.IntersectControl,
+            time,
+        )
     }
 }
 
@@ -665,10 +628,7 @@ impl Cx<'_> {
     pub fn refresh_intersect_frame(&mut self, id: ElementId) {
         let e = self.kernel.elements.record_mut(id);
         let first = e.next.image.frames.view(0).to_owned();
-        // SAFETY: both selections retain their native allocations throughout this projection.
-        let raw = unsafe {
-            crate::graphics::pixmap_abi::SetEquFrameIndex(first.raw(), e.next.image.frame.raw())
-        };
+        let raw = first.raw().equal_index(e.next.image.frame.raw());
         e.intersect_frame = first.with_raw(raw);
         crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, raw);
     }
@@ -696,7 +656,7 @@ mod intersection_projection_tests {
     #[serial_test::serial]
     fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
         use crate::battle::{Battle, Cx, World};
-        use crate::graphics::native_abi::POINT;
+        use crate::graphics::geometry::Point;
         // SAFETY: a zeroed group queue has no allocated storage.
 
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
@@ -705,11 +665,14 @@ mod intersection_projection_tests {
             let mut kernel = KernelOwner::new();
             kernel.elements.reset_capacity(1);
             let id = kernel.elements.alloc().unwrap();
-            kernel.elements.record_mut(id).current.location = POINT { x: 44, y: 52 };
-            kernel.elements.record_mut(id).next.location = POINT { x: 60, y: 68 };
+            kernel.elements.record_mut(id).current.location = Point { x: 44, y: 52 };
+            kernel.elements.record_mut(id).next.location = Point { x: 60, y: 68 };
             kernel.elements.record_mut(id).next.image.frames = crate::battle::views::Frames::shared(
                 crate::battle::frames::SharedFrames::Fixture(0),
-                crate::battle::frames::FrameArray::fixture([std::ptr::null_mut(); 3], ()),
+                crate::battle::frames::FrameArray::fixture(
+                    [crate::graphics::drawable::FrameId::NULL; 3],
+                    (),
+                ),
             );
             let mut world = World::new();
             let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, || 0);
@@ -741,7 +704,10 @@ mod intersection_projection_tests {
             cx.kernel.display.get_mut(primitive).kind = 3;
             assert_eq!(cx.display_primitive(primitive).kind, 3);
             cx.append_display(primitive);
-            assert_eq!(cx.display_batch().primitives()[0].Type, 3);
+            assert!(matches!(
+                cx.display_batch().primitives()[0],
+                crate::graphics::batch::Primitive::Line(..)
+            ));
             cx.clear_display_order();
             assert!(cx.display_batch().is_empty());
             cx.reset_display();
@@ -792,7 +758,7 @@ impl Cx<'_> {
     pub fn append_display(&mut self, index: u16) {
         self.kernel.display.insert_before(index, None);
     }
-    pub fn display_batch(&self) -> crate::graphics::native_batch::NativeBatch {
+    pub fn display_batch(&self) -> crate::graphics::batch::NativeBatch {
         self.kernel.display.batch()
     }
 }
@@ -822,21 +788,14 @@ impl Cx<'_> {
     pub fn draw_stamp(
         &self,
         frame: super::frames::FrameRef<'_>,
-        origin: crate::graphics::native_abi::POINT,
+        origin: crate::graphics::geometry::Point,
         in_status_context: bool,
     ) {
-        let mut stamp = crate::graphics::native_abi::STAMP {
-            origin,
-            frame: frame.raw(),
-        };
-        // SAFETY: the frame borrow retains its registered drawable through the synchronous draw.
-        unsafe {
-            let old = in_status_context
-                .then(|| crate::graphics::context_abi::SetContext(self.kernel.status_context));
-            crate::graphics::frame_abi::DrawStamp(&mut stamp);
-            if let Some(old) = old {
-                crate::graphics::context_abi::SetContext(old);
-            }
+        let old =
+            in_status_context.then(|| crate::graphics::menu::select(self.kernel.status_context));
+        crate::graphics::menu::stamp(frame.raw(), origin);
+        if let Some(old) = old {
+            crate::graphics::menu::select(old);
         }
     }
 }
@@ -851,18 +810,7 @@ impl Cx<'_> {
             !frame.is_absent() && !mipmap.is_absent(),
             "mipmap requires two loaded frames"
         );
-        let frame = frame.raw();
-        let mipmap = mipmap.raw();
-        // SAFETY: both non-absent frame borrows retain their allocations during the image update.
-        unsafe {
-            let hot = crate::graphics::drawable_abi::GetFrameHot(mipmap);
-            crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap(
-                (*frame).image,
-                (*mipmap).image,
-                i32::from(hot.x),
-                i32::from(hot.y),
-            );
-        }
+        frame.raw().set_mipmap(mipmap.raw());
     }
 }
 

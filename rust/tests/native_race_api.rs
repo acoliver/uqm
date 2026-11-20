@@ -4,7 +4,6 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Ship};
-
 use uqm_rust::collections::observation::{self, Event};
 use uqm_rust::engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
 use uqm_rust::ships::native::abi::*;
@@ -62,7 +61,7 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
         }
         drop(retained);
         assert!(std::panic::catch_unwind(|| {
-            uqm_rust::graphics::drawable_abi::retain_frame_allocations(&[raw]);
+            uqm_rust::graphics::drawable::retain_frames(&[raw]);
         })
         .is_err());
     });
@@ -280,7 +279,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("ship_record", "fn probe(cx: &mut Cx<'_>, ship: ShipId) { cx.ship_state_mut(ship).record.descriptor = None; let _ = cx.race_stats(ship); }", "E0616"),
         ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.parent = crate::engine::battle::Parent::None; let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
         ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.kernel.elements[id].next.image.frames = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
-        ("frame", "fn probe() { let _ = crate::engine::battle::views::FrameRef { raw: std::ptr::NonNull::dangling().as_ptr(), owner: &crate::engine::battle::frames::FrameArray::EMPTY, resolution: 0, identity: crate::engine::battle::frames::FrameOwner::Drawable }; }", "E0451"),
+        ("frame", "fn probe() { let _ = crate::engine::battle::views::FrameRef { raw: crate::graphics::drawable::FrameId::NULL, owner: &crate::engine::battle::frames::FrameArray::EMPTY, resolution: 0, identity: crate::engine::battle::frames::FrameOwner::Drawable }; }", "E0451"),
         ("frames", "fn probe() { let _ = crate::engine::battle::views::Frames(None); }", "E0423"),
         ("descriptor", "fn probe() { let _ = crate::engine::battle::RaceDesc::from_storage(Box::new(crate::engine::battle::record::RaceDescriptor::EMPTY)); }", "E0624"),
         ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { let _ = cx.project(p); }", "E0599"),

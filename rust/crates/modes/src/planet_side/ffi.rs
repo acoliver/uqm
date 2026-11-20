@@ -1,7 +1,7 @@
 //! Owner-supplied PlanetSide session boundary.
 
 use crate::engine::observe::InputView;
-use crate::graphics::context_abi::ContextFrame;
+use crate::graphics::drawable::ContextFrame;
 use crate::planets::solar_system::SolarSystem;
 use std::num::NonZeroU32;
 
@@ -51,7 +51,8 @@ use super::collision_adapter::{CffiGameplayRandom, SurfaceCollisionAdapter};
 use super::controller::PlanetSideController;
 use super::generation::ScanPersistence;
 use super::generation_adapter::CffiSurfaceGenerator;
-use super::graphics_adapter::{CffiPlanetSideGraphics, SurfaceDrawing};
+use super::graphics_adapter::CffiPlanetSideGraphics;
+use super::graphics_adapter::SurfaceDrawing;
 use super::mask_adapter::extract_lander_masks;
 use super::resources::{LanderGraphic, PlanetSideAssets};
 use super::runtime::{PlanetSideClock, RuntimeAdapters, Tick};

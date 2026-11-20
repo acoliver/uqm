@@ -4,7 +4,7 @@
 //! after the display resources they back, so the resources drop first.
 
 use crate::{
-    graphics::sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
+    graphics::present::{init_graphics, uninit_graphics, GraphicsOptions},
     input::InputSession,
     input_port::sdl_input,
     io::{install, uninstall, Dir, Placement, Vfs},
@@ -59,25 +59,14 @@ impl Graphics {
     pub fn start() -> Self {
         std::env::set_var("SDL_VIDEODRIVER", "dummy");
         std::env::set_var("SDL_AUDIODRIVER", "dummy");
-        // SAFETY: the serialized fixture owns SDL until this guard drops.
-        let status = unsafe {
-            TFB_InitGraphics(
-                1,
-                0,
-                ptr::from_ref(&GraphicsOptions::default()).cast(),
-                320,
-                240,
-            )
-        };
-        assert_eq!(status, 0);
+        init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         Self(())
     }
 }
 
 impl Drop for Graphics {
     fn drop(&mut self) {
-        // SAFETY: every display resource this fixture created has already been released.
-        unsafe { TFB_UninitGraphics() };
+        uninit_graphics();
     }
 }
 

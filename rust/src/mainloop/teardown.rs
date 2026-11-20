@@ -10,7 +10,7 @@
 pub fn teardown_subsystems() {
     crate::input::sdl_input::uninit_input();
     crate::sound::audio_init::uninit_audio();
-    crate::engine::host::display::uninit_graphics();
+    crate::graphics::present::uninit_graphics();
     crate::engine::host::dispatch().clear();
     crate::io::uninstall();
     crate::threading::uninit_game_thread();

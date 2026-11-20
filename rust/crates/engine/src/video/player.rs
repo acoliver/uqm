@@ -1,15 +1,14 @@
 //! Video player with playback control, scaling, and direct SDL surface rendering.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
-
 use super::{
     decoder::DukVideoDecoder,
     scaler::{LanczosVideoScaler, VideoScaler},
     VideoFrame, DUCK_FPS,
 };
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::video::ffi::SDL_Surface;
+use crate::graphics::canvas::Canvas;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 use xbrz::scale_rgba;
 
 /// Current state of video playback
@@ -174,7 +173,7 @@ impl VideoPlayer {
     /// This is an FFI function called from C. The caller must ensure pointers are valid.
     ///
     /// Returns `true` while still playing, `false` when finished/stopped.
-    pub unsafe fn process_frame(&mut self, dst_surface: *mut SDL_Surface) -> bool {
+    pub fn process_frame(&mut self, blit: &mut dyn FnMut(&VideoFrame, i32, i32)) -> bool {
         if self.state != PlaybackState::Playing {
             return self.state == PlaybackState::Paused;
         }
@@ -243,12 +242,7 @@ impl VideoPlayer {
                 };
             }
 
-            if !super::ffi::rust_present_video_to_window(
-                frame.data.as_ptr() as *const u8,
-                frame.width as i32,
-                frame.height as i32,
-                (frame.width * 4) as i32,
-            ) {
+            if !crate::graphics::present::present_video(&frame.data, frame.width, frame.height) {
                 rust_bridge_log_msg(
                     "RUST_VIDEO: Direct window presentation failed; stopping playback",
                 );
@@ -270,7 +264,7 @@ impl VideoPlayer {
                 }
             }
 
-            blit_frame_to_sdl_surface(dst_surface, &frame, self.dst_x, self.dst_y);
+            blit(&frame, self.dst_x, self.dst_y);
         }
 
         let log_index = FRAME_LOG_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -323,95 +317,34 @@ impl VideoPlayer {
     }
 }
 
-/// Minimal SDL_Surface declaration for blitting.
-///
-/// This matches SDL1/SDL2 surface layout sufficiently for width/height/pitch/pixels.
-unsafe fn blit_frame_to_sdl_surface(
-    surface: *mut SDL_Surface,
-    frame: &VideoFrame,
-    x0: i32,
-    y0: i32,
-) {
-    if surface.is_null() {
-        return;
-    }
-
-    // Use the SDL_LockSurface/UnlockSurface helpers from C.
-    super::ffi::tfb_drawcanvas_lock(surface as *mut std::ffi::c_void);
-
-    let surf = &*surface;
-    let dst_w = surf.w;
-    let dst_h = surf.h;
-    let pitch = surf.pitch;
-
-    if surf.pixels.is_null() {
-        super::ffi::tfb_drawcanvas_unlock(surface as *mut std::ffi::c_void);
-        return;
-    }
-
-    // We only support 32bpp surfaces for now (which is what UQM typically uses).
-    // If the screen is 16bpp, we'd need to map via pixel format masks.
-    if dst_w <= 0 || dst_h <= 0 || pitch < dst_w * 4 {
-        super::ffi::tfb_drawcanvas_unlock(surface as *mut std::ffi::c_void);
-        return;
-    }
-
+/// Write a movie frame (RGBA words, red in the low byte) into a screen
+/// canvas at `(x0, y0)`, clipped to the canvas.
+pub(crate) fn blit_frame(canvas: &mut Canvas, frame: &VideoFrame, x0: i32, y0: i32) {
     let log_index = FRAME_LOG_COUNTER.load(Ordering::Relaxed);
     if log_index < 5 {
         rust_bridge_log_msg(&format!(
-            "RUST_VIDEO: surface w={} h={} pitch={} pixels={:p} dst=({}, {})",
-            dst_w, dst_h, pitch, surf.pixels, x0, y0
+            "RUST_VIDEO: surface w={} h={} dst=({}, {})",
+            canvas.width(),
+            canvas.height(),
+            x0,
+            y0
         ));
     }
-
-    let src_w = frame.width as i32;
-    let src_h = frame.height as i32;
-
-    let mut y = 0;
-    while y < src_h {
+    for y in 0..frame.height as i32 {
         let dst_y = y0 + y;
-        if dst_y < 0 {
-            y += 1;
+        if dst_y < 0 || dst_y >= canvas.height() {
             continue;
         }
-        if dst_y >= dst_h {
-            break;
-        }
-
-        let row_ptr = (surf.pixels as *mut u8).add((dst_y * pitch) as usize) as *mut u32;
-
-        let mut x = 0;
-        while x < src_w {
+        for x in 0..frame.width as i32 {
             let dst_x = x0 + x;
-            if dst_x < 0 {
-                x += 1;
+            if dst_x < 0 || dst_x >= canvas.width() {
                 continue;
             }
-            if dst_x >= dst_w {
-                break;
-            }
-
-            // Frame pixels are RGBA with R in bits 0..7 etc (see decoder/scaler).
-            let p = frame.data[(y as usize * frame.width as usize) + x as usize];
-            // Frame pixels are RGBA in memory. The Rust graphics screen surface
-            // uses RGBX8888 with masks R=0xFF000000, G=0x00FF0000, B=0x0000FF00.
-            let r = p & 0xFF;
-            let g = (p >> 8) & 0xFF;
-            let b = (p >> 16) & 0xFF;
-
-            let out = (r << 24) | (g << 16) | (b << 8);
-
-            if (dst_x as usize) < (pitch as usize / 4) {
-                *row_ptr.add(dst_x as usize) = out;
-            }
-
-            x += 1;
+            let p = frame.data[y as usize * frame.width as usize + x as usize];
+            let (r, g, b) = (p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF);
+            canvas.set_pixel(dst_x, dst_y, (r << 24) | (g << 16) | (b << 8));
         }
-
-        y += 1;
     }
-
-    super::ffi::tfb_drawcanvas_unlock(surface as *mut std::ffi::c_void);
 }
 
 #[cfg(test)]

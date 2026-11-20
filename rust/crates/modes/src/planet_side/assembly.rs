@@ -1,14 +1,14 @@
 //! Assembly of generated nodes into one Rust-owned surface runtime.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use super::collision_adapter::SurfaceMasks;
 use super::entities::{SurfaceEntity, SurfaceEntityId, SurfaceWorld};
 use super::generation::{populate_surface, GeneratedEntity, ScanPersistence, SurfaceGenerator};
 use super::geometry::CollisionMask;
-use super::graphics_adapter::{SurfaceFrame, SurfaceFrameRegistry};
+use super::graphics_adapter::SurfaceFrame;
+use super::graphics_adapter::SurfaceFrameRegistry;
 use super::runtime::AdapterError;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Visual data required by both drawing and pixel collision.
 #[derive(Clone)]
@@ -231,7 +231,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 7,
                 },
                 mask: solid(),
@@ -335,7 +335,7 @@ mod tests {
             .unwrap();
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask,
@@ -370,7 +370,7 @@ mod tests {
             },
             EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),

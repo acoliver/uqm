@@ -5,6 +5,7 @@ use crate::engine::{
     observe::{Observer, Presented, Unobserved},
     Game,
 };
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -94,15 +95,15 @@ pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)
     let mut game = Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    let misc = crate::graphics::drawable_abi::LoadedDrawable::create(8, 1, 1, 70).unwrap();
+    let misc = crate::graphics::drawable::LoadedDrawable::create(8, 1, 1, 70).unwrap();
     game.kernel.misc_data_frame = misc.lease().frame(0).unwrap();
     game.kernel.space_context = game.kernel.off_screen_context;
     game.kernel.screen_context = game.kernel.off_screen_context;
     let context = ContextLease::require(game.kernel.space_context);
-    context.set_frame(ContextFrame::retain(NonNull::new(game.kernel.screen)));
-    context.set_clip(RECT {
-        corner: POINT { x: 7, y: 13 },
-        extent: EXTENT {
+    context.set_frame(ContextFrame::retain(game.kernel.screen));
+    context.set_clip(Rect {
+        corner: Point { x: 7, y: 13 },
+        extent: Extent {
             width: 242,
             height: 227,
         },
@@ -113,7 +114,7 @@ pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)
     ));
     game.world.current_star = Some(crate::engine::StarId(0));
     game.world.set_activity(4);
-    game.world.data.game.autopilot = POINT { x: -1, y: -1 };
+    game.world.data.game.autopilot = Point { x: -1, y: -1 };
     let driver = Rc::new(Driver {
         input: InputSession::new(InputControls::default(), game.kernel.configuration.clone()),
         ticks: Cell::new(0),
@@ -246,7 +247,7 @@ fn instant_select_uses_the_owned_option_and_campaign() {
                 observer: &mut observer
             }
         ));
-        assert_eq!(cx.world.data.game.autopilot, POINT { x: -1, y: -1 });
+        assert_eq!(cx.world.data.game.autopilot, Point { x: -1, y: -1 });
         assert_eq!(cx.world.current_star, Some(crate::engine::StarId(0)));
     });
 }
@@ -267,8 +268,8 @@ fn install_fleets(world: &mut World) -> Vec<LinkId<Fleet>> {
                 species_id: 0,
                 known_strength: known,
                 actual_strength: actual,
-                known_loc: POINT { x: 3000, y: 4000 },
-                loc: POINT { x: 3200, y: 4100 },
+                known_loc: Point { x: 3000, y: 4000 },
+                loc: Point { x: 3200, y: 4100 },
                 ..FleetInfo::default()
             };
             queue.put(id);
@@ -294,7 +295,7 @@ fn sphere_animation_updates_each_successor_and_preserves_unknown_fleets() {
                 assert_eq!(fleet.known_strength, fleet.actual_strength);
             }
             assert_eq!(queue.get(ids[2]).known_strength, 0);
-            assert_eq!(queue.get(ids[2]).known_loc, POINT { x: 3000, y: 4000 });
+            assert_eq!(queue.get(ids[2]).known_loc, Point { x: 3000, y: 4000 });
             if interrupt {
                 assert_eq!(
                     driver.updates.get(),
@@ -323,11 +324,11 @@ fn visits_clear_observations_and_same_star_destinations_without_retaining_input(
             ),
             0
         );
-        assert_eq!(cx.world.data.game.autopilot, POINT { x: -1, y: -1 });
+        assert_eq!(cx.world.data.game.autopilot, Point { x: -1, y: -1 });
         assert!(recorded.0.iter().any(Option::is_some));
         assert_eq!(recorded.0.last(), Some(&None));
         assert_eq!(driver.input.menu_sounds(), (15, 16));
-        let destination = POINT { x: 5000, y: 5000 };
+        let destination = Point { x: 5000, y: 5000 };
         cx.world.data.game.autopilot = destination;
         assert_eq!(
             star_map(
@@ -365,7 +366,7 @@ fn saved_location_names_use_normal_space_without_mutating_the_campaign() {
         assert!(super::super::starmap::naming::name_near(
             cx.kernel,
             cx.world.catalog(),
-            POINT { x: 0, y: 0 },
+            Point { x: 0, y: 0 },
         )
         .is_none());
     });

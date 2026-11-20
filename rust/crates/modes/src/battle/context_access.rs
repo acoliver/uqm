@@ -15,8 +15,10 @@ mod status_native_access {
 
     impl StatusOps for Cx<'_> {
         fn draw_explosion_flash(&mut self, life: u16, y: i16) {
-            let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
-                .map(crate::graphics::context_abi::ContextLease::retain)
+            let Some(context) = self
+                .kernel
+                .status_context
+                .map(crate::graphics::context::ContextLease::retain)
                 .and_then(|context| context.selected_context())
             else {
                 return;
@@ -30,15 +32,15 @@ mod status_native_access {
             });
         }
         fn draw_energy_label(&mut self, y: i16, change: i16) {
-            let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
-                .map(crate::graphics::context_abi::ContextLease::retain)
+            let Some(context) = self
+                .kernel
+                .status_context
+                .map(crate::graphics::context::ContextLease::retain)
                 .and_then(|context| context.selected_context())
             else {
                 return;
             };
-            let frames = crate::graphics::drawable_abi::retain_frame_allocations(&[self
-                .kernel
-                .status_frame]);
+            let frames = crate::graphics::drawable::retain_frames(&[self.kernel.status_frame]);
             crate::ui::shipstat::draw_crew_energy_labels(
                 &context,
                 &frames[0],

@@ -1,7 +1,7 @@
 //! Image assignments and copies retain the identity observed at the write boundary.
 use super::{Fields, Journal};
 use crate::engine::battle::record::{state__bindgen_ty_1, ElementRecord as Element, STATE};
-use crate::graphics::native_abi::{INTERSECT_CONTROL, STAMP};
+use crate::graphics::{intersection::IntersectControl, intersection::Stamp};
 use std::collections::BTreeMap;
 
 type Frame = (String, u16);
@@ -223,8 +223,8 @@ impl Journal {
                 "next.farray" => next + set,
                 "intersect.frame" => {
                     std::mem::offset_of!(Element, IntersectControl)
-                        + std::mem::offset_of!(INTERSECT_CONTROL, IntersectStamp)
-                        + std::mem::offset_of!(STAMP, frame)
+                        + std::mem::offset_of!(IntersectControl, IntersectStamp)
+                        + std::mem::offset_of!(Stamp, frame)
                 }
                 _ => panic!("unknown element image slot {name}"),
             }

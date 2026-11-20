@@ -33,7 +33,7 @@ impl Cx<'_> {
     }
     pub fn object_cloaked(&mut self, id: ElementId) -> bool {
         let style = self.primitive_style(id);
-        style.kind >= crate::graphics::native_abi::EMPTY_PRIMITIVE
+        style.kind >= 7
             || (u32::from(style.kind) == 2
                 && style.color.r == 0
                 && style.color.g == 0
@@ -42,7 +42,7 @@ impl Cx<'_> {
     }
     pub fn subject_cloaked(&self, subject: &Subject) -> bool {
         let style = self.subject_style(subject);
-        style.kind >= crate::graphics::native_abi::EMPTY_PRIMITIVE
+        style.kind >= 7
             || (u32::from(style.kind) == 2
                 && style.color.r == 0
                 && style.color.g == 0
@@ -55,12 +55,11 @@ impl Cx<'_> {
 
     pub fn projected_intersect(
         &self,
-        a: &mut crate::graphics::native_abi::INTERSECT_CONTROL,
-        b: &mut crate::graphics::native_abi::INTERSECT_CONTROL,
+        a: &mut crate::graphics::intersection::IntersectControl,
+        b: &mut crate::graphics::intersection::IntersectControl,
         time: u16,
     ) -> u16 {
-        // SAFETY: callers retain both intersect frames for the duration of the projection.
-        unsafe { crate::graphics::geometry_ffi::DrawablesIntersect(a, b, time) }
+        crate::graphics::intersection::drawables_intersect(a, b, time)
     }
 
     pub fn spawn_weapons(

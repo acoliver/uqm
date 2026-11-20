@@ -50,8 +50,8 @@ impl SurfaceGenerator for Generator {
 #[test]
 #[serial_test::serial]
 fn real_population_preserves_category_and_reverse_node_order_and_retrieval() {
-    let misc = crate::graphics::drawable_abi::LoadedDrawable::create(0, 0, 0, 48).unwrap();
-    let scene = crate::graphics::drawable_abi::LoadedDrawable::create(0, 0, 0, 6).unwrap();
+    let misc = crate::graphics::drawable::LoadedDrawable::create(0, 0, 0, 48).unwrap();
+    let scene = crate::graphics::drawable::LoadedDrawable::create(0, 0, 0, 6).unwrap();
     let frames = std::array::from_fn(|index| Frame::retain(scene.lease().frame(index).unwrap()));
     let mut game = crate::engine::Game::new();
     game.kernel.misc_data_frame = misc.lease().frame(0).unwrap();

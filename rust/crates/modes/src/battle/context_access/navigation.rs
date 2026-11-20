@@ -1,15 +1,14 @@
 //! Scoped navigation projections into the retained game-thread authorities.
 use crate::engine::battle::Cx;
 use crate::engine::battle::{ElementId, Parent};
-use crate::engine::graphics::native_abi::POINT;
+use crate::engine::graphics::geometry::Point;
 use crate::engine::save::{START_ENCOUNTER, START_INTERPLANETARY};
 use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
+use crate::navigation::hyper_units::Geometry;
 use crate::navigation::hyper_units::{
     ARILOU_HOME_X, ARILOU_HOME_Y, ARILOU_SPACE_X, ARILOU_SPACE_Y, QUASI_SPACE_X, QUASI_SPACE_Y,
 };
-
-use crate::navigation::hyper_units::Geometry;
 use crate::planets::starmap::find_star_id;
 
 const PORTALS: [(i16, i16); 15] = [
@@ -31,7 +30,7 @@ const PORTALS: [(i16, i16); 15] = [
 ];
 pub(crate) fn interplanetary(
     world: &mut crate::engine::World,
-    point: POINT,
+    point: Point,
     geometry: Geometry,
     catalog: &[crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN],
 ) {
@@ -43,7 +42,7 @@ pub(crate) fn interplanetary(
         world.set_activity(world.activity() | START_INTERPLANETARY);
         world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
     } else {
-        world.data.game.autopilot = POINT { x: -1, y: -1 };
+        world.data.game.autopilot = Point { x: -1, y: -1 };
         let star = find_star_id(world, catalog, None, point, 5, 5)
             .unwrap_or_else(|| panic!("quasispace transition without a selected star"));
         world.current_star = Some(star);
@@ -63,7 +62,7 @@ pub(crate) fn interplanetary(
 pub(crate) fn arilou(world: &mut crate::engine::World, geometry: Geometry) {
     world.data.game.ship_facing = 0;
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
-    world.data.game.autopilot = POINT { x: -1, y: -1 };
+    world.data.game.autopilot = Point { x: -1, y: -1 };
     let entering = world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1;
     let (x, y) = if entering {
         (QUASI_SPACE_X as i16, QUASI_SPACE_Y as i16)
@@ -89,8 +88,8 @@ pub trait NavigationOps {
     ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>;
     fn ip_group(&self, element: ElementId) -> &IP_GROUP;
     fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP;
-    fn planet_outer_location(&self, planet: u16) -> POINT;
-    fn leave_hyperspace(&mut self, kind: u8, point: POINT);
+    fn planet_outer_location(&self, planet: u16) -> Point;
+    fn leave_hyperspace(&mut self, kind: u8, point: Point);
     fn flagship_location(&self) -> u8;
     fn group_record(
         &self,
@@ -141,11 +140,11 @@ impl NavigationOps for Cx<'_> {
         self.world.ip_groups().into_record_mut(id)
     }
 
-    fn planet_outer_location(&self, planet: u16) -> POINT {
+    fn planet_outer_location(&self, planet: u16) -> Point {
         crate::planets::solar_coords::outer_location(self.solar_geometry(), planet)
     }
 
-    fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
+    fn leave_hyperspace(&mut self, kind: u8, point: Point) {
         let geometry = Geometry::new(self.screen_dimensions());
         if kind == 1 {
             let catalog = self.world.retain_catalog();

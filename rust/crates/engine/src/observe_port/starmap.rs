@@ -1,5 +1,5 @@
 //! Star-map coordinate values copied at an input boundary.
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 use std::ffi::c_long;
 
 pub fn signed_div_with_error(mut value: c_long, divisor: c_long) -> c_long {
@@ -17,7 +17,7 @@ pub fn signed_div_with_error(mut value: c_long, divisor: c_long) -> c_long {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Projection {
-    pub origin: POINT,
+    pub origin: Point,
     pub zoom: i32,
     pub width: i32,
     pub height: i32,
@@ -51,6 +51,6 @@ impl Projection {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StarMapView {
-    pub cursor: POINT,
+    pub cursor: Point,
     pub projection: Projection,
 }

@@ -1,19 +1,19 @@
 //! Campaign-owned rendering resources borrowed for a synchronous conversation.
 
 use crate::engine::Kernel;
-use crate::graphics::native_abi::{CONTEXT, FONT, FRAME};
+use crate::graphics::{context::ContextId, drawable::FrameId, font::FontId};
 
 #[derive(Default)]
 pub(crate) struct Presentation {
-    pub space_context: CONTEXT,
-    pub off_screen_context: CONTEXT,
-    pub radar_context: CONTEXT,
-    pub screen: FRAME,
-    pub activity_frame: FRAME,
-    pub tiny_font: FONT,
+    pub space_context: Option<ContextId>,
+    pub off_screen_context: Option<ContextId>,
+    pub radar_context: Option<ContextId>,
+    pub screen: FrameId,
+    pub activity_frame: FrameId,
+    pub tiny_font: Option<FontId>,
     pub using_speech: u32,
     pub scope_buffer:
-        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable_abi::LoadedDrawable>>>,
+        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable::LoadedDrawable>>>,
 }
 
 impl Presentation {
@@ -21,11 +21,9 @@ impl Presentation {
         &self,
         width: i16,
         height: i16,
-    ) -> crate::graphics::context_abi::ContextFrame {
+    ) -> crate::graphics::drawable::ContextFrame {
         self.scope_buffer
-            .get_or_init(|| {
-                crate::graphics::drawable_abi::LoadedDrawable::create(6, width, height, 1)
-            })
+            .get_or_init(|| crate::graphics::drawable::LoadedDrawable::create(6, width, height, 1))
             .as_ref()
             .unwrap_or_else(|| panic!("oscilloscope buffer allocation failed"))
             .lease()

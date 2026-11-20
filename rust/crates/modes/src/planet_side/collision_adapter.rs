@@ -1,7 +1,5 @@
 //! Pixel-mask collision adapter over the Rust-owned surface entity world.
 
-use std::collections::HashMap;
-
 use super::assembly::{
     advance_creature_animation_frame, insert_surface_entity, remove_surface_entity,
     transform_creature_to_canned, SharedSurface, SurfaceAssembly, WorldVisualPort,
@@ -18,6 +16,7 @@ use super::runtime::{AdapterError, CollisionContact, PlanetSideCollision, WorldS
 use super::simulation::{LanderState, Shot};
 use super::special_effects::{PickupContext, SpecialPickupEffects};
 use super::world::{self, HazardChances, WorldStepInputs};
+use std::collections::HashMap;
 
 /// Gameplay RNG boundary. Surface generation uses a separate random context.
 pub trait GameplayRandom {
@@ -720,7 +719,7 @@ mod tests {
         fn shot_visual(&mut self, _facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -733,7 +732,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 0x100 + animation_frame,
                 },
                 mask: solid(),
@@ -743,7 +742,7 @@ mod tests {
         fn hazard_visual(&mut self, _kind: HazardKind) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: 2,
                 },
                 mask: solid(),
@@ -757,7 +756,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    base: crate::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask: solid(),

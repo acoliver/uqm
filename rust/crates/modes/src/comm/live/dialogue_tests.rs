@@ -107,7 +107,7 @@ fn all_set_story() -> Vec<(StoryKey, u32)> {
     story_with(|_| 1)
 }
 
-fn campaign(world: &mut World, art: crate::graphics::native_abi::FRAME, story: &[(StoryKey, u32)]) {
+fn campaign(world: &mut World, art: crate::graphics::drawable::FrameId, story: &[(StoryKey, u32)]) {
     use crate::engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
     *world = World::new();
     world.story = Some(StoryState::new());
@@ -211,28 +211,24 @@ const POLICIES: [fn(usize, usize) -> usize; 4] = [
 
 /// Run `body` once per campaign on the display fixture with the conversation
 /// resources installed: fixture art, fonts, panels and a pacing runtime.
-fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::native_abi::FRAME)) {
-    use crate::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_font::FontLease,
-    };
+fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::drawable::FrameId)) {
+    use crate::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
     let mut game = Game::new();
     let display = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
         || {},
         |game| {
             let space = ContextLease::require(game.kernel.status_context);
-            space.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-                game.kernel.screen,
-            )));
-            game.kernel.space_context = space.as_raw();
-            game.kernel.radar_context = space.as_raw();
+            space.set_frame(ContextFrame::retain(game.kernel.screen));
+            game.kernel.space_context = Some(space.context());
+            game.kernel.radar_context = Some(space.context());
             space.set_font(&FontLease::retain(
-                std::ptr::NonNull::new(game.kernel.tiny_font)
+                game.kernel
+                    .tiny_font
                     .unwrap_or_else(|| panic!("tiny font fixture")),
             ));
             // Cargo and status panels the starbase and trader scripts redraw.
-            let icons = crate::graphics::drawable_abi::LoadedDrawable::create(8, 8, 8, 128)
+            let icons = crate::graphics::drawable::LoadedDrawable::create(8, 8, 8, 128)
                 .unwrap_or_else(|| panic!("icon fixture allocation failed"));
             let first = icons
                 .lease()
@@ -246,9 +242,9 @@ fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::native_abi::FRA
             game.kernel
                 .install_input_runtime(std::rc::Rc::new(Pacing(input)));
             body(game, first);
-            game.kernel.misc_data_frame = std::ptr::null_mut();
-            game.kernel.flag_stat_frame = std::ptr::null_mut();
-            game.kernel.font_grad_frame = std::ptr::null_mut();
+            game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
+            game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
+            game.kernel.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
             drop(icons);
         },
     )

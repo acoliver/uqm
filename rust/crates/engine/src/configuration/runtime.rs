@@ -1,11 +1,6 @@
 //! Serialized access to the application's native display and audio settings.
 use crate::{
-    graphics::{
-        context_abi::ContextLease,
-        gfx_common_abi::{GraphicsDriver, ScreenHeightActual, ScreenWidthActual},
-        sdl::lifecycle_abi::GfxFlags,
-        tfb_draw_abi::TFB_DrawScreen_ReinitVideo,
-    },
+    graphics::{context::ContextLease, state},
     io::Dir,
     sound::{
         heart_ffi::{set_music_volume, set_speech_volume},
@@ -39,15 +34,8 @@ pub struct RuntimeSettings {
 impl RuntimeSettings {
     pub fn capture(context: &ContextLease) -> Self {
         let _target = context.target();
-        // SAFETY: the retained context checks the serialized graphics owner thread.
-        let display = unsafe {
-            [
-                GraphicsDriver,
-                GfxFlags,
-                ScreenWidthActual,
-                ScreenHeightActual,
-            ]
-        };
+        let mode = state::video_mode();
+        let display = [mode.driver, mode.flags, mode.width, mode.height];
         let sound = sound_options();
         let directory = crate::io::config_dir()
             .unwrap_or_else(|| panic!("configuration directory not initialized"));
@@ -85,10 +73,13 @@ impl RuntimeSettings {
             assert!(width > 0 && height > 0, "invalid display dimensions");
             context.flush();
             // SAFETY: the context verifies the owner thread and retains the display resources.
-            unsafe {
-                UninitVideoPlayer();
-                TFB_DrawScreen_ReinitVideo(driver, flags, width, height);
-            }
+            unsafe { UninitVideoPlayer() };
+            state::reinit_video(state::VideoMode {
+                driver,
+                flags,
+                width,
+                height,
+            });
             context.flush();
             // SAFETY: the synchronous video reinitialization above has completed.
             unsafe { InitVideoPlayer(1) };

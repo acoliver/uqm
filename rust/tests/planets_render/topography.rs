@@ -1,122 +1,19 @@
-//! Original C == sealed fixture == Rust, using actual RAM drawables and DrawBatch.
+//! Sealed original-C fixture == Rust, using actual RAM drawables and point batches.
 //! Synthetic resource records are inputs, not fake rendering/resource effects.
 
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
-use std::ffi::{c_void, CString};
 use uqm_rust::comm::locdata::{CPoint, CRect};
-use uqm_rust::engine::graphics::dcqueue_abi as queue;
-use uqm_rust::engine::graphics::{
-    native_offscreen::OffscreenFormats, native_surface::CapturedSurface,
-};
-use uqm_rust::graphics::native_abi as c;
+use uqm_rust::engine::graphics::surface::CapturedSurface;
+use uqm_rust::engine::test_support::native_probe;
+use uqm_rust::graphics::context::{ContextLease, LoadedContext};
+use uqm_rust::graphics::drawable::{ContextFrame, FrameId};
+use uqm_rust::graphics::geometry::{Color, DrawMode, Extent, Point, Rect};
+use uqm_rust::graphics::menu;
 use uqm_rust::planets::render::c_api::render_native_topography;
 use uqm_rust::planets::render::topography::*;
 use uqm_rust::planets::sphere::palette::SurfacePalette;
 use uqm_rust::planets::tables::PLANET_ARRAY;
-
-extern "C" {
-    fn CreateContextAux(name: *const std::ffi::c_char) -> *mut c_void;
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn DestroyContext(context: *mut c_void) -> c::BOOLEAN;
-    fn SetContextFGFrame(frame: c::FRAME) -> c::FRAME;
-    fn SetContextOrigin(point: c::POINT) -> c::POINT;
-    fn SetContextClipRect(rect: *mut c::RECT) -> c::BOOLEAN;
-    fn SetContextDrawMode(mode: c::DrawMode) -> c::DrawMode;
-    fn SetContextForeGroundColor(color: c::Color) -> c::Color;
-    fn GetColorMapAddress(map: c::STRING) -> *mut u8;
-    fn TFB_DrawCanvas_Initialize();
-    fn ReadFramePixelColors(frame: c::FRAME, pixels: *mut c::Color, w: i32, h: i32) -> c::BOOLEAN;
-    fn WriteFramePixelColors(
-        frame: c::FRAME,
-        pixels: *const c::Color,
-        w: i32,
-        h: i32,
-    ) -> c::BOOLEAN;
-}
-
-// Only the unchanged original C body uses this input layout. Rust rendering owns bytes.
-#[repr(C)]
-struct OraclePalette {
-    planet: *mut uqm_rust::engine::world::planet::PlanetDesc,
-    translation_entry: c::STRING,
-    translation_bytes: *const c_void,
-    color_entry: c::STRING,
-}
-
-#[repr(C)]
-struct OracleFrame {
-    kind: u8,
-    tectonics: u8,
-    atmosphere: u8,
-    elements: [uqm_rust::engine::world::planet::ElementEntry; 8],
-    colors: *const std::ffi::c_char,
-    translation: *const std::ffi::c_char,
-    faults: u16,
-    fault_depth: i16,
-    blemishes: u16,
-    elevation: i16,
-}
-
-impl From<uqm_rust::engine::world::planet::PlanetFrame> for OracleFrame {
-    fn from(frame: uqm_rust::engine::world::planet::PlanetFrame) -> Self {
-        Self {
-            kind: frame.type_,
-            tectonics: frame.base_tectonics,
-            atmosphere: frame.atmo_and_density,
-            elements: frame.useful_elements,
-            colors: frame.cmap_instance.as_ptr(),
-            translation: frame.xlat_tab_instance.as_ptr(),
-            faults: frame.num_faults,
-            fault_depth: frame.fault_depth,
-            blemishes: frame.num_blemishes,
-            elevation: frame.base_elevation,
-        }
-    }
-}
-
-#[repr(C)]
-struct Operations {
-    frame: unsafe extern "C" fn(c::FRAME) -> c::FRAME,
-    origin: unsafe extern "C" fn(c::POINT) -> c::POINT,
-    get_clip: unsafe extern "C" fn(*mut c::RECT) -> c::BOOLEAN,
-    set_clip: unsafe extern "C" fn(*mut c::RECT) -> c::BOOLEAN,
-    colors: unsafe extern "C" fn(c::STRING) -> *mut u8,
-    batch: unsafe extern "C" fn(*mut c::PRIMITIVE, u32, u8),
-    table: *const OracleFrame,
-    system: *mut OraclePalette,
-}
-
-type Original = unsafe extern "C" fn(*const Operations, c::FRAME, *mut i8, i32, i32);
-
-struct Oracle {
-    handle: *mut c_void,
-    run: Original,
-}
-impl Oracle {
-    fn open() -> Option<Self> {
-        std::env::var_os("UQM_RENDER_TOPOGRAPHY_ORACLE").map(|path| unsafe {
-            let path = CString::new(path.as_encoded_bytes()).unwrap();
-            let handle = libc::dlopen(path.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL);
-            assert!(
-                !handle.is_null(),
-                "load compiled original C oracle: {:?}",
-                std::ffi::CStr::from_ptr(libc::dlerror())
-            );
-            let symbol = libc::dlsym(handle, c"original_render_topography".as_ptr());
-            assert!(!symbol.is_null());
-            Self {
-                handle,
-                run: std::mem::transmute::<*mut c_void, Original>(symbol),
-            }
-        })
-    }
-}
-impl Drop for Oracle {
-    fn drop(&mut self) {
-        assert_eq!(unsafe { libc::dlclose(self.handle) }, 0);
-    }
-}
 
 thread_local! { static TRACE: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) }; }
 fn record(bytes: &[u8]) {
@@ -125,67 +22,69 @@ fn record(bytes: &[u8]) {
 fn take_trace() -> Vec<u8> {
     TRACE.with(|t| std::mem::take(&mut *t.borrow_mut()))
 }
-unsafe extern "C" fn frame(f: c::FRAME) -> c::FRAME {
+fn frame(f: FrameId) -> FrameId {
     record(&[1]);
-    SetContextFGFrame(f)
+    menu::set_frame_returning(f)
 }
-unsafe extern "C" fn origin(p: c::POINT) -> c::POINT {
+fn origin(p: Point) -> Point {
     record(&[2]);
     record(&p.x.to_le_bytes());
     record(&p.y.to_le_bytes());
-    SetContextOrigin(p)
+    menu::set_origin(p)
 }
-unsafe extern "C" fn get_clip(r: *mut c::RECT) -> c::BOOLEAN {
+fn get_clip() -> (Rect, bool) {
     record(&[3]);
-    uqm_rust::graphics::context_abi::GetContextClipRect(r)
+    native_probe::selected_clip()
 }
-unsafe extern "C" fn set_clip(r: *mut c::RECT) -> c::BOOLEAN {
-    record(&[4, u8::from(!r.is_null())]);
-    if !r.is_null() {
-        for v in [
-            (*r).corner.x,
-            (*r).corner.y,
-            (*r).extent.width,
-            (*r).extent.height,
-        ] {
+fn set_clip(r: Option<Rect>) {
+    record(&[4, u8::from(r.is_some())]);
+    if let Some(r) = r {
+        for v in [r.corner.x, r.corner.y, r.extent.width, r.extent.height] {
             record(&v.to_le_bytes());
         }
     }
-    SetContextClipRect(r)
+    menu::set_clip_or_clear(r);
 }
-unsafe extern "C" fn batch(prims: *mut c::PRIMITIVE, links: u32, flags: u8) {
-    record(&[5, flags]);
-    record(&links.to_le_bytes());
-    let mut index = links as u16;
-    while index != u16::MAX {
-        let p = &*prims.add(usize::from(index));
-        record(&index.to_le_bytes());
-        record(&p.Links.to_le_bytes());
-        record(&[p.Type]);
-        record(&p.Object.Point.x.to_le_bytes());
-        record(&p.Object.Point.y.to_le_bytes());
-        record(&[p.color.r, p.color.g, p.color.b, p.color.a]);
-        index = (p.Links >> 16) as u16;
+/// Record the C `PRIMITIVE` chain the original batch walked: from `first`
+/// forward, each point linking to the next and the last to the sentinel.
+fn batch(points: &[TopographyPoint; 64], first: usize) {
+    record(&[5, 0]);
+    record(&(first as u32).to_le_bytes());
+    for (index, source) in points.iter().enumerate().skip(first) {
+        let next = if index + 1 < points.len() {
+            index as u16 + 1
+        } else {
+            u16::MAX
+        };
+        let links = u32::from(u16::MAX) | (u32::from(next) << 16);
+        record(&(index as u16).to_le_bytes());
+        record(&links.to_le_bytes());
+        record(&[0]);
+        record(&source.point.x.to_le_bytes());
+        record(&source.point.y.to_le_bytes());
+        let c = source.color;
+        record(&[c.r, c.g, c.b, c.a]);
     }
     record(&u16::MAX.to_le_bytes());
-    uqm_rust::graphics::frame_abi::DrawBatch(prims, links, flags);
+    let selected = menu::selected();
+    let context = ContextLease::require(selected);
+    context.draw_preserving_scale(&mut uqm_rust::planets::render::c_api::topography_batch(
+        points, first,
+    ));
 }
 
-// For the core comparison these callbacks observe and forward every effect to
-// the real context renderer, the same operations used by the compiled C body.
 struct Observed;
 impl TopographyGfx for Observed {
-    type Frame = c::FRAME;
-    fn set_frame(&mut self, f: c::FRAME) -> c::FRAME {
-        unsafe { frame(f) }
+    type Frame = FrameId;
+    fn set_frame(&mut self, f: FrameId) -> FrameId {
+        frame(f)
     }
     fn set_origin(&mut self, p: CPoint) -> CPoint {
-        let p = unsafe { origin(c::POINT { x: p.x, y: p.y }) };
+        let p = origin(Point { x: p.x, y: p.y });
         CPoint { x: p.x, y: p.y }
     }
     fn clip(&mut self) -> CRect {
-        let mut r: c::RECT = unsafe { std::mem::zeroed() };
-        unsafe { get_clip(&mut r) };
+        let (r, _) = get_clip();
         CRect {
             corner: CPoint {
                 x: r.corner.x,
@@ -196,148 +95,109 @@ impl TopographyGfx for Observed {
         }
     }
     fn set_clip(&mut self, r: Option<CRect>) {
-        let mut r = r.map(|r| c::RECT {
-            corner: c::POINT {
+        set_clip(r.map(|r| Rect {
+            corner: Point {
                 x: r.corner.x,
                 y: r.corner.y,
             },
-            extent: c::EXTENT {
+            extent: Extent {
                 width: r.width,
                 height: r.height,
             },
-        });
-        unsafe { set_clip(r.as_mut().map_or(std::ptr::null_mut(), |r| r)) };
+        }));
     }
     fn batch(&mut self, points: &[TopographyPoint; 64], first: usize) {
-        let encoded = uqm_rust::planets::render::c_api::topography_batch(points, first);
-        let mut prims = encoded.primitives().to_vec();
-        unsafe { batch(prims.as_mut_ptr(), first as u32, 0) };
-    }
-}
-
-// strintrn.h's owned-by-caller resource entry; the real getters read it.
-#[repr(C)]
-struct Entry {
-    data: *mut u8,
-    length: i32,
-    index: i32,
-    parent: *mut c_void,
-}
-impl Entry {
-    fn new(data: &mut [u8]) -> Self {
-        Self {
-            data: data.as_mut_ptr(),
-            length: data.len() as i32,
-            index: 0,
-            parent: std::ptr::null_mut(),
-        }
-    }
-    fn handle(&mut self) -> c::STRING {
-        (self as *mut Self).cast()
+        batch(points, first);
     }
 }
 
 struct Ram {
-    context: *mut c_void,
-    old_context: *mut c_void,
-    previous: c::FRAME,
+    context: Option<LoadedContext>,
+    old_context: Option<uqm_rust::graphics::context::ContextId>,
+    previous: FrameId,
     target: Option<CapturedSurface>,
     old_frame: Option<CapturedSurface>,
     width: i32,
     height: i32,
-    _formats: OffscreenFormats,
+    _graphics: native_probe::DrawQueue,
 }
 impl Ram {
-    unsafe fn new(w: i32, h: i32) -> Self {
-        let formats = OffscreenFormats::new().unwrap();
-        TFB_DrawCanvas_Initialize();
-        queue::Init_DrawCommandQueue();
-        let context = CreateContextAux(c"topography parity".as_ptr());
-        assert!(!context.is_null());
-        let old_context = SetContext(context);
+    fn new(w: i32, h: i32) -> Self {
+        let graphics = native_probe::DrawQueue::init();
+        let context = LoadedContext::create(c"topography parity");
+        let old_context = menu::select(Some(context.context()));
         let target = CapturedSurface::pixmap(w as i16, h as i16, 1);
         let old_frame = CapturedSurface::pixmap(11, 9, 1);
-        assert!(!target.as_frame().is_null() && !old_frame.as_frame().is_null());
-        let previous = old_frame.as_frame();
-        SetContextFGFrame(previous);
+        assert!(!target.first_frame().is_null() && !old_frame.first_frame().is_null());
+        let previous = old_frame.first_frame();
+        menu::set_frame(previous);
         Self {
-            context,
+            context: Some(context),
             old_context,
             previous,
             target: Some(target),
             old_frame: Some(old_frame),
             width: w,
             height: h,
-            _formats: formats,
+            _graphics: graphics,
         }
     }
-    fn target(&self) -> c::FRAME {
-        self.target.as_ref().unwrap().as_frame()
+    fn context(&self) -> ContextLease {
+        self.context
+            .as_ref()
+            .unwrap_or_else(|| panic!("context"))
+            .lease()
     }
-    unsafe fn reset(&self, mode: c::DrawMode, explicit_clip: bool) {
+    fn target(&self) -> FrameId {
+        self.target
+            .as_ref()
+            .unwrap_or_else(|| panic!("target"))
+            .first_frame()
+    }
+    fn reset(&self, mode: DrawMode, explicit_clip: bool) {
         for (frame, w, h) in [
             (self.target(), self.width, self.height),
             (self.previous, 11, 9),
         ] {
-            let pixels = vec![
-                c::Color {
-                    r: 11,
-                    g: 23,
-                    b: 37,
-                    a: 255
-                };
-                (w * h) as usize
-            ];
-            assert_ne!(WriteFramePixelColors(frame, pixels.as_ptr(), w, h), 0);
+            let pixels = vec![Color::rgba(11, 23, 37, 255); (w * h) as usize];
+            assert!(native_probe::write_pixels(frame, &pixels, w, h));
         }
-        (*self.target()).HotSpot = c::POINT { x: 7, y: -9 };
-        (*self.previous).HotSpot = c::POINT { x: -3, y: 4 };
-        SetContextFGFrame(self.previous);
-        let mut clip = c::RECT {
-            corner: c::POINT { x: 2, y: 1 },
-            extent: c::EXTENT {
+        self.target().set_hot_spot(Point { x: 7, y: -9 });
+        self.previous.set_hot_spot(Point { x: -3, y: 4 });
+        menu::set_frame(self.previous);
+        let clip = Rect {
+            corner: Point { x: 2, y: 1 },
+            extent: Extent {
                 width: 3,
                 height: 2,
             },
         };
-        SetContextClipRect(if explicit_clip {
-            &mut clip
-        } else {
-            std::ptr::null_mut()
-        });
-        SetContextDrawMode(mode);
-        SetContextForeGroundColor(c::Color {
-            r: 31,
-            g: 61,
-            b: 91,
-            a: 101,
-        });
+        menu::set_clip_or_clear(explicit_clip.then_some(clip));
+        menu::draw_mode(mode);
+        menu::foreground(Color::rgba(31, 61, 91, 101));
         take_trace();
     }
-    unsafe fn result(&self, mode: c::DrawMode) -> Vec<u8> {
-        assert_eq!(
-            uqm_rust::graphics::drawable_abi::GetContextFGFrame(),
-            self.previous
-        );
-        assert_eq!(SetContext(self.context), self.context);
-        assert_eq!(
-            ((*self.target()).HotSpot.x, (*self.target()).HotSpot.y),
-            (7, -9)
-        );
-        assert_eq!(
-            ((*self.previous).HotSpot.x, (*self.previous).HotSpot.y),
-            (-3, 4)
-        );
-        let actual_mode = uqm_rust::graphics::context_abi::GetContextDrawMode();
+    fn result(&self, mode: DrawMode) -> Vec<u8> {
+        let context = self
+            .context
+            .as_ref()
+            .unwrap_or_else(|| panic!("context"))
+            .context();
+        assert_eq!(self.context().target().frame(), self.previous);
+        assert_eq!(menu::select(Some(context)), Some(context));
+        let hot = self.target().hot_spot();
+        assert_eq!((hot.x, hot.y), (7, -9));
+        let hot = self.previous.hot_spot();
+        assert_eq!((hot.x, hot.y), (-3, 4));
+        let actual_mode = native_probe::selected_draw_mode();
         assert_eq!(
             (actual_mode.kind, actual_mode.factor),
             (mode.kind, mode.factor)
         );
-        let color = uqm_rust::graphics::context_abi::GetContextForeGroundColor();
+        let color = native_probe::context_foreground(context);
         assert_eq!([color.r, color.g, color.b, color.a], [31, 61, 91, 101]);
-        let mut clip: c::RECT = std::mem::zeroed();
-        let defined = uqm_rust::graphics::context_abi::GetContextClipRect(&mut clip);
-        let mut result = defined.to_le_bytes().to_vec();
+        let (clip, defined) = native_probe::selected_clip();
+        let mut result = u32::from(defined).to_le_bytes().to_vec();
         for v in [
             clip.corner.x,
             clip.corner.y,
@@ -350,17 +210,7 @@ impl Ram {
             (self.target(), self.width, self.height),
             (self.previous, 11, 9),
         ] {
-            let mut pixels = vec![
-                c::Color {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0
-                };
-                (w * h) as usize
-            ];
-            assert_ne!(ReadFramePixelColors(frame, pixels.as_mut_ptr(), w, h), 0);
-            for p in pixels {
+            for p in native_probe::read_pixels(frame, w, h).unwrap_or_else(|| panic!("frame")) {
                 result.extend_from_slice(&[p.r, p.g, p.b, p.a]);
             }
         }
@@ -369,15 +219,12 @@ impl Ram {
 }
 impl Drop for Ram {
     fn drop(&mut self) {
-        unsafe {
-            SetContextFGFrame(std::ptr::null_mut());
-            drop(self.target.take());
-            drop(self.old_frame.take());
-            queue::TFB_FlushGraphicsEx(1);
-            SetContext(self.old_context);
-            assert_ne!(DestroyContext(self.context), 0);
-            queue::Uninit_DrawCommandQueue();
-        }
+        menu::set_frame(FrameId::NULL);
+        drop(self.target.take());
+        drop(self.old_frame.take());
+        uqm_rust::graphics::state::flush_ex(true);
+        menu::select(self.old_context);
+        drop(self.context.take());
     }
 }
 
@@ -481,7 +328,6 @@ fn cases() -> Vec<Case> {
 
 pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomContext) {
     host_errors_preserve_real_context_and_pixels();
-    let oracle = Oracle::open();
     let fixture = include_bytes!("../fixtures/planets/render-topography.bin");
     let mut offset = 0;
     assert_eq!(
@@ -494,7 +340,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
     uqm_rust::math::seed_random(90210);
     let mut independent = uqm_rust::math::RandomContext::with_seed(90210);
     for (index, case) in cases.iter().enumerate() {
-        unsafe {
+        {
             let ram = if case.cropped {
                 Ram::new(7, 3)
             } else {
@@ -525,21 +371,12 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
                 colors[0] = 16;
                 colors[1] = 47;
             }
-            let mut xlat_entry = Entry::new(&mut translation);
-            let mut color_entry = Entry::new(&mut colors);
-            let mut system: OraclePalette = std::mem::zeroed();
-            let mut desc: uqm_rust::engine::world::planet::PlanetDesc = std::mem::zeroed();
-            desc.data_index = case.planet as u8 | if case.shielded { 0x80 } else { 0 };
-            system.planet = &mut desc;
-            system.translation_entry = if case.missing {
-                std::ptr::null_mut()
-            } else {
-                xlat_entry.handle()
+            let desc = uqm_rust::engine::world::planet::PlanetDesc {
+                data_index: case.planet as u8 | if case.shielded { 0x80 } else { 0 },
+                ..Default::default()
             };
-            system.translation_bytes = translation.as_ptr().cast();
-            system.color_entry = color_entry.handle();
             let count = (case.width.max(0) * case.height.max(0)) as usize;
-            let mut depth: Vec<i8> = (0..count + 32)
+            let depth: Vec<i8> = (0..count + 32)
                 .map(|i| {
                     if case.width == 256 && case.height == 1 {
                         i as i8
@@ -551,20 +388,9 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
             let before = depth.clone();
             let color_before = colors.clone();
             let xlat_before = translation.clone();
-            let mode = c::DrawMode {
+            let mode = uqm_rust::graphics::geometry::DrawMode {
                 kind: case.mode,
                 factor: case.factor,
-            };
-            let oracle_table = table.map(OracleFrame::from);
-            let ops = Operations {
-                frame,
-                origin,
-                get_clip,
-                set_clip,
-                colors: GetColorMapAddress,
-                batch,
-                table: oracle_table.as_ptr(),
-                system: &mut system,
             };
             let palette = (!case.missing).then_some(TopographyPalette {
                 translation: translation[6..].try_into().unwrap(),
@@ -588,28 +414,6 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
             record.extend_from_slice(&actual);
             record.extend_from_slice(&(trace.len() as u32).to_le_bytes());
             record.extend_from_slice(&trace);
-            if let Some(oracle) = &oracle {
-                ram.reset(mode, case.clip);
-                (oracle.run)(
-                    &ops,
-                    ram.target(),
-                    depth.as_mut_ptr(),
-                    case.width,
-                    case.height,
-                );
-                let expected = ram.result(mode);
-                let original_trace = take_trace();
-                assert_eq!(expected, actual, "C pixels/state case {index}: {case:?}");
-                assert_eq!(
-                    original_trace, trace,
-                    "C primitive/effect order case {index}: {case:?}"
-                );
-                let mut original = (expected.len() as u32).to_le_bytes().to_vec();
-                original.extend_from_slice(&expected);
-                original.extend_from_slice(&(original_trace.len() as u32).to_le_bytes());
-                original.extend_from_slice(&original_trace);
-                assert_eq!(original, record);
-            }
             assert_eq!(
                 &fixture[offset..offset + record.len()],
                 record,
@@ -631,10 +435,8 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
                     )
                 };
                 render_native_topography(
-                    &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
-                    uqm_rust::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-                        ram.target(),
-                    )),
+                    &ram.context(),
+                    ContextFrame::retain(ram.target()),
                     &depth,
                     case.width,
                     case.height,
@@ -655,13 +457,18 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
         }
     }
     assert_eq!(offset, fixture.len());
-    println!("RenderTopography: {} full RGBA/state/primitive records, {} bytes, original fixture {:x}; live C={}", cases.len(), offset, Sha256::digest(fixture), oracle.is_some());
+    println!(
+        "RenderTopography: {} full RGBA/state/primitive records, {} bytes, original fixture {:x}",
+        cases.len(),
+        offset,
+        Sha256::digest(fixture)
+    );
 }
 
 fn host_errors_preserve_real_context_and_pixels() {
-    unsafe {
+    {
         let ram = Ram::new(9, 7);
-        let mode = c::DrawMode {
+        let mode = uqm_rust::graphics::geometry::DrawMode {
             kind: 2,
             factor: 101,
         };
@@ -687,10 +494,8 @@ fn host_errors_preserve_real_context_and_pixels() {
             let result = SurfacePalette::from_bytes(index, &xlat[..length], colors.clone())
                 .and_then(|palette| {
                     render_native_topography(
-                        &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
-                        uqm_rust::graphics::context_abi::ContextFrame::retain(
-                            std::ptr::NonNull::new(ram.target()),
-                        ),
+                        &ram.context(),
+                        ContextFrame::retain(ram.target()),
                         &[],
                         1,
                         1,

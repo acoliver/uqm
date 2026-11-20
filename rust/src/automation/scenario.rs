@@ -336,7 +336,7 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
 pub(crate) struct LinkedSceneEntry<'a> {
     pub(crate) world: &'a mut crate::engine::World,
     pub(crate) kernel: &'a mut crate::engine::Kernel,
-    pub(crate) screen_context: crate::graphics::native_abi::CONTEXT,
+    pub(crate) screen_context: Option<crate::graphics::context::ContextId>,
 }
 
 impl SceneEntryOps for LinkedSceneEntry<'_> {
@@ -349,23 +349,16 @@ impl SceneEntryOps for LinkedSceneEntry<'_> {
     }
 
     fn clear_screen(&mut self) {
-        // SAFETY: the screen context exists once game initialization is
-        // complete, and scene activation runs on the main thread.
-        unsafe {
-            crate::graphics::context_abi::SetContext(self.screen_context);
-            crate::graphics::frame_abi::ClearDrawable();
-        }
+        crate::graphics::menu::select(self.screen_context);
+        crate::graphics::menu::clear();
     }
 
     fn fade_screen_to_color(&mut self) {
-        // SAFETY: FadeScreen is called from the main thread; the returned
-        // completion time is deliberately not awaited, as in the C entry.
-        unsafe {
-            crate::graphics::cmap_abi::FadeScreen(
-                crate::graphics::cmap_abi::FADE_ALL_TO_COLOR,
-                (crate::time::counter_abi::ONE_SECOND / 2) as i16,
-            );
-        }
+        // The completion time is deliberately not awaited, as in the C entry.
+        crate::graphics::state::fade_screen(
+            crate::graphics::colormap::FADE_ALL_TO_COLOR,
+            (crate::time::counter_abi::ONE_SECOND / 2) as i16,
+        );
     }
 }
 

@@ -1,23 +1,23 @@
 //! Hyperspace encounter elements, transition animation, tracking and radar.
 use super::get;
+use super::hyper_transition::{init_transition, sis_element};
+use super::hyper_units::Geometry;
 use crate::battle::element::{
     APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, IGNORE_SIMILAR, IGNORE_VELOCITY,
     NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP,
 };
 use crate::comm::dispatch::{ENCOUNTER_REFORMING, MAX_HYPER_SHIPS, ONE_SHOT_ENCOUNTER};
+use crate::engine::battle::hooks::animation_preprocess;
+use crate::engine::battle::views::{FrameSelection as Frame, Frames};
+use crate::engine::battle::EMPTY_PRIMITIVE;
+use crate::engine::battle::STAMP_PRIMITIVE;
 use crate::engine::battle::{CollisionHook, ElementHook};
+use crate::engine::battle::{Cx, ElementId};
 use crate::engine::world::activity::activity_flags::IN_BATTLE;
 use crate::engine::world::queues::EncounterRecord;
 use crate::engine::StoryKey;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 use crate::math::arctan as ARCTAN;
-
-use super::hyper_transition::{init_transition, sis_element};
-use super::hyper_units::Geometry;
-use crate::engine::battle::hooks::animation_preprocess;
-use crate::engine::battle::views::{FrameSelection as Frame, Frames};
-use crate::engine::battle::{Cx, ElementId};
-use crate::engine::graphics::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
 use crate::math::{cosine, sine};
 use std::ptr;
 
@@ -31,7 +31,7 @@ const SPEED: [i16; 23] = [
 pub(super) const XOFFS: i16 = (63 * 12 + 63 * 4) / 2;
 pub(super) const YOFFS: i16 = (50 * 12 + 50 * 4) / 2;
 
-pub(super) fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
+pub(super) fn allocate(cx: &mut Cx<'_>, point: Point) -> Option<ElementId> {
     let geometry = Geometry::new(cx.screen_dimensions());
     let element = cx.alloc_element()?;
     cx.element_mut(element).player = NEUTRAL_PLAYER_NUM;
@@ -40,7 +40,7 @@ pub(super) fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
     cx.element_mut(element).mass = 1;
     let lx = geometry.log_x(point.x) + (geometry.width() >> 1) - cx.world.data.flagship.log_x;
     let ly = geometry.log_y(point.y) + (geometry.height() >> 1) - cx.world.data.flagship.log_y;
-    cx.element_mut(element).current.location = POINT {
+    cx.element_mut(element).current.location = Point {
         x: wrap(lx, geometry.width()),
         y: wrap(ly, geometry.height()),
     };
@@ -77,7 +77,7 @@ pub(super) fn ambient(cx: &mut Cx<'_>) {
     let random = cx.random();
     let dx = (random as u8 as i32 % geometry.space_width) - (geometry.space_width >> 1);
     let dy = ((random >> 8) as u8 as i32 % geometry.space_height) - (geometry.space_height >> 1);
-    cx.element_mut(element).current.location = POINT {
+    cx.element_mut(element).current.location = Point {
         x: ((geometry.width() >> 1) + (dx << 2)) as i16,
         y: ((geometry.height() >> 1) + (dy << 2)) as i16,
     };
@@ -128,9 +128,9 @@ pub fn transition(
 pub fn collision(
     cx: &mut Cx<'_>,
     source: ElementId,
-    _: &mut POINT,
+    _: &mut Point,
     ship: ElementId,
-    _: &mut POINT,
+    _: &mut Point,
 ) {
     if cx.element(ship).flags & PLAYER_SHIP == 0 || cx.world.activity() & IN_BATTLE == 0 {
         return;
@@ -176,7 +176,7 @@ fn populate_ships(cx: &mut Cx<'_>, encounter: &mut EncounterRecord) {
         brief.max_energy = fleet.max_energy;
     }
 }
-fn add(cx: &mut Cx<'_>, encounter: &mut EncounterRecord, universe: POINT) -> Option<ElementId> {
+fn add(cx: &mut Cx<'_>, encounter: &mut EncounterRecord, universe: Point) -> Option<ElementId> {
     let geometry = Geometry::new(cx.screen_dimensions());
     if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
@@ -194,7 +194,7 @@ fn add(cx: &mut Cx<'_>, encounter: &mut EncounterRecord, universe: POINT) -> Opt
         populate_ships(cx, encounter);
         loop {
             let random = cx.random();
-            point = POINT {
+            point = Point {
                 x: (universe.x as i32 + (random as u16 % (XOFFS as u16 * 2)) as i32 - XOFFS as i32)
                     .clamp(0, 9999) as i16,
                 y: (universe.y as i32 + ((random >> 16) % (YOFFS as u32 * 2)) as i32 - YOFFS as i32)
@@ -254,10 +254,10 @@ fn add(cx: &mut Cx<'_>, encounter: &mut EncounterRecord, universe: POINT) -> Opt
 fn process(
     cx: &mut Cx<'_>,
     encounter: &mut EncounterRecord,
-    universe: POINT,
+    universe: Point,
     ox: i16,
     oy: i16,
-    stamp: &mut POINT,
+    stamp: &mut Point,
 ) -> bool {
     let geometry = Geometry::new(cx.screen_dimensions());
     if encounter.h_element.is_null() && add(cx, encounter, universe).is_none() {
@@ -320,7 +320,7 @@ fn process(
         }
         encounter.log_x += dx as i32;
         encounter.log_y -= dy as i32;
-        encounter.loc_pt = POINT {
+        encounter.loc_pt = Point {
             x: geometry.universe_x(encounter.log_x),
             y: geometry.universe_y(encounter.log_y),
         };
@@ -355,7 +355,7 @@ fn process(
     let dx = point.x as i32 - universe.x as i32;
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
-        cx.element_mut(element).next.location = POINT {
+        cx.element_mut(element).next.location = Point {
             x: ((encounter.log_x - cx.world.data.flagship.log_x) as i16 as i32
                 + (geometry.width() >> 1)) as i16,
             y: ((encounter.log_y - cx.world.data.flagship.log_y) as i16 as i32
@@ -379,16 +379,16 @@ fn process(
         }
         cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
     }
-    *stamp = POINT {
+    *stamp = Point {
         x: ((point.x as i32 * 56 / (63 * 12)) as i16).wrapping_sub(ox),
         y: (((9999 - point.y as i32) * 53 / (50 * 12)) as i16).wrapping_sub(oy),
     };
     true
 }
-pub(super) fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
+pub(super) fn process_all(cx: &mut Cx<'_>, universe: Point, ox: i16, oy: i16) {
     let frame = cx.absolute_frame(Frame::retain(cx.kernel.stars_in_space).view(), 91);
     let radar = crate::engine::battle::hyperspace::radar_context(cx.kernel);
-    let mut stamp = POINT { x: 0, y: 0 };
+    let mut stamp = Point { x: 0, y: 0 };
     let mut next = cx.world.encounters_ref().head();
     while let Some(id) = next {
         let encounters = cx.world.encounters_ref();
@@ -396,9 +396,7 @@ pub(super) fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
         next = encounters.succ(id);
         if process(cx, &mut encounter, universe, ox, oy, &mut stamp) {
             radar.draw_stamp(
-                &crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-                    frame.raw(),
-                )),
+                &crate::graphics::drawable::ContextFrame::retain(frame.raw()),
                 stamp,
             );
             *cx.world.encounters().get_mut(id) = encounter;
@@ -435,13 +433,13 @@ mod tests {
             num_ships: 1,
             ..Default::default()
         };
-        assert!(add(&mut cx, &mut encounter, POINT { x: 100, y: 100 }).is_none());
+        assert!(add(&mut cx, &mut encounter, Point { x: 100, y: 100 }).is_none());
         assert_eq!(encounter.transition_state, 100);
         assert_eq!(encounter.flags, ONE_SHOT_ENCOUNTER);
         cx.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
         encounter.flags = ENCOUNTER_REFORMING;
         encounter.transition_state = 9;
-        assert!(add(&mut cx, &mut encounter, POINT { x: 100, y: 100 }).is_none());
+        assert!(add(&mut cx, &mut encounter, Point { x: 100, y: 100 }).is_none());
         assert_eq!(encounter.transition_state, 9);
         assert_eq!(encounter.flags, ENCOUNTER_REFORMING);
     }

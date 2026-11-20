@@ -6,15 +6,17 @@
 //! entry layout and the first four header fields. Rust's private ownership tag
 //! distinguishes plain-text allocations from tables with individually allocated data.
 
-use std::ffi::{c_char, c_int, c_void};
-use std::ptr::null_mut;
-
 use crate::memory::{rust_hfree, rust_hmalloc};
 use crate::strings::unicode::utf8_string_count_n as utf8StringCountN;
+use std::ffi::{c_char, c_int, c_void};
+use std::ptr::null_mut;
 
 pub const HAS_SOUND_CLIPS: u16 = 1 << 0;
 pub const HAS_TIMESTAMP: u16 = 1 << 1;
 pub const HAS_NAMEINDEX: u16 = 1 << 2;
+
+/// A string-table entry as game records hold it (C: `STRING`).
+pub type StringPtr = *mut StringTableEntry;
 
 #[repr(C)]
 pub struct StringTableEntry {

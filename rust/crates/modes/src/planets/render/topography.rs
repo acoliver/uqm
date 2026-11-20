@@ -1,7 +1,7 @@
 //! Colored surface batches from `plangen.c::RenderTopography`.
 
 use crate::comm::locdata::{CPoint, CRect};
-use crate::graphics::cmap::Color;
+use crate::graphics::geometry::Color;
 use crate::planets::generate::consts::{GAS_GIANT_ALGO, PLAN_ALGO_MASK};
 
 pub const NUM_BATCH_POINTS: usize = 64;
@@ -74,7 +74,7 @@ impl TopographyPalette<'_> {
             let v = u16::from(v >> 1);
             ((v << 3) | (v >> 2)) as u8
         };
-        Color::new(channel(rgb[0]), channel(rgb[1]), channel(rgb[2]))
+        Color::rgb(channel(rgb[0]), channel(rgb[1]), channel(rgb[2]))
     }
 }
 

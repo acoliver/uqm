@@ -76,8 +76,8 @@ impl DisplayPool {
         }
     }
     /// Serialize a transient drawing command batch without exposing pool storage.
-    pub fn batch(&self) -> crate::graphics::native_batch::NativeBatch {
-        crate::graphics::native_batch::NativeBatch::new(
+    pub fn batch(&self) -> crate::graphics::batch::NativeBatch {
+        crate::graphics::batch::NativeBatch::new(
             self.order()
                 .into_iter()
                 .map(|index| self.get(index).command())
@@ -123,11 +123,13 @@ mod tests {
         let retained = display.batch();
         let batch = retained.primitives();
         assert_eq!(batch.len(), 181);
-        assert_eq!(batch[0].color.r, 179);
-        assert_eq!(batch[179].color.r, 0);
-        assert_eq!(batch[180].color.r, 180);
-        assert_eq!(batch[0].Links, u32::from(u16::MAX) | (1 << 16));
-        assert_eq!(batch[180].Links, 179 | (u32::from(u16::MAX) << 16));
+        let red = |primitive: &crate::graphics::batch::Primitive| match primitive {
+            crate::graphics::batch::Primitive::Point(color, _) => color.r,
+            other => panic!("unexpected primitive {other:?}"),
+        };
+        assert_eq!(red(&batch[0]), 179);
+        assert_eq!(red(&batch[179]), 0);
+        assert_eq!(red(&batch[180]), 180);
         assert_eq!(display.order(), order_before);
         display.clear_order();
         assert!(display.batch().is_empty());

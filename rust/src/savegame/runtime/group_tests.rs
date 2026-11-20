@@ -9,10 +9,9 @@
 
 use super::groups::*;
 use super::queue_tests::{
-    free_slots, handle, records, FixturePool, LiveGame, C_WRITTEN_SAVE, RACES,
+    frame_handle, free_slots, handle, records, FixturePool, LiveGame, C_WRITTEN_SAVE, RACES,
 };
 use super::queues::QueueKind;
-
 use crate::comm::dispatch::{
     CPoint, IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,
 };
@@ -120,7 +119,7 @@ fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
         orbit_pos: entry.orbit_pos,
         group_id: entry.group_id,
         loc: cp(entry.loc.x, entry.loc.y),
-        melee_icon: icon as _,
+        melee_icon: crate::graphics::drawable::FrameId::from_bits(icon << 16),
     };
     queue.put(id);
 }
@@ -231,7 +230,7 @@ fn seed_group_restores_into_the_live_queue_and_captures_back() {
     assert_eq!((g.dest_loc, g.orbit_pos, g.group_id), (3, 13, 1));
     assert_eq!((g.loc.x, g.loc.y), (-2185, -969));
     // The icon is the template of the group's own race.
-    assert_eq!(g.melee_icon, handle(23, 3).cast());
+    assert_eq!(g.melee_icon, frame_handle(23, 3));
     assert_eq!(group_wire(&g), SEED_GROUP_WIRE);
 
     let captured = capture_groups(&game).unwrap();
@@ -312,10 +311,10 @@ fn groups_keep_their_order_and_take_the_icon_of_their_own_race() {
     assert_eq!(
         icons,
         [
-            handle(5, 3).cast(),
-            handle(0, 3).cast(),
-            handle(17, 3).cast(),
-            handle(5, 3).cast()
+            frame_handle(5, 3),
+            frame_handle(0, 3),
+            frame_handle(17, 3),
+            frame_handle(5, 3)
         ]
     );
     assert_eq!(live[2].loc.x, -103);
@@ -359,8 +358,8 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
                 t.species_id,
                 t.crew_level,
                 t.race_strings as usize,
-                t.icons as usize,
-                t.melee_icon as usize,
+                (t.icons).bits(),
+                (t.melee_icon).bits(),
             )
         })
         .collect();
@@ -376,8 +375,8 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
                 t.species_id,
                 t.crew_level,
                 t.race_strings as usize,
-                t.icons as usize,
-                t.melee_icon as usize,
+                (t.icons).bits(),
+                (t.melee_icon).bits(),
             )
         })
         .collect();
@@ -469,7 +468,7 @@ fn assert_rejected(game: &mut LiveGame, bad: GroupSections, expected: GroupError
     let before = fingerprint(game);
     let icons: Vec<usize> = raw_groups(&game.ip_groups_ref())
         .iter()
-        .map(|g| g.melee_icon as usize)
+        .map(|g| (g.melee_icon).bits())
         .collect();
     let elements: Vec<usize> = raw_encounters(&game.encounters_ref())
         .iter()
@@ -480,7 +479,7 @@ fn assert_rejected(game: &mut LiveGame, bad: GroupSections, expected: GroupError
     assert_eq!(
         raw_groups(&game.ip_groups_ref())
             .iter()
-            .map(|g| g.melee_icon as usize)
+            .map(|g| (g.melee_icon).bits())
             .collect::<Vec<_>>(),
         icons
     );
@@ -667,5 +666,5 @@ fn load_game_retains_the_build_group_zero_template_icon() {
     restore_loaded_groups(&mut game, &sections(vec![group(7, 1)], Vec::new())).unwrap();
     let loaded = raw_groups(&game.ip_groups_ref());
     assert_eq!(loaded[0].race_id, 7);
-    assert_eq!(loaded[0].melee_icon, handle(0, 3).cast());
+    assert_eq!(loaded[0].melee_icon, frame_handle(0, 3));
 }

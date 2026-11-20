@@ -1,20 +1,24 @@
-use std::{cell::Cell, ptr, rc::Rc};
-use uqm_rust::{
-    engine::input::frames::{KEY_MENU_RIGHT, KEY_MENU_SELECT},
-    engine::world::activity::activity_flags::IN_BATTLE,
-    engine::{
-        battle::{input::InputContext, Battle, Cx},
-        input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-        observe::{Io, Observer, Unobserved},
-        Game,
-    },
-    graphics::{
-        context_abi::*,
-        dcqueue_abi::TFB_FlushGraphics,
-        drawable_abi::{GetFramePixel, LoadedDrawable},
-        native_abi::*,
-        sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
-    },
+use std::{cell::Cell, rc::Rc};
+use uqm_rust::engine::battle::input::InputContext;
+use uqm_rust::engine::battle::Battle;
+use uqm_rust::engine::battle::Cx;
+use uqm_rust::engine::input::frames::InputState;
+use uqm_rust::engine::input::frames::KEY_MENU_RIGHT;
+use uqm_rust::engine::input::frames::KEY_MENU_SELECT;
+use uqm_rust::engine::input::Frame;
+use uqm_rust::engine::input::InputControls;
+use uqm_rust::engine::input::InputRuntime;
+use uqm_rust::engine::input::InputSession;
+use uqm_rust::engine::observe::Io;
+use uqm_rust::engine::observe::Observer;
+use uqm_rust::engine::observe::Unobserved;
+use uqm_rust::engine::test_support::native_probe::frame_pixel as GetFramePixel;
+use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_rust::engine::Game;
+use uqm_rust::graphics::context::{ContextLease, LoadedContext};
+use uqm_rust::graphics::{
+    drawable::LoadedDrawable, geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
+    menu::select as SetContext, present::GraphicsOptions,
 };
 
 struct MenuDriver {
@@ -75,38 +79,20 @@ impl InputRuntime for MenuDriver {
 fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    // SAFETY: this serialized test owns the graphics runtime, contexts and drawable until teardown.
-    unsafe {
-        assert_eq!(
-            TFB_InitGraphics(
-                1,
-                0,
-                ptr::from_ref(&GraphicsOptions::default()).cast(),
-                320,
-                240,
-            ),
-            0
-        );
+    {
+        uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         let contexts: [_; 3] = std::array::from_fn(|_| {
-            #[cfg(feature = "debug-process")]
-            {
-                CreateContextAux(c"hyperspace menu fixture".as_ptr())
-            }
-            #[cfg(not(feature = "debug-process"))]
-            {
-                CreateContextAux()
-            }
+            Some(LoadedContext::create(c"hyperspace menu fixture").into_id())
         });
         let [space, status, screen_context] = contexts;
         let drawable = LoadedDrawable::create(8, 320, 240, 1).unwrap();
         let screen = drawable.lease().frame(0).unwrap();
         for context in contexts {
-            ContextLease::retain(ptr::NonNull::new(context).unwrap())
-                .set_frame(drawable.lease().context_frame(0));
+            ContextLease::require(context).set_frame(drawable.lease().context_frame(0));
         }
-        ContextLease::retain(ptr::NonNull::new(status).unwrap()).set_clip(RECT {
-            corner: POINT { x: 256, y: 0 },
-            extent: EXTENT {
+        ContextLease::require(status).set_clip(Rect {
+            corner: Point { x: 256, y: 0 },
+            extent: Extent {
                 width: 64,
                 height: 240,
             },
@@ -117,7 +103,7 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
             b: 25,
             a: 255,
         };
-        ContextLease::retain(ptr::NonNull::new(space).unwrap()).set_background(background);
+        ContextLease::require(space).set_background(background);
         SetContext(status);
         let mut game = Game::new();
         uqm_rust::battle::services::install(&mut game.kernel);
@@ -143,18 +129,18 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
         assert_eq!(runtime.frames.get(), 7);
         assert_eq!(SetContext(status), status);
         SetContext(space);
-        let restored = SetContextBackGroundColor(background);
+        let restored = uqm_rust::graphics::menu::background(background);
         assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
-        TFB_FlushGraphics();
-        let radar = GetFramePixel(screen, POINT { x: 259, y: 173 });
+        uqm_rust::graphics::state::flush();
+        let radar = GetFramePixel(screen, Point { x: 259, y: 173 });
         assert_eq!((radar.r, radar.g, radar.b), (82, 82, 82));
         assert_eq!(cx.world.activity(), IN_BATTLE);
-        SetContext(ptr::null_mut());
+        SetContext(None);
         for context in contexts {
-            DestroyContext(context);
+            drop(context.map(LoadedContext::from_id));
         }
         drop(drawable);
-        TFB_UninitGraphics();
+        uqm_rust::graphics::present::uninit_graphics();
     }
     uqm_rust::engine::host::dispatch().clear();
 }

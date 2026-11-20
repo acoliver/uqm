@@ -1,6 +1,5 @@
 //! Phase contracts use real borrowed records; engine execution is integration-tested.
 use super::*;
-use std::ptr;
 fn frame_views(views: Frames) -> [FRAME; 3] {
     std::array::from_fn(|index| views.view(index).raw())
 }
@@ -111,7 +110,10 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
     run.stage = 9;
     run.array = Some(Frames::shared(
         crate::engine::battle::frames::SharedFrames::Fixture(0),
-        crate::engine::battle::frames::FrameArray::fixture([std::ptr::null_mut(); 3], ()),
+        crate::engine::battle::frames::FrameArray::fixture(
+            [crate::graphics::drawable::FrameId::NULL; 3],
+            (),
+        ),
     ));
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()
@@ -125,7 +127,7 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
         .unwrap()
         .unwrap();
     assert!(
-        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a() && *b == run.b() && *element == run.a() && frame_views(views.clone()) == [ptr::null_mut(); 3])
+        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a() && *b == run.b() && *element == run.a() && frame_views(views.clone()) == [crate::graphics::drawable::FrameId::NULL; 3])
     );
     run.wait = 3;
     let effects = frames::advance(&mut run, &mut world, &hooks)

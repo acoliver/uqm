@@ -1,667 +1,910 @@
-//! Drawable and Frame management
+//! Drawables and their frames, ported from drawable.c and pixmap.c
+//! (GPL-2.0-or-later).
 //!
-//! This module provides Rust abstractions for the drawable and frame
-//! concepts from the original C code (libs/graphics/drawable.h).
-//!
-//! Key concepts:
-//! - DrawableType: ROM_DRAWABLE, RAM_DRAWABLE, SCREEN_DRAWABLE
-//! - Drawable: Container for multiple frames with memory flags
-//! - Frame: Individual drawable frame with bounds and hot spot
+//! A drawable is a numbered list of frames; each frame has a hot spot, a size
+//! and, unless it is the screen, an image. Game state names frames with the
+//! copyable [`FrameId`]. A drawable lives while its owner ([`LoadedDrawable`])
+//! or any lease ([`DrawableLease`], [`ContextFrame`], a context's frame or
+//! font effect) holds it; its images are released through the draw queue
+//! when the last holder lets go, after every draw queued before.
+use super::canvas::scale::rescale_nearest;
+use super::context::ContextLease;
+use super::dcq::DrawCommand;
+use super::geometry::{Color, Extent, HotSpot, Point, Rect};
+use super::image::{Image, ImageId};
+use super::state::{self, Graphics};
+use crate::collections::observation::{self, Event};
+use std::num::NonZeroU64;
 
-use anyhow::{Context, Result};
-use std::collections::HashMap;
-use std::num::NonZeroU32;
-use std::sync::{Arc, RwLock};
-
-use crate::graphics::tfb_draw::{Canvas, CanvasFormat, TFImage};
-
-/// Drawable type classification (from DRAWABLE_TYPE)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DrawableType {
-    /// Read-only memory (e.g., ROM or loaded assets)
+/// C: `ROM_DRAWABLE`, `RAM_DRAWABLE` and `SCREEN_DRAWABLE`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FrameKind {
+    #[default]
     Rom,
-    /// Read-write memory (e.g., created frames)
     Ram,
-    /// Screen buffer
     Screen,
 }
 
-impl From<u16> for DrawableType {
-    fn from(value: u16) -> Self {
-        match value {
-            0 => DrawableType::Rom,
-            1 => DrawableType::Ram,
-            2 => DrawableType::Screen,
-            _ => DrawableType::Ram, // Default fallback
-        }
-    }
-}
-
-impl From<DrawableType> for u16 {
-    fn from(dt: DrawableType) -> Self {
-        match dt {
-            DrawableType::Rom => 0,
-            DrawableType::Ram => 1,
-            DrawableType::Screen => 2,
-        }
-    }
-}
-
-/// Drawable creation flags (from CREATE_FLAGS)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct DrawableFlags {
-    pub want_pixmap: bool,
-    pub want_alpha: bool,
-    /// Mapped to display flag (legacy compatibility)
-    pub mapped_to_display: bool,
-}
-
-/// Represents a coordinate in 2D space
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Coord {
-    pub value: i16,
-}
-
-impl Coord {
-    pub fn new(value: i16) -> Self {
-        Self { value }
-    }
-
-    /// Convert from COORD typedef (SWORD)
-    pub fn from_sword(value: u16) -> Self {
-        Self {
-            value: value as i16,
-        }
-    }
-
-    pub fn to_i32(&self) -> i32 {
-        self.value as i32
-    }
-}
-
-/// 2D Size (width, height)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Extent {
-    pub width: u16,
-    pub height: u16,
-}
-
-impl Extent {
-    pub fn new(width: u16, height: u16) -> Self {
-        Self { width, height }
-    }
-
-    /// Create from COORD-based SIZE typedef
-    pub fn from_size(width: u16, height: u16) -> Self {
-        Self { width, height }
-    }
-
-    pub fn area(&self) -> u32 {
-        u32::from(self.width) * u32::from(self.height)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.width == 0 || self.height == 0
-    }
-}
-
-/// 2D point (x, y)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Point {
-    pub x: i16,
-    pub y: i16,
-}
-
-impl Point {
-    pub fn new(x: i16, y: i16) -> Self {
-        Self { x, y }
-    }
-
-    pub fn from_coords(x: Coord, y: Coord) -> Self {
-        Self {
-            x: x.value,
-            y: y.value,
-        }
-    }
-
-    pub fn offset(&self, dx: i16, dy: i16) -> Point {
-        Point::new(self.x + dx, self.y + dy)
-    }
-}
-
-/// Hot spot offset for drawing (anchor point)
-///
-/// The hot spot defines where the frame "originates" when drawing.
-/// For example, (0,0) means top-left is the origin, while (-width/2, -height/2)
-/// would center the frame on the draw point.
-pub type HotSpot = Point;
-
-/// Helper functions for creating hot spots
-impl HotSpot {
-    /// Create a hot spot directly
-    pub fn make(x: i16, y: i16) -> Self {
-        Point::new(x, y)
-    }
-
-    /// Top-left hot spot (default)
-    pub fn top_left() -> Self {
-        Point::new(0, 0)
-    }
-
-    /// Centered hot spot
-    pub fn centered(extent: Extent) -> Self {
-        Point::new((extent.width as i16) / 2, (extent.height as i16) / 2)
-    }
-
-    /// Bottom-right hot spot
-    pub fn bottom_right(extent: Extent) -> Self {
-        Point::new(extent.width as i16, extent.height as i16)
-    }
-}
-
-/// Bounding rectangle (corner + extent)
-///
-/// This represents the geometric bounds of a frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rect {
-    pub corner: Point,
-    pub extent: Extent,
-}
-
-impl Rect {
-    pub fn new(corner: Point, width: u16, height: u16) -> Self {
-        Self {
-            corner,
-            extent: Extent::new(width, height),
-        }
-    }
-
-    pub fn from_point_extent(corner: Point, extent: Extent) -> Self {
-        Self { corner, extent }
-    }
-
-    pub fn from_xywh(x: i16, y: i16, width: u16, height: u16) -> Self {
-        Self {
-            corner: Point::new(x, y),
-            extent: Extent::new(width, height),
-        }
-    }
-
-    pub fn width(&self) -> u16 {
-        self.extent.width
-    }
-
-    pub fn height(&self) -> u16 {
-        self.extent.height
-    }
-
-    /// Get the right edge x-coordinate (exclusive)
-    pub fn right(&self) -> i32 {
-        self.corner.x as i32 + self.extent.width as i32
-    }
-
-    /// Get the bottom edge y-coordinate (exclusive)
-    pub fn bottom(&self) -> i32 {
-        self.corner.y as i32 + self.extent.height as i32
-    }
-
-    /// Check if a point is within the rectangle
-    pub fn contains(&self, point: Point) -> bool {
-        (point.x as i32) >= (self.corner.x as i32)
-            && (point.y as i32) >= (self.corner.y as i32)
-            && (point.x as i32) < self.right()
-            && (point.y as i32) < self.bottom()
-    }
-
-    /// Check if this rectangle intersects with another
-    pub fn intersects(&self, other: &Rect) -> bool {
-        self.right() > (other.corner.x as i32)
-            && self.bottom() > (other.corner.y as i32)
-            && (self.corner.x as i32) < other.right()
-            && (self.corner.y as i32) < other.bottom()
-    }
-
-    /// Get the intersection of two rectangles (if any)
-    pub fn intersection(&self, other: &Rect) -> Option<Rect> {
-        if !self.intersects(other) {
-            return None;
-        }
-
-        let x1 = self.corner.x.max(other.corner.x);
-        let y1 = self.corner.y.max(other.corner.y);
-        let x2 = self.right().min(other.right()) as i16;
-        let y2 = self.bottom().min(other.bottom()) as i16;
-
-        Some(Rect::new(
-            Point::new(x1, y1),
-            (x2 - x1) as u16,
-            (y2 - y1) as u16,
-        ))
-    }
-}
-
-/// Errors related to Frame operations
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum FrameError {
-    #[error("Invalid frame index: {index} (max: {max_index})")]
-    InvalidFrameIndex { index: usize, max_index: usize },
-
-    #[error("Frame not initialized")]
-    NotInitialized,
-
-    #[error("Parent drawable already freed")]
-    ParentFreed,
-
-    #[error("Bounds size must be positive")]
-    InvalidBounds,
-}
-
-/// Image data stored on a frame.
-#[derive(Debug, Clone)]
-pub struct FrameImage {
-    pub image: Arc<TFImage>,
-}
-
-impl FrameImage {
-    pub fn new(image: Arc<TFImage>) -> Self {
-        Self { image }
-    }
-}
-
-/// Frame representation
-///
-/// A Frame represents a single image frame within a Drawable.
-/// It contains bounds, hot spot information, a reference to its parent,
-/// and optional image data for RAM-backed drawables.
-#[derive(Debug, Clone)]
+/// C: `FRAME_DESC`.
+#[derive(Clone, Debug, Default)]
 pub struct Frame {
-    /// Unique frame identifier within its drawable
-    pub index: usize,
-    /// Drawable type (ROM, RAM, or SCREEN)
-    pub frame_type: DrawableType,
-    /// Bounding rectangle
-    pub bounds: Extent,
-    /// Hot spot offset
+    pub kind: FrameKind,
     pub hot_spot: HotSpot,
-    /// Optional image data for this frame
-    pub image: Option<FrameImage>,
-    /// Reference to parent drawable
-    pub parent: Option<NonZeroU32>,
+    pub bounds: Extent,
+    pub image: Option<ImageId>,
 }
 
-impl Frame {
-    /// Create a new frame
-    pub fn new(
-        index: usize,
-        frame_type: DrawableType,
-        width: u16,
-        height: u16,
-        hot_spot: HotSpot,
-    ) -> Result<Self, FrameError> {
-        if width == 0 || height == 0 {
-            return Err(FrameError::InvalidBounds);
-        }
+/// C: `DRAWABLE_DESC`.
+#[derive(Debug)]
+pub struct Drawable {
+    pub flags: u8,
+    pub frames: Vec<Frame>,
+    leases: u32,
+    owned: bool,
+}
 
-        Ok(Self {
-            index,
-            frame_type,
-            bounds: Extent::new(width, height),
-            hot_spot,
-            image: None,
-            parent: None,
+/// `CREATE_FLAGS`: the drawable's frames carry an alpha channel.
+pub const WANT_ALPHA: u8 = 8;
+/// `CREATE_FLAGS`: a pixel image.
+pub const WANT_PIXMAP: u8 = 2;
+
+/// A copyable name for a drawable (C: `DRAWABLE`). Names are never reused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DrawableId(NonZeroU64);
+
+impl DrawableId {
+    /// A stable number for observation journals, distinct from every
+    /// [`FrameId::bits`].
+    pub fn bits(self) -> usize {
+        (self.0.get() as usize) << 16 | 0xffff
+    }
+}
+
+/// A copyable name for one frame of a drawable (C: `FRAME`); the default is
+/// the null frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FrameId(Option<(DrawableId, u16)>);
+
+impl FrameId {
+    pub const NULL: Self = Self(None);
+
+    pub(crate) fn new(drawable: DrawableId, index: u16) -> Self {
+        Self(Some((drawable, index)))
+    }
+
+    /// `None` for the null frame.
+    pub fn non_null(self) -> Option<Self> {
+        (!self.is_null()).then_some(self)
+    }
+
+    pub fn is_null(self) -> bool {
+        self.0.is_none()
+    }
+
+    /// C: `GetFrameParentDrawable`.
+    pub fn drawable(self) -> Option<DrawableId> {
+        self.0.map(|(drawable, _)| drawable)
+    }
+
+    /// C: `GetFrameIndex`: zero for the null frame.
+    pub fn index(self) -> u16 {
+        self.0.map_or(0, |(_, index)| index)
+    }
+
+    /// A stable number for observation journals and opaque game handles;
+    /// zero for the null frame.
+    pub fn bits(self) -> usize {
+        self.0.map_or(0, |(drawable, index)| {
+            (drawable.0.get() as usize) << 16 | usize::from(index)
         })
     }
 
-    /// Create a frame with top-left hot spot
-    pub fn with_top_left_hotspot(
-        index: usize,
-        frame_type: DrawableType,
-        width: u16,
-        height: u16,
-    ) -> Result<Self, FrameError> {
-        Self::new(index, frame_type, width, height, HotSpot::top_left())
+    /// The frame named by [`Self::bits`].
+    pub fn from_bits(bits: usize) -> Self {
+        NonZeroU64::new((bits >> 16) as u64).map_or(Self::NULL, |drawable| {
+            Self::new(DrawableId(drawable), bits as u16)
+        })
     }
 
-    /// Create a frame backed by an existing image
-    pub fn from_image(
-        index: usize,
-        frame_type: DrawableType,
-        image: Arc<TFImage>,
-        hot_spot: HotSpot,
-    ) -> Result<Self, FrameError> {
-        let extent = image.extent().ok_or(FrameError::InvalidBounds)?;
-        if extent.width <= 0 || extent.height <= 0 {
-            return Err(FrameError::InvalidBounds);
+    /// C: `GetFrameCount`.
+    pub fn count(self) -> u16 {
+        self.drawable().map_or(0, |drawable| {
+            state::with(|g| g.drawable(drawable).frames.len() as u16)
+        })
+    }
+
+    /// C: `SetAbsFrameIndex`: the frame `index` modulo the frame count.
+    pub fn at(self, index: u16) -> Self {
+        let Some((drawable, _)) = self.0 else {
+            return self;
+        };
+        Self::new(drawable, index % self.count())
+    }
+
+    /// C: `SetRelFrameIndex`.
+    pub fn relative(self, mut offset: i16) -> Self {
+        let Some((drawable, index)) = self.0 else {
+            return self;
+        };
+        let count = self.count();
+        if offset < 0 {
+            loop {
+                offset = (i32::from(offset) + i32::from(count)) as i16;
+                if offset >= 0 {
+                    break;
+                }
+            }
         }
-
-        let mut frame = Self::new(
-            index,
-            frame_type,
-            extent.width as u16,
-            extent.height as u16,
-            hot_spot,
-        )?;
-        frame.set_image(image);
-        Ok(frame)
+        let index = (i32::from(index as i16) + i32::from(offset)) % i32::from(count);
+        Self::new(drawable, index as u16)
     }
 
-    /// Get frame width
-    pub fn width(&self) -> u16 {
-        self.bounds.width
+    /// C: `SetEquFrameIndex`.
+    pub fn equal_index(self, source: Self) -> Self {
+        if self.is_null() || source.is_null() {
+            Self::NULL
+        } else {
+            self.at(source.index())
+        }
     }
 
-    /// Get frame height
-    pub fn height(&self) -> u16 {
-        self.bounds.height
+    /// C: `IncFrameIndex`.
+    pub fn next(self) -> Self {
+        let Some((drawable, index)) = self.0 else {
+            return self;
+        };
+        if index + 1 < self.count() {
+            Self::new(drawable, index + 1)
+        } else {
+            Self::new(drawable, 0)
+        }
     }
 
-    /// Get frame bounds as a Rect at origin
-    pub fn as_rect(&self) -> Rect {
-        Rect::new(Point::new(0, 0), self.bounds.width, self.bounds.height)
+    /// C: `DecFrameIndex`.
+    pub fn previous(self) -> Self {
+        let Some((drawable, index)) = self.0 else {
+            return self;
+        };
+        if index > 0 {
+            Self::new(drawable, index - 1)
+        } else {
+            Self::new(drawable, self.count() - 1)
+        }
     }
 
-    /// Calculate the effective bounds with hot spot applied
-    pub fn effective_rect(&self) -> Rect {
-        Rect::new(
-            Point::new(-self.hot_spot.x, -self.hot_spot.y),
-            self.bounds.width,
-            self.bounds.height,
+    /// C: `GetFrameRect`: the frame's bounds placed at minus its hot spot.
+    pub fn rect(self) -> Option<Rect> {
+        self.0.map(|_| state::with(|g| g.frame(self).rect()))
+    }
+
+    /// C: `GetFrameHot`.
+    pub fn hot_spot(self) -> HotSpot {
+        if self.is_null() {
+            return HotSpot::default();
+        }
+        state::with(|g| g.frame(self).hot_spot)
+    }
+
+    /// C: `SetFrameHot`: returns the previous hot spot.
+    pub fn set_hot_spot(self, hot: HotSpot) -> HotSpot {
+        if self.is_null() {
+            return HotSpot::default();
+        }
+        state::with(|g| std::mem::replace(&mut g.frame_mut(self).hot_spot, hot))
+    }
+
+    /// Replace the frame's bounds (a fixture's collision box); returns the
+    /// previous bounds.
+    pub fn set_bounds(self, bounds: Extent) -> Extent {
+        state::with(|g| std::mem::replace(&mut g.frame_mut(self).bounds, bounds))
+    }
+
+    /// The image identity of a pixel frame and the identity of its mipmap
+    /// companion, for zoom-level diagnostics.
+    pub fn image_identity(self) -> Option<(u64, Option<u64>)> {
+        let (_, index) = self.0?;
+        let _ = index;
+        state::with(|g| {
+            let image = g.frame(self).image?;
+            Some((image.key(), g.images.get(image).mipmap_key()))
+        })
+    }
+
+    /// C: `TFB_DrawScreen_SetMipmap` with the mipmap frame's hot spot: queue
+    /// `mipmap` as this frame's trilinear companion.
+    pub fn set_mipmap(self, mipmap: Self) {
+        state::with(|g| {
+            let image = g.frame(self).pixel_image();
+            let source = g.frame(mipmap);
+            let hot = source.hot_spot;
+            let mipmap = source.pixel_image();
+            g.enqueue(DrawCommand::SetMipmap { image, mipmap, hot });
+        });
+    }
+
+    /// The frame's kind; `None` for the null frame.
+    pub fn kind(self) -> Option<FrameKind> {
+        self.0.map(|_| state::with(|g| g.frame(self).kind))
+    }
+}
+
+impl Frame {
+    fn rect(&self) -> Rect {
+        Rect {
+            corner: Point::new(
+                self.hot_spot.x.wrapping_neg(),
+                self.hot_spot.y.wrapping_neg(),
+            ),
+            extent: self.bounds,
+        }
+    }
+
+    fn pixel_image(&self) -> ImageId {
+        assert_ne!(
+            self.kind,
+            FrameKind::Screen,
+            "screen frames require readback"
+        );
+        self.image
+            .unwrap_or_else(|| panic!("frame has no pixel image"))
+    }
+}
+
+/// The drawable registry: serial names, never reused.
+#[derive(Debug, Default)]
+pub(crate) struct Drawables {
+    pub(crate) entries: std::collections::HashMap<NonZeroU64, Drawable>,
+    next: u64,
+}
+
+impl Graphics {
+    pub(crate) fn drawable(&self, drawable: DrawableId) -> &Drawable {
+        self.drawables
+            .entries
+            .get(&drawable.0)
+            .unwrap_or_else(|| panic!("drawable {drawable:?} was released"))
+    }
+
+    fn drawable_mut(&mut self, drawable: DrawableId) -> &mut Drawable {
+        self.drawables
+            .entries
+            .get_mut(&drawable.0)
+            .unwrap_or_else(|| panic!("drawable {drawable:?} was released"))
+    }
+
+    pub(crate) fn frame(&self, frame: FrameId) -> &Frame {
+        let (drawable, index) = frame.0.unwrap_or_else(|| panic!("null frame"));
+        &self.drawable(drawable).frames[usize::from(index)]
+    }
+
+    pub(crate) fn frame_mut(&mut self, frame: FrameId) -> &mut Frame {
+        let (drawable, index) = frame.0.unwrap_or_else(|| panic!("null frame"));
+        &mut self.drawable_mut(drawable).frames[usize::from(index)]
+    }
+
+    /// C: `AllocDrawable`: `count` empty frames, owned by the caller.
+    pub(crate) fn alloc_drawable(&mut self, count: u16, flags: u8) -> DrawableId {
+        self.drawables.next += 1;
+        let id = NonZeroU64::new(self.drawables.next).unwrap_or_else(|| unreachable!());
+        let drawable = DrawableId(id);
+        observation::record(Event::Drawable(drawable.bits()));
+        for index in 0..count {
+            observation::record(Event::Frame {
+                address: FrameId::new(drawable, index).bits(),
+                owner: drawable.bits(),
+                index,
+            });
+        }
+        self.drawables.entries.insert(
+            id,
+            Drawable {
+                flags,
+                frames: vec![Frame::default(); usize::from(count)],
+                leases: 1,
+                owned: true,
+            },
+        );
+        drawable
+    }
+
+    /// C: `request_drawable`.
+    fn request_drawable(
+        &mut self,
+        count: u16,
+        kind: FrameKind,
+        flags: u8,
+        width: i16,
+        height: i16,
+    ) -> DrawableId {
+        let drawable = self.alloc_drawable(count, flags);
+        for index in 0..usize::from(count) {
+            let image = (kind == FrameKind::Ram && width > 0 && height > 0).then(|| {
+                self.images.insert(Image::true_color(
+                    i32::from(width),
+                    i32::from(height),
+                    flags & WANT_ALPHA != 0,
+                ))
+            });
+            self.drawable_mut(drawable).frames[index] = Frame {
+                kind,
+                hot_spot: HotSpot::default(),
+                bounds: Extent::new(width, height),
+                image,
+            };
+        }
+        drawable
+    }
+
+    /// C: `CreateDrawable`.
+    pub(crate) fn create_drawable(
+        &mut self,
+        flags: u8,
+        width: i16,
+        height: i16,
+        count: u16,
+    ) -> DrawableId {
+        self.request_drawable(count, FrameKind::Ram, flags & 15, width, height)
+    }
+
+    /// C: `CreateDisplay`: the screen as a one-frame drawable.
+    pub(crate) fn create_display(&mut self, flags: u8) -> DrawableId {
+        self.request_drawable(
+            1,
+            FrameKind::Screen,
+            flags & 3,
+            state::SCREEN_WIDTH as i16,
+            state::SCREEN_HEIGHT as i16,
         )
     }
 
-    /// Set hot spot
-    pub fn set_hot_spot(&mut self, hot_spot: HotSpot) {
-        self.hot_spot = hot_spot;
+    /// Hold a drawable for a lease.
+    pub(crate) fn retain_drawable(&mut self, drawable: DrawableId) {
+        let entry = self
+            .drawables
+            .entries
+            .get_mut(&drawable.0)
+            .unwrap_or_else(|| panic!("frame belongs to an unowned drawable: {drawable:?}"));
+        entry.leases += 1;
     }
 
-    /// Set parent drawable id
-    pub fn set_parent(&mut self, parent_id: NonZeroU32) {
-        self.parent = Some(parent_id);
-    }
-
-    /// Clear parent reference
-    pub fn clear_parent(&mut self) {
-        self.parent = None;
-    }
-
-    /// Attach an image to this frame
-    pub fn set_image(&mut self, image: Arc<TFImage>) {
-        self.image = Some(FrameImage::new(image));
-    }
-}
-
-/// Drawable container
-///
-/// A Drawable holds a collection of frames, typically representing an
-/// animated graphic or multi-state element. The original C code uses
-/// this for managing sprite frames and image sequences.
-#[derive(Debug, Clone)]
-pub struct Drawable {
-    /// Unique identifier for this drawable
-    id: NonZeroU32,
-    /// Drawable type
-    drawable_type: DrawableType,
-    /// Creation flags
-    flags: DrawableFlags,
-    /// Frames collection
-    frames: Vec<Frame>,
-    /// Maximum frame index (capacity)
-    max_index: usize,
-    /// Default frame size for newly allocated frames
-    default_bounds: Extent,
-}
-
-impl Drawable {
-    /// Create a new drawable with empty frame slots
-    pub fn new(
-        id: NonZeroU32,
-        drawable_type: DrawableType,
-        flags: DrawableFlags,
-        num_frames: usize,
-    ) -> Self {
-        Self::with_bounds(id, drawable_type, flags, num_frames, Extent::new(0, 0))
-    }
-
-    /// Create a new drawable with preset frame bounds
-    pub fn with_bounds(
-        id: NonZeroU32,
-        drawable_type: DrawableType,
-        flags: DrawableFlags,
-        num_frames: usize,
-        bounds: Extent,
-    ) -> Self {
-        Self {
-            id,
-            drawable_type,
-            flags,
-            frames: Vec::with_capacity(num_frames),
-            max_index: num_frames.saturating_sub(1),
-            default_bounds: bounds,
+    /// Let go of a lease; the last one releases the drawable's images
+    /// through the returned queue commands (C: `release_cel_data`).
+    #[must_use]
+    pub(crate) fn release_drawable(&mut self, drawable: DrawableId) -> Vec<DrawCommand> {
+        let entry = self.drawable_mut(drawable);
+        entry.leases -= 1;
+        if entry.leases != 0 {
+            return Vec::new();
         }
-    }
-
-    /// Add a frame to this drawable
-    pub fn add_frame(&mut self, frame: Frame) -> Result<(), FrameError> {
-        let frame_index = frame.index;
-        if frame_index > self.max_index {
-            return Err(FrameError::InvalidFrameIndex {
-                index: frame_index,
-                max_index: self.max_index,
-            });
-        }
-
-        // Link frame to parent
-        let mut linked_frame = frame;
-        linked_frame.set_parent(self.id);
-
-        self.ensure_frames_initialized();
-        self.frames[frame_index] = linked_frame;
-        Ok(())
-    }
-
-    /// Ensure all frame slots are initialized
-    fn ensure_frames_initialized(&mut self) {
-        if self.frames.len() == self.max_index + 1 {
-            return;
-        }
-
-        let frame_type = self.drawable_type;
-        let bounds = self.default_bounds;
-        let flags = self.flags;
-
-        while self.frames.len() <= self.max_index {
-            let index = self.frames.len();
-            let mut frame = Frame {
-                index,
-                frame_type,
-                bounds,
-                hot_spot: HotSpot::top_left(),
-                image: None,
-                parent: Some(self.id),
-            };
-
-            if matches!(frame_type, DrawableType::Ram) && bounds.width > 0 && bounds.height > 0 {
-                let canvas = Canvas::new(
-                    crate::graphics::dcqueue::Extent::new(
-                        bounds.width as i32,
-                        bounds.height as i32,
-                    ),
-                    if flags.want_alpha {
-                        CanvasFormat::rgba()
-                    } else {
-                        CanvasFormat::rgb()
-                    },
-                );
-                let image = Arc::new(TFImage::new(canvas));
-                frame.set_image(image);
-            }
-
-            self.frames.push(frame);
-        }
-    }
-
-    /// Get a frame by index
-    pub fn get_frame(&self, index: usize) -> Result<&Frame, FrameError> {
-        if index > self.max_index {
-            return Err(FrameError::InvalidFrameIndex {
-                index,
-                max_index: self.max_index,
-            });
-        }
-
-        if self.frames.is_empty() {
-            return Err(FrameError::NotInitialized);
-        }
-
-        let frame = self.frames.get(index).ok_or(FrameError::NotInitialized)?;
-        if frame.parent.is_none() {
-            return Err(FrameError::NotInitialized);
-        }
-
-        Ok(frame)
-    }
-
-    /// Get a mutable frame by index
-    pub fn get_frame_mut(&mut self, index: usize) -> Result<&mut Frame, FrameError> {
-        if index > self.max_index {
-            return Err(FrameError::InvalidFrameIndex {
-                index,
-                max_index: self.max_index,
-            });
-        }
-
-        self.ensure_frames_initialized();
-        let frame = self
+        let entry = self
+            .drawables
+            .entries
+            .remove(&drawable.0)
+            .unwrap_or_else(|| unreachable!());
+        entry
             .frames
-            .get_mut(index)
-            .ok_or(FrameError::NotInitialized)?;
-        if frame.parent.is_none() {
-            return Err(FrameError::NotInitialized);
+            .into_iter()
+            .filter_map(|frame| frame.image)
+            .map(DrawCommand::DeleteImage)
+            .collect()
+    }
+
+    pub(crate) fn retain_frame(&mut self, frame: FrameId) {
+        if let Some(drawable) = frame.drawable() {
+            self.retain_drawable(drawable);
         }
-
-        Ok(frame)
     }
 
-    /// Get drawable ID
-    pub fn id(&self) -> u32 {
-        self.id.get()
+    #[must_use]
+    pub(crate) fn release_frame(&mut self, frame: FrameId) -> Vec<DrawCommand> {
+        frame
+            .drawable()
+            .map_or_else(Vec::new, |drawable| self.release_drawable(drawable))
     }
 
-    /// Get drawable type
-    pub fn drawable_type(&self) -> DrawableType {
-        self.drawable_type
+    /// C: `DestroyDrawable`: the owner's release. Leases keep the frames.
+    #[must_use]
+    pub(crate) fn destroy_drawable(&mut self, drawable: DrawableId) -> Vec<DrawCommand> {
+        if self.current.frame.drawable() == Some(drawable) {
+            self.set_context_fg_frame(FrameId::NULL);
+        }
+        observation::record(Event::DrawableFree(drawable.bits()));
+        let entry = self.drawable_mut(drawable);
+        assert!(entry.owned, "drawable {drawable:?} destroyed twice");
+        entry.owned = false;
+        self.release_drawable(drawable)
     }
 
-    /// Get frame count
-    pub fn frame_count(&self) -> usize {
-        self.max_index + 1
+    pub(crate) fn frame_image(&self, frame: FrameId) -> &Image {
+        self.images.get(self.frame(frame).pixel_image())
     }
 
-    /// Get total capacity (max index + 1)
-    pub fn capacity(&self) -> usize {
-        self.max_index + 1
+    pub(crate) fn frame_image_mut(&mut self, frame: FrameId) -> &mut Image {
+        let id = self.frame(frame).pixel_image();
+        self.images.get_mut(id)
     }
 
-    /// Get flags
-    pub fn flags(&self) -> DrawableFlags {
-        self.flags
+    /// C: `RotateFrame`.
+    pub(crate) fn rotate_frame(&mut self, frame: FrameId, angle: i32) -> DrawableId {
+        let source = self.frame(frame).clone();
+        let image = self.images.get(source.pixel_image()).rotated(angle);
+        let bounds = image.extent;
+        let drawable = self.request_drawable(1, FrameKind::Ram, WANT_PIXMAP, 0, 0);
+        let image = self.images.insert(image);
+        let rotated = &mut self.drawable_mut(drawable).frames[0];
+        rotated.bounds = bounds;
+        rotated.hot_spot = rotate_hotspot(source.hot_spot, source.bounds, bounds, angle);
+        rotated.image = Some(image);
+        drawable
     }
 
-    /// Check if drawable requires alpha channel
-    pub fn has_alpha(&self) -> bool {
-        self.flags.want_alpha
+    /// C: `matching_frame`: a one-frame RAM drawable with the source's flags.
+    fn matching_drawable(&mut self, frame: FrameId, width: i32, height: i32) -> DrawableId {
+        let flags = frame
+            .drawable()
+            .map_or(0, |drawable| self.drawable(drawable).flags);
+        self.create_drawable(flags, width as i16, height as i16, 1)
+    }
+
+    /// C: `CopyFrameRect`.
+    pub(crate) fn copy_frame_rect(&mut self, frame: FrameId, area: Rect) -> DrawableId {
+        let source = self.frame(frame).pixel_image();
+        let drawable = self.matching_drawable(
+            frame,
+            i32::from(area.extent.width),
+            i32::from(area.extent.height),
+        );
+        let target = self.frame(FrameId::new(drawable, 0)).pixel_image();
+        super::image::copy_image_rect(&mut self.images, source, area, target, Point::default());
+        drawable
+    }
+
+    /// C: `RescaleFrame`.
+    pub(crate) fn rescale_frame(&mut self, frame: FrameId, width: i32, height: i32) -> DrawableId {
+        let source = self.frame(frame).clone();
+        let drawable = self.matching_drawable(frame, width, height);
+        let target = FrameId::new(drawable, 0);
+        self.frame_mut(target).hot_spot = HotSpot::new(
+            (i32::from(source.hot_spot.x) * width / i32::from(source.bounds.width)) as i16,
+            (i32::from(source.hot_spot.y) * height / i32::from(source.bounds.height)) as i16,
+        );
+        let target = self.frame(target).pixel_image();
+        let (from, to) = self.images.pair_mut(source.pixel_image(), target);
+        let mut extent = Extent::zero();
+        let mut hot = HotSpot::default();
+        rescale_nearest(
+            from.canvas(),
+            to.canvas_mut(),
+            -1,
+            HotSpot::default(),
+            &mut extent,
+            &mut hot,
+        );
+        drawable
     }
 }
 
-/// Drawable registry for managing multiple drawables
-///
-/// This provides centralized management of all drawables in the system,
-/// similar to how the C code uses global state combined with memory management.
-#[derive(Debug, Default)]
-pub struct DrawableRegistry {
-    drawables: RwLock<HashMap<NonZeroU32, Drawable>>,
-    next_id: RwLock<u32>,
+/// C: `RotateFrame`'s hot-spot rotation about the integer centre.
+fn rotate_hotspot(hot: HotSpot, bounds: Extent, rotated: Extent, angle: i32) -> HotSpot {
+    let radians = f64::from(angle) * std::f64::consts::PI / 180.0;
+    let mut dx = f64::from(i32::from(hot.x) - i32::from(bounds.width) / 2);
+    let mut dy = f64::from(i32::from(hot.y) - i32::from(bounds.height) / 2);
+    let distance = (dx * dx + dy * dy).sqrt();
+    if distance as i32 != 0 {
+        let original = (-dy).atan2(dx);
+        dx = (original + radians).cos() * distance;
+        dy = -(original + radians).sin() * distance;
+    }
+    HotSpot::new(
+        (i32::from(rotated.width) / 2 + dx as i32) as i16,
+        (i32::from(rotated.height) / 2 + dy as i32) as i16,
+    )
 }
 
-impl DrawableRegistry {
-    /// Create a new registry
-    pub fn new() -> Self {
+/// A held drawable: its frames stay valid while any lease is alive.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DrawableLease(DrawableId);
+
+impl DrawableLease {
+    /// Hold `drawable`; panics if it was released.
+    pub fn retain(drawable: DrawableId) -> Self {
+        state::with(|g| g.retain_drawable(drawable));
+        Self(drawable)
+    }
+
+    /// Adopt the reference a new drawable starts with.
+    fn adopt(drawable: DrawableId) -> Self {
+        Self(drawable)
+    }
+
+    pub fn drawable(&self) -> DrawableId {
+        self.0
+    }
+
+    pub fn frame_count(&self) -> u16 {
+        state::with(|g| g.drawable(self.0).frames.len() as u16)
+    }
+
+    /// The frame `index`, if the drawable has it.
+    pub fn frame(&self, index: usize) -> Option<FrameId> {
+        (index < usize::from(self.frame_count())).then(|| FrameId::new(self.0, index as u16))
+    }
+
+    /// The frame `index` modulo the frame count.
+    pub fn wrapped_frame(&self, index: usize) -> FrameId {
+        FrameId::new(self.0, (index % usize::from(self.frame_count())) as u16)
+    }
+
+    pub fn context_frame(&self, index: usize) -> ContextFrame {
+        let frame = self
+            .frame(index)
+            .unwrap_or_else(|| panic!("drawable frame index {index}"));
+        ContextFrame::retain(frame)
+    }
+
+    pub fn frame_rect(&self, index: usize) -> Rect {
+        self.context_frame(index).rect()
+    }
+
+    pub fn set_hotspot(&self, index: usize, hot: HotSpot) {
+        self.context_frame(index).replace_hotspot(hot);
+    }
+
+    pub fn owns_frame(&self, frame: FrameId) -> bool {
+        self.frame_index(frame).is_some()
+    }
+
+    pub fn frame_index(&self, frame: FrameId) -> Option<usize> {
+        (frame.drawable() == Some(self.0) && frame.index() < self.frame_count())
+            .then(|| usize::from(frame.index()))
+    }
+}
+
+impl Clone for DrawableLease {
+    fn clone(&self) -> Self {
+        Self::retain(self.0)
+    }
+}
+
+impl Drop for DrawableLease {
+    fn drop(&mut self) {
+        let released = state::with(|g| g.release_drawable(self.0));
+        state::enqueue_all(released);
+    }
+}
+
+/// Unique release authority for a loaded or generated drawable.
+#[derive(Debug)]
+pub struct LoadedDrawable {
+    lease: Option<DrawableLease>,
+}
+
+impl LoadedDrawable {
+    /// Adopt a drawable just created by the caller.
+    pub(crate) fn adopt(drawable: DrawableId) -> Self {
         Self {
-            drawables: RwLock::new(HashMap::new()),
-            next_id: RwLock::new(1),
+            lease: Some(DrawableLease::adopt(drawable)),
         }
     }
 
-    /// Allocate a new drawable
-    pub fn allocate(
-        &self,
-        ty: DrawableType,
-        flags: DrawableFlags,
-        num_frames: usize,
-    ) -> Result<NonZeroU32> {
-        self.allocate_with_bounds(ty, flags, num_frames, Extent::new(0, 0))
+    pub fn drawable(&self) -> DrawableId {
+        self.lease_ref().0
     }
 
-    /// Allocate a new drawable with preset frame bounds
-    pub fn allocate_with_bounds(
-        &self,
-        ty: DrawableType,
-        flags: DrawableFlags,
-        num_frames: usize,
-        bounds: Extent,
-    ) -> Result<NonZeroU32> {
-        let id = {
-            let mut next = self.next_id.write().unwrap();
-            let id = *next;
-            // Increment, skipping 0
-            *next = id.wrapping_add(1);
-            if *next == 0 {
-                *next = 1;
+    /// Whether no lease other than the owner's holds the drawable.
+    pub fn is_exclusive(&self) -> bool {
+        state::with(|g| g.drawable(self.drawable()).leases == 1)
+    }
+
+    fn lease_ref(&self) -> &DrawableLease {
+        self.lease
+            .as_ref()
+            .unwrap_or_else(|| unreachable!("owner lease is held until drop"))
+    }
+
+    pub fn lease(&self) -> DrawableLease {
+        self.lease_ref().clone()
+    }
+
+    /// The first frame (C: `CaptureDrawable`).
+    pub fn first_frame(&self) -> FrameId {
+        FrameId::new(self.lease_ref().0, 0)
+    }
+
+    /// Hand ownership to game state that names the drawable by its first
+    /// frame (C: a `FRAME` field); [`Self::from_frame`] takes it back.
+    pub fn into_frame(self) -> FrameId {
+        // the owner's release moves to whoever calls `from_frame`
+        std::mem::ManuallyDrop::new(self).first_frame()
+    }
+
+    /// Take back ownership handed out by [`Self::into_frame`]; the null
+    /// frame owns nothing.
+    pub fn from_frame(frame: FrameId) -> Option<Self> {
+        frame.drawable().map(Self::adopt)
+    }
+
+    /// Load a graphics resource.
+    pub fn load(resource: &std::ffi::CStr) -> Option<Self> {
+        crate::resource::cache::load_graphic(resource)
+    }
+
+    /// Load an animation or image file.
+    pub fn load_file(path: &std::ffi::CStr) -> Option<Self> {
+        super::load::load_graphic_file(path)
+    }
+
+    /// C: `CreateDrawable`.
+    pub fn create(flags: u8, width: i16, height: i16, count: u16) -> Option<Self> {
+        Some(Self::adopt(state::with(|g| {
+            g.create_drawable(flags, width, height, count)
+        })))
+    }
+
+    /// C: `CreateDisplay`.
+    pub fn display(flags: u8) -> Self {
+        Self::adopt(state::with(|g| g.create_display(flags)))
+    }
+
+    /// C: `RotateFrame`.
+    pub fn rotated(frame: &ContextFrame, angle: i32) -> Option<Self> {
+        let source = frame.frame();
+        if source.is_null() {
+            return None;
+        }
+        assert_ne!(source.kind(), Some(FrameKind::Screen));
+        Some(Self::adopt(state::with(|g| g.rotate_frame(source, angle))))
+    }
+
+    /// Rescale one pixel frame into a separate owner, preserving the source.
+    /// Empty frames, invalid indices and dimensions outside native bounds return `None`.
+    pub fn rescaled(&self, index: usize, width: i32, height: i32) -> Option<Self> {
+        let (width, height) = (i16::try_from(width).ok()?, i16::try_from(height).ok()?);
+        let frame = self.lease_ref().frame(index)?;
+        let bounds = frame.rect()?.extent;
+        if width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0 {
+            return None;
+        }
+        assert_ne!(frame.kind(), Some(FrameKind::Screen));
+        Some(Self::adopt(state::with(|g| {
+            g.rescale_frame(frame, i32::from(width), i32::from(height))
+        })))
+    }
+
+    /// Copy an area relative to the context's clip into an independently owned drawable.
+    /// An absent area copies the current clip; an empty intersection returns `None`.
+    pub fn capture(context: &ContextLease, area: Option<Rect>) -> Option<Self> {
+        context.copy_rect(area).map(Self::adopt)
+    }
+
+    /// C: `CloneFrame`.
+    pub fn clone_frame(frame: &ContextFrame) -> Option<Self> {
+        let source = frame.frame();
+        if source.is_null() {
+            return None;
+        }
+        assert_ne!(source.kind(), Some(FrameKind::Screen));
+        let hot = source.hot_spot();
+        let bounds = source.rect()?.extent;
+        let drawable = state::with(|g| {
+            let drawable = g.copy_frame_rect(
+                source,
+                Rect {
+                    corner: Point::default(),
+                    extent: bounds,
+                },
+            );
+            g.frame_mut(FrameId::new(drawable, 0)).hot_spot = hot;
+            drawable
+        });
+        Some(Self::adopt(drawable))
+    }
+}
+
+impl Drop for LoadedDrawable {
+    fn drop(&mut self) {
+        let lease = self
+            .lease
+            .take()
+            .unwrap_or_else(|| unreachable!("owner lease is held until drop"));
+        // the store's destroy below releases the owner's reference
+        let drawable = std::mem::ManuallyDrop::new(lease).0;
+        let released = state::with(|g| g.destroy_drawable(drawable));
+        state::enqueue_all(released);
+    }
+}
+
+/// Hold the distinct drawables of `frames`.
+pub fn retain_frames(frames: &[FrameId]) -> Vec<DrawableLease> {
+    let mut drawables: Vec<DrawableId> =
+        frames.iter().filter_map(|frame| frame.drawable()).collect();
+    drawables.sort_unstable();
+    drawables.dedup();
+    drawables.into_iter().map(DrawableLease::retain).collect()
+}
+
+/// A held frame (or the null frame) for drawing.
+#[derive(Clone, Debug, Default)]
+pub struct ContextFrame {
+    frame: FrameId,
+    _lease: Option<DrawableLease>,
+}
+
+impl PartialEq for ContextFrame {
+    fn eq(&self, other: &Self) -> bool {
+        self.frame == other.frame
+    }
+}
+
+impl ContextFrame {
+    /// Hold `frame`'s drawable; panics if it was released.
+    pub fn retain(frame: FrameId) -> Self {
+        Self {
+            frame,
+            _lease: frame.drawable().map(DrawableLease::retain),
+        }
+    }
+
+    pub fn frame(&self) -> FrameId {
+        self.frame
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.frame.is_null()
+    }
+
+    pub fn same_frame(&self, other: &Self) -> bool {
+        self.frame == other.frame
+    }
+
+    /// The next frame, wrapping (C: `IncFrameIndex`).
+    pub fn next_frame(&self) -> Self {
+        if self.frame.is_null() {
+            return self.clone();
+        }
+        self.with_frame(self.frame.next())
+    }
+
+    /// The frame `index` modulo the frame count.
+    pub fn wrapped_frame(&self, index: u16) -> Self {
+        assert!(!self.frame.is_null(), "absent frame has no allocation");
+        self.with_frame(self.frame.at(index))
+    }
+
+    /// The frame `index`; panics past the frame count.
+    pub fn indexed_frame(&self, index: usize) -> Self {
+        assert!(!self.frame.is_null(), "absent frame has no allocation");
+        assert!(
+            index < usize::from(self.frame_count()),
+            "drawable frame index {index}"
+        );
+        self.with_frame(self.frame.at(index as u16))
+    }
+
+    /// The frame offset by `offset`, wrapping (C: `SetRelFrameIndex`).
+    pub fn relative_frame(&self, offset: i16) -> Self {
+        self.with_frame(self.frame.relative(offset))
+    }
+
+    fn with_frame(&self, frame: FrameId) -> Self {
+        Self {
+            frame,
+            _lease: self._lease.clone(),
+        }
+    }
+
+    pub fn rect(&self) -> Rect {
+        self.frame
+            .rect()
+            .unwrap_or_else(|| panic!("absent frame has no bounds"))
+    }
+
+    pub fn frame_count(&self) -> u16 {
+        self.frame.count()
+    }
+
+    pub fn index(&self) -> u16 {
+        self.frame.index()
+    }
+
+    pub fn replace_hotspot(&self, hotspot: HotSpot) -> HotSpot {
+        self.frame.set_hot_spot(hotspot)
+    }
+
+    /// Read a frame-local pixel without applying its hotspot. Flush pending drawing first.
+    pub fn pixel(&self, point: Point) -> Color {
+        let extent = self.rect().extent;
+        assert!(
+            point.x >= 0 && point.y >= 0 && point.x < extent.width && point.y < extent.height,
+            "frame pixel is outside its extent"
+        );
+        state::with(|g| {
+            g.frame_image(self.frame)
+                .canvas()
+                .color_at(i32::from(point.x), i32::from(point.y))
+        })
+    }
+
+    /// Read the normal canvas alpha mask, ignoring its hotspot and draw mode.
+    pub fn alpha_occupancy(&self) -> Option<Vec<u8>> {
+        if self.frame.is_null() {
+            return None;
+        }
+        state::with(|g| {
+            let frame = g.frame(self.frame);
+            let (width, height) = (frame.bounds.width, frame.bounds.height);
+            let image = frame.image?;
+            if width <= 0 || height <= 0 {
+                return None;
             }
-            NonZeroU32::new(id).context("Failed to allocate drawable ID")?
-        };
-
-        let drawable = Drawable::with_bounds(id, ty, flags, num_frames, bounds);
-
-        let mut registry = self.drawables.write().unwrap();
-        registry.insert(id, drawable);
-
-        Ok(id)
+            let canvas = g.images.get(image).canvas();
+            let mut occupancy = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..i32::from(height) {
+                for x in 0..i32::from(width) {
+                    occupancy.push(u8::from(canvas.color_at(x, y).a != 0));
+                }
+            }
+            Some(occupancy)
+        })
     }
 
-    /// Get a drawable by ID
-    pub fn get(&self, id: u32) -> Result<Arc<Drawable>> {
-        let id = NonZeroU32::new(id).context("Invalid drawable ID: 0")?;
-        let mut registry = self.drawables.write().unwrap();
-        let drawable = registry.get_mut(&id).context("Drawable not found")?;
-        drawable.ensure_frames_initialized();
-
-        // Clone via Arc for safe concurrent access
-        Ok(Arc::new(drawable.clone()))
+    /// C: `SetFrameTransparentColor`.
+    pub fn transparent_color(&self, color: Color) {
+        state::with(|g| g.frame_image_mut(self.frame).set_transparent_color(color));
     }
 
-    /// Release a drawable
-    pub fn release(&self, id: u32) -> Result<()> {
-        let id = NonZeroU32::new(id).context("Invalid drawable ID: 0")?;
-        let mut registry = self.drawables.write().unwrap();
-        registry
-            .remove(&id)
-            .map(|_| ())
-            .context("Drawable not found")
+    fn checked_count(pixels: usize, width: i32, height: i32) {
+        let count = usize::try_from(width)
+            .unwrap_or_else(|_| panic!("negative pixel width: {width}"))
+            .checked_mul(
+                usize::try_from(height)
+                    .unwrap_or_else(|_| panic!("negative pixel height: {height}")),
+            )
+            .unwrap_or_else(|| panic!("pixel buffer size overflow"));
+        assert!(
+            pixels >= count,
+            "pixel buffer is shorter than its stride and height"
+        );
     }
 
-    /// Get frame from a drawable
-    pub fn get_frame(&self, drawable_id: u32, frame_index: usize) -> Result<Frame> {
-        let id = NonZeroU32::new(drawable_id).context("Invalid drawable ID: 0")?;
-        let mut registry = self.drawables.write().unwrap();
-        let drawable = registry.get_mut(&id).context("Drawable not found")?;
-        drawable.ensure_frames_initialized();
-        Ok(drawable.get_frame(frame_index)?.clone())
+    /// C: `ReadFramePixelColors`.
+    pub fn read_colors(&self, pixels: &mut [Color], width: i32, height: i32) {
+        Self::checked_count(pixels.len(), width, height);
+        state::with(|g| {
+            g.frame_image(self.frame)
+                .canvas()
+                .read_colors(pixels, width, height)
+        });
     }
 
-    /// Count active drawables
-    pub fn count(&self) -> usize {
-        self.drawables.read().unwrap().len()
+    /// C: `WriteFramePixelColors`.
+    pub fn write_colors(&self, pixels: &[Color], width: i32, height: i32) {
+        Self::checked_count(pixels.len(), width, height);
+        state::with(|g| {
+            g.frame_image_mut(self.frame)
+                .canvas_mut()
+                .write_colors(pixels, width, height)
+        });
+    }
+
+    /// C: `ReadFramePixelIndexes`.
+    pub fn read_indexes(&self, pixels: &mut [u8], width: i32, height: i32) {
+        Self::checked_count(pixels.len(), width, height);
+        state::with(|g| {
+            g.frame_image(self.frame)
+                .canvas()
+                .read_indexes(pixels, width, height)
+        });
+    }
+
+    /// C: `WriteFramePixelIndexes`.
+    pub fn write_indexes(&self, pixels: &[u8], width: i32, height: i32) {
+        Self::checked_count(pixels.len(), width, height);
+        state::with(|g| {
+            g.frame_image_mut(self.frame)
+                .canvas_mut()
+                .write_indexes(pixels, width, height)
+        });
     }
 }
 
@@ -670,192 +913,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_drawable_type_conversion() {
-        assert_eq!(DrawableType::from(0u16), DrawableType::Rom);
-        assert_eq!(DrawableType::from(1u16), DrawableType::Ram);
-        assert_eq!(DrawableType::from(2u16), DrawableType::Screen);
-        assert_eq!(DrawableType::from(99u16), DrawableType::Ram); // fallback
-
-        assert_eq!(u16::from(DrawableType::Rom), 0);
-        assert_eq!(u16::from(DrawableType::Ram), 1);
-        assert_eq!(u16::from(DrawableType::Screen), 2);
+    fn frame_hotspot_and_bounds_preserve_signed_coordinates() {
+        let owner = LoadedDrawable::create(0, 7, 5, 1).unwrap();
+        let frame = owner.first_frame();
+        assert_eq!(frame.set_hot_spot(HotSpot::new(-2, 3)), HotSpot::default());
+        assert_eq!(frame.rect(), Some(Rect::new(2, -3, 7, 5)));
+        assert_eq!(FrameId::NULL.rect(), None);
     }
 
     #[test]
-    fn test_extent_creation() {
-        let extent = Extent::new(320, 200);
-        assert_eq!(extent.width, 320);
-        assert_eq!(extent.height, 200);
-        assert_eq!(extent.area(), 320 * 200);
-        assert!(!extent.is_empty());
-
-        let empty = Extent::new(0, 100);
-        assert!(empty.is_empty());
+    fn rotation_truncates_hotspot_after_rotating_about_integer_center() {
+        let bounds = Extent::new(8, 6);
+        let hot = rotate_hotspot(HotSpot::new(6, 3), bounds, Extent::new(6, 8), 90);
+        assert_eq!((hot.x, hot.y), (3, 2));
+        let center = rotate_hotspot(HotSpot::new(4, 3), bounds, bounds, 123);
+        assert_eq!((center.x, center.y), (4, 3));
     }
 
     #[test]
-    fn test_point_operations() {
-        let p1 = Point::new(10, 20);
-        let p2 = p1.offset(5, -3);
-        assert_eq!(p2.x, 15);
-        assert_eq!(p2.y, 17);
+    fn frame_indexing_wraps_like_pixmap_c() {
+        let owner = LoadedDrawable::create(0, 1, 1, 3).unwrap();
+        let first = owner.first_frame();
+        assert_eq!(first.count(), 3);
+        assert_eq!(first.at(4).index(), 1);
+        assert_eq!(first.previous().index(), 2);
+        assert_eq!(first.at(2).next().index(), 0);
+        assert_eq!(first.relative(-4).index(), 2);
+        assert_eq!(first.relative(5).index(), 2);
+        assert_eq!(first.at(1).equal_index(first.at(2)).index(), 2);
+        assert!(FrameId::NULL.next().is_null());
+        assert_eq!(FrameId::from_bits(first.at(2).bits()), first.at(2));
+        assert_eq!(FrameId::from_bits(0), FrameId::NULL);
     }
 
     #[test]
-    fn test_hot_spot_variants() {
-        let extent = Extent::new(64, 32);
-
-        let top_left = HotSpot::top_left();
-        assert_eq!(top_left.x, 0);
-        assert_eq!(top_left.y, 0);
-
-        let centered = HotSpot::centered(extent);
-        assert_eq!(centered.x, 32);
-        assert_eq!(centered.y, 16);
-
-        let bottom_right = HotSpot::bottom_right(extent);
-        assert_eq!(bottom_right.x, 64);
-        assert_eq!(bottom_right.y, 32);
-    }
-
-    #[test]
-    fn test_rect_operations() {
-        let r1 = Rect::from_xywh(10, 10, 100, 50);
-
-        assert_eq!(r1.width(), 100);
-        assert_eq!(r1.height(), 50);
-        assert_eq!(r1.right(), 110);
-        assert_eq!(r1.bottom(), 60);
-
-        assert!(r1.contains(Point::new(10, 10)));
-        assert!(r1.contains(Point::new(50, 30)));
-        assert!(!r1.contains(Point::new(110, 10)));
-        assert!(!r1.contains(Point::new(10, 60)));
-
-        let r2 = Rect::from_xywh(50, 30, 100, 50);
-        assert!(r1.intersects(&r2));
-
-        let rect_outside = Rect::from_xywh(200, 200, 10, 10);
-        assert!(!r1.intersects(&rect_outside));
-    }
-
-    #[test]
-    fn test_rect_intersection() {
-        let r1 = Rect::from_xywh(0, 0, 100, 100);
-        let r2 = Rect::from_xywh(50, 50, 100, 100);
-
-        let intersection = r1.intersection(&r2);
-        assert!(intersection.is_some());
-        let rect = intersection.unwrap();
-        assert_eq!(rect.corner.x, 50);
-        assert_eq!(rect.corner.y, 50);
-        assert_eq!(rect.width(), 50);
-        assert_eq!(rect.height(), 50);
-    }
-
-    #[test]
-    fn test_frame_creation() {
-        let frame = Frame::with_top_left_hotspot(0, DrawableType::Ram, 64, 64).unwrap();
-
-        assert_eq!(frame.index, 0);
-        assert_eq!(frame.width(), 64);
-        assert_eq!(frame.height(), 64);
-        assert_eq!(frame.hot_spot, HotSpot::top_left());
-        assert_eq!(frame.frame_type, DrawableType::Ram);
-    }
-
-    #[test]
-    fn test_frame_invalid_bounds() {
-        let result = Frame::new(0, DrawableType::Ram, 0, 64, HotSpot::top_left());
-        assert!(matches!(result, Err(FrameError::InvalidBounds)));
-
-        let result = Frame::new(0, DrawableType::Ram, 64, 0, HotSpot::top_left());
-        assert!(matches!(result, Err(FrameError::InvalidBounds)));
-    }
-
-    #[test]
-    fn test_drawable_basic() {
-        let id = NonZeroU32::new(1).unwrap();
-        let flags = DrawableFlags::default();
-        let mut drawable = Drawable::new(id, DrawableType::Ram, flags, 3);
-
-        assert_eq!(drawable.id(), 1);
-        assert_eq!(drawable.capacity(), 3);
-        assert_eq!(drawable.frame_count(), 3);
-
-        // Add a frame
-        let frame = Frame::with_top_left_hotspot(0, DrawableType::Ram, 32, 32).unwrap();
-        drawable.add_frame(frame).unwrap();
-
-        assert_eq!(drawable.frame_count(), 3);
-
-        // Retrieve the frame
-        let retrieved = drawable.get_frame(0).unwrap();
-        assert_eq!(retrieved.width(), 32);
-        assert_eq!(retrieved.height(), 32);
-    }
-
-    #[test]
-    fn test_drawable_invalid_frame_index() {
-        let id = NonZeroU32::new(1).unwrap();
-        let flags = DrawableFlags::default();
-        let mut drawable = Drawable::new(id, DrawableType::Ram, flags, 2);
-
-        // Try to add frame with index beyond capacity
-        let frame = Frame::with_top_left_hotspot(5, DrawableType::Ram, 32, 32).unwrap();
-        let result = drawable.add_frame(frame);
-        assert!(matches!(result, Err(FrameError::InvalidFrameIndex { .. })));
-    }
-
-    #[test]
-    fn test_drawable_registry() {
-        let registry = DrawableRegistry::new();
-
-        let id = registry
-            .allocate(DrawableType::Ram, DrawableFlags::default(), 2)
-            .unwrap();
-
-        assert_eq!(registry.count(), 1);
-
-        // Get and modify the drawable
-        {
-            let drawable_ref = registry.get(id.get()).unwrap();
-            assert_eq!(drawable_ref.drawable_type(), DrawableType::Ram);
-        }
-
-        // Release
-        registry.release(id.get()).unwrap();
-        assert_eq!(registry.count(), 0);
-    }
-
-    #[test]
-    fn test_drawable_registry_frame_access() {
-        let registry = DrawableRegistry::new();
-
-        let id = registry
-            .allocate_with_bounds(
-                DrawableType::Ram,
-                DrawableFlags::default(),
-                2,
-                Extent::new(16, 16),
-            )
-            .unwrap();
-
-        let drawable_ref = registry.get(id.get()).unwrap();
-        assert_eq!(drawable_ref.capacity(), 2);
-        assert_eq!(drawable_ref.frame_count(), 2);
-        let frame = drawable_ref.get_frame(1).unwrap();
-        assert!(frame.image.is_some());
-    }
-
-    #[test]
-    fn test_effective_rect() {
-        let frame = Frame::new(0, DrawableType::Ram, 64, 32, HotSpot::make(32, 16)).unwrap();
-
-        let rect = frame.effective_rect();
-        assert_eq!(rect.corner.x, -32);
-        assert_eq!(rect.corner.y, -16);
-        assert_eq!(rect.width(), 64);
-        assert_eq!(rect.height(), 32);
+    fn owner_release_keeps_leased_frames_until_the_last_lease_drops() {
+        let owner = LoadedDrawable::create(0, 4, 4, 2).unwrap();
+        let drawable = owner.drawable();
+        let lease = owner.lease();
+        let frame = lease.context_frame(1);
+        frame.replace_hotspot(HotSpot::new(-12, 7));
+        drop(owner);
+        assert_eq!(lease.frame_rect(1), Rect::new(12, -7, 4, 4));
+        drop(lease);
+        assert_eq!(frame.next_frame().index(), 0);
+        drop(frame);
+        assert!(std::panic::catch_unwind(|| DrawableLease::retain(drawable)).is_err());
     }
 }

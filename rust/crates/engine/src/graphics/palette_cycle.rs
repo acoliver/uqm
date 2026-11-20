@@ -30,8 +30,7 @@ impl PaletteCycle {
         bytes
     }
     pub fn apply(&self) {
-        // SAFETY: the retained entry contains the validated complete palette range.
-        unsafe { super::cmap_abi::SetColorMap(self.bytes(self.entry).as_ptr()) };
+        super::state::set_color_map(self.bytes(self.entry));
     }
     pub fn select(&mut self, index: u16) {
         // SAFETY: absolute indexing wraps within the owned table.
@@ -44,12 +43,10 @@ impl PaletteCycle {
         // SAFETY: absolute indexing stays in this owned binary table.
         let entry = unsafe { string_table::SetAbsStringTableIndex(self.entry.as_ptr(), index) };
         let entry = NonNull::new(entry).unwrap_or_else(|| panic!("palette table has no entries"));
-        // SAFETY: the complete validated target is copied into the transform before this borrow ends.
-        unsafe { super::cmap_abi::XFormColorMap(self.bytes(entry).as_ptr(), duration) }
+        super::state::xform_color_map(self.bytes(entry), duration)
     }
-    pub fn step_transforms() -> u32 {
-        // SAFETY: active transforms own their target bytes.
-        unsafe { super::cmap_abi::XFormColorMap_step() }
+    pub fn step_transforms() -> bool {
+        super::state::step_color_map_xforms()
     }
     pub fn advance(&mut self) {
         // SAFETY: relative indexing stays inside this retained table and wraps at its ends.

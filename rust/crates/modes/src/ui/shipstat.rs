@@ -2,24 +2,24 @@ use crate::battle::status_native::draw_battle_crew_amount as draw_crew;
 use crate::engine::battle::link_queue::PickShip;
 use crate::engine::battle::record::SHIP_INFO;
 use crate::engine::Kernel;
-use crate::graphics::native_abi::{
-    Color, BYTE, COORD, COUNT, EXTENT, POINT, RECT, SIZE, TEXT_ALIGN_ALIGN_CENTER,
+use crate::graphics::{
+    geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 
-const STATUS_WIDTH: COORD = 64;
-const SHIP_INFO_HEIGHT: COORD = 65;
-const GAUGE_YOFFS: COORD = SHIP_INFO_HEIGHT - 10;
-const STARCON_TEXT_HEIGHT: COORD = 7;
-const CREW_XOFFS: COORD = 4;
-const ENERGY_XOFFS: COORD = 52;
-const STAT_WIDTH: COORD = 7;
-const UNIT_WIDTH: COORD = 2;
-const UNIT_HEIGHT: COORD = 1;
-const MAX_CREW_SIZE: COUNT = 42;
+const STATUS_WIDTH: i16 = 64;
+const SHIP_INFO_HEIGHT: i16 = 65;
+const GAUGE_YOFFS: i16 = SHIP_INFO_HEIGHT - 10;
+const STARCON_TEXT_HEIGHT: i16 = 7;
+const CREW_XOFFS: i16 = 4;
+const ENERGY_XOFFS: i16 = 52;
+const STAT_WIDTH: i16 = 7;
+const UNIT_WIDTH: i16 = 2;
+const UNIT_HEIGHT: i16 = 1;
+const MAX_CREW_SIZE: u16 = 42;
 const CREW_IMMUNE: u16 = 1 << 6;
 const PLAYER_CAPTAIN: u16 = 1 << 13;
 const OPT_PC: i32 = 0x02;
-const RPG_PLAYER_NUM: COORD = 0;
+const RPG_PLAYER_NUM: i16 = 0;
 
 const fn rgb15(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -31,24 +31,24 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 }
 
 pub fn draw_crew_energy_labels(
-    context: &crate::graphics::context_abi::ContextLease,
-    frames: &crate::graphics::drawable_abi::DrawableLease,
+    context: &crate::graphics::context::ContextLease,
+    frames: &crate::graphics::drawable::DrawableLease,
     pc_menu: bool,
-    y: COORD,
-    state: SIZE,
+    y: i16,
+    state: i16,
 ) {
     let y = y + GAUGE_YOFFS + STARCON_TEXT_HEIGHT;
     let index = if pc_menu { 4 } else { 0 };
     if state == 0 {
         context.draw_stamp(
             &frames.context_frame(index),
-            POINT {
+            Point {
                 x: CREW_XOFFS + (STAT_WIDTH >> 1) + 6,
                 y,
             },
         );
     }
-    let origin = POINT {
+    let origin = Point {
         x: ENERGY_XOFFS + (STAT_WIDTH >> 1) - 5,
         y,
     };
@@ -61,11 +61,11 @@ pub fn draw_crew_energy_labels(
 }
 
 pub fn draw_ship_name_text(
-    context: &crate::graphics::context_abi::ContextLease,
-    font: &crate::graphics::native_font::FontLease,
+    context: &crate::graphics::context::ContextLease,
+    font: &crate::graphics::font::FontLease,
     text: &std::ffi::CStr,
-    char_count: COUNT,
-    y: COORD,
+    char_count: u16,
+    y: i16,
 ) {
     context.with_text_state(|| {
         for (baseline_y, color) in [
@@ -75,11 +75,11 @@ pub fn draw_ship_name_text(
             context.draw_text_bounded(
                 font,
                 text,
-                POINT {
+                Point {
                     x: STATUS_WIDTH >> 1,
                     y: baseline_y,
                 },
-                TEXT_ALIGN_ALIGN_CENTER,
+                TextAlign::Center,
                 color,
                 char_count,
             );
@@ -88,12 +88,12 @@ pub fn draw_ship_name_text(
     context.set_foreground(rgb15(0, 0, 0));
 }
 
-pub fn clear_ship_status(context: &crate::graphics::context_abi::ContextLease, y: COORD) {
+pub fn clear_ship_status(context: &crate::graphics::context::ContextLease, y: i16) {
     context.fill_rectangle(
         rgb15(0x0a, 0x0a, 0x0a),
-        RECT {
-            corner: POINT { x: 2, y: 3 + y },
-            extent: EXTENT {
+        Rect {
+            corner: Point { x: 2, y: 3 + y },
+            extent: Extent {
                 width: STATUS_WIDTH - 4,
                 height: SHIP_INFO_HEIGHT - 3,
             },
@@ -101,10 +101,10 @@ pub fn clear_ship_status(context: &crate::graphics::context_abi::ContextLease, y
     );
 }
 
-pub fn outline_ship_status(context: &crate::graphics::context_abi::ContextLease, y: COORD) {
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 1 + y },
-        extent: EXTENT {
+pub fn outline_ship_status(context: &crate::graphics::context::ContextLease, y: i16) {
+    let mut r = Rect {
+        corner: Point { x: 0, y: 1 + y },
+        extent: Extent {
             width: STATUS_WIDTH,
             height: 1,
         },
@@ -135,40 +135,38 @@ pub fn outline_ship_status(context: &crate::graphics::context_abi::ContextLease,
 
 pub struct StatusTitle<'a> {
     pub name: &'a std::ffi::CStr,
-    pub name_count: COUNT,
-    pub caption: Option<(&'a std::ffi::CStr, COUNT)>,
+    pub name_count: u16,
+    pub caption: Option<(&'a std::ffi::CStr, u16)>,
 }
 
 pub struct StatusGraphics {
-    pub context: crate::graphics::context_abi::ContextLease,
-    pub frames: crate::graphics::drawable_abi::DrawableLease,
-    pub font: crate::graphics::native_font::FontLease,
-    pub tiny_font: crate::graphics::native_font::FontLease,
-    pub crew_font: Option<crate::graphics::native_font::FontLease>,
+    pub context: crate::graphics::context::ContextLease,
+    pub frames: crate::graphics::drawable::DrawableLease,
+    pub font: crate::graphics::font::FontLease,
+    pub tiny_font: crate::graphics::font::FontLease,
+    pub crew_font: Option<crate::graphics::font::FontLease>,
     pub pc_menu: bool,
 }
 
 impl StatusGraphics {
-    pub fn new(
-        kernel: &Kernel,
-        crew_font: Option<crate::graphics::native_font::FontLease>,
-    ) -> Self {
-        use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
-        use std::ptr::NonNull;
+    pub fn new(kernel: &Kernel, crew_font: Option<crate::graphics::font::FontLease>) -> Self {
+        use crate::graphics::{context::ContextLease, font::FontLease};
+
         Self {
             context: ContextLease::retain(
-                NonNull::new(kernel.status_context)
+                kernel
+                    .status_context
                     .unwrap_or_else(|| panic!("status context not admitted")),
             ),
-            frames: crate::graphics::drawable_abi::retain_frame_allocations(&[kernel.status_frame])
-                [0]
-            .clone(),
+            frames: crate::graphics::drawable::retain_frames(&[kernel.status_frame])[0].clone(),
             font: FontLease::retain(
-                NonNull::new(kernel.star_con_font.cast())
+                kernel
+                    .star_con_font
                     .unwrap_or_else(|| panic!("status font not admitted")),
             ),
             tiny_font: FontLease::retain(
-                NonNull::new(kernel.tiny_font.cast())
+                kernel
+                    .tiny_font
                     .unwrap_or_else(|| panic!("status tiny font not admitted")),
             ),
             crew_font,
@@ -179,9 +177,9 @@ impl StatusGraphics {
     pub fn draw(
         &self,
         ship: &mut SHIP_INFO,
-        portrait: &crate::graphics::context_abi::ContextFrame,
-        y: COORD,
-        clip: Option<RECT>,
+        portrait: &crate::graphics::drawable::ContextFrame,
+        y: i16,
+        clip: Option<Rect>,
         title: Option<StatusTitle<'_>>,
     ) {
         let context = &self.context;
@@ -191,7 +189,7 @@ impl StatusGraphics {
                 clear_ship_status(context, y);
                 context.draw_stamp(
                     portrait,
-                    POINT {
+                    Point {
                         x: STATUS_WIDTH >> 1,
                         y: 31 + y,
                     },
@@ -205,11 +203,11 @@ impl StatusGraphics {
                             context.draw_text_bounded(
                                 &self.tiny_font,
                                 caption,
-                                POINT {
+                                Point {
                                     x: STATUS_WIDTH >> 1,
                                     y: y + GAUGE_YOFFS + 3,
                                 },
-                                TEXT_ALIGN_ALIGN_CENTER,
+                                TextAlign::Center,
                                 rgb15(0, 0, 0),
                                 characters,
                             )
@@ -217,7 +215,7 @@ impl StatusGraphics {
                         context.set_foreground(rgb15(0, 0, 0));
                     }
                 }
-                let changes = (ship.crew_level as SIZE, ship.energy_level as SIZE);
+                let changes = (ship.crew_level as i16, ship.energy_level as i16);
                 ship.crew_level = 0;
                 ship.energy_level = 0;
                 update_statistics(
@@ -240,7 +238,7 @@ impl StatusGraphics {
                 bounds.extent.height += clip.corner.y & 1;
                 context.with_clip(bounds, || {
                     context.with_origin(
-                        POINT {
+                        Point {
                             x: -clip.corner.x,
                             y: -(clip.corner.y & !1),
                         },
@@ -257,9 +255,9 @@ impl StatusGraphics {
 pub fn draw_battle_status(
     cx: &mut crate::engine::battle::Cx<'_>,
     id: crate::engine::battle::ShipId,
-    clip: Option<RECT>,
+    clip: Option<Rect>,
 ) {
-    if cx.kernel.status_context.is_null() {
+    if cx.kernel.status_context.is_none() {
         return;
     }
     let graphics = StatusGraphics::new(cx.kernel, cx.kernel.battle_font());
@@ -267,9 +265,7 @@ pub fn draw_battle_status(
     let y = cx.kernel.status_offsets[selected.player as usize];
     let descriptor = cx.desc(id);
     let mut info = descriptor.ship_info;
-    let portrait =
-        crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(info.icons))
-            .next_frame();
+    let portrait = crate::graphics::drawable::ContextFrame::retain(info.icons).next_frame();
     let title = battle_title(descriptor, selected, &cx.world.data.flagship.ship_name);
     graphics.draw(&mut info, &portrait, y, clip, title);
     let mut stats = cx.race_stats_mut(id);
@@ -293,7 +289,7 @@ fn battle_title<'a>(
         Some(StatusTitle {
             name: std::ffi::CStr::from_bytes_until_nul(flagship)
                 .unwrap_or_else(|error| panic!("flagship name: {error}")),
-            name_count: COUNT::MAX,
+            name_count: u16::MAX,
             caption: None,
         })
     } else {
@@ -302,13 +298,13 @@ fn battle_title<'a>(
 }
 
 pub fn update_statistics(
-    context: Option<&crate::graphics::context_abi::ContextLease>,
+    context: Option<&crate::graphics::context::ContextLease>,
     numeric_crew: bool,
     pc_menu: bool,
-    font: Option<&crate::graphics::native_font::FontLease>,
+    font: Option<&crate::graphics::font::FontLease>,
     ship: &mut SHIP_INFO,
-    y_offs: COORD,
-    deltas: (SIZE, SIZE),
+    y_offs: i16,
+    deltas: (i16, i16),
 ) {
     let mut draw = |color, rect| {
         if let Some(context) = context {
@@ -343,22 +339,22 @@ pub fn update_statistics(
 }
 
 fn draw_crew_delta(
-    draw: &mut impl FnMut(Color, Option<RECT>),
+    draw: &mut impl FnMut(Color, Option<Rect>),
     ship: &mut SHIP_INFO,
-    y_offs: COORD,
-    crew_delta: SIZE,
+    y_offs: i16,
+    crew_delta: i16,
 ) {
     let y = GAUGE_YOFFS + y_offs;
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let mut r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: UNIT_WIDTH,
             height: UNIT_HEIGHT,
         },
     };
-    let old_blocks = std::cmp::min(ship.crew_level, MAX_CREW_SIZE as COUNT) as COORD;
-    let new_level = (ship.crew_level as i32 + crew_delta as i32) as COUNT;
-    let new_blocks = std::cmp::min(new_level, MAX_CREW_SIZE as COUNT) as COORD;
+    let old_blocks = std::cmp::min(ship.crew_level, MAX_CREW_SIZE) as i16;
+    let new_level = (ship.crew_level as i32 + crew_delta as i32) as u16;
+    let new_blocks = std::cmp::min(new_level, MAX_CREW_SIZE) as i16;
     if crew_delta > 0 {
         r.corner.y = (y + 1) - (((old_blocks + 1) >> 1) * (UNIT_HEIGHT + 1));
         let color = if ship.ship_flags & CREW_IMMUNE != 0 {
@@ -395,15 +391,15 @@ fn draw_crew_delta(
 }
 
 fn draw_energy_delta(
-    draw: &mut impl FnMut(Color, Option<RECT>),
+    draw: &mut impl FnMut(Color, Option<Rect>),
     ship: &mut SHIP_INFO,
-    y_offs: COORD,
-    mut energy_delta: SIZE,
+    y_offs: i16,
+    mut energy_delta: i16,
 ) {
     let y = GAUGE_YOFFS + y_offs;
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let mut r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: UNIT_WIDTH,
             height: UNIT_HEIGHT,
         },
@@ -411,7 +407,7 @@ fn draw_energy_delta(
     if energy_delta > 0 {
         let color = rgb15(0x14, 0, 0);
         draw(color, None);
-        r.corner.y = (y + 1) - ((ship.energy_level as COORD + 1) >> 1) * (UNIT_HEIGHT + 1);
+        r.corner.y = (y + 1) - ((ship.energy_level as i16 + 1) >> 1) * (UNIT_HEIGHT + 1);
         while energy_delta > 0 {
             r.corner.x = ENERGY_XOFFS + 1;
             if ship.energy_level & 1 == 0 {
@@ -425,7 +421,7 @@ fn draw_energy_delta(
     } else {
         let color = rgb15(0, 0, 0);
         draw(color, None);
-        r.corner.y = (y + 1) - ((ship.energy_level as COORD + 2) >> 1) * (UNIT_HEIGHT + 1);
+        r.corner.y = (y + 1) - ((ship.energy_level as i16 + 2) >> 1) * (UNIT_HEIGHT + 1);
         while energy_delta < 0 {
             r.corner.x = ENERGY_XOFFS + 1 + UNIT_WIDTH + 1;
             if ship.energy_level & 1 == 0 {
@@ -440,27 +436,27 @@ fn draw_energy_delta(
 }
 
 fn draw_crew_marker(
-    draw: &mut impl FnMut(Color, Option<RECT>),
+    draw: &mut impl FnMut(Color, Option<Rect>),
     ship: &SHIP_INFO,
-    new_level: COUNT,
-    y: COORD,
+    new_level: u16,
+    y: i16,
 ) {
     if ship.ship_flags & PLAYER_CAPTAIN != 0
-        && ((ship.crew_level > MAX_CREW_SIZE as COUNT) != (new_level > MAX_CREW_SIZE as COUNT)
+        && ((ship.crew_level > MAX_CREW_SIZE) != (new_level > MAX_CREW_SIZE)
             || ship.crew_level == 0)
         && new_level != 0
     {
-        let color = if new_level > MAX_CREW_SIZE as COUNT {
+        let color = if new_level > MAX_CREW_SIZE {
             rgb15(0, 0x14, 0)
         } else {
             rgb15(0x0a, 0x0a, 0x1f)
         };
-        let rect = RECT {
-            corner: POINT {
+        let rect = Rect {
+            corner: Point {
                 x: CREW_XOFFS + 1 + UNIT_WIDTH + 1,
                 y: y - UNIT_HEIGHT,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: UNIT_WIDTH,
                 height: UNIT_HEIGHT,
             },
@@ -470,20 +466,20 @@ fn draw_crew_marker(
 }
 
 pub fn draw_gauge_frames(
-    context: &crate::graphics::context_abi::ContextLease,
-    max_crew: COUNT,
-    max_energy: BYTE,
-    y: COORD,
+    context: &crate::graphics::context::ContextLease,
+    max_crew: u16,
+    max_energy: u8,
+    y: i16,
 ) {
-    let crew = (((std::cmp::min(max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as SIZE;
-    let energy = ((((max_energy + 1) >> 1) << 1) + 1) as COORD;
+    let crew = (((std::cmp::min(max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as i16;
+    let energy = ((((max_energy + 1) >> 1) << 1) + 1) as i16;
     let bottom = GAUGE_YOFFS + y;
     let draw = |color, x, y, width, height| {
         context.fill_rectangle(
             color,
-            RECT {
-                corner: POINT { x, y },
-                extent: EXTENT { width, height },
+            Rect {
+                corner: Point { x, y },
+                extent: Extent { width, height },
             },
         );
     };

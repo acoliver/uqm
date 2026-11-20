@@ -1,196 +1,136 @@
-//! Safe probes over process-global native graphics state.
+//! Probes over the process graphics state for serialized fixtures.
 //!
-//! Every fixture that calls these is `#[serial]` and owns the display, queue and
-//! frames it probes, which is the invariant each wrapped call needs.
-//!
-//! Frames and contexts arrive as the engine's raw handle types, taken from its own
-//! safe lease and drawable APIs, never fabricated by a test.
-#![allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "handles come from live engine leases; the dependents that call these forbid unsafe"
-)]
-
-use crate::graphics::{
-    context_abi, dcqueue_abi, drawable_abi, gfx_common_abi,
-    native_abi::{Color, DrawMode, CONTEXT, FONT, FRAME, POINT},
-};
+//! Every fixture that calls these is `#[serial]` and owns the screens, queue
+//! and frames it probes. Frames and contexts come from the engine's own
+//! lease and drawable APIs, never fabricated by a test.
+use crate::graphics::context::ContextId;
+use crate::graphics::drawable::{ContextFrame, FrameId, LoadedDrawable};
+use crate::graphics::font::FontId;
+use crate::graphics::geometry::{Color, DrawMode, HotSpot, Point};
+use crate::graphics::state::{self, VideoMode};
 
 /// Run every queued draw command.
 pub fn flush_graphics() {
-    // SAFETY: the serialized fixture owns the initialized graphics queue.
-    unsafe { dcqueue_abi::TFB_FlushGraphics() };
+    state::flush();
 }
 
-/// Initialized draw-command queue, released on drop.
+/// Headless screens and an empty draw queue, released on drop.
 pub struct DrawQueue(());
 
 impl DrawQueue {
     pub fn init() -> Self {
-        // SAFETY: the serialized fixture owns the queue until this guard drops.
-        unsafe { dcqueue_abi::Init_DrawCommandQueue() };
+        state::init_headless(VideoMode::default());
         Self(())
     }
 }
 
 impl Drop for DrawQueue {
     fn drop(&mut self) {
-        // SAFETY: the guard owns the queue it initialized.
-        unsafe { dcqueue_abi::Uninit_DrawCommandQueue() };
+        state::uninit_headless();
     }
 }
 
 pub fn batch_graphics() {
-    // SAFETY: the serialized fixture owns an initialized queue.
-    unsafe { gfx_common_abi::BatchGraphics() };
+    state::batch();
 }
 
 pub fn unbatch_graphics() {
-    // SAFETY: the serialized fixture owns an initialized queue.
-    unsafe { gfx_common_abi::UnbatchGraphics() };
+    state::unbatch();
 }
 
 pub fn batch_depth() -> i32 {
-    // SAFETY: the serialized fixture owns an initialized queue.
-    unsafe { gfx_common_abi::GetBatchDepth() }
+    state::batch_depth()
 }
 
-/// Read a `width` by `height` RAM frame as colors. `None` when the frame is absent.
-pub fn read_pixels(frame: FRAME, width: i32, height: i32) -> Option<Vec<Color>> {
+/// Read a `width` by `height` RAM frame as colors. `None` for the null frame.
+pub fn read_pixels(frame: FrameId, width: i32, height: i32) -> Option<Vec<Color>> {
+    if frame.is_null() {
+        return None;
+    }
     let mut pixels = vec![Color::default(); width as usize * height as usize];
-    // SAFETY: the fixture retains the non-screen frame and the buffer covers width * height colors.
-    let read =
-        unsafe { drawable_abi::ReadFramePixelColors(frame, pixels.as_mut_ptr(), width, height) };
-    (read != 0).then_some(pixels)
+    ContextFrame::retain(frame).read_colors(&mut pixels, width, height);
+    Some(pixels)
 }
 
-/// Overwrite a `width` by `height` RAM frame. `false` when the frame is absent.
-pub fn write_pixels(frame: FRAME, pixels: &[Color], width: i32, height: i32) -> bool {
-    assert_eq!(pixels.len(), width as usize * height as usize);
-    // SAFETY: the fixture retains the non-screen frame and the buffer covers width * height colors.
-    unsafe { drawable_abi::WriteFramePixelColors(frame, pixels.as_ptr(), width, height) != 0 }
+/// Overwrite a `width` by `height` RAM frame. `false` for the null frame.
+pub fn write_pixels(frame: FrameId, pixels: &[Color], width: i32, height: i32) -> bool {
+    if frame.is_null() {
+        return false;
+    }
+    ContextFrame::retain(frame).write_colors(pixels, width, height);
+    true
 }
 
-pub fn frame_pixel(frame: FRAME, at: POINT) -> Color {
-    // SAFETY: the fixture retains the frame and `at` lies inside it.
-    unsafe { drawable_abi::GetFramePixel(frame, at) }
+/// C: `GetFramePixel`.
+pub fn frame_pixel(frame: FrameId, at: Point) -> Color {
+    if frame.is_null() {
+        return Color::rgba(0, 0, 0, 0);
+    }
+    ContextFrame::retain(frame).pixel(at)
 }
 
-/// The currently selected context, or null.
-pub fn selected_context() -> CONTEXT {
-    // SAFETY: context selection is serialized by the fixture.
-    unsafe { context_abi::_pCurContext }
+/// The currently selected context.
+pub fn selected_context() -> Option<ContextId> {
+    crate::graphics::context::selected()
 }
 
 /// The font a context currently holds.
-pub fn context_font(context: CONTEXT) -> FONT {
-    // SAFETY: the fixture retains the registered context.
-    unsafe { (*context).Font }
+pub fn context_font(context: ContextId) -> Option<FontId> {
+    state::with(|g| g.context(context).font)
 }
 
 /// Draw mode of the selected context.
 pub fn selected_draw_mode() -> DrawMode {
-    // SAFETY: the fixture has selected a retained context.
-    unsafe { context_abi::GetContextDrawMode() }
+    state::with(|g| g.draw_mode())
 }
 
 /// Set the graphic scale and return the previous one.
 pub fn set_graphic_scale(scale: i32) -> i32 {
-    // SAFETY: the serialized fixture owns native drawing state.
-    unsafe { gfx_common_abi::set_graphic_scale(scale) }
+    state::set_graphic_scale(scale)
 }
 
 pub fn graphic_scale() -> i32 {
-    // SAFETY: the serialized fixture owns native drawing state.
-    unsafe { gfx_common_abi::get_graphic_scale() }
+    state::graphic_scale()
 }
 
-/// A screen-sized display drawable and its first frame, released on drop.
+/// The screen drawable and its frame, released on drop.
 pub struct Display {
-    drawable: *mut crate::graphics::native_abi::drawable_desc,
-    frame: FRAME,
+    drawable: LoadedDrawable,
 }
 
 impl Display {
     pub fn create() -> Self {
-        let (mut width, mut height) = (0, 0);
-        // SAFETY: the isolated fixture owns the initialized graphics thread.
-        let drawable = unsafe { drawable_abi::CreateDisplay(0, &mut width, &mut height) };
-        assert!(!drawable.is_null());
-        // SAFETY: the live display has one registered frame retained until drop.
-        let frame = unsafe { crate::graphics::pixmap_abi::CaptureDrawable(drawable) };
-        Self { drawable, frame }
+        Self {
+            drawable: LoadedDrawable::display(0),
+        }
     }
 
-    pub fn frame(&self) -> FRAME {
-        self.frame
-    }
-}
-
-impl Drop for Display {
-    fn drop(&mut self) {
-        // SAFETY: drawing has drained and this display uniquely owns its allocation.
-        unsafe { drawable_abi::DestroyDrawable(self.drawable) };
+    pub fn frame(&self) -> FrameId {
+        self.drawable.first_frame()
     }
 }
 
 /// The frame at `index` within the same drawable as `frame`.
-pub fn frame_at(frame: FRAME, index: u16) -> FRAME {
-    // SAFETY: the fixture owns the drawable and `index` is one of its frames.
-    unsafe { crate::graphics::pixmap_abi::SetAbsFrameIndex(frame, index) }
+pub fn frame_at(frame: FrameId, index: u16) -> FrameId {
+    frame.at(index)
 }
 
-pub fn set_frame_hot_spot(frame: FRAME, hot: crate::graphics::native_abi::HOT_SPOT) {
-    // SAFETY: the fixture retains the frame.
-    unsafe { drawable_abi::SetFrameHot(frame, hot) };
+pub fn set_frame_hot_spot(frame: FrameId, hot: HotSpot) {
+    frame.set_hot_spot(hot);
 }
 
-/// Release the capture reference a drawable's first frame holds. Returns the
-/// drawable's address, which identifies the allocation across conversations.
-pub fn release_drawable(frame: FRAME) -> usize {
-    // SAFETY: the fixture retains the drawable the frame belongs to.
-    unsafe { crate::graphics::pixmap_abi::ReleaseDrawable(frame) as usize }
+/// The number identifying the drawable a frame belongs to, stable across
+/// conversations.
+pub fn release_drawable(frame: FrameId) -> usize {
+    frame.drawable().map_or(0, |drawable| drawable.bits())
 }
 
-/// Software surfaces installed as the graphics format-conversion and screen
-/// globals, with the previous globals restored on drop.
-pub struct SdlSurfaces {
-    previous: (
-        *mut crate::graphics::ffi::SDL_Surface,
-        *mut crate::graphics::ffi::SDL_Surface,
-    ),
-    _format: sdl2::surface::Surface<'static>,
-    _screen: sdl2::surface::Surface<'static>,
-}
+/// Headless screens for fixtures that draw to the display, released on drop.
+pub struct SdlSurfaces(DrawQueue);
 
 impl SdlSurfaces {
-    pub fn install(width: u32, height: u32) -> Result<Self, String> {
-        use crate::graphics::sdl::lifecycle_abi;
-        use sdl2::pixels::PixelFormatEnum;
-        let format = sdl2::surface::Surface::new(width, height, PixelFormatEnum::RGBA32)?;
-        let screen = sdl2::surface::Surface::new(width, height, PixelFormatEnum::RGB888)?;
-        // SAFETY: the serialized fixture owns both surfaces and restores the borrowed globals before they drop.
-        let previous = unsafe {
-            let previous = (lifecycle_abi::format_conv_surf, lifecycle_abi::SDL_Screen);
-            lifecycle_abi::format_conv_surf = format.raw().cast();
-            lifecycle_abi::SDL_Screen = screen.raw().cast();
-            previous
-        };
-        Ok(Self {
-            previous,
-            _format: format,
-            _screen: screen,
-        })
-    }
-}
-
-impl Drop for SdlSurfaces {
-    fn drop(&mut self) {
-        use crate::graphics::sdl::lifecycle_abi;
-        // SAFETY: the surfaces this guard installed are still alive until its fields drop.
-        unsafe {
-            lifecycle_abi::format_conv_surf = self.previous.0;
-            lifecycle_abi::SDL_Screen = self.previous.1;
-        }
+    pub fn install(_width: u32, _height: u32) -> Result<Self, String> {
+        Ok(Self(DrawQueue::init()))
     }
 }
 
@@ -199,6 +139,126 @@ pub fn set_color_map(table: &[u8]) {
     assert!(table.len() >= 2);
     let maps = usize::from(table[1] - table[0]) + 1;
     assert_eq!(table.len(), 2 + maps * 256 * 3);
-    // SAFETY: the table is complete for the maps its header declares.
-    unsafe { crate::graphics::cmap_abi::SetColorMap(table.as_ptr()) };
+    state::set_color_map(table);
+}
+
+/// C: `_GraphicsStatusFlags`, for fixtures that switch a status bit and
+/// restore it.
+pub fn graphics_status() -> u8 {
+    state::with(|g| g.current.status)
+}
+
+pub fn set_graphics_status(status: u8) {
+    state::with(|g| g.current.status = status);
+}
+
+/// Give `frame` a 4x4 indexed image whose pixels are all index 1, with no
+/// transparent index, so collision tests see a solid shape.
+pub fn make_opaque(frame: FrameId) {
+    use crate::graphics::canvas::{Canvas, PixelFormat};
+    use crate::graphics::image::Image;
+    let mut canvas = Canvas::new(PixelFormat::Indexed, 4, 4);
+    canvas.set_transparent_index(-1);
+    canvas.write_indexes(&[1u8; 16], 4, 4);
+    state::with(|g| {
+        let image = g.images.insert(Image::new(canvas));
+        let previous = g.frame_mut(frame).image.replace(image);
+        if let Some(previous) = previous {
+            g.images.remove(previous);
+        }
+    });
+}
+
+/// Run `inspect` with a loaded font's description.
+pub fn with_font<R>(font: FontId, inspect: impl FnOnce(&crate::graphics::font::Font) -> R) -> R {
+    state::with(|g| inspect(g.font(font)))
+}
+
+/// What a test reads of one frame: kind, index, bounds, hot spot, colour
+/// map index, canvas transparent key and the first `rows` rows of indexes.
+#[derive(Debug, PartialEq, Eq)]
+pub struct FrameProbe {
+    pub kind: Option<crate::graphics::drawable::FrameKind>,
+    pub index: u16,
+    pub bounds: crate::graphics::geometry::Extent,
+    pub hot_spot: HotSpot,
+    pub colormap_index: i32,
+    pub key: Option<u32>,
+}
+
+pub fn probe_frame(frame: FrameId) -> FrameProbe {
+    state::with(|g| {
+        let record = g.frame(frame);
+        let image = g.frame_image(frame);
+        FrameProbe {
+            kind: Some(record.kind),
+            index: frame.index(),
+            bounds: record.bounds,
+            hot_spot: record.hot_spot,
+            colormap_index: image.colormap_index,
+            key: image.canvas().color_key(),
+        }
+    })
+}
+
+/// The row `y` of an indexed frame's pixels, `width` entries long.
+pub fn frame_index_row(frame: FrameId, y: i32, width: i32) -> Vec<u8> {
+    state::with(|g| {
+        let canvas = g.frame_image(frame).canvas();
+        (0..width).map(|x| canvas.pixel(x, y) as u8).collect()
+    })
+}
+
+/// The palette of colour map `index` as the draw queue would apply it.
+pub fn color_map_palette(index: i32) -> [crate::graphics::geometry::Color; 256] {
+    state::with(|g| g.colormaps.get(index).palette)
+}
+
+/// Commands queued and commands visible to the renderer (C: the queue's
+/// `FullSize` and `Size`).
+pub fn queue_sizes() -> (usize, usize) {
+    state::with(|g| (g.queue.len(), g.queue.visible()))
+}
+
+/// Frames rendered since the last FPS sample.
+pub fn rendered_frames() -> i32 {
+    state::with(|g| g.flush.rendered_frames)
+}
+
+/// C: `GetContextClipRect` on the selected context: the clip (the whole
+/// frame when none is set) and whether one is set.
+pub fn selected_clip() -> (crate::graphics::geometry::Rect, bool) {
+    state::with(|g| g.clip().unwrap_or_else(|| panic!("no context selected")))
+}
+
+/// Adjust a loaded font, for fixtures that shape a one-glyph font.
+pub fn with_font_mut<R>(
+    font: FontId,
+    edit: impl FnOnce(&mut crate::graphics::font::Font) -> R,
+) -> R {
+    state::with(|g| edit(g.font_mut(font)))
+}
+
+/// A context's foreground colour (C: `context->ForeGroundColor`).
+pub fn context_foreground(context: ContextId) -> Color {
+    state::with(|g| g.context(context).fg_color)
+}
+
+/// Mark `rect` of the main screen changed, as drawing would.
+pub fn register_rect(rect: crate::graphics::geometry::Rect) {
+    state::with(|g| g.bbox.register_rect(rect));
+}
+
+/// Live images and drawables, for fixtures that check every owner released
+/// what it allocated.
+pub fn allocations() -> (usize, usize) {
+    state::with(|g| (g.images.len(), g.drawables.entries.len()))
+}
+
+/// A frame's bounds and whether it holds pixels.
+pub fn frame_bounds(frame: FrameId) -> (crate::graphics::geometry::Extent, bool) {
+    state::with(|g| {
+        let record = g.frame(frame);
+        (record.bounds, record.image.is_some())
+    })
 }

@@ -1,27 +1,24 @@
 //! All mineral surface frames through the production visual and stamp path.
-use std::ptr;
-use uqm_rust::{
-    engine::graphics::native_offscreen::OffscreenFormats,
-    graphics::{
-        cmap_abi::{SetColorMap, UninitColorMaps},
-        context_abi::*,
-        drawable_abi::*,
-        filegfx::LoadGraphicFile,
-        frame_abi::ClearDrawable,
-        native_abi::*,
-        pixmap_abi::*,
-    },
-    planet_side::{
-        assembly::{SurfaceAssembly, SurfaceVisualPort},
-        collision_adapter::SurfaceMasks,
-        entities::{SurfaceEntity, SurfaceEntityKind, SurfaceWorld},
-        generation::{GeneratedEntity, ScanNodeId, ScanType},
-        graphics_adapter::{draw_surface_entities, SurfaceFrameRegistry},
-        mask_adapter::extract_frame_mask,
-        model::SurfacePoint,
-        visual_adapter::CffiSurfaceVisuals,
-    },
+use uqm_rust::engine::test_support::native_probe::{set_color_map, DrawQueue};
+use uqm_rust::graphics::context::{ContextLease, LoadedContext};
+use uqm_rust::graphics::drawable::{ContextFrame, LoadedDrawable};
+use uqm_rust::graphics::{
+    geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, menu,
 };
+use uqm_rust::planet_side::assembly::SurfaceAssembly;
+use uqm_rust::planet_side::assembly::SurfaceVisualPort;
+use uqm_rust::planet_side::collision_adapter::SurfaceMasks;
+use uqm_rust::planet_side::entities::SurfaceEntity;
+use uqm_rust::planet_side::entities::SurfaceEntityKind;
+use uqm_rust::planet_side::entities::SurfaceWorld;
+use uqm_rust::planet_side::generation::GeneratedEntity;
+use uqm_rust::planet_side::generation::ScanNodeId;
+use uqm_rust::planet_side::generation::ScanType;
+use uqm_rust::planet_side::graphics_adapter::draw_surface_entities;
+use uqm_rust::planet_side::graphics_adapter::SurfaceFrameRegistry;
+use uqm_rust::planet_side::mask_adapter::extract_frame_mask;
+use uqm_rust::planet_side::model::SurfacePoint;
+use uqm_rust::planet_side::visual_adapter::CffiSurfaceVisuals;
 
 #[test]
 #[serial_test::serial]
@@ -32,43 +29,39 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
         .lines()
         .map(|row| row.split_whitespace().collect())
         .collect();
-    let _formats = OffscreenFormats::new().unwrap();
-    unsafe {
+    let _graphics = DrawQueue::init();
+    {
         let content = uqm_engine::test_support::native_session::ContentMount::new(&base);
-        let drawable = LoadGraphicFile(c"ui/miscdata.ani".as_ptr());
-        assert!(!drawable.is_null());
-        let frames = CaptureDrawable(drawable);
+        let drawable = LoadedDrawable::load_file(c"ui/miscdata.ani").unwrap();
+        let frames = drawable.first_frame();
         let mut visuals = CffiSurfaceVisuals::new(
-            ContextFrame::retain(std::ptr::NonNull::new(frames)),
+            ContextFrame::retain(frames),
             None,
             std::array::from_fn(|_| None),
         )
         .unwrap();
-        #[cfg(feature = "debug-process")]
-        let context = CreateContextAux(c"mineral surface parity".as_ptr());
-        #[cfg(not(feature = "debug-process"))]
-        let context = CreateContextAux();
-        let previous_context = SetContext(context);
-        let destination = CreateDrawable(0, 320, 200, 1);
-        let destination_frame = CaptureDrawable(destination);
-        SetContextFGFrame(destination_frame);
-        let mut clip = RECT {
-            corner: POINT { x: 8, y: 16 },
-            extent: EXTENT {
+        let context_owner = LoadedContext::create(c"mineral surface parity");
+        let context = Some(context_owner.context());
+        let previous_context = menu::select(context);
+        let destination = LoadedDrawable::create(0, 320, 200, 1).unwrap();
+        let destination_frame = destination.first_frame();
+        menu::set_frame(destination_frame);
+        let clip = Rect {
+            corner: Point { x: 8, y: 16 },
+            extent: Extent {
                 width: 242,
                 height: 162,
             },
         };
-        SetContextClipRect(&mut clip);
+        menu::set_clip(clip);
         let background = Color {
             r: 1,
             g: 2,
             b: 3,
             a: 255,
         };
-        SetContextBackGroundColor(background);
-        let empty_mask =
-            extract_frame_mask(&ContextFrame::retain(std::ptr::NonNull::new(frames))).unwrap();
+        menu::background(background);
+        let empty_mask = extract_frame_mask(&ContextFrame::retain(frames)).unwrap();
         for category in 0..8 {
             for gross in 0..3 {
                 // GeneratePlanetSide: 2*NUM_SCANDOT_TRANSITIONS +
@@ -89,7 +82,7 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
                 let mut colormap = vec![0, 0];
                 colormap.extend_from_slice(&palette);
                 colormap.resize(2 + 256 * 3, 0);
-                assert_ne!(SetColorMap(colormap.as_ptr()), 0);
+                set_color_map(&colormap);
                 let hotspot_x: i32 = row[3].parse().unwrap();
                 let hotspot_y: i32 = row[4].parse().unwrap();
                 // MAG_SHIFT=2 scales node coordinates, not the sprite extent.
@@ -143,7 +136,7 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
                         (hotspot_x, hotspot_y)
                     );
                     surface.frames.insert(id, visual.frame);
-                    ClearDrawable();
+                    menu::clear();
                     draw_surface_entities(&ContextLease::require(context), &surface, camera);
                     let mut pixels = vec![
                         Color {
@@ -154,10 +147,7 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
                         };
                         320 * 200
                     ];
-                    assert_ne!(
-                        ReadFramePixelColors(destination_frame, pixels.as_mut_ptr(), 320, 200),
-                        0
-                    );
+                    ContextFrame::retain(destination_frame).read_colors(&mut pixels, 320, 200);
                     let left = 8 + 242 / 2 - (6 << 2) - hotspot_x;
                     let top = 16 + 162 / 2 + (3 << 2) - hotspot_y;
                     let mut bounds = (320, 200, -1, -1);
@@ -202,12 +192,10 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
             }
         }
         drop(visuals);
-        SetContextFGFrame(ptr::null_mut());
-        DestroyDrawable(destination);
-        DestroyDrawable(drawable);
-        SetContext(previous_context);
-        DestroyContext(context);
+        menu::set_frame(Default::default());
+        drop((destination, drawable));
+        menu::select(previous_context);
+        drop(context_owner);
         drop(content);
-        UninitColorMaps();
     }
 }

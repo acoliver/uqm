@@ -1,10 +1,10 @@
 //! Drawing resources retained by one synchronous orbit visit.
 
-use crate::engine::{
-    graphics::context_abi::{ContextFrame, ContextLease, LoadedContext},
-    Kernel,
+use crate::engine::graphics::{
+    context::ContextLease, context::LoadedContext, drawable::ContextFrame,
 };
-use std::{cell::RefCell, ptr::NonNull, rc::Rc};
+use crate::engine::Kernel;
+use std::{cell::RefCell, rc::Rc};
 
 pub struct OrbitPresentation {
     planet: LoadedContext,
@@ -24,7 +24,7 @@ impl OrbitPresentation {
             let mut clip = space.clip_rect();
             let planet = LoadedContext::create(c"PlanetContext");
             let context = planet.lease();
-            context.set_frame(ContextFrame::retain(NonNull::new(kernel.screen)));
+            context.set_frame(ContextFrame::retain(kernel.screen));
             clip.extent.height -= 75 + 5;
             context.set_clip(clip);
             planet
@@ -70,10 +70,10 @@ mod tests {
                 .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let space = ContextLease::require(game.kernel.space_context);
-        space.set_frame(ContextFrame::retain(NonNull::new(game.kernel.screen)));
-        space.set_clip(crate::graphics::native_abi::RECT {
-            corner: crate::graphics::native_abi::POINT { x: 7, y: 13 },
-            extent: crate::graphics::native_abi::EXTENT {
+        space.set_frame(ContextFrame::retain(game.kernel.screen));
+        space.set_clip(crate::graphics::geometry::Rect {
+            corner: crate::graphics::geometry::Point { x: 7, y: 13 },
+            extent: crate::graphics::geometry::Extent {
                 width: 242,
                 height: 227,
             },

@@ -4,15 +4,15 @@ use super::{
 };
 use crate::engine::{save::summary_record::SummaryDesc, Game};
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease, LoadedContext},
-    native_abi::{EXTENT, POINT, RECT},
+    context::ContextLease, context::LoadedContext, drawable::ContextFrame, geometry::Extent,
+    geometry::Point, geometry::Rect,
 };
 
 #[test]
 #[serial_test::serial]
 fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
     if !uqm_engine::test_support::native_process::own_graphics_process("front_end::gameopt::render_tests::prepared_picker_draws_empty_and_populated_pages_without_published_owners") { return; }
-    use crate::graphics::drawable_abi::LoadedDrawable;
+    use crate::graphics::drawable::LoadedDrawable;
     let mut game = Game::new();
     let fixture =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
@@ -28,12 +28,12 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
         .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
             vec![b"A\0".to_vec(); 600],
         ));
-    let target = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+    let target = ContextFrame::retain(game.kernel.screen);
     let context = ContextLease::require(game.kernel.space_context);
     context.set_frame(target.clone());
-    context.set_clip(RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    context.set_clip(Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 320,
             height: 240,
         },
@@ -44,9 +44,7 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
         (39, crate::ui::rgb15(31, 0, 0)),
         (40, crate::ui::rgb15(0, 31, 0)),
     ] {
-        source_context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-            frames.lease().frame(index).unwrap(),
-        )));
+        source_context.set_frame(ContextFrame::retain(frames.lease().frame(index).unwrap()));
         source_context.set_background(color);
         source_context.clear();
     }
@@ -57,9 +55,9 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
     display.header(false);
     display.header(true);
     context.flush();
-    let selected = target.pixel(POINT { x: 8, y: 186 });
+    let selected = target.pixel(Point { x: 8, y: 186 });
     assert_eq!((selected.r, selected.g, selected.b), (222, 0, 222));
-    let unselected = target.pixel(POINT { x: 8, y: 160 });
+    let unselected = target.pixel(Point { x: 8, y: 160 });
     assert_eq!((unselected.r, unselected.g, unselected.b), (0, 0, 165));
     state.summary[7].year_index = 2155;
     state.summary[7].month_index = 1;
@@ -79,8 +77,8 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
         assert_eq!(game.world.data.flagship.total_bio_mass, 99);
         assert_eq!(context.clip_rect().extent.width, 320);
         if flags == 128 {
-            let left = target.pixel(POINT { x: 13, y: 0 });
-            let right = target.pixel(POINT { x: 21, y: 0 });
+            let left = target.pixel(Point { x: 13, y: 0 });
+            let right = target.pixel(Point { x: 21, y: 0 });
             assert_eq!((left.r, left.g, left.b), (255, 0, 0));
             assert_eq!((right.r, right.g, right.b), (0, 255, 0));
         }

@@ -6,11 +6,11 @@
 use super::menu_logic::{self, check_timeout};
 use super::restart_ops::RestartMenuOps;
 use super::types::{MenuInputState, RestartMenuItem, SelectionResult};
-use crate::{
-    engine::input::frames::{MENU_SOUND_DOWN, MENU_SOUND_SELECT, MENU_SOUND_UP},
-    graphics::cmap_abi::{FADE_ALL_TO_BLACK, FADE_ALL_TO_COLOR},
-    sound::types::NORMAL_VOLUME,
-};
+use crate::engine::input::frames::MENU_SOUND_DOWN;
+use crate::engine::input::frames::MENU_SOUND_SELECT;
+use crate::engine::input::frames::MENU_SOUND_UP;
+use crate::graphics::{colormap::FADE_ALL_TO_BLACK, colormap::FADE_ALL_TO_COLOR};
+use crate::sound::types::NORMAL_VOLUME;
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
 // ===========================================================================
@@ -328,7 +328,7 @@ fn handle_timeout<O: RestartMenuOps + ?Sized>(ops: &mut O) {
 mod tests {
     use super::super::restart_ops::RestartMenuOps;
     use super::*;
-    use crate::graphics::native_abi::Color;
+    use crate::graphics::geometry::Color;
     use std::cell::Cell;
     use std::os::raw::{c_int, c_short};
 

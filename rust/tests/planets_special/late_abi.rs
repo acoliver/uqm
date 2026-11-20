@@ -160,9 +160,7 @@ pub fn check() {
 
 fn check_live_queues(harness: &mut Harness) {
     use uqm_rust::planets::generate::sam::GuardSite;
-    extern "C" {
-        static mut ScreenHeight: i32;
-    }
+    const SCREEN_HEIGHT: i32 = uqm_rust::graphics::state::SCREEN_HEIGHT;
     let (saved_queues, ids, first) = crate::battle_context::with(|cx| {
         let saved = std::mem::take(&mut cx.world.queues);
         let mut groups = cx.world.ip_groups();
@@ -228,7 +226,7 @@ fn check_live_queues(harness: &mut Harness) {
         assert_eq!(harness.rng_position(), 104729);
         crate::battle_context::with(|cx| cx.world.queues = saved_queues);
 
-        use uqm_rust::engine::graphics::native_abi::POINT;
+        use uqm_rust::engine::graphics::geometry::Point;
         let saved_race = crate::battle_context::with(|cx| cx.world.encounter_race);
         let saved_group = crate::battle_context::with(|cx| cx.world.encounter_group);
         crate::battle_context::with(|cx| {
@@ -258,10 +256,10 @@ fn check_live_queues(harness: &mut Harness) {
         // units.h and solarsys.c: SIS height = screen height - 13;
         // DISPLAY_TO_LOC = ((SIS width >> 1) - 8) >> 1.
         let half_width = i32::from(uqm_rust::planets::generate::consts::MAP_WIDTH) >> 1;
-        let half_height = (ScreenHeight - 13) >> 1;
+        let half_height = (SCREEN_HEIGHT - 13) >> 1;
         let display_to_loc = (half_width - 8) >> 1;
         harness.state.sys.sun.radius = (display_to_loc * 10) as i16;
-        harness.state.sys.planets[4].image.origin = POINT {
+        harness.state.sys.planets[4].image.origin = Point {
             x: (half_width + 12) as i16,
             y: (half_height - 9) as i16,
         };

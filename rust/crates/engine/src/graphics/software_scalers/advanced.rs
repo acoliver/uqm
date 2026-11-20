@@ -1,7 +1,6 @@
 // Portions Copyright (C) 2003-2005 Alex Volkov. GPL-2.0-or-later.
 // Mechanical port of the Advanced BiAdaptive integer kernel.
-use super::{blend_11, blend_1111, cmp_yuv, intensity, rgb_delta, Image};
-use sdl2_sys::SDL_PixelFormat;
+use super::{blend_11, blend_1111, cmp_yuv, intensity, rgb_delta, Format, Image};
 const RESOLVE_COORD: [[i32; 2]; 8] = [
     [0, -1],
     [1, -1],
@@ -12,7 +11,7 @@ const RESOLVE_COORD: [[i32; 2]; 8] = [
     [-1, 1],
     [-1, 0],
 ];
-pub(super) fn advanced(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4] {
+pub(super) fn advanced(image: &Image<'_>, fmt: &Format, x: i32, y: i32) -> [u32; 4] {
     let w = image.width;
     let h = image.height;
     let mut pixels = [[0u32; 4]; 4];

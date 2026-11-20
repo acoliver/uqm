@@ -1,21 +1,21 @@
 //! Flagship gauges borrow campaign state and retained display resources.
 use super::*;
 use crate::engine::World;
-use crate::graphics::{context_abi::ContextFrame, native_font::FontLease};
+use crate::graphics::{
+    drawable::ContextFrame, drawable::FrameId, font::FontLease, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
+};
 use crate::starbase::ids;
 use crate::starbase::module_guard;
 use crate::starbase::platform::StatusMessageMode;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
-use std::{
-    ffi::{CStr, CString},
-    ptr::NonNull,
-};
+use std::ffi::{CStr, CString};
 
 pub const UNDEFINED_DELTA: i16 = 0x7fff;
 
-fn frame(raw: FRAME) -> ContextFrame {
-    ContextFrame::retain(NonNull::new(raw))
+fn frame(raw: FrameId) -> ContextFrame {
+    ContextFrame::retain(raw)
 }
 fn font(kernel: &Kernel) -> FontLease {
     kernel
@@ -29,13 +29,13 @@ fn name(bytes: &[u8]) -> &CStr {
 fn number(value: impl ToString) -> CString {
     CString::new(value.to_string()).unwrap_or_else(|error| panic!("invalid gauge label: {error}"))
 }
-pub fn gauge_rect(crew: bool) -> RECT {
-    RECT {
-        corner: POINT {
+pub fn gauge_rect(crew: bool) -> Rect {
+    Rect {
+        corner: Point {
             x: 20,
             y: if crew { 117 } else { 38 },
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 24,
             height: 5,
         },
@@ -91,11 +91,11 @@ fn draw_number(context: &ContextLease, font: &FontLease, crew: bool, value: u16)
     context.draw_text(
         font,
         &number(value),
-        POINT {
+        Point {
             x: 32,
             y: rect.corner.y + rect.extent.height,
         },
-        TEXT_ALIGN_ALIGN_CENTER,
+        TextAlign::Center,
         if crew {
             rgb15(0, 14, 0)
         } else {
@@ -108,9 +108,9 @@ pub fn draw_captains_name(kernel: &Kernel, world: &World) {
     context.with_text_state(|| {
         context.fill_rectangle(
             rgb15(0, 0, 20),
-            RECT {
-                corner: POINT { x: 3, y: 10 },
-                extent: EXTENT {
+            Rect {
+                corner: Point { x: 3, y: 10 },
+                extent: Extent {
                     width: 58,
                     height: 7,
                 },
@@ -119,8 +119,8 @@ pub fn draw_captains_name(kernel: &Kernel, world: &World) {
         context.draw_text(
             &font(kernel),
             name(&world.data.flagship.commander_name),
-            POINT { x: 31, y: 16 },
-            TEXT_ALIGN_ALIGN_CENTER,
+            Point { x: 31, y: 16 },
+            TextAlign::Center,
             rgb15(22, 11, 31),
         );
     });
@@ -132,17 +132,17 @@ pub fn draw_flagship_name(kernel: &Kernel, world: &World, width: i32, status: bo
         kernel.space_context
     });
     let font = if status {
-        NonNull::new(kernel.star_con_font).map(FontLease::retain)
+        kernel.star_con_font.map(FontLease::retain)
     } else {
         kernel.micro_font_lease()
     }
     .unwrap_or_else(|| panic!("flagship name requires its font"));
-    let rect = RECT {
-        corner: POINT {
+    let rect = Rect {
+        corner: Point {
             x: if status { 2 } else { 0 },
             y: if status { 20 } else { 1 },
         },
-        extent: EXTENT {
+        extent: Extent {
             width: if status { 60 } else { (width - 78) as i16 },
             height: 7,
         },
@@ -169,11 +169,11 @@ pub fn draw_flagship_name(kernel: &Kernel, world: &World, width: i32, status: bo
                 context.draw_text(
                     &font,
                     &text,
-                    POINT {
+                    Point {
                         x: rect.corner.x + (rect.extent.width >> 1),
                         y: rect.corner.y + 7 - i16::from(status),
                     },
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    TextAlign::Center,
                     if gradient.is_some() {
                         rgb15(0, 0, 0)
                     } else {
@@ -191,7 +191,7 @@ pub fn draw_landers(kernel: &Kernel, world: &World) {
         let mut rect = lander.rect();
         let count = i32::from(world.data.flagship.num_landers);
         rect.corner.x = (32 - i32::from(rect.corner.x)) as i16;
-        let mut origin = POINT {
+        let mut origin = Point {
             x: (i32::from(rect.corner.x)
                 - ((i32::from(rect.extent.width) * count + 2 * (count - 1)) >> 1))
                 as i16,
@@ -214,9 +214,9 @@ pub fn draw_storage_bays(kernel: &Kernel, world: &World, refresh: bool) {
     let context = ContextLease::require(kernel.status_context);
     context.with_selected(|| {
         let state = &world.data.flagship;
-        let mut rect = RECT {
-            corner: POINT { x: 0, y: 123 },
-            extent: EXTENT {
+        let mut rect = Rect {
+            corner: Point { x: 0, y: 123 },
+            extent: Extent {
                 width: 2,
                 height: 4,
             },
@@ -273,9 +273,9 @@ fn draw_slots(
     for &piece in slots {
         if piece < equipment::NUM_MODULES as u8 {
             let image = frames.indexed_frame(usize::from(piece) + 1 + mode);
-            context.draw_stamp(&image, POINT { x: 1, y });
+            context.draw_stamp(&image, Point { x: 1, y });
             if mode != 2 {
-                context.draw_stamp(&image.next_frame(), POINT { x: 1, y });
+                context.draw_stamp(&image.next_frame(), Point { x: 1, y });
             }
         }
         y = y.wrapping_sub(3);
@@ -285,7 +285,7 @@ fn draw_pc_sis(kernel: &Kernel, context: &ContextLease) {
     let font = font(kernel);
     let gradients = frame(kernel.font_grad_frame);
     let mut rect = gauge_rect(false);
-    let mut baseline = POINT {
+    let mut baseline = Point {
         x: 32,
         y: rect.corner.y - 1,
     };
@@ -299,16 +299,16 @@ fn draw_pc_sis(kernel: &Kernel, context: &ContextLease) {
                 &font,
                 kernel.game_text((ids::STATUS_STRING_BASE + index) as usize),
                 baseline,
-                TEXT_ALIGN_ALIGN_CENTER,
+                TextAlign::Center,
                 rgb15(0, 0, 0),
             )
         });
         rect.corner.y += 79;
         baseline.y += 79;
     }
-    rect = RECT {
-        corner: POINT { x: 3, y: 3 },
-        extent: EXTENT {
+    rect = Rect {
+        corner: Point { x: 3, y: 3 },
+        extent: Extent {
             width: 58,
             height: 7,
         },
@@ -318,15 +318,15 @@ fn draw_pc_sis(kernel: &Kernel, context: &ContextLease) {
         context.draw_text(
             &font,
             kernel.game_text((ids::STATUS_STRING_BASE + 5) as usize),
-            POINT { x: 32, y: 9 },
-            TEXT_ALIGN_ALIGN_CENTER,
+            Point { x: 32, y: 9 },
+            TextAlign::Center,
             rgb15(2, 4, 30),
         )
     });
 }
 fn draw_full_panel(kernel: &Kernel, world: &World, context: &ContextLease) {
     let frames = frame(kernel.flag_stat_frame);
-    context.draw_stamp(&frames, POINT { x: 0, y: 0 });
+    context.draw_stamp(&frames, Point { x: 0, y: 0 });
     if kernel.configuration.preferences().fonts == OPT_PC {
         draw_pc_sis(kernel, context);
     }
@@ -351,7 +351,7 @@ fn draw_full_panel(kernel: &Kernel, world: &World, context: &ContextLease) {
     let ships = world.built_ships_ref();
     for (id, (x, y)) in std::iter::successors(ships.head(), |&id| ships.succ(id)).zip(points) {
         let resources = world.fleet_resources(ships.get(id).species_id);
-        context.draw_stamp(&frame(resources.icon().raw()), POINT { x, y });
+        context.draw_stamp(&frame(resources.icon().raw()), Point { x, y });
     }
 }
 pub fn delta_sis_gauges(kernel: &Kernel, world: &mut World, crew: i16, fuel: i16, resources: i32) {
@@ -406,10 +406,8 @@ mod tests {
     #[serial_test::serial]
     fn owned_gauges_and_border_draw_without_publishing_campaign_state() {
         if !uqm_engine::test_support::native_process::own_graphics_process("ui::sis::gauges::tests::owned_gauges_and_border_draw_without_publishing_campaign_state") { return; }
-        use crate::{
-            engine::Game,
-            graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable},
-        };
+        use crate::engine::Game;
+        use crate::graphics::drawable::LoadedDrawable;
         use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
@@ -420,9 +418,9 @@ mod tests {
             ));
         let font = font(&game.kernel);
         game.kernel.screen_context = game.kernel.status_context;
-        let space_owner = crate::graphics::context_abi::LoadedContext::create(c"gauge-space");
-        let space = space_owner.lease().as_raw();
-        game.kernel.space_context = space;
+        let space_owner = crate::graphics::context::LoadedContext::create(c"gauge-space");
+        let space = space_owner.context();
+        game.kernel.space_context = Some(space);
         let frames =
             LoadedDrawable::create(8, 64, 140, 100).unwrap_or_else(|| panic!("gauge frames"));
         game.kernel.flag_stat_frame = frames
@@ -431,7 +429,7 @@ mod tests {
             .unwrap_or_else(|| panic!("gauge frame"));
         game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
         let context = ContextLease::require(game.kernel.status_context);
-        context.set_frame(ContextFrame::retain(NonNull::new(game.kernel.screen)));
+        context.set_frame(ContextFrame::retain(game.kernel.screen));
         game.world
             .data
             .flagship
@@ -488,14 +486,14 @@ mod tests {
         crate::ui::border::draw_sis_frame(&game.kernel, &mut game.world, (320, 240));
         assert_eq!(
             (
-                ContextLease::require(space).clip_rect().corner.x,
-                ContextLease::require(space).clip_rect().extent.width
+                ContextLease::require(Some(space)).clip_rect().corner.x,
+                ContextLease::require(Some(space)).clip_rect().extent.width
             ),
             (7, 242)
         );
         context.flush();
-        game.kernel.flag_stat_frame = std::ptr::null_mut();
-        game.kernel.font_grad_frame = std::ptr::null_mut();
+        game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
         drop(context);
         drop(font);
         drop(frames);

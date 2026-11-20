@@ -2,14 +2,12 @@
 
 use super::drawing::*;
 use super::flight::*;
-use super::*;
-use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World};
-use crate::graphics::context_abi::{BatchGuard, ContextFrame, ContextLease};
-use std::ptr::NonNull;
-
 use super::site::dispatch::invoke;
+use super::*;
 use crate::comm::locdata::CPoint;
 use crate::engine::world::generation::Body;
+use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World};
+use crate::graphics::{context::BatchGuard, context::ContextLease, drawable::ContextFrame};
 use crate::planets::devices::{devices_menu, SolarVisit};
 use crate::planets::generate::calc::preview_body;
 use crate::planets::{
@@ -23,7 +21,7 @@ const END_INTERPLANETARY: u16 = 1 << 11;
 const CHECK_LOAD: u16 = 1 << 12;
 const CHECK_RESTART: u16 = 1 << 13;
 const CHECK_ABORT: u16 = 1 << 14;
-const MAX_ZOOM_RADIUS: c::SIZE = 128 << 6;
+const MAX_ZOOM_RADIUS: i16 = 128 << 6;
 const ONE_SECOND: u32 = 840;
 const IP_FRAME_RATE: u32 = ONE_SECOND / 30;
 const FUSION_THRUSTER: u8 = 1;
@@ -57,8 +55,8 @@ use crate::planets::roster::live::roster_menu;
 use crate::ui::settings::stop_music;
 
 #[inline]
-const fn rgb15(r: u8, g: u8, b: u8) -> c::Color {
-    c::Color {
+const fn rgb15(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
+    crate::graphics::geometry::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),
         b: (b << 3) | (b >> 2),
@@ -67,15 +65,15 @@ const fn rgb15(r: u8, g: u8, b: u8) -> c::Color {
 }
 
 #[inline]
-fn c_point(point: CPoint) -> c::POINT {
-    c::POINT {
+fn c_point(point: CPoint) -> crate::graphics::geometry::Point {
+    crate::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     }
 }
 
 #[inline]
-fn saved_point(point: c::POINT) -> CPoint {
+fn saved_point(point: crate::graphics::geometry::Point) -> CPoint {
     CPoint {
         x: point.x,
         y: point.y,
@@ -118,17 +116,17 @@ pub(super) fn init_solar_sys_sis_characteristics(world: &World, solar: &mut Sola
     }
 }
 
-fn temperature_color(temperature: i16) -> c::Color {
-    const TEMP_COLORS: [c::Color; 5] = [
+fn temperature_color(temperature: i16) -> crate::graphics::geometry::Color {
+    const TEMP_COLORS: [crate::graphics::geometry::Color; 5] = [
         rgb15(0x00, 0x00, 0x0e),
         rgb15(0x00, 0x06, 0x08),
         rgb15(0x00, 0x0b, 0x00),
         rgb15(0x0f, 0x00, 0x00),
         rgb15(0x0f, 0x08, 0x00),
     ];
-    let mut index = ((i32::from(temperature) + 250) / 100) as c::COUNT;
+    let mut index = ((i32::from(temperature) + 250) / 100) as u16;
     if usize::from(index) >= TEMP_COLORS.len() {
-        index = (TEMP_COLORS.len() - 1) as c::COUNT;
+        index = (TEMP_COLORS.len() - 1) as u16;
     }
     TEMP_COLORS[usize::from(index)]
 }
@@ -143,10 +141,10 @@ pub(super) fn load_solar_sys(
     let sun_type = (star.star_type & 0x18) >> 3;
     solar.sys.sun.rand_seed = solar.sys.rng.next_random();
     solar.sys.sun.data_index = sun_type;
-    solar.sys.sun.location = c::POINT { x: 0, y: 0 };
+    solar.sys.sun.location = crate::graphics::geometry::Point { x: 0, y: 0 };
     solar.sys.sun.image.origin = solar.sys.sun.location;
     solar.sys.sun.image.frame =
-        resources::frame(&resources::retained(cx.kernel).sun, u16::from(sun_type)).cast();
+        resources::frame(&resources::retained(cx.kernel).sun, u16::from(sun_type));
 
     invoke(cx, io, solar, |generator, system, host| {
         generator.generate_planets(system, host)
@@ -158,7 +156,7 @@ pub(super) fn load_solar_sys(
     for i in 0..solar.sys.planets.len() {
         solar.sys.planets[i].image.origin = solar.sys.planets[i].location;
         if i >= usize::from(solar.sys.sun.num_planets) {
-            solar.sys.planets[i].image.frame = ptr::null_mut();
+            solar.sys.planets[i].image.frame = crate::graphics::drawable::FrameId::NULL;
         } else {
             let info = invoke(cx, io, solar, |_, system, _| {
                 preview_body(system, Body::Planet(i as u8))
@@ -205,7 +203,7 @@ pub(super) fn load_solar_sys(
             i += 1;
         }
         cx.world.data.game.ship_stamp.frame =
-            resources::frame(&resources::retained(cx.kernel).flagship, i - 1).cast();
+            resources::frame(&resources::retained(cx.kernel).flagship, i - 1);
         None
     }
 }
@@ -325,7 +323,7 @@ fn prepare_planet_orbit(
     });
     cx.kernel.last_activity &= !(CHECK_LOAD | CHECK_RESTART);
     if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER) != 0
-        || cx.world.data.flagship.crew_enlisted == c::COUNT::MAX
+        || cx.world.data.flagship.crew_enlisted == u16::MAX
         || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
         OrbitAdmission::Interrupted
@@ -336,7 +334,7 @@ fn prepare_planet_orbit(
 
 fn finish_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
     if cx.world.activity() & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD) == 0
-        && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX
+        && cx.world.data.flagship.crew_enlisted != u16::MAX
     {
         let space_context = ContextLease::require(cx.kernel.space_context);
         let next_activity = cx.world.next_activity;
@@ -372,7 +370,7 @@ fn start_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
         SolarSystemStart::Fade(batch) => {
             crate::battle::process_native::engine::redraw_queue(cx, false);
             drop(batch);
-            context.fade_screen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as c::SIZE);
+            context.fade_screen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as i16);
             cx.kernel.last_activity = 0;
         }
         SolarSystemStart::Transition(batch) => {
@@ -417,7 +415,7 @@ fn prepare_solar_sys(
     solar.stars = Some(create_star_background(cx.world, cx.kernel, solar));
     let context = ContextLease::require(cx.kernel.space_context);
     context.select();
-    context.set_frame(ContextFrame::retain(NonNull::new(cx.kernel.screen.cast())));
+    context.set_frame(ContextFrame::retain(cx.kernel.screen));
     context.set_background(rgb15(0, 0, 0));
     let orbital = load_solar_sys(cx, io, solar);
     let inner_system = check_zoom_level(&mut cx.world.data.game, solar) != 0;
@@ -478,17 +476,20 @@ pub(super) fn end_interplanetary(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut S
     }
 }
 
-pub(super) fn closest_planet_interplanetary(solar: &SolarSystem, point: c::POINT) -> Body {
+pub(super) fn closest_planet_interplanetary(
+    solar: &SolarSystem,
+    point: crate::graphics::geometry::Point,
+) -> Body {
     let mut best_distance_squared = u32::MAX;
     let mut best_planet = None;
     for (i, planet) in solar.sys.planets[..usize::from(solar.sys.sun.num_planets)]
         .iter()
         .enumerate()
     {
-        let dx = (i32::from(point.x) - i32::from(planet.image.origin.x)) as c::SIZE;
-        let dy = (i32::from(point.y) - i32::from(planet.image.origin.y)) as c::SIZE;
+        let dx = (i32::from(point.x) - i32::from(planet.image.origin.x)) as i16;
+        let dy = (i32::from(point.y) - i32::from(planet.image.origin.y)) as i16;
         let distance_squared =
-            (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as c::DWORD;
+            (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32;
         if distance_squared < best_distance_squared {
             best_distance_squared = distance_squared;
             best_planet = Some(Body::Planet(i as u8));
@@ -558,7 +559,7 @@ fn prepare_explore_solar_sys(
 ) -> crate::engine::world::StarId {
     let (log_units_x, log_units_y) = hyperspace_unit_factors(screen);
     if world.current_star.is_none() {
-        let universe = c::POINT {
+        let universe = crate::graphics::geometry::Point {
             x: ((world.data.flagship.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as _,
             y: (9999 - (world.data.flagship.log_y * 625 + (log_units_y >> 1)) / log_units_y) as _,
         };
@@ -604,12 +605,12 @@ fn do_solar_sys_menu(
     io: &mut Io<'_>,
     solar: &mut SolarSystem,
     menu: &mut SolarMenu,
-) -> c::BOOLEAN {
+) -> u32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    let mut select = input.pulsed().menu[KEY_MENU_SELECT] as c::BOOLEAN;
+    let mut select = input.pulsed().menu[KEY_MENU_SELECT] as u32;
     if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
-        || cx.world.data.flagship.crew_enlisted == c::COUNT::MAX
+        || cx.world.data.flagship.crew_enlisted == u16::MAX
     {
         return 0;
     }
@@ -625,13 +626,13 @@ fn do_solar_sys_menu(
     crate::ui::sis::clear_flash(cx.kernel);
     match menu.current {
         EQUIP_DEVICE => {
-            select = devices_menu(cx, io, Some(solar_visit(solar))) as c::BOOLEAN;
+            select = devices_menu(cx, io, Some(solar_visit(solar))) as u32;
             if cx.world.activity() & START_ENCOUNTER != 0 {
                 return 0;
             }
         }
         CARGO => cargo_menu(cx, io),
-        ROSTER => select = roster_menu(cx, io) as c::BOOLEAN,
+        ROSTER => select = roster_menu(cx, io) as u32,
         GAME_MENU => {
             if game_options(cx, io, Some(solar)) == 0 {
                 return 0;
@@ -707,7 +708,7 @@ fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
     );
 }
 
-fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) -> c::BOOLEAN {
+fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) -> u32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let cancel = input.pulsed().menu[KEY_MENU_CANCEL];
@@ -730,5 +731,5 @@ fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) -> c:
         cx.kernel.solar_presentation.frame_deadline = GetTimeCounter().wrapping_add(IP_FRAME_RATE);
     }
     (cx.world.activity() & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD) == 0
-        && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX) as c::BOOLEAN
+        && cx.world.data.flagship.crew_enlisted != u16::MAX) as u32
 }

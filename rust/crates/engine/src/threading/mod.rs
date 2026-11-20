@@ -26,7 +26,9 @@ pub mod affinity;
 pub mod critical_timer;
 #[cfg(unix)]
 pub mod descriptor;
+mod game_thread;
 pub mod pacing;
+pub use game_thread::{init_game_thread, uninit_game_thread, yield_game_thread, yield_task};
 #[cfg(target_os = "macos")]
 pub mod qos;
 
@@ -39,35 +41,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
 use std::thread::{self, JoinHandle, ThreadId};
 use std::time::Duration;
-
-/// Declare the calling thread the game thread, which owns SDL dispatch.
-pub fn init_game_thread() {
-    // SAFETY: called once on the game thread before any worker is spawned.
-    unsafe { legacy_abi::InitThreadSystem() };
-}
-
-/// Retire the thread system once every worker has stopped.
-pub fn uninit_game_thread() {
-    // SAFETY: all workers have stopped before final subsystem teardown.
-    unsafe { legacy_abi::UnInitThreadSystem() };
-}
-
-/// Let pending window-system events run: the game thread's cooperative yield.
-pub fn yield_task() {
-    // SAFETY: only the game thread owns SDL dispatch and the draw queue.
-    unsafe { legacy_abi::TaskSwitch() };
-}
-
-pub fn yield_game_thread() {
-    assert_eq!(
-        *legacy_abi::MAIN_THREAD
-            .lock()
-            .unwrap_or_else(|error| panic!("thread owner lock: {error}")),
-        Some(thread::current().id()),
-        "event polling requires the initialized game thread"
-    );
-    yield_task();
-}
 
 /// Error type for threading operations
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1444,5 +1417,3 @@ pub unsafe fn rust_semaphore_count(sem: *mut RustSemaphore) -> u32 {
 pub unsafe fn rust_task_switch() {
     task_switch();
 }
-
-pub mod legacy_abi;

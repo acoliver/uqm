@@ -1,19 +1,16 @@
 use super::*;
-use std::{ffi::CStr, ptr};
+use std::ffi::CStr;
+use uqm_rust::engine::test_support::native_probe::frame_pixel as GetFramePixel;
+use uqm_rust::graphics::{geometry::Point, geometry::TextAlign, present::GraphicsOptions};
+use uqm_rust::planets::generate::andro::AndrosynthSite;
+use uqm_rust::planets::generate::burv::BurvScenes;
+use uqm_rust::planets::generate::spa::SpathiSite;
+use uqm_rust::planets::generate::thrad::ThraddashSite;
+use uqm_rust::planets::generate::vault::VaultSite;
+use uqm_rust::planets::generate::wreck::WreckSite;
+use uqm_rust::planets::generate::zoq::ZoqFotPikSite;
 #[cfg(feature = "debug-process")]
 use uqm_rust::planets::generate::{slylandro::HomeSite, syreen::StarbaseSite};
-use uqm_rust::{
-    graphics::{
-        dcqueue_abi::TFB_FlushGraphics,
-        drawable_abi::*,
-        native_abi::*,
-        sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
-    },
-    planets::generate::{
-        andro::AndrosynthSite, burv::BurvScenes, spa::SpathiSite, thrad::ThraddashSite,
-        vault::VaultSite, wreck::WreckSite, zoq::ZoqFotPikSite,
-    },
-};
 
 const GRAPHICS: &[&str] = &[
     "ruins",
@@ -62,10 +59,9 @@ fn check_scene(
         let typography = host
             .report_typography()
             .unwrap_or_else(|| panic!("scene {report} typography"));
-        let measured =
-            typography
-                .font()
-                .measure(c"A", POINT { x: 0, y: 0 }, TEXT_ALIGN_ALIGN_LEFT, 1);
+        let measured = typography
+            .font()
+            .measure(c"A", Point { x: 0, y: 0 }, TextAlign::Left, 1);
         assert!(measured.visible);
         assert_eq!(measured.rect.extent.width, 1);
         assert_eq!(typography.effect().frame_rect(0).extent.width, 1);
@@ -76,7 +72,7 @@ fn check_scene(
                     panic!("mask {mask} has no first frame");
                 };
                 // SAFETY: the fixture owns this loaded mask until cleanup below.
-                let pixel = unsafe { GetFramePixel(frame, POINT { x: 0, y: 0 }) };
+                let pixel = GetFramePixel(frame, Point { x: 0, y: 0 });
                 let palette_index = GRAPHICS
                     .iter()
                     .position(|key| *key == mask)
@@ -154,16 +150,7 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     // SAFETY: this serialized fixture owns SDL, the mount and all its native allocations on one thread.
     unsafe {
-        assert_eq!(
-            TFB_InitGraphics(
-                1,
-                0,
-                ptr::from_ref(&GraphicsOptions::default()).cast(),
-                320,
-                240
-            ),
-            0
-        );
+        uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         content.init_resources("fixture.rmp");
         let mut game = campaign();
@@ -355,10 +342,10 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
             });
         }
         assert_eq!(game.world.activity(), 0);
-        TFB_FlushGraphics();
+        uqm_rust::graphics::state::flush();
         drop(game);
         uqm_rust::resource::ffi_bridge::UninitResourceSystem();
         drop(content);
-        TFB_UninitGraphics();
+        uqm_rust::graphics::present::uninit_graphics();
     }
 }

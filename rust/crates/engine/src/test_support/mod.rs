@@ -8,7 +8,7 @@ pub mod native_process;
 pub mod native_session;
 
 use crate::battle::access::schema::{CLOCK_STATE, GAME_STATE};
-use crate::{battle::record::VELOCITY_DESC, graphics::native_abi::POINT};
+use crate::{battle::record::VELOCITY_DESC, graphics::geometry::Point};
 
 /// An all-zero campaign state record, as the C initializer produced one.
 impl Default for GAME_STATE {
@@ -19,7 +19,6 @@ impl Default for GAME_STATE {
             fuel_cost: 0,
             module_cost: [0; 20],
             element_worth: [0; 8],
-            _display_array: std::ptr::null_mut(),
             game_clock: CLOCK_STATE {
                 day_index: 0,
                 month_index: 0,
@@ -27,8 +26,8 @@ impl Default for GAME_STATE {
                 tick_count: 0,
                 day_in_ticks: 0,
             },
-            autopilot: POINT::default(),
-            ip_location: POINT::default(),
+            autopilot: Point::default(),
+            ip_location: Point::default(),
             ship_stamp: Default::default(),
             ship_facing: 0,
             ip_planet: 0,

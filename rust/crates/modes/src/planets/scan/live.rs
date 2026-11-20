@@ -2,7 +2,7 @@ use super::{landing_fuel, move_cursor};
 use crate::battle::element::ElementFlags;
 use crate::comm::locdata::{CColor, CPoint, CRect};
 use crate::engine::battle::views::FrameSelection;
-use crate::engine::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::engine::graphics::{context::ContextLease, drawable::ContextFrame};
 use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use crate::engine::{
     battle::Cx,
@@ -34,28 +34,18 @@ const TINT_COLORS: [Rgba; 3] = [
 
 mod display;
 
-use uqm_engine::time::counter_abi::GetTimeCounter;
-
 use super::state::ScanState;
-use crate::engine::graphics::drawable_abi::LoadedDrawable;
-
-use crate::planets::render::draw_star_background;
-
-use crate::planets::sphere::live::draw_default_planet_sphere;
-
-use crate::planets::sphere::live::draw_planet;
-
-use crate::planets::orbit::live::draw_scanned_objects;
-
-use crate::planets::orbit::live::redraw_planet_orbit_display;
-
-use crate::ui::settings::play_menu_sound;
-
+use crate::engine::graphics::drawable::LoadedDrawable;
+use crate::graphics::font::FontLease;
 use crate::planet_side::init_lander::{draw_lander, LanderStatus};
-
+use crate::planets::orbit::live::draw_scanned_objects;
+use crate::planets::orbit::live::redraw_planet_orbit_display;
+use crate::planets::render::draw_star_background;
+use crate::planets::sphere::live::draw_default_planet_sphere;
+use crate::planets::sphere::live::draw_planet;
+use crate::ui::settings::play_menu_sound;
 use crate::ui::util::wait_for_any_button_until;
-
-use crate::graphics::native_font::FontLease;
+use uqm_engine::time::counter_abi::GetTimeCounter;
 
 impl ScanState {
     pub(crate) fn draw_surface(&self, tint_y: i32, color: CColor) {
@@ -83,14 +73,14 @@ fn width(screen_width: i32) -> i16 {
     (screen_width - 78) as i16
 }
 fn draw(frame: FrameSelection, point: CPoint, filled: bool) {
-    let point = crate::graphics::native_abi::POINT {
+    let point = crate::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     };
     if filled {
-        drawing::filled_stamp(frame.raw().cast(), point);
+        drawing::filled_stamp(frame.raw(), point);
     } else {
-        drawing::stamp(frame.raw().cast(), point);
+        drawing::stamp(frame.raw(), point);
     }
 }
 
@@ -115,7 +105,7 @@ fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
 
 fn save_location_image(scan: &ScanState) {
     let corner = cursor_frame(scan).rect().corner;
-    let hot = crate::graphics::native_abi::HOT_SPOT {
+    let hot = crate::graphics::geometry::HotSpot {
         x: corner.x.wrapping_neg(),
         y: corner.y.wrapping_neg(),
     };
@@ -126,12 +116,12 @@ fn save_location_image(scan: &ScanState) {
     rect.corner.y -= hot.y;
     let saved = LoadedDrawable::capture(
         &scan.context(),
-        Some(crate::graphics::native_abi::RECT {
-            corner: crate::graphics::native_abi::POINT {
+        Some(crate::graphics::geometry::Rect {
+            corner: crate::graphics::geometry::Point {
                 x: rect.corner.x,
                 y: rect.corner.y,
             },
-            extent: crate::graphics::native_abi::EXTENT {
+            extent: crate::graphics::geometry::Extent {
                 width: rect.width,
                 height: rect.height,
             },
@@ -149,7 +139,7 @@ fn restore_location_image(scan: &ScanState) {
         .unwrap_or_else(|| panic!("saved landing cursor background"));
     scan.context().draw_stamp(
         &saved.lease().context_frame(0),
-        crate::graphics::native_abi::POINT {
+        crate::graphics::geometry::Point {
             x: cursor.rect.corner.x,
             y: cursor.rect.corner.y,
         },
@@ -158,7 +148,7 @@ fn restore_location_image(scan: &ScanState) {
 fn draw_cursor(scan: &ScanState, filled: bool) {
     let context = scan.context();
     let point = scan.cursor.borrow().rect.corner;
-    let point = crate::graphics::native_abi::POINT {
+    let point = crate::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     };
@@ -254,7 +244,7 @@ fn dispatch_lander(
     services: &OrbitServices,
 ) -> bool {
     let runtime = cx.kernel.input_runtime();
-    let misc_data = ContextFrame::retain(std::ptr::NonNull::new(cx.kernel.misc_data_frame));
+    let misc_data = ContextFrame::retain(cx.kernel.misc_data_frame);
     let (landing_fuel, old_callback) = {
         let landing_fuel = fuel(solar) as i16;
         erase_coarse(planet, scan);
@@ -504,15 +494,19 @@ fn scanned_stuff(solar: &SolarSystem, cx: &mut crate::engine::battle::Cx<'_>, y:
                 }
                 g.set_fg_color(c);
                 let size = g
-                    .frame_index(cx.element(element).next.image.frame.raw() as usize)
+                    .frame_index((cx.element(element).next.image.frame.raw()).bits())
                     .wrapping_sub(
-                        g.frame_index(cx.element(element).current.image.frame.raw() as usize),
+                        g.frame_index((cx.element(element).current.image.frame.raw()).bits()),
                     );
                 if dy as u16 > size {
                     dy = size as i16;
                 }
-                let frame = g.rel_frame(cx.element(element).current.image.frame.raw() as usize, dy);
-                draw(FrameSelection::retain(frame as _), point, true);
+                let frame = g.rel_frame((cx.element(element).current.image.frame.raw()).bits(), dy);
+                draw(
+                    FrameSelection::retain(crate::graphics::drawable::FrameId::from_bits(frame)),
+                    point,
+                    true,
+                );
             }
         }
     }
@@ -536,7 +530,8 @@ fn scan_planet(
     };
     let mut repair = CRect::default();
     let micro = FontLease::retain(
-        std::ptr::NonNull::new(cx.kernel.micro_font)
+        cx.kernel
+            .micro_font
             .unwrap_or_else(|| panic!("scan micro font is not loaded")),
     );
     for scan in start..=end {

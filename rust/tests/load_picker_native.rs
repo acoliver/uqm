@@ -5,7 +5,6 @@ use uqm_rust::input::frames::Target;
 use uqm_rust::{
     engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
     front_end::gameopt::{picker_action, PickerAction},
-    graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
     mainloop::{
         input_abi::{FlushInput, UpdateInputState},
         restart_menu::{
@@ -100,7 +99,7 @@ unsafe fn open_from_restart_while_select_is_held(
     key_event(input, RETURN, true, false);
     crate::battle_context::with(|cx| UpdateInputState(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
-    let context = uqm_rust::graphics::context_abi::LoadedContext::create(c"load-picker-restart");
+    let context = uqm_rust::graphics::context::LoadedContext::create(c"load-picker-restart");
     let mut owner = RestartMenu::default();
     let mut host = NoLifecycle;
     let mut menu = DoRestartState {
@@ -111,7 +110,7 @@ unsafe fn open_from_restart_while_select_is_held(
     };
     crate::battle_context::with(|cx| {
         let previous = cx.kernel.screen_context;
-        cx.kernel.screen_context = context.lease().as_raw();
+        cx.kernel.screen_context = Some(context.context());
         let mut observer = uqm_rust::engine::observe::Unobserved;
         let mut io = uqm_rust::engine::observe::Io {
             observer: &mut observer,
@@ -173,8 +172,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
         std::fs::create_dir_all(&root).unwrap();
         let profile = tempfile::tempdir_in(root).unwrap();
         unsafe {
-            uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
-            Init_DrawCommandQueue();
+            uqm_rust::graphics::state::init_headless(Default::default());
             input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
             uqm_rust::input::sdl_input::attach_controls(input.controls());
             input.vcontrol(|vc| {
@@ -256,7 +254,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                 }
             }
             uqm_rust::input::sdl_input::uninit_input();
-            Uninit_DrawCommandQueue();
+            uqm_rust::graphics::state::uninit_headless();
         }
     });
 }

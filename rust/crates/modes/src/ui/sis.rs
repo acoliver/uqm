@@ -1,15 +1,12 @@
 use crate::engine::world::activity::activity_flags;
 use crate::engine::Kernel;
 use crate::engine::World;
-use crate::graphics::context_abi::ContextLease;
+use crate::graphics::{context::ContextLease, geometry::Extent, geometry::Point, geometry::Rect};
 use crate::starbase::ids;
 use crate::ui::palette::pilot_color;
 use crate::ui::rgb15;
-use uqm_engine::time::counter_abi::ONE_SECOND;
-
-use crate::graphics::native_abi::*;
-
 use std::ffi::{CStr, CString};
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
 pub(crate) mod gauges;
 pub use gauges::{delta_sis_gauges, draw_flagship_name};
@@ -37,16 +34,16 @@ mod services_tests;
 const OPT_PC: i32 = 2;
 const SIS_MESSAGE_HEIGHT: i16 = 8;
 
-const SIS_ORG_X: SIZE = 7;
-const SIS_ORG_Y: SIZE = 10;
-const SIS_TITLE_BOX_WIDTH: SIZE = 57;
-const SIS_TITLE_WIDTH: SIZE = 55;
-const SIS_TITLE_HEIGHT: SIZE = 8;
-const SIS_SPACER_BOX_WIDTH: SIZE = 12;
-const STATUS_MESSAGE_WIDTH: SIZE = 60;
-const STATUS_MESSAGE_HEIGHT: SIZE = 7;
-const RADAR_WIDTH: SIZE = 56;
-const RADAR_HEIGHT: SIZE = 53;
+const SIS_ORG_X: i16 = 7;
+const SIS_ORG_Y: i16 = 10;
+const SIS_TITLE_BOX_WIDTH: i16 = 57;
+const SIS_TITLE_WIDTH: i16 = 55;
+const SIS_TITLE_HEIGHT: i16 = 8;
+const SIS_SPACER_BOX_WIDTH: i16 = 12;
+const STATUS_MESSAGE_WIDTH: i16 = 60;
+const STATUS_MESSAGE_HEIGHT: i16 = 7;
+const RADAR_WIDTH: i16 = 56;
+const RADAR_HEIGHT: i16 = 53;
 mod stats_display;
 pub use gauges::{draw_landers, draw_storage_bays};
 pub use stats_display::draw_flagship_stats;
@@ -87,15 +84,15 @@ pub fn draw_autopilot_message(
 pub fn set_flash_rect(
     highlight: &crate::engine::kernel::SisHighlight,
     screen: &ContextLease,
-    clip: RECT,
-    rect: Option<RECT>,
+    clip: Rect,
+    rect: Option<Rect>,
 ) {
     screen.with_selected(|| {
         let mut slot = highlight.context.borrow_mut();
         let current = &mut *slot;
         if let Some(mut rect) = rect.filter(|rect| rect.extent.width != 0) {
-            rect.corner.x = (i32::from(rect.corner.x) + i32::from(clip.corner.x)) as SIZE;
-            rect.corner.y = (i32::from(rect.corner.y) + i32::from(clip.corner.y)) as SIZE;
+            rect.corner.x = (i32::from(rect.corner.x) + i32::from(clip.corner.x)) as i16;
+            rect.corner.y = (i32::from(rect.corner.y) + i32::from(clip.corner.y)) as i16;
             if let Some(current) = current {
                 current.set_rect(rect);
             } else {
@@ -131,7 +128,7 @@ pub fn clear_flash(kernel: &Kernel) {
     *kernel.sis_highlight.context.borrow_mut() = None;
 }
 
-pub fn highlight_rect(kernel: &Kernel, rect: RECT) {
+pub fn highlight_rect(kernel: &Kernel, rect: Rect) {
     if rect.extent.width == 0 {
         clear_flash(kernel);
         return;
@@ -150,12 +147,12 @@ pub fn highlight_rect(kernel: &Kernel, rect: RECT) {
 
 pub fn repair_sis_border(kernel: &Kernel, dimensions: (i32, i32)) {
     let context = ContextLease::require(kernel.screen_context);
-    let mut rect = RECT {
-        corner: POINT {
+    let mut rect = Rect {
+        corner: Point {
             x: SIS_ORG_X - 1,
             y: SIS_ORG_Y - 1,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: 1,
             height: (dimensions.1 - 13 + 2) as i16,
         },

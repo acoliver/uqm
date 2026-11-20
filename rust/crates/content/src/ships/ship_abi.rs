@@ -8,14 +8,13 @@ pub use crate::engine::battle::ai_constants::{
 pub use crate::engine::battle::flags::{
     APPEARING, DISAPPEARING, FINITE_LIFE, MAX_TIME_VALUE, NONSOLID, PLAYER_SHIP, PRE_PROCESS,
 };
-use crate::graphics::flash::FlashContext;
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
     captain_stuff, state, state__bindgen_ty_1,
     tfb_soundsample, TFB_SoundSample,
     CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ElementRecord, EVALUATE_DESC, FLEET_STUFF,
-    INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    PRIMITIVE, PRIM_DESC, RaceDescriptor, SHIP_INFO, ShipRecord,
+    INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
+    RaceDescriptor, SHIP_INFO, ShipRecord,
     STATE,
 };
 // Shared engine records used by the Rust runtime.
@@ -876,7 +875,7 @@ pub type UNICODE = ::std::os::raw::c_char;
 pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
-pub use crate::graphics::native_abi::Color;
+pub use crate::graphics::geometry::Color;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct resource_index_desc {
@@ -885,38 +884,24 @@ pub struct resource_index_desc {
 pub type RESOURCE_INDEX_DESC = resource_index_desc;
 pub type RESOURCE_INDEX = *mut RESOURCE_INDEX_DESC;
 pub type RESOURCE = *const ::std::os::raw::c_char;
-pub use crate::graphics::native_abi::string_table_entry;
-pub type STRING_TABLE_ENTRY_DESC = string_table_entry;
-pub use crate::graphics::native_abi::string_table;
-pub type STRING_TABLE_DESC = string_table;
+pub type STRING_TABLE_ENTRY_DESC = crate::engine::strings::string_table::StringTableEntry;
+pub type STRING_TABLE_DESC = crate::engine::strings::string_table::StringTable;
 pub type STRING_TABLE = *mut STRING_TABLE_DESC;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
-pub use crate::graphics::native_abi::context_desc;
-pub type CONTEXT_DESC = context_desc;
-pub type FRAME_DESC = frame_desc;
-pub use crate::graphics::native_abi::font_desc;
-pub type FONT_DESC = font_desc;
-pub type DRAWABLE_DESC = drawable_desc;
-pub type CONTEXT = *mut CONTEXT_DESC;
-pub type FRAME = *mut FRAME_DESC;
-pub type FONT = *mut FONT_DESC;
-pub type DRAWABLE = *mut DRAWABLE_DESC;
+pub type CONTEXT = Option<crate::graphics::context::ContextId>;
+pub type FRAME = crate::graphics::drawable::FrameId;
+pub type FONT = Option<crate::graphics::font::FontId>;
 pub type TIME_VALUE = UWORD;
 pub type COORD = SWORD;
 pub type CREATE_FLAGS = BYTE;
-pub use crate::graphics::native_abi::extent;
-pub type EXTENT = extent;
-pub use crate::graphics::native_abi::point;
-pub type POINT = point;
-pub use crate::graphics::native_abi::stamp;
-pub type STAMP = stamp;
-pub use crate::graphics::native_abi::rect;
-pub type RECT = rect;
-pub use crate::graphics::native_abi::line;
-pub type LINE = line;
+pub type EXTENT = crate::graphics::geometry::Extent;
+pub type POINT = crate::graphics::geometry::Point;
+pub type STAMP = crate::graphics::intersection::Stamp;
+pub type RECT = crate::graphics::geometry::Rect;
+pub type LINE = crate::graphics::geometry::Line;
 pub const TEXT_ALIGN_ALIGN_LEFT: TEXT_ALIGN = 0;
 pub const TEXT_ALIGN_ALIGN_CENTER: TEXT_ALIGN = 1;
 pub const TEXT_ALIGN_ALIGN_RIGHT: TEXT_ALIGN = 2;
@@ -925,17 +910,15 @@ pub const TEXT_VALIGN_VALIGN_TOP: TEXT_VALIGN = 0;
 pub const TEXT_VALIGN_VALIGN_MIDDLE: TEXT_VALIGN = 1;
 pub const TEXT_VALIGN_VALIGN_BOTTOM: TEXT_VALIGN = 2;
 pub type TEXT_VALIGN = ::std::os::raw::c_uint;
-pub use crate::graphics::native_abi::text;
-pub type TEXT = text;
 pub type COLORMAP = STRING;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
 pub const gfx_object_STAMP_PRIM: gfx_object = 1;
 pub const gfx_object_STAMPFILL_PRIM: gfx_object = 2;
-pub const gfx_object_LINE_PRIM: gfx_object = crate::graphics::native_abi::LINE_PRIMITIVE as gfx_object;
+pub const gfx_object_LINE_PRIM: gfx_object = 3;
 pub const gfx_object_TEXT_PRIM: gfx_object = 4;
 pub const gfx_object_RECT_PRIM: gfx_object = 5;
 pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
-pub const gfx_object_NUM_PRIMS: gfx_object = crate::graphics::native_abi::EMPTY_PRIMITIVE as gfx_object;
+pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
 pub type PRIM_LINKS = DWORD;
@@ -949,16 +932,11 @@ pub const ScreenFadeType_FadeSomeToBlack: ScreenFadeType = 254;
 pub const ScreenFadeType_FadeSomeToColor: ScreenFadeType = 255;
 pub type ScreenFadeType = ::std::os::raw::c_uint;
 
-pub use crate::graphics::context_abi::SetContextForeGroundColor;
-
-pub use crate::graphics::context_abi::SetContextBackGroundColor;
-pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-
-pub use crate::graphics::frame_abi::ClearDrawable;
-
-pub use crate::graphics::cmap_abi::FadeScreen;
-
-pub use crate::graphics::cmap_abi::FlushColorXForms;
+pub use crate::graphics::state::{
+    batch as BatchGraphics, fade_screen as FadeScreen, flush_color_xforms as FlushColorXForms,
+    unbatch as UnbatchGraphics,
+};
+pub use crate::graphics::menu::{background as SetContextBackGroundColor, clear as ClearDrawable, foreground as SetContextForeGroundColor};
 
 pub type SOUND_REF = STRING_TABLE;
 pub type SOUND = STRING;
@@ -999,8 +977,8 @@ pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
 
 pub type Checksum = uint32;
-pub use crate::graphics::gfx_common_abi::ScreenWidth;
-pub use crate::graphics::gfx_common_abi::ScreenHeight;
+pub const ScreenWidth: i32 = crate::graphics::state::SCREEN_WIDTH;
+pub const ScreenHeight: i32 = crate::graphics::state::SCREEN_HEIGHT;
 
 pub type VELOCITY_DESC = crate::math::velocity::VelocityDesc;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
@@ -1195,11 +1173,8 @@ pub struct MISSILE_BLOCK {
 
 
 pub use crate::engine::battle::motion::collision;
-
 pub use crate::engine::battle::motion::inertial_thrust;
-
 pub use crate::engine::world::fleet::set_race_allied;
-
 pub use crate::engine::world::fleet::start_sphere_tracking;
 
 pub type Mutex = *mut crate::threading::RustMutex;
@@ -1210,8 +1185,7 @@ pub const SYNC_CLASS_VIDEO: _bindgen_ty_6 = 4;
 pub const SYNC_CLASS_RESOURCE: _bindgen_ty_6 = 8;
 pub type _bindgen_ty_6 = ::std::os::raw::c_uint;
 pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-
-pub use crate::threading::legacy_abi::TaskSwitch;
+pub use crate::threading::yield_task as TaskSwitch;
 
 pub const COMMON: _bindgen_ty_7 = 0;
 pub const CORROSIVE: _bindgen_ty_7 = 1;
@@ -1474,7 +1448,7 @@ pub const TFB_REDRAW_FADING: _bindgen_ty_16 = 1;
 pub const TFB_REDRAW_EXPOSE: _bindgen_ty_16 = 2;
 pub const TFB_REDRAW_YES: _bindgen_ty_16 = 3;
 pub type _bindgen_ty_16 = ::std::os::raw::c_uint;
-pub use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
+pub use crate::graphics::state::{set_graphic_scale as SetGraphicScale, set_graphic_scale_mode as SetGraphicScaleMode};
 
 
 
@@ -1520,7 +1494,6 @@ pub struct menu_state {
     pub flash_rect1: RECT,
     pub flash_frame0: FRAME,
     pub flash_frame1: FRAME,
-    pub flashContext: *mut FlashContext,
     pub hMusic: MUSIC_REF,
     pub privData: *mut ::std::os::raw::c_void,
 }
@@ -1719,11 +1692,7 @@ pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
 
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
-pub use crate::graphics::native_abi::tfb_image;
-pub type TFB_Image = tfb_image;
 pub type DRAWABLE_TYPE = UWORD;
-pub use crate::graphics::native_abi::drawable_desc;
-pub use crate::graphics::native_abi::frame_desc;
 pub const TFB_DRAWCOMMANDTYPE_LINE: _bindgen_ty_28 = 0;
 pub const TFB_DRAWCOMMANDTYPE_RECTANGLE: _bindgen_ty_28 = 1;
 pub const TFB_DRAWCOMMANDTYPE_IMAGE: _bindgen_ty_28 = 2;
@@ -1740,8 +1709,6 @@ pub const TFB_DRAWCOMMANDTYPE_SENDSIGNAL: _bindgen_ty_28 = 12;
 pub const TFB_DRAWCOMMANDTYPE_REINITVIDEO: _bindgen_ty_28 = 13;
 pub const TFB_DRAWCOMMANDTYPE_CALLBACK: _bindgen_ty_28 = 14;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
-pub use crate::graphics::native_abi::tfb_drawcommandqueue;
-pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
 
 #[cfg(test)]
 mod ship_abi_tests {

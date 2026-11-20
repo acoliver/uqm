@@ -1,6 +1,6 @@
 use super::*;
 use crate::comm::locdata::{CPoint, CRect};
-use crate::graphics::cmap::Color;
+use crate::graphics::geometry::Color;
 use crate::planets::generate::consts::GAS_GIANT_ALGO;
 
 // This fake proves dependency calls only, not rendering or resource effects.
@@ -63,7 +63,7 @@ fn batches_reverse_across_rows_and_keep_every_tail() {
         );
         assert!(points
             .iter()
-            .all(|p| p.0 == 0 && p.2 == Color::new(255, 8, 255)));
+            .all(|p| p.0 == 0 && p.2 == Color::rgb(255, 8, 255)));
         assert_eq!(&gfx.calls[..4], ["frame", "origin", "clip", "set_clip"]);
         assert_eq!(
             &gfx.calls[gfx.calls.len() - 3..],

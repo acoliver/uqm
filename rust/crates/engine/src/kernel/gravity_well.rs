@@ -2,7 +2,6 @@
 
 use super::Kernel;
 use std::ffi::CStr;
-use std::ptr;
 
 /// The large, medium and small resource keys of each planet type, in the
 /// order of `PlanetFrameArray` (cons_res.c).
@@ -105,12 +104,15 @@ impl Kernel {
     /// Samatra (one past the last type) or a slave-shielded world (bit 7).
     pub fn load_gravity_well(&mut self, selector: u8) {
         for (frame, key) in self.planet.iter_mut().zip(gravity_keys(selector)) {
-            *frame = key.map_or(ptr::null_mut(), crate::battle::frames::load_graphic);
+            *frame = key.map_or(
+                crate::graphics::drawable::FrameId::NULL,
+                crate::battle::frames::load_graphic,
+            );
         }
         crate::collections::observation::observe_views(
             &self.planet,
             "engine-global:planet",
-            |frame| *frame as usize,
+            |frame| frame.bits(),
         );
     }
 

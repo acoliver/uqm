@@ -127,10 +127,6 @@ name = "graphics_loading"
 path = "tests/graphics_loading.rs"
 
 [[test]]
-name = "canvas_native"
-path = "tests/canvas_native.rs"
-
-[[test]]
 name = "queue_native"
 path = "tests/queue_native.rs"
 

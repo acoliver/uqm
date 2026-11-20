@@ -1,7 +1,8 @@
 //! Campaign initialization from retained resource metadata and prepared names.
 use super::super::battle::schema::GAME_STATE;
 use super::{queues::FleetInfo, story::StoryState, SisState, World, WorldData, FUEL_TANK_SCALE};
-use crate::graphics::native_abi::{FRAME, POINT, STRING};
+use crate::graphics::{drawable::FrameId, geometry::Point};
+use crate::strings::string_table::StringPtr;
 
 #[derive(Clone, Copy)]
 pub struct FleetRoster {
@@ -17,11 +18,11 @@ pub struct FleetTemplate {
     pub crew_level: u16,
     pub max_crew: u16,
     pub max_energy: u8,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
+    pub race_strings: StringPtr,
+    pub icons: FrameId,
+    pub melee_icon: FrameId,
     pub strength: u16,
-    pub known_location: POINT,
+    pub known_location: Point,
 }
 
 pub struct NewGameInputs {
@@ -119,7 +120,7 @@ impl World {
         self.data.flagship.log_x = inputs.log_position.0;
         self.data.flagship.log_y = inputs.log_position.1;
         self.current_star = None;
-        self.data.game.autopilot = POINT { x: -1, y: -1 };
+        self.data.game.autopilot = Point { x: -1, y: -1 };
     }
 }
 

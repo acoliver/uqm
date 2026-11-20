@@ -2,16 +2,12 @@
 pub(super) mod rules;
 pub mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::engine::Kernel as KernelOwner;
-    use crate::supermelee::session::MeleeSession;
-
-    use crate::graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable};
-    use std::ptr::NonNull;
-
-    use crate::sound::heart_ffi::fade_music as FadeMusic;
-
     use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::Kernel as KernelOwner;
+    use crate::graphics::{context::ContextLease, drawable::LoadedDrawable};
     use crate::ships::native::abi::*;
+    use crate::sound::heart_ffi::fade_music as FadeMusic;
+    use crate::supermelee::session::MeleeSession;
 
     pub(crate) mod admission;
     mod boundary;
@@ -34,7 +30,9 @@ pub mod live {
     use editing::*;
     pub(crate) fn screen_context(kernel: &KernelOwner) -> ContextLease {
         ContextLease::retain(
-            NonNull::new(kernel.screen_context).unwrap_or_else(|| panic!("melee screen context")),
+            kernel
+                .screen_context
+                .unwrap_or_else(|| panic!("melee screen context")),
         )
     }
 
@@ -128,7 +126,8 @@ pub mod live {
                 state.side = u16::from(state.melee_option != 2);
                 if state.melee_setup.fleet_value[state.side as usize] > 0 {
                     let screen = ContextLease::retain(
-                        NonNull::new(cx.kernel.screen_context.cast())
+                        cx.kernel
+                            .screen_context
                             .unwrap_or_else(|| panic!("melee save context")),
                     );
                     do_save_team(state, &screen, cx, io);
@@ -244,18 +243,25 @@ pub mod live {
     }
     fn admit_menu_rendering(state: &mut MeleeSession, kernel: &KernelOwner) -> ContextLease {
         let offscreen = ContextLease::retain(
-            NonNull::new(kernel.off_screen_context.cast())
+            kernel
+                .off_screen_context
                 .unwrap_or_else(|| panic!("melee offscreen context")),
         );
         state.menu_context = Some(ContextLease::retain(
-            NonNull::new(kernel.space_context.cast())
+            kernel
+                .space_context
                 .unwrap_or_else(|| panic!("melee drawing context")),
         ));
-        state.menu_target = Some(crate::graphics::context_abi::ContextFrame::retain(Some(
-            NonNull::new(kernel.screen.cast()).unwrap_or_else(|| panic!("melee screen frame")),
-        )));
-        state.menu_font = Some(crate::graphics::native_font::FontLease::retain(
-            NonNull::new(kernel.micro_font.cast()).unwrap_or_else(|| panic!("melee menu font")),
+        state.menu_target = Some(crate::graphics::drawable::ContextFrame::retain(
+            kernel
+                .screen
+                .non_null()
+                .unwrap_or_else(|| panic!("melee screen frame")),
+        ));
+        state.menu_font = Some(crate::graphics::font::FontLease::retain(
+            kernel
+                .micro_font
+                .unwrap_or_else(|| panic!("melee menu font")),
         ));
         offscreen
     }

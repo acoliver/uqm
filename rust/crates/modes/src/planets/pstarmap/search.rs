@@ -348,7 +348,7 @@ mod tests {
     use crate::engine::input::InputRuntime;
     fn star(prefix: u8, postfix: u8) -> CStarDesc {
         CStarDesc {
-            star_pt: POINT { x: 0, y: 0 },
+            star_pt: Point { x: 0, y: 0 },
             star_type: 0,
             index: 0,
             prefix,

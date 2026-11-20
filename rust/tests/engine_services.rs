@@ -1,9 +1,7 @@
 //! Resource and movie lifecycle through the engine's normal library build.
 use std::ffi::CString;
 use std::ptr;
-use uqm_rust::graphics::sdl::lifecycle_abi::{
-    GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics,
-};
+use uqm_rust::graphics::present::GraphicsOptions;
 use uqm_rust::resource::ffi_bridge::_cur_resfile_name;
 use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::load_string_table_file};
 use uqm_rust::video::{control::*, ffi::*, legacy::*};
@@ -76,10 +74,7 @@ fixture.absent = 3DOVID:missing.duk
         assert!(load_string_table_file(&dir, c"strings.txt".as_ptr()).is_null());
         _cur_resfile_name = ptr::null();
         let options = GraphicsOptions::default();
-        assert_eq!(
-            TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
-            0
-        );
+        uqm_rust::graphics::present::init_graphics(1, 0, options, 320, 240);
         assert_eq!(InitVideoPlayer(0), 1);
         assert_eq!(VidPlay(ptr::null_mut()), 0);
         assert_eq!(VidProcessFrame(), 0);
@@ -119,7 +114,7 @@ fixture.absent = 3DOVID:missing.duk
         UninitVideoPlayer();
         assert!(!rust_process_video_frame());
         uqm_rust::sound::rodio_audio::rust_audio_uninit();
-        TFB_UninitGraphics();
+        uqm_rust::graphics::present::uninit_graphics();
         drop(mount);
     }
     replay_audio_exports_follow_sample_completion_and_transport();

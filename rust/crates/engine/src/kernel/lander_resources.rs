@@ -1,7 +1,7 @@
 //! Campaign-owned lander graphics, sound bank and orbital themes.
 
 use crate::{
-    graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable},
+    graphics::drawable::{ContextFrame, LoadedDrawable},
     sound::{owned_bank::LoadedSoundBank, resource_types::LoadedMusic, types::MusicRef},
 };
 use std::ffi::CStr;

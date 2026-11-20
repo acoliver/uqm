@@ -9,7 +9,7 @@ pub use snapshot::{SolarBodySnapshot, SolarSnapshot};
 mod ownership_tests;
 
 use super::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
-use crate::graphics::{drawable_abi::LoadedDrawable, native_abi::POINT};
+use crate::graphics::{drawable::LoadedDrawable, geometry::Point};
 use crate::math::RandomContext;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,7 +133,7 @@ impl<'a> SolarSys<'a> {
         self.descriptor(body).data_index
     }
 
-    pub fn orbital_location(&self, body: Body) -> POINT {
+    pub fn orbital_location(&self, body: Body) -> Point {
         self.planets[body.planet()].location
     }
 

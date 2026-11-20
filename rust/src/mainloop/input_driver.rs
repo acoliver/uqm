@@ -10,7 +10,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     crate::mainloop::input_frame::rust_begin_input_loop();
     loop {
         crate::engine::host::process_async();
-        crate::engine::host::display::process_events();
+        crate::graphics::sdl::process_events();
         process_utility_keys(controls);
         super::yield_input_loop(crate::threading::yield_task);
         if step
@@ -49,7 +49,7 @@ fn process_utility_keys(input: &crate::engine::input::InputSession) {
     }
     if state.menu[KEY_FULLSCREEN as usize] != 0 {
         FlushInput(input);
-        crate::graphics::tfb_draw_abi::toggle_fullscreen();
+        crate::graphics::present::toggle_fullscreen();
     }
 }
 

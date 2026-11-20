@@ -5,7 +5,6 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{abi::*, cosine, sine};
 #[test]
 fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
@@ -50,7 +49,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
             with_rng(19, 1, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 1);
+            assert_eq!(((*e).next.image.frame.raw()).index(), 1);
             assert_eq!((*e).turn, 2);
             let mut v: VELOCITY_DESC = mem::zeroed();
             let speed = (15 << ONE_SHIFT) << 1 << VELOCITY_SHIFT;
@@ -64,12 +63,12 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                     hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
                 });
                 assert_eq!((*e).turn, expected);
-                assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 1);
+                assert_eq!(((*e).next.image.frame.raw()).index(), 1);
             }
             with_rng(19, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 2);
+            assert_eq!(((*e).next.image.frame.raw()).index(), 2);
             assert_eq!((*e).turn, 2);
             battle_context::dispose(h);
         }

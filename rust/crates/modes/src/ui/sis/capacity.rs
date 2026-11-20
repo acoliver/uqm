@@ -1,11 +1,9 @@
 //! Flagship capacities and physical crew, mineral and fuel positions.
-use crate::starbase::sis_modules as equipment;
-
 use crate::engine::world::SisState;
 use crate::graphics::{
-    context_abi::ContextLease,
-    native_abi::{Color, EXTENT, POINT, RECT},
+    context::ContextLease, geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
 };
+use crate::starbase::sis_modules as equipment;
 use crate::ui::rgb15;
 use equipment::{fuel_bar_at, ModuleType};
 
@@ -56,7 +54,7 @@ fn fuel_color(i: usize) -> Color {
 }
 
 pub(crate) struct CapacityCell {
-    pub point: POINT,
+    pub point: Point,
     pub foreground: Color,
 }
 
@@ -91,7 +89,7 @@ pub(crate) fn crew_cell(state: &SisState, pc_fonts: bool) -> Option<CapacityCell
     let row = i32::from(seat) / CREW_PER_ROW;
     let col = i32::from(seat) % CREW_PER_ROW;
     Some(CapacityCell {
-        point: POINT {
+        point: Point {
             x: (27 + i32::from(slot) * SHIP_PIECE_OFFSET - col * 2) as i16,
             y: (34 - row * 2) as i16,
         },
@@ -110,7 +108,7 @@ pub(crate) fn storage_cell(state: &SisState) -> Option<CapacityCell> {
     )?;
     let row = i32::from(cell) / SBAY_MASS_PER_ROW;
     Some(CapacityCell {
-        point: POINT {
+        point: Point {
             x: (19 + i32::from(slot) * SHIP_PIECE_OFFSET) as i16,
             y: (34 - if row == 0 { 0 } else { row - 1 } * 2) as i16,
         },
@@ -127,7 +125,7 @@ pub(crate) fn fuel_cell(state: &SisState) -> Option<(CapacityCell, Color)> {
     let bar = fuel_bar_at(&capacities, state.fuel_on_board, state.fuel_on_board)?;
     Some((
         CapacityCell {
-            point: POINT {
+            point: Point {
                 x: bar.x as i16,
                 y: bar.y as i16,
             },
@@ -142,9 +140,9 @@ fn draw_fuel_bar(context: &ContextLease, state: &SisState, filled: bool) {
         fuel_cell(state).unwrap_or_else(|| panic!("fuel bar below flagship capacity"));
     context.set_foreground(cell.foreground);
     context.set_background(background);
-    let mut rect = RECT {
+    let mut rect = Rect {
         corner: cell.point,
-        extent: EXTENT {
+        extent: Extent {
             width: 3,
             height: 1,
         },
@@ -197,9 +195,9 @@ pub(crate) fn draw_blueprint_cells(context: &ContextLease, state: &SisState, pc_
                 .unwrap_or_else(|| panic!("blueprint cargo exceeds flagship capacity"));
             context.fill_rectangle(
                 cell.foreground,
-                RECT {
+                Rect {
                     corner: cell.point,
-                    extent: EXTENT {
+                    extent: Extent {
                         width: 9,
                         height: 1,
                     },
@@ -239,7 +237,7 @@ mod tests {
         )) {
             return;
         }
-        use crate::graphics::context_abi::{ContextFrame, ContextLease};
+        use crate::graphics::{context::ContextLease, drawable::ContextFrame};
         let mut game = crate::engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
@@ -254,7 +252,7 @@ mod tests {
         state.fuel_on_board = 1001;
         let before = *state;
         let context = ContextLease::require(game.kernel.status_context);
-        let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+        let frame = ContextFrame::retain(game.kernel.screen);
         context.set_frame(frame.clone());
         context.set_background(rgb15(0, 0, 0));
         context.clear();
@@ -262,12 +260,12 @@ mod tests {
         context.flush();
         let extent = frame.rect().extent;
         for point in [
-            POINT { x: -1, y: 0 },
-            POINT {
+            Point { x: -1, y: 0 },
+            Point {
                 x: extent.width,
                 y: 0,
             },
-            POINT {
+            Point {
                 x: 0,
                 y: extent.height,
             },
@@ -278,7 +276,7 @@ mod tests {
             );
         }
         let pixel = |x, y| {
-            let color = frame.pixel(POINT { x, y });
+            let color = frame.pixel(Point { x, y });
             (color.r, color.g, color.b)
         };
         for (x, y, rgb) in [

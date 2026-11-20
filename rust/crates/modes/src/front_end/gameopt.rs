@@ -16,7 +16,6 @@ use picker::picker_slot;
 use picker::MAX_SAVED_GAMES;
 use picker::SAVES_PER_PAGE;
 pub use picker::{picker_action, PickerAction};
-
 pub use runtime::game_options;
 
 pub(crate) mod runtime {
@@ -25,8 +24,6 @@ pub(crate) mod runtime {
 
     mod save_load;
 
-    use save_load::pick_game;
-
     use super::{PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::engine::world::{
         activity::activity_flags::{CHECK_ABORT, CHECK_LOAD},
@@ -34,13 +31,13 @@ pub(crate) mod runtime {
     };
     use crate::engine::world::{generation::SolarSnapshot, MUSIC_DISABLED};
     use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
-    use crate::graphics::context_abi::ContextLease;
-    use crate::graphics::native_abi::{BOOLEAN, COUNT, EXTENT, POINT, RECT};
+    use crate::graphics::context::ContextLease;
     use crate::input::frames::*;
     use crate::starbase::ids::{NAMING_STRING_BASE, OPTION_STRING_BASE, SAFE_X};
     use crate::ui::menu_state::{PM_SAVE_GAME, PM_SOUND_ON};
     use crate::ui::settings::{play_menu_sound, OPT_PC};
     use crate::ui::sis::{draw_status_message, set_flash_rect, set_menu_flash};
+    use save_load::pick_game;
     use uqm_engine::time::counter_abi::ONE_SECOND;
 
     const SIS_NAME_SIZE: usize = 16;
@@ -70,9 +67,9 @@ pub(crate) mod runtime {
     const CHANGE_SHIP_SETTING: u8 = 9;
     const EXIT_SETTINGS_MENU: u8 = 10;
 
-    const DDSHS_NORMAL: COUNT = 0;
-    const DDSHS_EDIT: COUNT = 1;
-    const DDSHS_BLOCKCUR: COUNT = 2;
+    const DDSHS_NORMAL: u16 = 0;
+    const DDSHS_EDIT: u16 = 1;
+    const DDSHS_BLOCKCUR: u16 = 2;
 
     // Cast-valued macros in sounds.h and sis.h are not emitted by bindgen.
     const MENU_SOUND_ARROWS: u16 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
@@ -249,7 +246,7 @@ pub(crate) mod runtime {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         solar: Option<&crate::planets::solar_system::SolarSystem>,
-    ) -> BOOLEAN {
+    ) -> u32 {
         let solar = solar.map(|visit| visit.snapshot(cx.screen_dimensions()));
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();

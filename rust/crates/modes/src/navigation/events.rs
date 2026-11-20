@@ -24,7 +24,7 @@ use crate::engine::world::activity::{activity_flags::IN_BATTLE, ActivityKind};
 use crate::engine::world::fleet::{set_race_allied, start_sphere_tracking};
 use crate::engine::world::queues::FleetInfo;
 use crate::engine::{StoryKey, World};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 use crate::math::square_root;
 use crate::navigation::hyper_units::{SOL_X, SOL_Y};
 use crate::navigation::hyperspace::check_hyperspace_encounter;
@@ -352,14 +352,14 @@ fn yehat_rebellion(world: &mut World) {
         (world.avail_races_ref().get(royal).actual_strength as u32 * 2 / 3) as u16;
     world.avail_races().get_mut(rebel).actual_strength =
         world.avail_races_ref().get(royal).actual_strength;
-    world.avail_races().get_mut(rebel).loc = POINT { x: 5150, y: 0 };
+    world.avail_races().get_mut(rebel).loc = Point { x: 5150, y: 0 };
     start_sphere_tracking(world, u16::from(YEHAT_REBEL_SHIP));
 }
 
 /// `race` identifies an allocated fleet in the supplied world queue.
 pub fn set_race_destination(world: &mut World, race: u8, x: i16, y: i16, days: u8, selector: u8) {
     let current = fleet(world, race);
-    world.avail_races().get_mut(current).dest_loc = POINT { x, y };
+    world.avail_races().get_mut(current).dest_loc = Point { x, y };
     world.avail_races().get_mut(current).days_left = days;
     world.avail_races().get_mut(current).func_index = selector;
 }
@@ -726,7 +726,7 @@ mod tests {
             growth_fract: 128,
             growth_err_term: 127,
             days_left: 2,
-            dest_loc: POINT { x: 5, y: -5 },
+            dest_loc: Point { x: 5, y: -5 },
             func_index: 4,
             ..Default::default()
         };

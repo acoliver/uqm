@@ -129,20 +129,15 @@ pub mod engine {
     use crate::battle::battle_native::engine::battle_song;
     use crate::battle::battle_native::engine::rgb15;
     use crate::battle::encount_native::fleet_is_infinite;
+    use crate::battle::ship_native::engine::animation_preprocess;
+    use crate::battle::ship_native::engine::ship_postprocess;
+    use crate::battle::ship_native::engine::ship_preprocess;
+    use crate::battle::status_native::engine::PostProcessStatus;
     use crate::engine::battle::views::SharedFrames;
+    use crate::engine::battle::world_elements::crew_preprocess;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine};
     use abi::*;
-
-    use crate::engine::battle::world_elements::crew_preprocess;
-
-    use crate::battle::ship_native::engine::animation_preprocess;
-
-    use crate::battle::status_native::engine::PostProcessStatus;
-
-    use crate::battle::ship_native::engine::ship_preprocess;
-
-    use crate::battle::ship_native::engine::ship_postprocess;
 
     fn same_callback(a: Option<crate::engine::battle::ElementHook>, b: ElementFn) -> bool {
         a.map(|f| f.address()) == Some(b as usize)
@@ -318,9 +313,10 @@ pub mod engine {
             .unwrap_or_else(|| panic!("dead ship descriptor"));
         descriptor.unload(cx.world, true);
 
-        let _pause = std::ptr::NonNull::new(cx.kernel.space_context).map(|context| {
-            crate::graphics::context_abi::ContextLease::retain(context).pause_batch()
-        });
+        let _pause = cx
+            .kernel
+            .space_context
+            .map(|context| crate::graphics::context::ContextLease::retain(context).pause_batch());
         if let Some(net) = &net {
             net.init_end_frames();
         }

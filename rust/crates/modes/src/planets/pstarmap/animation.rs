@@ -1,4 +1,5 @@
 use super::*;
+use crate::graphics::geometry::Rect;
 
 #[derive(Default)]
 struct Flags {
@@ -28,7 +29,7 @@ fn button_pressed(cx: &mut Cx<'_>, input: &InputSession) -> bool {
 }
 
 impl StarMap {
-    fn repair_map(&mut self, world: &World, race: u16, last: &mut RECT, next: RECT) {
+    fn repair_map(&mut self, world: &World, race: u16, last: &mut Rect, next: Rect) {
         let r = repair_rectangle(
             *last,
             next,

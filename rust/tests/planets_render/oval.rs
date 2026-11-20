@@ -1,166 +1,121 @@
 //! Offscreen coverage of retained-context oval drawing against original C fixtures.
 //! Uses real RAM drawables and C graphics dependencies, never a video driver.
 
-use std::ffi::c_void;
+use sha2::{Digest, Sha256};
 use std::fmt::Write;
 use std::io::Read;
-
-use sha2::{Digest, Sha256};
-use uqm_rust::engine::graphics::dcqueue_abi as queue;
-use uqm_rust::engine::graphics::{
-    native_offscreen::OffscreenFormats, native_surface::CapturedSurface,
-};
-use uqm_rust::graphics::native_abi as c;
+use uqm_rust::engine::graphics::surface::CapturedSurface;
+use uqm_rust::engine::test_support::native_probe;
+use uqm_rust::graphics::context::LoadedContext;
+use uqm_rust::graphics::drawable::{ContextFrame, FrameId};
+use uqm_rust::graphics::menu;
 use uqm_rust::starbase::ids::RadarLayout;
 
-extern "C" {
-    static mut ScreenWidth: i32;
-    static mut ScreenHeight: i32;
-    // The linked-test compile profile defines DEBUG, so gfxlib.h takes a name.
-    fn CreateContextAux(name: *const std::ffi::c_char) -> *mut c_void;
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn DestroyContext(context: *mut c_void) -> c::BOOLEAN;
-    fn SetContextFGFrame(frame: *mut c::FRAME_DESC) -> *mut c::FRAME_DESC;
-    fn ReadFramePixelColors(
-        frame: *mut c::FRAME_DESC,
-        pixels: *mut c::Color,
-        width: i32,
-        height: i32,
-    ) -> c::BOOLEAN;
-    fn WriteFramePixelColors(
-        frame: *mut c::FRAME_DESC,
-        pixels: *const c::Color,
-        width: i32,
-        height: i32,
-    ) -> c::BOOLEAN;
-    fn SetContextForeGroundColor(color: c::Color) -> c::Color;
-    fn TFB_DrawCanvas_Initialize();
-}
-
 struct Offscreen {
-    context: *mut c_void,
-    previous_context: *mut c_void,
+    context: Option<LoadedContext>,
+    previous_context: Option<uqm_rust::graphics::context::ContextId>,
     surface: Option<CapturedSurface>,
-    frame: *mut c::FRAME_DESC,
+    frame: FrameId,
     width: i32,
     height: i32,
-    previous_screen: (i32, i32),
-    screen: (i32, i32),
-    _formats: OffscreenFormats,
+    _graphics: native_probe::DrawQueue,
 }
 
 impl Offscreen {
     fn new(screen: (i32, i32)) -> Self {
         let layout = RadarLayout::for_screen(screen.0, screen.1);
-        let formats = OffscreenFormats::new().unwrap();
-        unsafe {
-            let previous_screen = (ScreenWidth, ScreenHeight);
-            ScreenWidth = screen.0;
-            ScreenHeight = screen.1;
-            TFB_DrawCanvas_Initialize();
-            queue::Init_DrawCommandQueue();
-            let context = CreateContextAux(c"oval parity".as_ptr());
-            assert!(!context.is_null());
-            let previous_context = SetContext(context);
-            let surface = CapturedSurface::pixmap(
-                layout.sis_screen_width as i16,
-                layout.sis_screen_height as i16,
-                1,
-            );
-            let frame = surface.as_frame();
-            assert!(!frame.is_null());
-            SetContextFGFrame(frame);
-            Self {
-                context,
-                previous_context,
-                surface: Some(surface),
-                frame,
-                width: layout.sis_screen_width,
-                height: layout.sis_screen_height,
-                previous_screen,
-                screen,
-                _formats: formats,
-            }
+        let graphics = native_probe::DrawQueue::init();
+        let context = LoadedContext::create(c"oval parity");
+        let previous_context = menu::select(Some(context.context()));
+        let surface = CapturedSurface::pixmap(
+            layout.sis_screen_width as i16,
+            layout.sis_screen_height as i16,
+            1,
+        );
+        let frame = surface.first_frame();
+        assert!(!frame.is_null());
+        menu::set_frame(frame);
+        Self {
+            context: Some(context),
+            previous_context,
+            surface: Some(surface),
+            frame,
+            width: layout.sis_screen_width,
+            height: layout.sis_screen_height,
+            _graphics: graphics,
         }
+    }
+
+    fn context(&self) -> uqm_rust::graphics::context::ContextId {
+        self.context
+            .as_ref()
+            .unwrap_or_else(|| panic!("oval fixture context"))
+            .context()
     }
 
     fn assert_context(&self, alpha: u8) {
-        unsafe {
-            assert_eq!(
-                SetContext(self.context),
-                self.context,
-                "oval changed context"
-            );
-            assert_eq!(
-                uqm_rust::graphics::drawable_abi::GetContextFGFrame(),
-                self.frame
-            );
-            let color = uqm_rust::graphics::context_abi::GetContextForeGroundColor();
-            assert_eq!([color.r, color.g, color.b, color.a], [71, 131, 197, alpha]);
-            let mut clip: c::RECT = std::mem::zeroed();
-            uqm_rust::graphics::context_abi::GetContextClipRect(&mut clip);
-            assert_eq!(
-                (
-                    clip.corner.x,
-                    clip.corner.y,
-                    clip.extent.width,
-                    clip.extent.height
-                ),
-                (0, 0, self.width as i16, self.height as i16)
-            );
-            let mode = uqm_rust::graphics::context_abi::GetContextDrawMode();
-            assert_eq!((mode.kind, mode.factor), (0, 255));
-            assert_eq!((ScreenWidth, ScreenHeight), self.screen);
-            assert_eq!(((*self.frame).HotSpot.x, (*self.frame).HotSpot.y), (0, 0));
-        }
+        assert_eq!(
+            menu::select(Some(self.context())),
+            Some(self.context()),
+            "oval changed context"
+        );
+        let target = ContextFrame::retain(self.frame);
+        assert_eq!(
+            uqm_rust::graphics::context::ContextLease::retain(self.context())
+                .target()
+                .frame(),
+            target.frame()
+        );
+        let color = native_probe::context_foreground(self.context());
+        assert_eq!([color.r, color.g, color.b, color.a], [71, 131, 197, alpha]);
+        let (clip, _) = native_probe::selected_clip();
+        assert_eq!(
+            (
+                clip.corner.x,
+                clip.corner.y,
+                clip.extent.width,
+                clip.extent.height
+            ),
+            (0, 0, self.width as i16, self.height as i16)
+        );
+        let mode = native_probe::selected_draw_mode();
+        assert_eq!((mode.kind, mode.factor), (0, 255));
+        let hot = self.frame.hot_spot();
+        assert_eq!((hot.x, hot.y), (0, 0));
     }
 
     fn reset(&self) {
-        let color = c::Color {
+        let color = uqm_rust::graphics::geometry::Color {
             r: 11,
             g: 23,
             b: 37,
             a: 255,
         };
         let pixels = vec![color; (self.width * self.height) as usize];
-        assert_ne!(
-            unsafe { WriteFramePixelColors(self.frame, pixels.as_ptr(), self.width, self.height) },
-            0
-        );
+        assert!(native_probe::write_pixels(
+            self.frame,
+            &pixels,
+            self.width,
+            self.height
+        ));
     }
 
     fn pixels(&self) -> Vec<[u8; 4]> {
-        let mut pixels = vec![
-            c::Color {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 0
-            };
-            (self.width * self.height) as usize
-        ];
-        assert_ne!(
-            unsafe {
-                ReadFramePixelColors(self.frame, pixels.as_mut_ptr(), self.width, self.height)
-            },
-            0
-        );
-        pixels.into_iter().map(|p| [p.r, p.g, p.b, p.a]).collect()
+        native_probe::read_pixels(self.frame, self.width, self.height)
+            .unwrap_or_else(|| panic!("oval fixture frame"))
+            .into_iter()
+            .map(|p| [p.r, p.g, p.b, p.a])
+            .collect()
     }
 }
 
 impl Drop for Offscreen {
     fn drop(&mut self) {
-        unsafe {
-            SetContextFGFrame(std::ptr::null_mut());
-            drop(self.surface.take());
-            queue::TFB_FlushGraphicsEx(1);
-            SetContext(self.previous_context);
-            assert_ne!(DestroyContext(self.context), 0);
-            queue::Uninit_DrawCommandQueue();
-            ScreenWidth = self.previous_screen.0;
-            ScreenHeight = self.previous_screen.1;
-        }
+        menu::set_frame(FrameId::NULL);
+        drop(self.surface.take());
+        uqm_rust::graphics::state::flush_ex(true);
+        menu::select(self.previous_context);
+        drop(self.context.take());
     }
 }
 
@@ -218,24 +173,21 @@ pub fn retained_ovals_match_original_c_full_offscreen_buffers(
             .enumerate()
         {
             for alpha in [255, 101] {
-                unsafe {
-                    SetContextForeGroundColor(c::Color {
-                        r: 71,
-                        g: 131,
-                        b: 197,
-                        a: alpha,
-                    });
-                }
+                menu::foreground(uqm_rust::graphics::geometry::Color {
+                    r: 71,
+                    g: 131,
+                    b: 197,
+                    a: alpha,
+                });
                 for mode in [Some(0), Some(1), Some(7), Some(255), None] {
-                    let c_rect = c::RECT {
-                        corner: c::POINT { x, y },
-                        extent: c::EXTENT { width, height },
+                    let c_rect = uqm_rust::graphics::geometry::Rect {
+                        corner: uqm_rust::graphics::geometry::Point { x, y },
+                        extent: uqm_rust::graphics::geometry::Extent { width, height },
                     };
                     canvas.reset();
                     canvas.assert_context(alpha);
-                    let context = uqm_rust::graphics::context_abi::ContextLease::require(
-                        canvas.context.cast(),
-                    );
+                    let context =
+                        uqm_rust::graphics::context::ContextLease::retain(canvas.context());
                     let rectangle = uqm_rust::comm::locdata::CRect {
                         corner: uqm_rust::comm::locdata::CPoint { x, y },
                         width,

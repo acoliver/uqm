@@ -8,37 +8,30 @@ mod shared;
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::battle::tactrans_native::reset_winner;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
-
-use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
 struct Battle {
     inner: shared::Battle,
     globals: uqm_rust::engine::WorldData,
-    screen: (i32, i32),
     graphics_flags: BYTE,
     counters: [BYTE; 2],
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
         let globals = crate::battle_context::with(|cx| cx.world.data);
-        let screen = (ScreenWidth, ScreenHeight);
-        let graphics_flags = _GraphicsStatusFlags;
+        let graphics_flags = graphics_status();
         let counters = crate::battle_context::with(|cx| cx.b.counters);
         let inner = shared::Battle::new(capacity);
         crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as _));
         crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
         set_recruited(true);
-        ScreenWidth = 320;
-        ScreenHeight = 240;
-        _GraphicsStatusFlags &= !4;
+        set_graphics_status(graphics_flags & !4);
         crate::battle_context::with(|cx| cx.b.counters = [10, 10]);
         crate::battle_context::with(|cx| reset_winner(cx.kernel));
         Self {
             inner,
             globals,
-            screen,
             graphics_flags,
             counters,
         }
@@ -46,13 +39,10 @@ impl Battle {
 }
 impl Drop for Battle {
     fn drop(&mut self) {
-        unsafe {
-            crate::battle_context::with(|cx| reset_winner(cx.kernel));
-            crate::battle_context::with(|cx| cx.world.data = self.globals);
-            (ScreenWidth, ScreenHeight) = self.screen;
-            _GraphicsStatusFlags = self.graphics_flags;
-            crate::battle_context::with(|cx| cx.b.counters = self.counters);
-        }
+        crate::battle_context::with(|cx| reset_winner(cx.kernel));
+        crate::battle_context::with(|cx| cx.world.data = self.globals);
+        set_graphics_status(self.graphics_flags);
+        crate::battle_context::with(|cx| cx.b.counters = self.counters);
     }
 }
 
@@ -68,7 +58,6 @@ unsafe fn set_recruited(value: bool) {
 }
 
 use shared::FrameSet;
-
 use shared::PoolShip;
 struct Ship<'a> {
     inner: shared::Ship<'a>,
@@ -363,10 +352,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (10, 1, 1, 1)
             );
             assert_eq!((*dart).playerNr, 1);
-            assert_eq!(
-                GetFrameIndex((*dart).current.image.frame.raw().cast()),
-                facing % 16
-            );
+            assert_eq!(((*dart).current.image.frame.raw()).index(), facing % 16);
             assert_eq!(
                 (*dart).current.image.frame.raw(),
                 ship.weapon_frames.frame((facing % 16) as usize)
@@ -466,7 +452,7 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
         let mut threat = Ship::new(&_battle, 1);
         ship.ship_frames.make_opaque();
         threat.ship_frames.make_opaque();
-        _GraphicsStatusFlags |= 4;
+        set_graphics_status(graphics_status() | 4);
         ship.inner
             .descriptor_mut()
             .ship_data
@@ -520,15 +506,14 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             ship.inner.ship_mut().cur_status_flags = current;
             with_rng(11, 0, || ship.inner.postprocess());
             assert_eq!(
-                GetFrameIndex(
-                    ship.inner
-                        .descriptor_mut()
-                        .ship_data
-                        .captain_control
-                        .special
-                        .raw()
-                        .cast()
-                ),
+                (ship
+                    .inner
+                    .descriptor_mut()
+                    .ship_data
+                    .captain_control
+                    .special
+                    .raw())
+                .index(),
                 index
             );
             assert_eq!((*ship.ptr()).hits, if index == 17 { 0 } else { 6 });
@@ -757,7 +742,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (*explosion).next.image.frame = ship.special_frames.selection(7);
             with_rng(3, 0, || hooks::invoke_element_pointer(animate, explosion));
             assert_eq!(
-                GetFrameIndex((*explosion).next.image.frame.raw().cast()),
+                ((*explosion).next.image.frame.raw()).index(),
                 1,
                 "advance current, not next frame"
             );
@@ -815,25 +800,16 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
         let directory = tempfile::tempdir_in(fixture_root).unwrap();
         std::fs::create_dir(directory.path().join("font")).unwrap();
         std::fs::write(directory.path().join("font/not-a-glyph.txt"), []).unwrap();
-        let format =
-            sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA32).unwrap();
-        // SAFETY: this serialized fixture owns its UIO mount and all registered drawing resources.
+        // SAFETY: this serialized fixture owns its content mount and all registered drawing resources.
         unsafe {
-            use uqm_rust::graphics::drawable_abi::LoadedDrawable;
+            use uqm_rust::graphics::drawable::LoadedDrawable;
             let content =
                 uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-            let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
-            assert!(!font.is_null());
+            let font = uqm_rust::graphics::font::LoadedFont::load_file(c"font")
+                .unwrap_or_else(|| panic!("font fixture"));
             drop(content);
-            #[cfg(feature = "debug-process")]
-            let context =
-                uqm_rust::graphics::context_abi::CreateContextAux(c"melee-death-test".as_ptr());
-            #[cfg(not(feature = "debug-process"))]
-            let context = uqm_rust::graphics::context_abi::CreateContextAux();
-            let saved_screen = uqm_rust::graphics::sdl::lifecycle_abi::SDL_Screen;
-            uqm_rust::graphics::sdl::lifecycle_abi::SDL_Screen = format.raw().cast();
-            let saved_format = uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf;
-            uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf = format.raw().cast();
+            let context = uqm_rust::graphics::context::LoadedContext::create(c"melee-death-test");
+            let screens = uqm_rust::engine::test_support::native_probe::DrawQueue::init();
             let picker = LoadedDrawable::create(2, 149, 55, 2).unwrap();
             let status = LoadedDrawable::create(2, 1, 1, 4).unwrap();
             let saved_graphics = crate::battle_context::with(|cx| {
@@ -842,9 +818,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     cx.kernel.tiny_font,
                     cx.kernel.status_frame,
                 );
-                cx.kernel.off_screen_context = context.cast();
-                cx.kernel.tiny_font = font.cast();
-                cx.kernel.status_frame = status.lease().frame(0).unwrap().cast();
+                cx.kernel.off_screen_context = Some(context.context());
+                cx.kernel.tiny_font = Some(font.font());
+                cx.kernel.status_frame = status.first_frame();
                 saved
             });
             for computer in [false, true] {
@@ -1020,12 +996,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     cx.kernel.status_frame,
                 ) = saved_graphics;
             });
-            uqm_rust::graphics::font_abi::DestroyFont(font);
-            uqm_rust::graphics::context_abi::DestroyContext(context);
-            drop((picker, status));
-            uqm_rust::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics();
-            uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf = saved_format;
-            uqm_rust::graphics::sdl::lifecycle_abi::SDL_Screen = saved_screen;
+            drop((font, context, picker, status, screens));
         }
     })
 }

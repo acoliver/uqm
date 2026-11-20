@@ -1,17 +1,12 @@
 //! Production surface drawing adapter over low-level graphics services.
 
-use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_abi::POINT as CPoint,
-};
-use std::collections::HashMap;
-
 use super::assembly::SharedSurface;
 use super::entities::{SurfaceEntityId, SurfaceEntityKind};
 use super::resources::PlanetSideAssets;
 use super::runtime::{AdapterError, PlanetSideGraphics, RenderSnapshot};
-
 use super::selection::{LANDING_CURSOR_STEP, MAP_WIDTH};
+use crate::graphics::{context::ContextLease, drawable::ContextFrame, geometry::Point as CPoint};
+use std::collections::HashMap;
 
 const SURFACE_WIDTH: i32 = 242;
 
@@ -109,7 +104,7 @@ impl SurfaceFrameRegistry {
     }
 }
 pub struct SurfaceDrawing<'a> {
-    pub planet: crate::engine::graphics::context_abi::ContextLease,
+    pub planet: crate::engine::graphics::context::ContextLease,
     pub scan: &'a crate::planets::scan::state::ScanState,
     pub refresh: fn(
         &crate::planets::scan::state::ScanState,
@@ -173,7 +168,7 @@ impl PlanetSideGraphics for CffiPlanetSideGraphics<'_, '_> {
                 draw_crew_meter(&self.drawing.radar, &lander, snapshot.lander.crew.get());
             })
         });
-        crate::graphics::dcqueue_abi::present_retained(&self.drawing.planet);
+        self.drawing.planet.present_retained();
         Ok(())
     }
 }
@@ -208,7 +203,7 @@ pub fn draw_surface_entities(
     }
 }
 
-fn damage_color(remaining: u8) -> crate::graphics::native_abi::Color {
+fn damage_color(remaining: u8) -> crate::graphics::geometry::Color {
     let (r, g, b) = match remaining {
         7 => (31, 31, 31),
         6 => (31, 31, 10),
@@ -219,7 +214,7 @@ fn damage_color(remaining: u8) -> crate::graphics::native_abi::Color {
         1 => (27, 0, 0),
         _ => unreachable!("damage flash has seven colors"),
     };
-    crate::graphics::native_abi::Color {
+    crate::graphics::geometry::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),
         b: (b << 3) | (b >> 2),
@@ -438,10 +433,9 @@ mod tests {
             return;
         }
         {
-            let owner =
-                crate::graphics::context_abi::LoadedContext::create(c"uninitialized display");
+            let owner = crate::graphics::context::LoadedContext::create(c"uninitialized display");
             assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                crate::graphics::dcqueue_abi::present_retained(&owner.lease());
+                owner.lease().present_retained();
             }))
             .is_err());
         }
@@ -449,9 +443,8 @@ mod tests {
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
-        crate::graphics::dcqueue_abi::present_retained(
-            &crate::graphics::context_abi::ContextLease::require(game.kernel.status_context),
-        );
+        crate::graphics::context::ContextLease::require(game.kernel.status_context)
+            .present_retained();
         display.finish(game);
     }
 

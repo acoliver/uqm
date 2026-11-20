@@ -40,7 +40,7 @@ fn public_campaign_copy_does_not_traverse_live_records() {
     use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut world = World::new();
     world.story = Some(uqm_rust::state::game_state::StoryState::new());
-    world.data.game.ship_stamp.frame = std::ptr::dangling_mut();
+    world.data.game.ship_stamp.frame = uqm_rust::graphics::drawable::FrameId::from_bits(1 << 16);
     let id = world.npc_built_ships().alloc().unwrap();
     world.npc_built_ships().put(id);
     let id = world.built_ships().alloc().unwrap();
@@ -80,7 +80,7 @@ fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     }
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    let frames = uqm_rust::graphics::drawable::LoadedDrawable::create(8, 64, 140, 100).unwrap();
     game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
     game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
     game.kernel.star_con_font = game.kernel.tiny_font;
@@ -309,7 +309,7 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
         fragment.race_id = SAMATRA_SHIP as u8;
         fragment.species_id = SPECIES_ID_VUX_ID;
         fragment.race_strings = std::ptr::dangling_mut();
-        fragment.icons = std::ptr::dangling_mut();
+        fragment.icons = uqm_rust::graphics::drawable::FrameId::from_bits(1 << 16);
         fragment.index = index;
         fragment.crew_level = crew;
         fragment.max_crew = 19;
@@ -407,7 +407,7 @@ fn lander_status_releases_world_before_gauge_and_lander_drawing() {
     };
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    let frames = uqm_rust::graphics::drawable::LoadedDrawable::create(8, 64, 140, 100).unwrap();
     game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
     game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
     game.world.data.flagship.module_slots.fill(255);

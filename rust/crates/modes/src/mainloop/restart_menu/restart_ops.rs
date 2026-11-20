@@ -7,10 +7,8 @@ use crate::engine::{
     StoryKey,
 };
 use crate::graphics::{
-    context_abi::{BatchGuard, ContextFrame, ContextLease, Overlay},
-    drawable_abi::LoadedDrawable,
-    native_abi::{Color, POINT, TEXT_ALIGN_ALIGN_RIGHT},
-    native_font::FontLease,
+    context::BatchGuard, context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
+    font::FontLease, geometry::Color, geometry::Point, geometry::TextAlign, highlight::Overlay,
 };
 use crate::sound::resource_types::LoadedMusic;
 use uqm_engine::time::counter_abi::{GetTimeCounter, ONE_SECOND};
@@ -293,7 +291,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
             context.finish_color_transforms();
             context.draw_stamp(
                 &frame,
-                POINT {
+                Point {
                     x: centered_coordinate(width, bounds.width),
                     y: centered_coordinate(height, bounds.height),
                 },
@@ -304,11 +302,11 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
                     .as_ref()
                     .unwrap_or_else(|| panic!("restart tiny font")),
                 &version,
-                POINT {
+                Point {
                     x: (width - 3) as i16,
                     y: (height - 2) as i16,
                 },
-                TEXT_ALIGN_ALIGN_RIGHT,
+                TextAlign::Right,
                 Color {
                     r: 255,
                     g: 255,
@@ -320,7 +318,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
     }
     fn draw_restart_menu_state(&mut self, state: u8) {
         let frame = self.menu.frame().wrapped_frame(u16::from(state) + 1);
-        self.menu.overlay().set_frame(POINT { x: 0, y: 0 }, frame);
+        self.menu.overlay().set_frame(Point { x: 0, y: 0 }, frame);
     }
     fn set_menu_sounds(&mut self, first: u16, second: u16) {
         self.cx

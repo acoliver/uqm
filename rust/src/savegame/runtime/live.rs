@@ -1,15 +1,14 @@
 //! Live save capture over the supplied campaign, kernel and optional solar visit.
 
-use crate::engine::{Kernel, World};
-use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
-use std::fmt;
-
 use super::location::{self, LocationError};
 use super::solar::{GameStrings, SolarSummary, SolarSystemOwner};
 use super::star::{self, StarError};
 use crate::engine::save::{snapshot, SessionView};
 use crate::engine::world::generation::SolarSnapshot;
+use crate::engine::{Kernel, World};
 use crate::savegame::types::{SaveFile, StarDesc};
+use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
+use std::fmt;
 
 /// `GAME_STRING (index)` over the loaded `GameStrings` table.
 struct LiveGameStrings<'a>(&'a Kernel);
@@ -36,7 +35,7 @@ pub unsafe fn capture_prepared(
     world: &mut World,
     kernel: &Kernel,
     star: StarDesc,
-    ip_location: crate::graphics::native_abi::POINT,
+    ip_location: crate::graphics::geometry::Point,
     name: &[u8],
     state: Option<SolarSnapshot>,
 ) -> anyhow::Result<SaveFile> {

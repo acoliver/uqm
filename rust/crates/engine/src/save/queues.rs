@@ -38,15 +38,14 @@
 //! templates. The "IGpQ" and "Enct" queues are in `groups`, which uses the same
 //! typed traversal order.
 
-use std::fmt;
-
 use super::super::battle::link_queue::{LinkQueue, QueueRecord};
 use super::super::clock::NUM_EVENTS;
 use super::super::world::fleet::captain_name;
 use super::super::world::queues::{FleetInfo, Fragment, ShipFragment};
 use super::super::World;
 use super::activity::{INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY};
-use crate::graphics::native_abi::POINT as CPoint;
+use crate::graphics::geometry::Point as CPoint;
+use std::fmt;
 use uqm_save::{Point, RaceEntry, ShipFragmentEntry};
 
 /// `MAX_BUILT_SHIPS` (sis.h): hangar slots, so the bound of an escort's index.

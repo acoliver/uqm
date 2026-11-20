@@ -59,5 +59,5 @@ pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
 pub use crate::math::RandomContext;
-pub use crate::graphics::native_abi::{POINT, EXTENT};
+pub use crate::graphics::geometry::{Extent, Point};
 pub use crate::ships::native::abi::{BOOLEAN, MELEE_OPTIONS, COUNT, MeleeShip, MUSIC_REF, TimeCount, VELOCITY_DESC};

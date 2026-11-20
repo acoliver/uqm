@@ -6,18 +6,11 @@ pub use crate::engine::save::location::LocationError;
 use crate::engine::save::location::{OrbitLocation, SolarLocation};
 use crate::engine::world::generation::SolarSnapshot;
 use crate::engine::world::planet_info::ScanRetrieveMask;
-use crate::graphics::native_abi::FRAME_DESC;
 use crate::planets::solar_system::BodyLocation;
 
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.
-///
-/// # Safety
-/// `frame` must be NULL or point at a live `FRAME_DESC`.
-unsafe fn frame_index(frame: *const FRAME_DESC) -> u16 {
-    if frame.is_null() {
-        return 0;
-    }
-    (*frame).Index
+fn frame_index(frame: crate::graphics::drawable::FrameId) -> u16 {
+    frame.index()
 }
 
 /// Prepare the save location from the active solar session.
@@ -55,7 +48,7 @@ unsafe fn prepare_non_orbital_location(
     game: &CGameState,
     state: &SolarSnapshot,
 ) -> Result<SolarLocation, LocationError> {
-    let ship_facing = frame_index(game.ship_stamp.frame.cast::<FRAME_DESC>())
+    let ship_facing = frame_index(game.ship_stamp.frame)
         .checked_add(1)
         .ok_or(LocationError::FrameIndexOverflow)?;
     // (ip_planet, ip_location): the outer system keeps the location.

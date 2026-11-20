@@ -18,24 +18,20 @@ pub use self::{
     res_put_color as res_PutColor, res_put_integer as res_PutInteger,
     res_put_string as res_PutString,
 };
-
-use std::ffi::{c_char, c_int, c_long, c_void, CStr, CString};
-use std::ptr;
-use std::sync::Mutex;
-
 use super::dispatch::ResourceDispatch;
 use super::ffi_types::{
     ResourceData, ResourceFreeFun, ResourceLoadFileFun, ResourceLoadFun, ResourceStringFun,
 };
 use super::propfile::parse_propfile;
 use super::type_registry;
+use std::ffi::{c_char, c_int, c_long, c_void, CStr, CString};
+use std::ptr;
+use std::sync::Mutex;
 
 // =============================================================================
 // UIO extern imports — C file I/O layer
 // =============================================================================
 
-#[cfg(not(test))]
-use crate::graphics::resgfx::InstallGraphicResTypes;
 #[cfg(not(test))]
 use crate::strings::sresins::install_resource_types;
 #[cfg(not(test))]
@@ -235,7 +231,7 @@ pub unsafe extern "C" fn InitResourceSystem() -> *mut c_void {
         // (same calls as C InitResourceSystem in resinit.c)
         #[cfg(not(test))]
         unsafe {
-            InstallGraphicResTypes();
+            with_dispatch(|dispatch| super::cache::install_types(&mut dispatch.type_registry));
             install_resource_types();
             #[cfg(feature = "audio_heart")]
             {
@@ -2006,24 +2002,14 @@ mod tests {
     }
 
     #[test]
-    fn color_property_accessors_have_packed_rust_signatures() {
-        let _: unsafe fn(*const c_char) -> c_int = crate::graphics::native_abi::res_IsColor;
-        let _: unsafe fn(*const c_char) -> u32 = crate::graphics::native_abi::res_GetColor;
-        let _: unsafe fn(*const c_char, u32) = crate::graphics::native_abi::res_PutColor;
-    }
-
-    #[test]
     #[serial]
     fn graphics_property_imports_preserve_rgba_byte_order() {
         unsafe {
             reset_state();
             let key = c"test.graphics.rgba";
-            crate::graphics::native_abi::res_PutColor(key.as_ptr(), 0x12345678);
-            assert_eq!(crate::graphics::native_abi::res_IsColor(key.as_ptr()), 1);
-            assert_eq!(
-                crate::graphics::native_abi::res_GetColor(key.as_ptr()),
-                0x12345678
-            );
+            res_PutColor(key.as_ptr(), 0x12345678);
+            assert_eq!(res_IsColor(key.as_ptr()), 1);
+            assert_eq!(res_GetColor(key.as_ptr()), 0x12345678);
             let value = CStr::from_ptr(res_GetString(key.as_ptr()));
             assert_eq!(value.to_bytes(), b"");
         }

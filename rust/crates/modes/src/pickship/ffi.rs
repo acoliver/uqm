@@ -2,30 +2,25 @@
 //! `DrawArmadaPickShip`, with the drawing and input calls of `pickship.c` in
 //! the order the C made them. The rules they apply are in the parent module.
 
+use super::{
+    crew_label, crew_strip, find_escort, highlight, icon_origin, moved, name_strip, slot, Area,
+    Cursor, Direction, Escort, Slot, ICON_HEIGHT, ICON_WIDTH, NO_ID,
+};
 use crate::battle::context_access::links;
 use crate::comm::dispatch::production_captain_name;
+use crate::comm::locdata::{CColor, CPoint, CRect};
+use crate::engine::world::activity::activity_flags::CHECK_ABORT;
 use crate::engine::{
     battle::{Cx, ShipId},
     observe::Io,
     world::activity::ActivityControl,
     Kernel as KernelOwner,
 };
-
-use std::ffi::c_int;
-
-use super::{
-    crew_label, crew_strip, find_escort, highlight, icon_origin, moved, name_strip, slot, Area,
-    Cursor, Direction, Escort, Slot, ICON_HEIGHT, ICON_WIDTH, NO_ID,
-};
 use crate::input::frames::{
     KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
-
-use crate::comm::locdata::{CColor, CPoint, CRect};
-
-use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-
 use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
+use std::ffi::c_int;
 
 /// `RPG_PLAYER_NUM`.
 const RPG_PLAYER_NUM: usize = 0;
@@ -37,16 +32,12 @@ const MENU_SOUND_NONE: u16 = 0;
 /// `MENU_SOUND_UP | DOWN | LEFT | RIGHT`.
 const MENU_SOUND_ARROWS: u16 = 0x0F;
 const MENU_SOUND_SELECT: u16 = 1 << 4;
-/// `ALIGN_CENTER`.
-const ALIGN_CENTER: u32 = 1;
 /// `RUN_AWAY_FUEL_COST`.
 const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
-use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
-
 use crate::battle::encount_native::engine::fleet_is_infinite;
-
 use crate::engine::world::IN_HYPERSPACE;
+use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 
 fn color(color: Rgba) -> CColor {
     CColor {
@@ -57,14 +48,14 @@ fn color(color: Rgba) -> CColor {
     }
 }
 
-fn rectangle(area: Area) -> crate::graphics::native_abi::RECT {
-    use crate::graphics::native_abi::{EXTENT, POINT, RECT};
-    RECT {
-        corner: POINT {
+fn rectangle(area: Area) -> crate::graphics::geometry::Rect {
+    use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+    Rect {
+        corner: Point {
             x: area.x,
             y: area.y,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: area.width,
             height: area.height,
         },
@@ -81,9 +72,9 @@ struct PickerState {
     chosen: Option<ShipId>,
     frame: (i16, i16),
     /// `MENU_STATE.flash_rect0`, which `SetFlashRect` keeps pointing at.
-    context: crate::graphics::context_abi::ContextLease,
-    screen: crate::graphics::context_abi::ContextLease,
-    font: crate::graphics::native_font::FontLease,
+    context: crate::graphics::context::ContextLease,
+    screen: crate::graphics::context::ContextLease,
+    font: crate::graphics::font::FontLease,
 }
 
 /// Every `STARSHIP` of the player's queue before the flagship, which is the
@@ -146,7 +137,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
     context.fill_rectangle(color(Rgba::BLACK), rectangle(name));
     let (crew, max_crew) = if let Some(chosen) = state.chosen {
         context.set_font(&state.font);
-        let baseline = crate::graphics::native_abi::POINT {
+        let baseline = crate::graphics::geometry::Point {
             x: name.x + (name.width >> 1),
             y: name.y + name.height - 1,
         };
@@ -157,7 +148,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
                 &state.font,
                 c"",
                 baseline,
-                ALIGN_CENTER,
+                crate::graphics::geometry::TextAlign::Center,
                 color(Rgba::rgb15(20, 10, 0)),
                 0,
             );
@@ -178,7 +169,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
                     &state.font,
                     text,
                     baseline,
-                    ALIGN_CENTER,
+                    crate::graphics::geometry::TextAlign::Center,
                     color(Rgba::rgb15(20, 10, 0)),
                     count,
                 );
@@ -197,11 +188,11 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
         context.draw_text(
             &state.font,
             &text,
-            crate::graphics::native_abi::POINT {
+            crate::graphics::geometry::Point {
                 x: crew_area.x + (crew_area.width >> 1),
                 y: name.y + name.height - 1,
             },
-            ALIGN_CENTER,
+            crate::graphics::geometry::TextAlign::Center,
             color(Rgba::rgb15(0, 20, 0)),
         );
     }
@@ -263,13 +254,15 @@ fn get_armada_star_ship(
     input: &crate::engine::input::InputSession,
     activity: ActivityControl,
 ) -> Option<ShipId> {
-    use crate::graphics::context_abi::ContextLease;
-    use std::ptr::NonNull;
+    use crate::graphics::context::ContextLease;
+
     if cx.b.counters[1] == 0 {
         return None;
     }
     let context = ContextLease::retain(
-        NonNull::new(cx.kernel.space_context).unwrap_or_else(|| panic!("picker context")),
+        cx.kernel
+            .space_context
+            .unwrap_or_else(|| panic!("picker context")),
     );
     context.with_selected(|| {
         let mut pick = CRect::default();
@@ -282,7 +275,9 @@ fn get_armada_star_ship(
             frame: (pick.corner.x, pick.corner.y),
             context: context.clone(),
             screen: ContextLease::retain(
-                NonNull::new(cx.kernel.screen_context).unwrap_or_else(|| panic!("picker screen")),
+                cx.kernel
+                    .screen_context
+                    .unwrap_or_else(|| panic!("picker screen")),
             ),
             font: cx
                 .kernel
@@ -396,33 +391,31 @@ pub(crate) fn draw_armada_pick_ship_in(
     draw_salvage_frame: c_int,
     pick_rect: &mut CRect,
 ) {
-    use crate::graphics::{
-        context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::FontLease,
-    };
-    use std::{ffi::CStr, ptr::NonNull};
+    use crate::graphics::{context::ContextLease, drawable::LoadedDrawable, font::FontLease};
+    use std::ffi::CStr;
     let (context, font, status_frame) = {
         (
             ContextLease::retain(
-                NonNull::new(kernel.space_context.cast())
+                kernel
+                    .space_context
                     .unwrap_or_else(|| panic!("missing picker context")),
             ),
             FontLease::retain(
-                NonNull::new(kernel.star_con_font.cast())
+                kernel
+                    .star_con_font
                     .unwrap_or_else(|| panic!("missing picker font")),
             ),
-            crate::graphics::drawable_abi::retain_frame_allocations(&[kernel.status_frame.cast()])
-                [0]
-            .context_frame(3),
+            crate::graphics::drawable::retain_frames(&[kernel.status_frame])[0].context_frame(3),
         )
     };
     let owner = LoadedDrawable::load(c"graphics.pickship")
         .unwrap_or_else(|| panic!("missing picker graphic"));
     let frames = owner.lease();
     let frame = frames.context_frame(0);
-    frame.replace_hotspot(crate::graphics::native_abi::POINT { x: 0, y: 0 });
+    frame.replace_hotspot(crate::graphics::geometry::Point { x: 0, y: 0 });
     let mut pick = frame.rect();
     let result = context.draw_batch(|| {
-        use crate::graphics::native_abi::POINT;
+        use crate::graphics::geometry::Point;
         let clip = context.clip_rect();
         pick.corner.x = (clip.extent.width >> 1) - (pick.extent.width >> 1);
         pick.corner.y = (clip.extent.height >> 1) - (pick.extent.height >> 1);
@@ -430,15 +423,15 @@ pub(crate) fn draw_armada_pick_ship_in(
             pick
         } else {
             let salvage_frame = frames.context_frame(1);
-            salvage_frame.replace_hotspot(POINT { x: 0, y: 0 });
+            salvage_frame.replace_hotspot(Point { x: 0, y: 0 });
             let mut salvage = salvage_frame.rect();
-            let origin = POINT {
+            let origin = Point {
                 x: (clip.extent.width >> 1) - (salvage.extent.width >> 1),
                 y: pick.corner.y - (salvage.extent.height >> 1),
             };
             context.draw_stamp(&salvage_frame, origin);
             pick.corner.y = origin.y + salvage.extent.height;
-            salvage.corner = POINT {
+            salvage.corner = Point {
                 x: pick.corner.x,
                 y: origin.y,
             };
@@ -451,11 +444,11 @@ pub(crate) fn draw_armada_pick_ship_in(
         context.draw_text(
             &font,
             ship_name,
-            POINT {
+            Point {
                 x: pick.corner.x + (pick.extent.width >> 1),
                 y: pick.corner.y + pick.extent.height - 5,
             },
-            1,
+            crate::graphics::geometry::TextAlign::Center,
             color(Rgba::rgb15(0x12, 0x12, 0x12)),
         );
         for id in links::all_links(kernel) {
@@ -475,14 +468,13 @@ pub(crate) fn draw_armada_pick_ship_in(
 
 fn draw_escort_icon(
     kernel: &KernelOwner,
-    context: &crate::graphics::context_abi::ContextLease,
-    status: &crate::graphics::context_abi::ContextFrame,
+    context: &crate::graphics::context::ContextLease,
+    status: &crate::graphics::drawable::ContextFrame,
     id: ShipId,
-    pick: crate::graphics::native_abi::RECT,
+    pick: crate::graphics::geometry::Rect,
 ) {
     use crate::graphics::{
-        context_abi::ContextFrame,
-        native_abi::{EXTENT, POINT, RECT},
+        drawable::ContextFrame, geometry::Extent, geometry::Point, geometry::Rect,
     };
     let ship = links::ship_value(kernel, id);
     if ship.captain == 0 {
@@ -490,24 +482,24 @@ fn draw_escort_icon(
     }
     let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index);
     let icon = links::with_ship_resources(kernel, id, |resources| {
-        ContextFrame::retain(std::ptr::NonNull::new(resources.icon().raw().cast()))
+        ContextFrame::retain(resources.icon().raw())
     });
     context.fill_rectangle(
         color(Rgba::BLACK),
-        RECT {
-            corner: POINT { x, y },
-            extent: EXTENT {
+        Rect {
+            corner: Point { x, y },
+            extent: Extent {
                 width: ICON_WIDTH,
                 height: ICON_HEIGHT,
             },
         },
     );
     if ship.species != NO_ID || ship.crew == 0 {
-        context.draw_stamp(&icon, POINT { x, y });
+        context.draw_stamp(&icon, Point { x, y });
         if ship.species == NO_ID {
-            context.draw_stamp(status, POINT { x: x - 1, y });
+            context.draw_stamp(status, Point { x: x - 1, y });
         }
     } else {
-        context.draw_filled_stamp(&icon, POINT { x, y }, color(Rgba::rgb15(0x00, 0x00, 0x14)));
+        context.draw_filled_stamp(&icon, Point { x, y }, color(Rgba::rgb15(0x00, 0x00, 0x14)));
     }
 }

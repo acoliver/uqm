@@ -78,14 +78,6 @@ impl NavigationSnapshot {
     }
 }
 
-#[cfg(not(test))]
-extern "C" {
-
-    #[link_name = "ScreenWidth"]
-    static mut SCREEN_WIDTH: i32;
-    #[link_name = "ScreenHeight"]
-    static mut SCREEN_HEIGHT: i32;
-}
 /// The interplanetary view geometry derived from the live screen size.
 ///
 /// These mirror the C macros in `units.h` and `planets.h`, which are all
@@ -124,31 +116,10 @@ impl ViewGeometry {
     }
 }
 
-/// The live `ScreenWidth` and `ScreenHeight`.
-#[cfg(not(test))]
+/// The screen size (C: `ScreenWidth` and `ScreenHeight`).
 pub(crate) fn screen_size() -> (i32, i32) {
-    // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
-    // init and are read-only thereafter; this runs on the game thread.
-    unsafe {
-        (
-            std::ptr::addr_of!(SCREEN_WIDTH).read(),
-            std::ptr::addr_of!(SCREEN_HEIGHT).read(),
-        )
-    }
+    crate::graphics::state::screen_dimensions()
 }
-
-/// Without the linked game the screen is the baseline size.
-#[cfg(test)]
-pub(crate) fn screen_size() -> (i32, i32) {
-    (DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
-}
-
-/// The game's baseline screen size, used only when the C globals are absent.
-#[cfg(test)]
-const DEFAULT_SCREEN_WIDTH: i32 = 320;
-/// The game's baseline screen size, used only when the C globals are absent.
-#[cfg(test)]
-const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 
 /// Read only the mode owner's copied admission value, including its live orbit flag.
 fn read_flight_state(
@@ -320,7 +291,7 @@ pub(crate) fn contact_snapshot(
             128 << 6
         };
         let point = crate::planets::solar_coords::SolarCoordinates::new(solar.screen).to_display(
-            crate::graphics::native_abi::POINT {
+            crate::graphics::geometry::Point {
                 x: location.0,
                 y: location.1,
             },
@@ -432,44 +403,46 @@ pub(crate) fn navigation_snapshot(
     snapshot
 }
 
+/// Presentation hooks for automation: stop presenting once the scheduler
+/// is terminal, trace each presentation, and capture frames on request.
+struct PresentHooks(std::sync::Arc<AutomationObserver>);
+
+impl crate::graphics::present::PresentObserver for PresentHooks {
+    fn suppress_present(&mut self) -> bool {
+        self.0.runtime.mirror.is_terminal()
+    }
+
+    fn capture(
+        &mut self,
+        count: u64,
+        samples: &[crate::graphics::presentation_diagnostics::PresentationSample],
+    ) -> Option<u64> {
+        self.0.trace_native_graphics(count, samples);
+        Some(self.0.runtime.mirror.capture_generation())
+    }
+
+    fn presented(&mut self, frame: Option<crate::graphics::presented_frame::PresentedFrame>) {
+        let mut owner = super::observer::Handle(self.0.clone());
+        let io = crate::engine::observe::Io {
+            observer: &mut owner,
+        };
+        let mut frame = crate::engine::observe::Presented { frame, stop: false };
+        io.observer.presented(&mut frame);
+    }
+}
+
 pub(crate) fn graphics_options(
-    renderer: Option<std::ffi::CString>,
     observer: Option<std::sync::Arc<AutomationObserver>>,
-) -> crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
-    let presented_owner = observer.clone();
-    crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
-        renderer,
+) -> crate::graphics::present::GraphicsOptions {
+    crate::graphics::present::GraphicsOptions {
         #[cfg(feature = "debug-process")]
         native_position: crate::automation::native_window::active_native_window_config()
             .map(|config| (config.client_bounds.x, config.client_bounds.y)),
         #[cfg(not(feature = "debug-process"))]
         native_position: None,
-        present_hook: Some(std::rc::Rc::new(move |presented| {
-            let Some(observer) = &presented_owner else {
-                return 0;
-            };
-            if !presented {
-                return i32::from(observer.runtime.mirror.is_terminal());
-            }
-            let mut owner = super::observer::Handle(observer.clone());
-            let io = crate::engine::observe::Io {
-                observer: &mut owner,
-            };
-            let mut frame = crate::engine::observe::Presented {
-                frame: crate::graphics::ffi::take_presented_frame(),
-                stop: false,
-            };
-            io.observer.presented(&mut frame);
-            i32::from(frame.stop)
-        })),
-        readback_hook: Some(std::rc::Rc::new(move |count, samples| {
-            if let Some(owner) = &observer {
-                owner.trace_native_graphics(count, samples);
-            }
-            observer
-                .as_ref()
-                .map(|owner| owner.runtime.mirror.capture_generation())
-        })),
+        observer: observer.map(|observer| {
+            Box::new(PresentHooks(observer)) as Box<dyn crate::graphics::present::PresentObserver>
+        }),
     }
 }
 // ===========================================================================
@@ -711,10 +684,7 @@ mod tests;
 #[cfg(test)]
 mod graphics_hook_tests {
     #[test]
-    fn options_install_both_live_observers() {
-        let options = super::graphics_options(None, None);
-        assert!(options.present_hook.is_some());
-        assert!(options.readback_hook.is_some());
-        assert!(options.renderer.is_none());
+    fn options_install_an_observer_only_for_automation() {
+        assert!(super::graphics_options(None).observer.is_none());
     }
 }

@@ -1,12 +1,13 @@
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 #[test]
 fn map_sessions_keep_cursor_zoom_and_origin_independent() {
-    let mut first = MapState::new((320, 240), POINT { x: 1752, y: 1450 });
-    let second = MapState::new((640, 480), POINT { x: 5000, y: 5000 });
+    let mut first = MapState::new((320, 240), Point { x: 1752, y: 1450 });
+    let second = MapState::new((640, 480), Point { x: 5000, y: 5000 });
     assert!(first.zoom(1));
     assert_eq!(first.projection.origin, first.cursor);
     assert_eq!(first.projection.zoom, 1);
     assert_eq!(second.projection.zoom, 0);
-    assert_eq!(second.projection.origin, POINT { x: 4999, y: 4999 });
+    assert_eq!(second.projection.origin, Point { x: 4999, y: 4999 });
     for _ in 0..8 {
         first.zoom(1);
     }
@@ -16,25 +17,25 @@ fn map_sessions_keep_cursor_zoom_and_origin_independent() {
         assert!(first.zoom(-1));
     }
     assert!(!first.zoom(-1));
-    assert_eq!(first.projection.origin, POINT { x: 4999, y: 4999 });
-    assert_eq!(second.cursor, POINT { x: 5000, y: 5000 });
+    assert_eq!(first.projection.origin, Point { x: 4999, y: 4999 });
+    assert_eq!(second.cursor, Point { x: 5000, y: 5000 });
 }
 
 #[test]
 fn cursor_steps_cross_pixels_and_clamp_the_universe() {
-    let mut state = MapState::new((320, 240), POINT { x: 4999, y: 4999 });
+    let mut state = MapState::new((320, 240), Point { x: 4999, y: 4999 });
     let old = state.screen_cursor();
     let movement = state.move_cursor(1, -1, None);
     assert_eq!(movement.old, old);
     assert!(movement.next.x > old.x);
     assert!(movement.next.y < old.y);
     assert!(!movement.recentered);
-    state.move_cursor(0, 0, Some(POINT { x: 9999, y: 0 }));
+    state.move_cursor(0, 0, Some(Point { x: 9999, y: 0 }));
     state.move_cursor(1, 1, None);
-    assert_eq!(state.cursor, POINT { x: 9999, y: 0 });
-    state.move_cursor(0, 0, Some(POINT { x: 0, y: 9999 }));
+    assert_eq!(state.cursor, Point { x: 9999, y: 0 });
+    state.move_cursor(0, 0, Some(Point { x: 0, y: 9999 }));
     state.move_cursor(-1, -1, None);
-    assert_eq!(state.cursor, POINT { x: 0, y: 9999 });
+    assert_eq!(state.cursor, Point { x: 0, y: 9999 });
 }
 
 #[test]
@@ -48,7 +49,7 @@ fn projections_match_original_c_checksum_across_resolutions_origins_and_zooms() 
         for (x, y) in [(4999, 4999), (0, 0), (9999, 9999), (438, 6372)] {
             for zoom in 0..=4 {
                 let p = Projection {
-                    origin: POINT { x, y },
+                    origin: Point { x, y },
                     zoom,
                     width: screen_width - 78,
                     height: screen_height - 13,
@@ -71,7 +72,7 @@ use super::*;
 
 fn projection_at(zoom: i32, x: i16, y: i16) -> Projection {
     Projection {
-        origin: POINT { x, y },
+        origin: Point { x, y },
         zoom,
         width: 242,
         height: 227,
@@ -108,7 +109,7 @@ fn inverse_shifts_negative_products_before_truncating_division() {
 #[test]
 fn projection_uses_live_screen_dimensions() {
     let p = Projection {
-        origin: POINT { x: 4999, y: 4999 },
+        origin: Point { x: 4999, y: 4999 },
         zoom: 0,
         width: 562,
         height: 467,
@@ -120,7 +121,7 @@ fn projection_uses_live_screen_dimensions() {
 
 #[test]
 fn autopilot_dashes_keep_c_postdecrement_phase() {
-    let mut p = POINT { x: 0, y: 0 };
+    let mut p = Point { x: 0, y: 0 };
     let mut walk = LineWalk::new(7, 3);
     walk.delta &= !1;
     let mut points = Vec::new();
@@ -141,7 +142,7 @@ fn autopilot_dashes_keep_c_postdecrement_phase() {
 #[test]
 fn animation_line_walker_includes_c_extra_final_step() {
     for (dx, dy) in [(4, 2), (-4, 2), (4, -2), (-4, -2), (0, 4), (4, 0)] {
-        let mut p = POINT { x: 100, y: 100 };
+        let mut p = Point { x: 100, y: 100 };
         let mut walk = LineWalk::new(dx, dy);
         let mut steps = 0;
         loop {
@@ -162,8 +163,8 @@ fn animation_line_walker_includes_c_extra_final_step() {
 
 #[test]
 fn fuel_adds_half_a_tenth_only_outside_quasispace() {
-    let origin = POINT { x: 0, y: 0 };
-    let destination = POINT { x: 300, y: 400 };
+    let origin = Point { x: 0, y: 0 };
+    let destination = Point { x: 300, y: 400 };
     assert_eq!(
         fuel_requirement(origin, destination, 0, |f| {
             assert_eq!(f, 250000);
@@ -188,16 +189,16 @@ fn fuel_adds_half_a_tenth_only_outside_quasispace() {
 
 #[test]
 fn repair_union_clips_and_aligns_scanlines_after_label_padding() {
-    let last = RECT {
-        corner: POINT { x: -5, y: -3 },
-        extent: EXTENT {
+    let last = Rect {
+        corner: Point { x: -5, y: -3 },
+        extent: Extent {
             width: 20,
             height: 20,
         },
     };
-    let next = RECT {
-        corner: POINT { x: 230, y: 219 },
-        extent: EXTENT {
+    let next = Rect {
+        corner: Point { x: 230, y: 219 },
+        extent: Extent {
             width: 30,
             height: 30,
         },
@@ -209,9 +210,9 @@ fn repair_union_clips_and_aligns_scanlines_after_label_padding() {
     );
     let r = repair_rectangle(
         zero_rect(),
-        RECT {
-            corner: POINT { x: 100, y: 100 },
-            extent: EXTENT {
+        Rect {
+            corner: Point { x: 100, y: 100 },
+            extent: Extent {
                 width: 20,
                 height: 20,
             },
@@ -227,9 +228,9 @@ fn repair_union_clips_and_aligns_scanlines_after_label_padding() {
 
 #[test]
 fn rectangle_intersection_excludes_touching_edges() {
-    let a = RECT {
-        corner: POINT { x: 10, y: 10 },
-        extent: EXTENT {
+    let a = Rect {
+        corner: Point { x: 10, y: 10 },
+        extent: Extent {
             width: 20,
             height: 20,
         },

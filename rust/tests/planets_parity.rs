@@ -18,12 +18,6 @@ mod sphere_geometry_parity;
 #[path = "planets_render/topography.rs"]
 mod topography_parity;
 
-use std::fmt::Write as _;
-use std::path::PathBuf;
-use uqm_rust::engine::world::generation::Body;
-use uqm_rust::planets::generate::{calc, orbits, surface};
-use uqm_rust::planets::solar_system::SolarSystem;
-
 use planets_common::default_gen::{
     self, layout_cases, moon_cases, moons_line, nodes_line, planets_line, DefaultOps, Layout,
     NodeKind,
@@ -33,15 +27,18 @@ use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, WorldCase, PRESET_LIFE,
 };
-use uqm_rust::graphics::native_abi::POINT;
+use std::fmt::Write as _;
+use std::path::PathBuf;
+use uqm_rust::engine::world::generation::Body;
+use uqm_rust::graphics::geometry::Point;
 use uqm_rust::math::RandomContext;
+use uqm_rust::planets::generate::{calc, orbits, surface};
+use uqm_rust::planets::solar_system::SolarSystem;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
-unsafe extern "C" {
-
-    static mut ScreenWidth: i32;
-
-}
+/// The fixed screen width (C: `ScreenWidth`).
+#[allow(non_upper_case_globals)]
+const ScreenWidth: i32 = uqm_rust::graphics::state::SCREEN_WIDTH;
 
 /// Cells past the map the C side gets, so an overrun reads as a mismatch
 /// instead of corrupting memory.
@@ -96,10 +93,10 @@ struct SuppliedGenerators {
 
 impl SuppliedGenerators {
     fn new() -> Self {
-        unsafe {
-            // `MAP_WIDTH` derives from the screen width the graphics init sets.
-            ScreenWidth = 320;
-        }
+        assert_eq!(
+            ScreenWidth, 320,
+            "`MAP_WIDTH` derives from the screen width"
+        );
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
         let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
         let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
@@ -477,7 +474,7 @@ fn gravity_and_random_locations_agree() {
             i16::from((draw as u8) % 226) + 8,
             i16::from(((draw >> 8) as u8) % 59) + 8,
         );
-        let mut point = POINT { x: 0, y: 0 };
+        let mut point = Point { x: 0, y: 0 };
         surface::generate_random_location(&mut rng, &mut point);
         assert_eq!((point.x, point.y), expected, "seed {seed}");
         assert!((8..234).contains(&point.x));
@@ -586,7 +583,7 @@ type GenerationData = (
     [PlanetDesc; 16],
     [PlanetDesc; 4],
     SystemInfo,
-    [Option<uqm_rust::graphics::native_abi::FRAME>; 6],
+    [Option<uqm_rust::graphics::drawable::FrameId>; 6],
     Option<usize>,
 );
 

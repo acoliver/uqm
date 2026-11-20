@@ -1,5 +1,6 @@
 use super::*;
 use crate::engine::species::ship::{HUMAN_SHIP, ORZ_SHIP};
+use crate::graphics::geometry::Point;
 use crate::navigation::hyper_units::Geometry;
 
 const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
@@ -136,7 +137,7 @@ fn hyperspace_daily_event_uses_the_supplied_geometry_and_rng_stream() {
         let fleet = fleets.get_mut(id);
         fleet.actual_strength = 100;
         fleet.growth_err_term = 127;
-        fleet.loc = POINT { x: 1000, y: 2000 };
+        fleet.loc = Point { x: 1000, y: 2000 };
     }
     let mut samples = Vec::new();
     let mut random = || {
@@ -223,7 +224,7 @@ fn genocide_prioritizes_druuge_and_ends_the_campaign_after_reaching_sol() {
         let mut fleets = world.avail_races();
         let fleet = fleets.get_mut(id);
         fleet.actual_strength = strength;
-        fleet.loc = POINT { x, y };
+        fleet.loc = Point { x, y };
     }
     let mut random = || panic!("genocide event RNG");
     let mut services = services(&mut random);
@@ -245,7 +246,7 @@ fn genocide_prioritizes_druuge_and_ends_the_campaign_after_reaching_sol() {
         id = fleets.succ(current);
         fleets.get_mut(current).actual_strength = 0;
     }
-    fleets.get_mut(black).loc = POINT { x: SOL_X, y: SOL_Y };
+    fleets.get_mut(black).loc = Point { x: SOL_X, y: SOL_Y };
     world.set_activity(IN_HYPERSPACE | IN_BATTLE);
     dispatch_event(&mut world, &mut services, KOHR_AH_GENOCIDE_EVENT as u8);
     assert_eq!(world.activity() & IN_BATTLE, 0);
@@ -266,7 +267,7 @@ fn thraddash_arrival_runs_the_immediate_ilwrath_callback_before_returning() {
         .at(usize::from(THRADDASH_SHIP))
         .unwrap();
     world.avail_races().get_mut(ilwrath).actual_strength = 200;
-    world.avail_races().get_mut(ilwrath).loc = POINT {
+    world.avail_races().get_mut(ilwrath).loc = Point {
         x: (2500 + 2535) / 2,
         y: (8070 + 8358) / 2,
     };
@@ -312,7 +313,7 @@ fn pkunk_departure_pause_and_absorption_keep_their_event_order() {
     assert_eq!(world.story_state(StoryKey::PKUNK_ON_THE_MOVE), 1);
     world.set_story_state(StoryKey::PKUNK_MISSION, 2);
     world.avail_races().get_mut(pkunk).days_left = 0;
-    world.avail_races().get_mut(pkunk).loc = POINT { x: 502, y: 401 };
+    world.avail_races().get_mut(pkunk).loc = Point { x: 502, y: 401 };
     dispatch_event(&mut world, &mut services, ADVANCE_PKUNK_MISSION as u8);
     assert_eq!(world.story_state(StoryKey::PKUNK_MISSION), 2);
     assert_eq!(world.story_state(StoryKey::PKUNK_ON_THE_MOVE), 0);
@@ -349,7 +350,7 @@ fn mycon_arrival_schedules_losses_before_the_return_destination() {
         ),
         (6858, 577, 30, ADVANCE_MYCON_MISSION as u8)
     );
-    world.avail_races().get_mut(mycon).loc = POINT { x: 6858, y: 577 };
+    world.avail_races().get_mut(mycon).loc = Point { x: 6858, y: 577 };
     dispatch_event(&mut world, &mut services, ADVANCE_MYCON_MISSION as u8);
     assert_eq!(
         scheduled(&world),

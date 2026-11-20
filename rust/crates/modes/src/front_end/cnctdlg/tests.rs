@@ -1,3 +1,4 @@
+use crate::graphics::geometry::Point;
 #[test]
 #[serial_test::serial]
 fn editor_keeps_initial_49_bytes_but_inserts_only_up_to_48_utf8_bytes() {
@@ -174,8 +175,8 @@ fn input_priority_keeps_the_first_pressed_menu_key() {
 }
 
 struct Display {
-    context: crate::graphics::context_abi::LoadedContext,
-    screen: crate::graphics::drawable_abi::LoadedDrawable,
+    context: crate::graphics::context::LoadedContext,
+    screen: crate::graphics::drawable::LoadedDrawable,
     player: Option<LoadedFont>,
     button: Option<LoadedFont>,
     _graphics: uqm_engine::test_support::native_session::Graphics,
@@ -195,8 +196,8 @@ impl Display {
                 LoadedFont::load(c"fixture.font").unwrap(),
             )
         };
-        let context = crate::graphics::context_abi::LoadedContext::create(c"connection fixture");
-        let screen = crate::graphics::drawable_abi::LoadedDrawable::create(8, 320, 240, 1).unwrap();
+        let context = crate::graphics::context::LoadedContext::create(c"connection fixture");
+        let screen = crate::graphics::drawable::LoadedDrawable::create(8, 320, 240, 1).unwrap();
         context.lease().set_frame(screen.lease().context_frame(0));
         Self {
             context,
@@ -234,7 +235,7 @@ fn renderer_draws_box_focus_slider_and_edit_cursor_pixels_after_font_release() {
     let measured =
         resources
             .button_font
-            .measure(c"A", POINT { x: 160, y: 83 }, TEXT_ALIGN_ALIGN_CENTER, 1);
+            .measure(c"A", Point { x: 160, y: 83 }, TextAlign::Center, 1);
     assert!(measured.visible);
     assert_eq!(
         (
@@ -247,7 +248,7 @@ fn renderer_draws_box_focus_slider_and_edit_cursor_pixels_after_font_release() {
     );
     let frame = display.screen.lease().context_frame(0);
     let rgb = |x, y| {
-        let c = frame.pixel(POINT { x, y });
+        let c = frame.pixel(Point { x, y });
         (c.r, c.g, c.b)
     };
     assert_eq!(rgb(30, 65), (165, 165, 165));

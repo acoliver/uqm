@@ -18,10 +18,10 @@ enum Case {
     Average([u32; 4]),
 }
 const COLORS: [Color; 4] = [
-    Color::with_alpha(255, 1, 2, 3),
-    Color::with_alpha(17, 230, 31, 4),
-    Color::with_alpha(91, 44, 178, 5),
-    Color::with_alpha(0, 255, 128, 6),
+    Color::rgba(255, 1, 2, 3),
+    Color::rgba(17, 230, 31, 4),
+    Color::rgba(91, 44, 178, 5),
+    Color::rgba(0, 255, 128, 6),
 ];
 const WRAP: [u32; 4] = [0xffff_ffff, 0x8000_0001, 0x7fff_ffff, 0x1234_5678];
 fn p(x: f64, y: f64, z: f64) -> Point3 {

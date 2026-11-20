@@ -21,8 +21,8 @@ pub fn set(world: &mut crate::engine::World, key: crate::engine::StoryKey, value
     world.set_story_state(key, u32::from(value));
 }
 
-pub(crate) fn color(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::Color {
-    crate::graphics::native_abi::Color {
+pub(crate) fn color(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
+    crate::graphics::geometry::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),
         b: (b << 3) | (b >> 2),

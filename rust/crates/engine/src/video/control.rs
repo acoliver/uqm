@@ -12,12 +12,6 @@ static mut CURRENT_SPEECH: *mut c_void = ptr::null_mut();
 
 use crate::sound::heart_ffi::snd_stop_speech as snd_StopSpeech;
 
-extern "C" {
-
-    static mut ScreenWidth: i32;
-    static mut ScreenHeight: i32;
-}
-
 /// # Safety
 /// Must run on the graphics thread with graphics initialized.
 pub unsafe extern "C" fn InitVideoPlayer(_use_cdrom: c_int) -> c_int {
@@ -104,8 +98,9 @@ pub unsafe extern "C" fn VidPlayEx(
     (*video).data = speech;
     VidStop();
     // C promotes the unsigned clip dimensions before converting the centered coordinates.
-    let x = (ScreenWidth as u32).wrapping_sub((*video).w) / 2;
-    let y = (ScreenHeight as u32).wrapping_sub((*video).h) / 2;
+    let (width, height) = crate::graphics::state::screen_dimensions();
+    let x = (width as u32).wrapping_sub((*video).w) / 2;
+    let y = (height as u32).wrapping_sub((*video).h) / 2;
     if tfb_play_video(video, x, y) {
         CURRENT_VIDEO = video;
         if !speech.is_null() {
@@ -199,12 +194,7 @@ fixture.absent = 3DOVID:missing.duk
         );
         // SAFETY: the child owns the content directory, surfaces and decoder handles for the full lifecycle.
         unsafe {
-            let screen =
-                sdl2_sys::SDL_CreateRGBSurface(0, 320, 240, 32, 0xff, 0xff00, 0xff0000, 0xff000000);
-            assert!(!screen.is_null());
-            crate::graphics::sdl::lifecycle_abi::SDL_Screen = screen.cast();
-            crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND =
-                ptr::addr_of_mut!(crate::graphics::sdl::lifecycle_abi::RUST_BACKEND);
+            crate::graphics::state::init_headless(crate::graphics::state::VideoMode::default());
             assert_eq!(InitVideoPlayer(0), 1);
             assert!(VidPlaying().is_null());
             assert_eq!(VidProcessFrame(), 0);
@@ -236,9 +226,7 @@ fixture.absent = 3DOVID:missing.duk
             assert!(VidPlaying().is_null());
             UninitVideoPlayer();
             crate::sound::rodio_audio::rust_audio_uninit();
-            crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND = ptr::null_mut();
-            crate::graphics::sdl::lifecycle_abi::SDL_Screen = ptr::null_mut();
-            sdl2_sys::SDL_FreeSurface(screen);
+            crate::graphics::state::uninit_headless();
         }
     }
     fn retained_playback_keeps_its_clip_after_descriptor_drop() {

@@ -34,30 +34,25 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 
 pub(crate) mod live {
     use super::page;
-    use crate::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi as render,
-        native_font::FontLease,
-    };
-    use crate::ships::master_native::ShipChoice;
-    use crate::supermelee::native::menu::live::drawing::repair_frame;
-    use crate::supermelee::session::MeleeSession;
-
     use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
+    use crate::ships::master_native::ShipChoice;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::menu::live::changes::local_change_team;
+    use crate::supermelee::native::menu::live::drawing::repair_frame;
+    use crate::supermelee::session::MeleeSession;
     use crate::supermelee::setup::{
         browser::write_team,
         team::{ship_cost, MeleeTeam as OwnedTeam},
     };
-    use std::{ffi::CString, ptr::NonNull};
+    use std::ffi::CString;
 
     fn draw_entry(
         context: &ContextLease,
         font: &FontLease,
         catalog: &[ShipChoice],
         team: &OwnedTeam,
-        origin: render::POINT,
+        origin: crate::graphics::geometry::Point,
         ships: bool,
         highlighted: bool,
     ) {
@@ -70,7 +65,7 @@ pub(crate) mod live {
             font,
             team.c_name(),
             origin,
-            render::TEXT_ALIGN_ALIGN_LEFT,
+            crate::graphics::geometry::TextAlign::Left,
             color,
         );
         let value = CString::new(
@@ -85,15 +80,15 @@ pub(crate) mod live {
         context.draw_text(
             font,
             &value,
-            render::POINT {
+            crate::graphics::geometry::Point {
                 x: origin.x + 7 * 35 - 1,
                 y: origin.y,
             },
-            render::TEXT_ALIGN_ALIGN_RIGHT,
+            crate::graphics::geometry::TextAlign::Right,
             color,
         );
         if ships {
-            let mut origin = render::POINT {
+            let mut origin = crate::graphics::geometry::Point {
                 x: origin.x + 1,
                 y: origin.y + 4,
             };
@@ -101,15 +96,17 @@ pub(crate) mod live {
                 if ship.is_valid() && ship as u8 != 255 {
                     let source = catalog
                         .get(ship as u8 as usize)
-                        .and_then(|ship| NonNull::new(ship.icon.raw().cast()));
+                        .map_or(crate::graphics::drawable::FrameId::NULL, |ship| {
+                            ship.icon.raw()
+                        });
                     context.draw_stamp(&ContextFrame::retain(source), origin);
                     origin.x += 17;
                 }
             }
         }
     }
-    fn rgb(r: u8, g: u8, b: u8) -> render::Color {
-        render::Color {
+    fn rgb(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
+        crate::graphics::geometry::Color {
             r: (r << 3) | (r >> 2),
             g: (g << 3) | (g >> 2),
             b: (b << 3) | (b >> 2),
@@ -139,7 +136,7 @@ pub(crate) mod live {
                 font,
                 &state.catalog,
                 &state.load.view[index as usize],
-                render::POINT {
+                crate::graphics::geometry::Point {
                     x: 5,
                     y: 34 + index as i16 * 32,
                 },
@@ -169,7 +166,7 @@ pub(crate) mod live {
                         &font,
                         &state.catalog,
                         &state.load.view[relative as usize],
-                        render::POINT {
+                        crate::graphics::geometry::Point {
                             x: 5,
                             y: 34 + relative as i16 * 32,
                         },

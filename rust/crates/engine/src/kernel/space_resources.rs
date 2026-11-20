@@ -44,7 +44,7 @@ impl Kernel {
                 return false;
             }
             observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
-                *f as usize
+                f.bits()
             });
             if [&mut self.explosion, &mut self.blast, &mut self.asteroid]
                 .into_iter()

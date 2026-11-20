@@ -1,10 +1,8 @@
 //! Save failure popup, preserving save.c's measurement and screen restoration.
 use crate::engine::{battle::Cx, observe::Io};
 use crate::graphics::{
-    context_abi::ContextLease,
-    drawable_abi::LoadedDrawable,
-    native_abi::{Color, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
-    native_font::FontLease,
+    context::ContextLease, drawable::LoadedDrawable, font::FontLease, geometry::Color,
+    geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 use crate::ui::util::{box_rectangles, wait_for_any_button};
 
@@ -14,7 +12,8 @@ fn color(v: u8) -> Color {
 
 pub fn save_problem(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let context = ContextLease::retain(
-        std::ptr::NonNull::new(cx.kernel.space_context.cast())
+        cx.kernel
+            .space_context
             .unwrap_or_else(|| panic!("save error context not admitted")),
     );
     let font = cx
@@ -35,21 +34,16 @@ pub fn render_save_problem(
     context.with_selected(|| {
         context.set_font(font);
         let mut rect = if text.is_empty() {
-            RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: crate::graphics::native_abi::EXTENT {
+            Rect {
+                corner: Point { x: 0, y: 0 },
+                extent: crate::graphics::geometry::Extent {
                     width: 0,
                     height: 0,
                 },
             }
         } else {
-            font.measure(
-                text,
-                POINT { x: 0, y: 0 },
-                TEXT_ALIGN_ALIGN_CENTER,
-                u16::MAX,
-            )
-            .rect
+            font.measure(text, Point { x: 0, y: 0 }, TextAlign::Center, u16::MAX)
+                .rect
         };
         let size = context.target().rect().extent;
         let x =
@@ -73,13 +67,7 @@ pub fn render_save_problem(
             );
             context.set_foreground(color(20));
             if !text.is_empty() {
-                context.draw_text(
-                    font,
-                    text,
-                    POINT { x, y },
-                    TEXT_ALIGN_ALIGN_CENTER,
-                    color(20),
-                );
+                context.draw_text(font, text, Point { x, y }, TextAlign::Center, color(20));
             }
         });
         context.flush();
@@ -91,7 +79,7 @@ pub fn render_save_problem(
 pub struct SaveBackground {
     context: ContextLease,
     drawable: LoadedDrawable,
-    origin: POINT,
+    origin: Point,
 }
 
 impl SaveBackground {
@@ -109,7 +97,8 @@ pub fn save_confirmation(
     saving: bool,
 ) -> Option<SaveBackground> {
     let font = FontLease::retain(
-        std::ptr::NonNull::new(kernel.star_con_font.cast())
+        kernel
+            .star_con_font
             .unwrap_or_else(|| panic!("save confirmation font")),
     );
     render_save_confirmation(
@@ -129,12 +118,12 @@ pub fn render_save_confirmation(
     context.with_selected(|| {
         context.set_font(font);
         let clip = context.clip_rect();
-        let baseline = POINT {
+        let baseline = Point {
             x: clip.extent.width >> 1,
             y: (clip.extent.height >> 1) + 3,
         };
         let mut rect = font
-            .measure(text, baseline, TEXT_ALIGN_ALIGN_CENTER, u16::MAX)
+            .measure(text, baseline, TextAlign::Center, u16::MAX)
             .rect;
         rect.corner.x -= 4;
         rect.corner.y -= 4;
@@ -155,7 +144,7 @@ pub fn render_save_confirmation(
             |color, rect| context.fill_rectangle(color, rect),
         );
         context.set_foreground(color(20));
-        context.draw_text(font, text, baseline, TEXT_ALIGN_ALIGN_CENTER, color(20));
+        context.draw_text(font, text, baseline, TextAlign::Center, color(20));
         saved
     })
 }

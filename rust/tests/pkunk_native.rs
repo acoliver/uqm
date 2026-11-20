@@ -13,11 +13,9 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use uqm_rust::collections::observation;
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
-
 use uqm_rust::strings::string_table::{
     AllocStringTable, CaptureStringTable, FreeStringTable, StringTable,
 };
@@ -654,7 +652,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
             assert!(out[1].is_null());
             assert!(out[2].is_null());
             assert_eq!(
-                GetFrameIndex((*shared::element(out[0])).current.image.frame.raw().cast()),
+                ((*shared::element(out[0])).current.image.frame.raw()).index(),
                 0,
                 "the first missile is the forward one"
             );
@@ -677,7 +675,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             (*m).state_flags &= !(CHANGING as u16);
             assert_eq!((*m).turn, 0);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 3);
+            assert_eq!(((*m).next.image.frame.raw()).index(), 3);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
             assert_eq!((*m).turn, 1);
@@ -687,11 +685,11 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             hooks::invoke_element_pointer(animate, m);
             assert_eq!((*m).turn, 0);
             assert_eq!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 6);
+            assert_eq!(((*m).next.image.frame.raw()).index(), 6);
 
             (*m).current.image.frame = ship.weapon_frames.selection(7);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(GetFrameIndex((*m).next.image.frame.raw().cast()), 0);
+            assert_eq!(((*m).next.image.frame.raw()).index(), 0);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!((*m).turn, 1);
             for h in out {
@@ -906,8 +904,8 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 9, 6);
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
-            assert_eq!(GetFrameIndex((*el).current.image.frame.raw().cast()), 5);
-            assert_eq!(GetFrameIndex((*el).next.image.frame.raw().cast()), 5);
+            assert_eq!(((*el).current.image.frame.raw()).index(), 5);
+            assert_eq!(((*el).next.image.frame.raw()).index(), 5);
             assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             let control = (*el).IntersectControl;
             assert_eq!(
@@ -919,7 +917,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             );
             assert_eq!((control.EndPoint.x, control.EndPoint.y), (300, 19));
             // next.image.frame was overwritten before InitIntersectFrame runs.
-            assert_eq!(GetFrameIndex(control.IntersectStamp.frame.cast()), 5);
+            assert_eq!((control.IntersectStamp.frame).index(), 5);
             assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
             assert_eq!(
                 (*el).state_flags & (NONSOLID | FINITE_LIFE) as u16,
@@ -1293,10 +1291,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
-            assert_eq!(
-                GetFrameIndex((*el).current.image.frame.raw().cast()),
-                facing
-            );
+            assert_eq!(((*el).current.image.frame.raw()).index(), facing);
             assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
@@ -1366,34 +1361,6 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
                 "the candidate on top of the planet is rejected"
             );
             assert_eq!(ship.inner.ship_mut().ship_facing, (draws[0] & 15) as u16);
-        }
-    })
-}
-
-#[test]
-fn new_pkunk_macro_expansion_draws_again_for_a_negative_coordinate() {
-    battle_context::run(|_| {
-        let _battle = Battle::new();
-        unsafe {
-            // A 1280-wide screen makes LOG_SPACE_WIDTH exceed what a COORD holds, so
-            // the COORD narrowing can go negative and WRAP_VAL takes its first arm.
-            ScreenWidth = 1280;
-            let extent_x = (1280 - 64) * 4 * 8;
-            let (seed, draws) = (1..20_000u32)
-                .map(|seed| (seed, rolls(seed, 8)))
-                .find(|(_, r)| align(r[1], extent_x) < 0)
-                .expect("a seed with a negative first X draw");
-            let (x, n) = expanded_coord(&draws, 1, extent_x);
-            let (y, n) = expanded_coord(&draws, n, SPACE_H);
-            assert_eq!(n, 1 + 2 + 3, "two draws for X, three for Y");
-            // The second draw plus the extent is the wrapped value.
-            assert_eq!(x, (align(draws[2], extent_x) + extent_x) as u16 as i16);
-
-            let mut ship = Ship::new(&_battle, 0);
-            let new_pkunk = ship.armed_new_pkunk();
-            let el = ship.ptr();
-            with_rng(seed, 6, || hooks::invoke_element_pointer(new_pkunk, el));
-            assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
         }
     })
 }

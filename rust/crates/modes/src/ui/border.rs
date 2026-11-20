@@ -1,8 +1,10 @@
 //! Flagship screen border, ported from uqm/border.c.
 use super::util::box_rectangles;
 use crate::engine::Kernel;
-use crate::graphics::context_abi::{ContextFrame, ContextLease};
-use crate::graphics::native_abi::*;
+use crate::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect,
+};
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
         r: (r << 3) | (r >> 2),
@@ -14,13 +16,13 @@ fn color(r: u8, g: u8, b: u8) -> Color {
 pub fn init_siscontexts(kernel: &Kernel, dimensions: (i32, i32)) {
     let status = ContextLease::require(kernel.status_context);
     let space = ContextLease::require(kernel.space_context);
-    let screen = ContextFrame::retain(std::ptr::NonNull::new(kernel.screen));
+    let screen = ContextFrame::retain(kernel.screen);
     status.select();
     space.select();
     space.set_frame(screen);
-    space.set_clip(RECT {
-        corner: POINT { x: 7, y: 10 },
-        extent: EXTENT {
+    space.set_clip(Rect {
+        corner: Point { x: 7, y: 10 },
+        extent: Extent {
             width: (dimensions.0 - 78) as i16,
             height: (dimensions.1 - 13) as i16,
         },
@@ -30,9 +32,9 @@ pub fn init_siscontexts(kernel: &Kernel, dimensions: (i32, i32)) {
 pub fn draw_sis_frame(kernel: &Kernel, world: &mut crate::engine::World, dimensions: (i32, i32)) {
     let (width, height) = dimensions;
     let context = ContextLease::require(kernel.screen_context);
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let mut r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 0,
             height: 0,
         },
@@ -107,9 +109,9 @@ pub fn draw_sis_frame(kernel: &Kernel, world: &mut crate::engine::World, dimensi
 
 fn draw_edges(context: &ContextLease, dimensions: (i32, i32)) {
     let (width, height) = dimensions;
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let mut r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 0,
             height: 0,
         },
@@ -125,9 +127,9 @@ fn draw_edges(context: &ContextLease, dimensions: (i32, i32)) {
     r.corner.y = 139;
     context.fill_rectangle(
         ink,
-        RECT {
+        Rect {
             corner: r.corner,
-            extent: EXTENT {
+            extent: Extent {
                 width: 1,
                 height: 1,
             },
@@ -136,9 +138,9 @@ fn draw_edges(context: &ContextLease, dimensions: (i32, i32)) {
     r.corner.x = (width as i16) - 1;
     context.fill_rectangle(
         ink,
-        RECT {
+        Rect {
             corner: r.corner,
-            extent: EXTENT {
+            extent: Extent {
                 width: 1,
                 height: 1,
             },
@@ -185,9 +187,9 @@ fn draw_edges(context: &ContextLease, dimensions: (i32, i32)) {
 
 fn draw_dark_edges(context: &ContextLease, dimensions: (i32, i32)) {
     let (width, height) = dimensions;
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let mut r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: 0,
             height: 0,
         },

@@ -1,13 +1,10 @@
 use super::campaign_display::CampaignDisplay;
-use crate::graphics::{
-    context_abi::{CreateContextAux, DestroyContext},
-    native_abi::CONTEXT,
-};
+use crate::graphics::context::LoadedContext;
 use crate::world::Game;
 
 pub struct ConversationDisplay {
     _display: CampaignDisplay,
-    contexts: Vec<CONTEXT>,
+    contexts: Vec<LoadedContext>,
 }
 
 impl ConversationDisplay {
@@ -24,19 +21,8 @@ impl ConversationDisplay {
                 &mut game.kernel.screen_context,
             ),
         ] {
-            // SAFETY: the serialized fixture owns admission and releases each context.
-            let context = unsafe {
-                #[cfg(feature = "debug-process")]
-                {
-                    CreateContextAux(name.as_ptr())
-                }
-                #[cfg(not(feature = "debug-process"))]
-                {
-                    let _ = name;
-                    CreateContextAux()
-                }
-            };
-            *slot = context;
+            let context = LoadedContext::create(name);
+            *slot = Some(context.context());
             contexts.push(context);
         }
         Ok(Self {
@@ -45,19 +31,8 @@ impl ConversationDisplay {
         })
     }
 
-    pub fn finish(self, game: Game) {
+    pub fn finish(mut self, game: Game) {
         self._display.finish(game);
-        drop(self);
-    }
-}
-
-impl Drop for ConversationDisplay {
-    fn drop(&mut self) {
-        // SAFETY: these contexts belong only to this serialized fixture.
-        unsafe {
-            for context in self.contexts.drain(..) {
-                DestroyContext(context);
-            }
-        }
+        self.contexts.clear();
     }
 }

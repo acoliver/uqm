@@ -14,14 +14,12 @@ pub mod statefiles;
 pub mod summary;
 pub mod summary_record;
 
-use std::fmt;
-
 use super::battle::schema::GAME_STATE as CGameState;
 use super::world::story::GameStateOwnerError;
 use super::world::story::StoryState;
-use uqm_save::{EventEntry, GlobalState, GAME_STATE_BYTES};
-
 pub use events::EventError;
+use std::fmt;
+use uqm_save::{EventEntry, GlobalState, GAME_STATE_BYTES};
 
 /// The sections of a save that this module owns, as read from the live game.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,7 +130,7 @@ pub fn restore_runtime(
 pub struct SessionView {
     pub solar: summary::SessionSummary,
     pub star: uqm_save::StarDesc,
-    pub ip_location: crate::graphics::native_abi::POINT,
+    pub ip_location: crate::graphics::geometry::Point,
 }
 
 /// Capture prepared state before restoring the live IP position and orbit marker.

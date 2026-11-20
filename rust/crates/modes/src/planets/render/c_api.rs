@@ -1,11 +1,10 @@
 //! Oval and topography drawing on caller-retained contexts.
 
+use super::oval::OvalGfx;
 use crate::comm::locdata::{CPoint, CRect};
 use crate::starbase::ids::RadarLayout;
 
-use super::oval::OvalGfx;
-
-fn input(rect: crate::graphics::native_abi::RECT) -> CRect {
+fn input(rect: crate::graphics::geometry::Rect) -> CRect {
     CRect {
         corner: CPoint {
             x: rect.corner.x,
@@ -50,14 +49,14 @@ impl NativeOvalGfx {
     }
 }
 
-fn point(p: CPoint) -> crate::graphics::native_abi::POINT {
-    crate::graphics::native_abi::POINT { x: p.x, y: p.y }
+fn point(p: CPoint) -> crate::graphics::geometry::Point {
+    crate::graphics::geometry::Point { x: p.x, y: p.y }
 }
 
-fn rect(r: &CRect) -> crate::graphics::native_abi::RECT {
-    crate::graphics::native_abi::RECT {
+fn rect(r: &CRect) -> crate::graphics::geometry::Rect {
+    crate::graphics::geometry::Rect {
         corner: point(r.corner),
-        extent: crate::graphics::native_abi::EXTENT {
+        extent: crate::graphics::geometry::Extent {
             width: r.width,
             height: r.height,
         },
@@ -99,10 +98,10 @@ use super::topography::{
     render_topography, TopographyError, TopographyGfx, TopographyPalette, TopographyPoint,
     NUM_BATCH_POINTS,
 };
-
-use crate::graphics::context_abi::{ContextFrame, ContextLease};
-use crate::graphics::native_abi::Color;
-use crate::graphics::native_batch::{DrawCommand, NativeBatch, NativeShape};
+use crate::graphics::{
+    batch::DrawCommand, batch::NativeBatch, batch::NativeShape, context::ContextLease,
+    drawable::ContextFrame, geometry::Color,
+};
 
 struct CffiTopographyGfx {
     context: ContextLease,
@@ -157,7 +156,7 @@ pub fn topography_batch(points: &[TopographyPoint; NUM_BATCH_POINTS], first: usi
 
 fn topography_points(
     points: &[TopographyPoint; NUM_BATCH_POINTS],
-) -> impl ExactSizeIterator<Item = (crate::engine::graphics::native_abi::POINT, Color)> + '_ {
+) -> impl ExactSizeIterator<Item = (crate::engine::graphics::geometry::Point, Color)> + '_ {
     points.iter().map(|source| {
         let color = source.color;
         (
@@ -194,7 +193,7 @@ pub fn render_native_topography(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::graphics::{context_abi::LoadedContext, drawable_abi::LoadedDrawable};
+    use crate::engine::graphics::{context::LoadedContext, drawable::LoadedDrawable};
 
     #[test]
     #[serial_test::serial]

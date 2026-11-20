@@ -183,8 +183,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     descriptor: address, icons: false, battle: false
                 }] if *address == descriptor)
             );
-            let decoy =
-                uqm_rust::graphics::drawable_abi::LoadedDrawable::create(2, 0, 0, 1).unwrap();
+            let decoy = uqm_rust::graphics::drawable::LoadedDrawable::create(2, 0, 0, 1).unwrap();
             let decoy_frames = decoy.lease();
             crate::battle_context::with(|cx| {
                 let id = cx.world.avail_races().alloc().unwrap();

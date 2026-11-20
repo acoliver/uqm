@@ -5,7 +5,7 @@ use crate::engine::battle::record::{FLEET_STUFF, SHIP_INFO};
 use crate::engine::world::activity::activity_flags::START_INTERPLANETARY;
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
-use crate::graphics::native_abi::{EXTENT, POINT, RECT};
+use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use crate::navigation::hyper_units::{SOL_X, SOL_Y};
 use crate::ships::DescriptorLoader;
 use crate::ships::{master_native::find_master_ship, types::SpeciesId};
@@ -15,12 +15,12 @@ use crate::ui::border::init_siscontexts;
 
 fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
     let (width, height) = cx.screen_dimensions();
-    let radar_clip = RECT {
-        corner: POINT {
+    let radar_clip = Rect {
+        corner: Point {
             x: (4 + width - STATUS_WIDTH - i32::from(SAFE_X)) as i16,
             y: (10 + height - 13 - RADAR_HEIGHT) as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: RADAR_WIDTH as i16,
             height: RADAR_HEIGHT as i16,
         },

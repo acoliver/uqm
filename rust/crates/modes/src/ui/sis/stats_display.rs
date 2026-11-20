@@ -1,10 +1,13 @@
 //! Equipment statistics drawn through retained campaign resources.
 use super::*;
-use crate::graphics::{context_abi::ContextFrame, native_font::FontLease};
+use crate::graphics::{
+    drawable::ContextFrame, font::FontLease, geometry::Extent, geometry::Point, geometry::Rect,
+    geometry::TextAlign,
+};
 use crate::starbase::ids;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
-use std::{ffi::CString, ptr::NonNull};
+use std::ffi::CString;
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
 fn weapon_name(kernel: &Kernel, module: u8) -> CString {
@@ -51,7 +54,7 @@ fn column(
     context: &ContextLease,
     font: &FontLease,
     position: (i16, i16, i16),
-    align: TEXT_ALIGN,
+    align: TextAlign,
     labels: [&CStr; 4],
 ) {
     let (x, top, leading) = position;
@@ -59,7 +62,7 @@ fn column(
         context.draw_text(
             font,
             text,
-            POINT {
+            Point {
                 x,
                 y: top + leading * row as i16,
             },
@@ -76,14 +79,14 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
     let font = kernel
         .battle_font()
         .unwrap_or_else(|| panic!("equipment display requires its font"));
-    let gradient = ContextFrame::retain(NonNull::new(kernel.font_grad_frame));
+    let gradient = ContextFrame::retain(kernel.font_grad_frame);
     let leading = font.leading();
-    let rect = RECT {
-        corner: POINT {
+    let rect = Rect {
+        corner: Point {
             x: 0,
             y: (dimensions.1 - 13 - 4 * i32::from(leading)) as i16,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: (dimensions.0 - 78) as i16,
             height: 4 * leading,
         },
@@ -102,7 +105,7 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
                     &context,
                     &font,
                     (label_x, top, leading),
-                    TEXT_ALIGN_ALIGN_RIGHT,
+                    TextAlign::Right,
                     std::array::from_fn(|row| {
                         kernel.game_text(ids::FLAGSHIP_STRING_BASE as usize + row)
                     }),
@@ -111,7 +114,7 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
                     &context,
                     &font,
                     (label_x + 5, top, leading),
-                    TEXT_ALIGN_ALIGN_LEFT,
+                    TextAlign::Left,
                     weapons.each_ref().map(|text| text.as_c_str()),
                 );
             });
@@ -120,7 +123,7 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
                     &context,
                     &font,
                     (rect.extent.width - 25, top, leading),
-                    TEXT_ALIGN_ALIGN_RIGHT,
+                    TextAlign::Right,
                     std::array::from_fn(|row| {
                         kernel.game_text(ids::FLAGSHIP_STRING_BASE as usize + row + 4)
                     }),
@@ -129,7 +132,7 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
                     &context,
                     &font,
                     (rect.extent.width - 2, top, leading),
-                    TEXT_ALIGN_ALIGN_RIGHT,
+                    TextAlign::Right,
                     values.each_ref().map(|text| text.as_c_str()),
                 );
             });

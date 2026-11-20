@@ -21,7 +21,6 @@ impl LoadedMusic {
     }
 
     pub fn load_file(path: &CStr) -> Option<Self> {
-        crate::graphics::ffi::assert_owner_thread();
         load_music(path.to_str().ok()?).map(Self)
     }
 

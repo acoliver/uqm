@@ -69,7 +69,7 @@ fn current_star_is_a_catalog_identity_and_foreign_pointers_are_rejected() {
     use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
     let mut game = Game::new();
     let star = CStarDesc {
-        star_pt: uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+        star_pt: uqm_rust::graphics::geometry::Point { x: 0, y: 0 },
         star_type: 0,
         index: 0,
         prefix: 0,

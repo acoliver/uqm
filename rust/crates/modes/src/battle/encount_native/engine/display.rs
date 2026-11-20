@@ -19,17 +19,15 @@ pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::battle::Battle;
+    use crate::engine::battle::Cx;
+    use crate::engine::world::StarId;
     use crate::engine::world::{CStarDesc, CATALOG_LEN};
+    use crate::engine::Game;
+    use crate::graphics::geometry::Point;
+    use crate::ships::native::abi::IN_HYPERSPACE;
+    use crate::ships::native::abi::IN_INTERPLANETARY;
     use crate::ui;
-    use crate::{
-        engine::{
-            battle::{Battle, Cx},
-            world::StarId,
-            Game,
-        },
-        graphics::native_abi::*,
-        ships::native::abi::{IN_HYPERSPACE, IN_INTERPLANETARY},
-    };
     use uqm_engine::test_support::campaign_display;
 
     fn title_pixels(game: &Game) -> Vec<(u8, u8, u8)> {
@@ -39,7 +37,7 @@ mod tests {
                 (193..248).map(move |x| {
                     let pixel = uqm_engine::test_support::native_probe::frame_pixel(
                         game.kernel.screen,
-                        POINT { x, y },
+                        Point { x, y },
                     );
                     (pixel.r, pixel.g, pixel.b)
                 })
@@ -54,14 +52,14 @@ mod tests {
         let display = campaign_display::CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("campaign panel fixture failed: {error}"));
         let context =
-            crate::graphics::context_abi::ContextLease::require(game.kernel.off_screen_context);
+            crate::graphics::context::ContextLease::require(game.kernel.off_screen_context);
         let before = title_pixels(&game);
         super::super::draw_encounter_fleet(&game.world, &context, (320, 240));
         assert_eq!(title_pixels(&game), before);
         drop(context);
         let mut battle = Battle::new();
-        let ship = POINT { x: 1111, y: 1111 };
-        let star = POINT { x: 2222, y: 2222 };
+        let ship = Point { x: 1111, y: 1111 };
+        let star = Point { x: 2222, y: 2222 };
         let catalog = [CStarDesc {
             star_pt: star,
             star_type: 0,

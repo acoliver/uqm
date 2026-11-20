@@ -14,13 +14,14 @@ use super::battle::{
     link_queue::RacePool,
     ShipId,
 };
-use crate::graphics::native_abi::{POINT, STRING as SOUND};
+use crate::graphics::geometry::Point;
+use crate::strings::string_table::StringPtr as SOUND;
 pub use pilot_flash::{PilotFlash, PilotUpdate};
 use std::ptr;
 
 #[derive(Default)]
 pub struct SisHighlight {
-    pub context: std::cell::RefCell<Option<crate::graphics::context_abi::ScheduledHighlight>>,
+    pub context: std::cell::RefCell<Option<crate::graphics::highlight::ScheduledHighlight>>,
 }
 impl SisHighlight {
     pub fn pre_update_flash_rect(&self) {
@@ -89,11 +90,11 @@ pub(crate) struct KernelServices {
 #[derive(Default)]
 struct KernelAssets {
     #[cfg(not(test))]
-    battle_font: Option<crate::graphics::native_font::LoadedFont>,
+    battle_font: Option<crate::graphics::font::LoadedFont>,
     #[cfg(not(test))]
-    tiny_font_owner: Option<crate::graphics::native_font::LoadedFont>,
+    tiny_font_owner: Option<crate::graphics::font::LoadedFont>,
     #[cfg(not(test))]
-    micro_font_owner: Option<crate::graphics::native_font::LoadedFont>,
+    micro_font_owner: Option<crate::graphics::font::LoadedFont>,
     game_text: Option<crate::strings::owned_table::LoadedTextTable>,
     navigation: navigation_resources::NavigationResources,
     #[cfg(not(test))]
@@ -107,18 +108,18 @@ pub struct Kernel {
     pub last_activity: u16,
     pub player_control: [u8; 2],
     pub h_res_index: *mut std::ffi::c_void,
-    pub screen_context: crate::graphics::native_abi::CONTEXT,
-    pub space_context: crate::graphics::native_abi::CONTEXT,
-    pub status_context: crate::graphics::native_abi::CONTEXT,
-    pub off_screen_context: crate::graphics::native_abi::CONTEXT,
+    pub screen_context: Option<crate::graphics::context::ContextId>,
+    pub space_context: Option<crate::graphics::context::ContextId>,
+    pub status_context: Option<crate::graphics::context::ContextId>,
+    pub off_screen_context: Option<crate::graphics::context::ContextId>,
     pub screen_width: i16,
     pub screen_height: i16,
-    pub screen: crate::graphics::native_abi::FRAME,
-    pub star_con_font: crate::graphics::native_abi::FONT,
-    pub micro_font: crate::graphics::native_abi::FONT,
+    pub screen: crate::graphics::drawable::FrameId,
+    pub star_con_font: Option<crate::graphics::font::FontId>,
+    pub micro_font: Option<crate::graphics::font::FontId>,
     assets: KernelAssets,
-    pub tiny_font: crate::graphics::native_abi::FONT,
-    pub activity_frame: crate::graphics::native_abi::FRAME,
+    pub tiny_font: Option<crate::graphics::font::FontId>,
+    pub activity_frame: crate::graphics::drawable::FrameId,
     pub last_save_slot: u8,
     pub naming_callback: Option<fn(&Kernel, &crate::World, i32)>,
     pub status_message_mode: u32,
@@ -132,29 +133,29 @@ pub struct Kernel {
     pub instant_move: bool,
     pub sis_highlight: std::rc::Rc<SisHighlight>,
     pub comm_scope_buffer:
-        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable_abi::LoadedDrawable>>>,
-    pub status_frame: crate::graphics::native_abi::FRAME,
-    pub flag_stat_frame: crate::graphics::native_abi::FRAME,
-    pub misc_data_frame: crate::graphics::native_abi::FRAME,
-    pub font_grad_frame: crate::graphics::native_abi::FRAME,
-    pub game_strings: crate::graphics::native_abi::STRING,
+        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable::LoadedDrawable>>>,
+    pub status_frame: crate::graphics::drawable::FrameId,
+    pub flag_stat_frame: crate::graphics::drawable::FrameId,
+    pub misc_data_frame: crate::graphics::drawable::FrameId,
+    pub font_grad_frame: crate::graphics::drawable::FrameId,
+    pub game_strings: crate::strings::string_table::StringPtr,
     pub using_speech: u32,
-    pub radar_context: crate::graphics::native_abi::CONTEXT,
-    pub play_frame: crate::graphics::native_abi::FRAME,
-    pub stars_in_space: crate::graphics::native_abi::FRAME,
-    pub asteroid: [crate::graphics::native_abi::FRAME; 3],
-    pub blast: [crate::graphics::native_abi::FRAME; 3],
-    pub explosion: [crate::graphics::native_abi::FRAME; 3],
-    pub planet: [crate::graphics::native_abi::FRAME; 3],
+    pub radar_context: Option<crate::graphics::context::ContextId>,
+    pub play_frame: crate::graphics::drawable::FrameId,
+    pub stars_in_space: crate::graphics::drawable::FrameId,
+    pub asteroid: [crate::graphics::drawable::FrameId; 3],
+    pub blast: [crate::graphics::drawable::FrameId; 3],
+    pub explosion: [crate::graphics::drawable::FrameId; 3],
+    pub planet: [crate::graphics::drawable::FrameId; 3],
     pub space_init_count: u8,
     pub ships_initialized: bool,
-    pub hyperstars: [crate::graphics::native_abi::FRAME; 3],
+    pub hyperstars: [crate::graphics::drawable::FrameId; 3],
     pub cmaps: [Option<crate::graphics::palette_cycle::PaletteCycle>; 2],
     pub hyperspace_ship_hooks: (
         Option<crate::battle::ElementHook>,
         Option<crate::battle::ElementHook>,
     ),
-    pub portal_point: POINT,
+    pub portal_point: Point,
     pub(super) elements: super::battle::ElementTable,
     pub(super) races: [RacePool; 2],
     ship_reset_pending: bool,
@@ -171,7 +172,7 @@ pub struct Kernel {
     pub game_sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     pub sounds: SoundQueue,
     pub channels: std::rc::Rc<std::cell::RefCell<Channels>>,
-    pub space_origin: POINT,
+    pub space_origin: Point,
     pub star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
@@ -211,12 +212,12 @@ impl Kernel {
             .text(index)
     }
     #[cfg(not(test))]
-    pub fn install_micro_font(&mut self, font: crate::graphics::native_font::LoadedFont) {
-        self.micro_font = font.as_raw();
+    pub fn install_micro_font(&mut self, font: crate::graphics::font::LoadedFont) {
+        self.micro_font = Some(font.font());
         self.assets.micro_font_owner = Some(font);
     }
     #[cfg(not(test))]
-    pub fn micro_font_lease(&self) -> Option<crate::graphics::native_font::FontLease> {
+    pub fn micro_font_lease(&self) -> Option<crate::graphics::font::FontLease> {
         self.assets
             .micro_font_owner
             .as_ref()
@@ -224,36 +225,36 @@ impl Kernel {
     }
     #[cfg(not(test))]
     pub fn release_encounter_text(&mut self) {
-        self.micro_font = ptr::null_mut();
+        self.micro_font = None;
         self.game_strings = ptr::null_mut();
         self.assets.micro_font_owner = None;
         self.assets.game_text = None;
     }
     #[cfg(not(test))]
-    pub fn install_battle_font(&mut self, font: crate::graphics::native_font::LoadedFont) {
-        self.star_con_font = font.as_raw().cast();
+    pub fn install_battle_font(&mut self, font: crate::graphics::font::LoadedFont) {
+        self.star_con_font = Some(font.font());
         self.assets.battle_font = Some(font);
     }
 
     #[cfg(not(test))]
-    pub fn battle_font(&self) -> Option<crate::graphics::native_font::FontLease> {
+    pub fn battle_font(&self) -> Option<crate::graphics::font::FontLease> {
         self.assets.battle_font.as_ref().map(|font| font.lease())
     }
 
     #[cfg(not(test))]
     pub fn release_battle_font(&mut self) {
-        self.star_con_font = ptr::null_mut();
+        self.star_con_font = None;
         self.assets.battle_font = None;
     }
 
     #[cfg(not(test))]
-    pub fn install_tiny_font(&mut self, font: crate::graphics::native_font::LoadedFont) {
-        self.tiny_font = font.as_raw();
+    pub fn install_tiny_font(&mut self, font: crate::graphics::font::LoadedFont) {
+        self.tiny_font = Some(font.font());
         self.assets.tiny_font_owner = Some(font);
     }
 
     #[cfg(not(test))]
-    pub fn tiny_font_lease(&self) -> Option<crate::graphics::native_font::FontLease> {
+    pub fn tiny_font_lease(&self) -> Option<crate::graphics::font::FontLease> {
         self.assets
             .tiny_font_owner
             .as_ref()
@@ -262,7 +263,7 @@ impl Kernel {
 
     #[cfg(not(test))]
     pub fn release_tiny_font(&mut self) {
-        self.tiny_font = ptr::null_mut();
+        self.tiny_font = None;
         self.assets.tiny_font_owner = None;
     }
 
@@ -306,18 +307,18 @@ impl Kernel {
             last_activity: 0,
             player_control: [0; 2],
             h_res_index: ptr::null_mut(),
-            screen_context: ptr::null_mut(),
-            space_context: ptr::null_mut(),
-            status_context: ptr::null_mut(),
-            off_screen_context: ptr::null_mut(),
+            screen_context: None,
+            space_context: None,
+            status_context: None,
+            off_screen_context: None,
             screen_width: 0,
             screen_height: 0,
-            screen: ptr::null_mut(),
-            star_con_font: ptr::null_mut(),
-            micro_font: ptr::null_mut(),
+            screen: crate::graphics::drawable::FrameId::NULL,
+            star_con_font: None,
+            micro_font: None,
             assets: KernelAssets::default(),
-            tiny_font: ptr::null_mut(),
-            activity_frame: ptr::null_mut(),
+            tiny_font: None,
+            activity_frame: crate::graphics::drawable::FrameId::NULL,
             last_save_slot: 0,
             naming_callback: None,
             status_message_mode: 1,
@@ -331,25 +332,25 @@ impl Kernel {
             instant_move: false,
             sis_highlight: std::rc::Rc::new(SisHighlight::default()),
             comm_scope_buffer: Default::default(),
-            status_frame: ptr::null_mut(),
-            flag_stat_frame: ptr::null_mut(),
-            misc_data_frame: ptr::null_mut(),
-            font_grad_frame: ptr::null_mut(),
+            status_frame: crate::graphics::drawable::FrameId::NULL,
+            flag_stat_frame: crate::graphics::drawable::FrameId::NULL,
+            misc_data_frame: crate::graphics::drawable::FrameId::NULL,
+            font_grad_frame: crate::graphics::drawable::FrameId::NULL,
             game_strings: ptr::null_mut(),
             using_speech: 0,
-            radar_context: ptr::null_mut(),
-            play_frame: ptr::null_mut(),
-            stars_in_space: ptr::null_mut(),
-            asteroid: [ptr::null_mut(); 3],
-            blast: [ptr::null_mut(); 3],
-            explosion: [ptr::null_mut(); 3],
-            planet: [ptr::null_mut(); 3],
+            radar_context: None,
+            play_frame: crate::graphics::drawable::FrameId::NULL,
+            stars_in_space: crate::graphics::drawable::FrameId::NULL,
+            asteroid: [crate::graphics::drawable::FrameId::NULL; 3],
+            blast: [crate::graphics::drawable::FrameId::NULL; 3],
+            explosion: [crate::graphics::drawable::FrameId::NULL; 3],
+            planet: [crate::graphics::drawable::FrameId::NULL; 3],
             space_init_count: 0,
             ships_initialized: false,
-            hyperstars: [ptr::null_mut(); 3],
+            hyperstars: [crate::graphics::drawable::FrameId::NULL; 3],
             cmaps: [None, None],
             hyperspace_ship_hooks: (None, None),
-            portal_point: POINT { x: 0, y: 0 },
+            portal_point: Point { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),
             races: std::array::from_fn(|side| RacePool::with_capacity(side as u8, 0)),
             ship_reset_pending: false,
@@ -366,7 +367,7 @@ impl Kernel {
             game_sounds: None,
             sounds: SoundQueue::new(),
             channels: std::rc::Rc::new(std::cell::RefCell::new(Channels::new())),
-            space_origin: POINT { x: 0, y: 0 },
+            space_origin: Point { x: 0, y: 0 },
             star_planes: Box::new([30, 60, 90].map(StarPlane::new)),
         }
     }

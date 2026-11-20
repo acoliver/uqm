@@ -6,17 +6,16 @@ use crate::battle::element::{
 };
 use crate::comm::dispatch::RPG_PLAYER_NUM;
 use crate::engine::battle::ai_constants::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+use crate::engine::battle::EMPTY_PRIMITIVE;
 use crate::engine::battle::{Cx, ElementHook, ElementId};
 use crate::engine::world::activity::activity_flags::{CHECK_LOAD, IN_BATTLE, START_ENCOUNTER};
 use crate::engine::StoryKey;
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 use std::ptr;
-
-use crate::engine::graphics::EMPTY_PRIMITIVE;
-pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
+pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> Point {
     let point = cx.element(element).next.location;
     let (width, height) = cx.screen_dimensions();
-    POINT {
+    Point {
         x: crate::navigation::hyper_units::universe_x(
             cx.world.data.flagship.log_x + i32::from(point.x) - (((width - 64) << 5) >> 1),
             width - 64,
@@ -153,9 +152,9 @@ pub fn hyper_transition(
 pub fn star_collision(
     cx: &mut crate::engine::battle::Cx<'_>,
     source: crate::engine::battle::ElementId,
-    _p0: &mut POINT,
+    _p0: &mut Point,
     ship: crate::engine::battle::ElementId,
-    _p1: &mut POINT,
+    _p1: &mut Point,
 ) {
     if cx.element(ship).flags & PLAYER_SHIP == 0 || cx.portal_counter() != 0 {
         return;
@@ -214,9 +213,9 @@ pub fn portal_death(
 pub fn portal_collision(
     cx: &mut crate::engine::battle::Cx<'_>,
     source: crate::engine::battle::ElementId,
-    _p0: &mut POINT,
+    _p0: &mut Point,
     ship: crate::engine::battle::ElementId,
-    _p1: &mut POINT,
+    _p1: &mut Point,
 ) {
     if cx.element(ship).flags & PLAYER_SHIP == 0 {
         return;

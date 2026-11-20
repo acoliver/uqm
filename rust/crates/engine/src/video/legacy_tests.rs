@@ -37,13 +37,8 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         &std::fs::read(source.join("3dovideo.rmp")).unwrap(),
     );
     // SAFETY: the isolated child owns this real content mount, video player and screen until teardown.
-    let screen = unsafe {
-        let screen =
-            sdl2_sys::SDL_CreateRGBSurface(0, 320, 240, 32, 0xff, 0xff00, 0xff0000, 0xff000000);
-        assert!(!screen.is_null());
-        crate::graphics::sdl::lifecycle_abi::SDL_Screen = screen.cast();
-        crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND =
-            ptr::addr_of_mut!(crate::graphics::sdl::lifecycle_abi::RUST_BACKEND);
+    unsafe {
+        crate::graphics::state::init_headless(crate::graphics::state::VideoMode::default());
         assert_eq!(crate::sound::rodio_audio::rust_audio_init(), 1);
         assert_eq!(super::super::control::InitVideoPlayer(0), 1);
         InstallVideoResType();
@@ -52,8 +47,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
             c"3dovideo.rmp".as_ptr(),
             ptr::null(),
         );
-        screen
-    };
+    }
     let descriptor = LoadedVideo::load(c"slides.spins.00").expect("shipped spin descriptor");
     let playback = descriptor.play().expect("shipped spin playback");
     let music = Arc::downgrade(&playback.audio.as_ref().expect("spin.aif").playback().0);
@@ -72,8 +66,6 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         assert!(super::super::control::VidPlaying().is_null());
         super::super::control::UninitVideoPlayer();
         crate::sound::rodio_audio::rust_audio_uninit();
-        crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND = ptr::null_mut();
-        crate::graphics::sdl::lifecycle_abi::SDL_Screen = ptr::null_mut();
-        sdl2_sys::SDL_FreeSurface(screen);
+        crate::graphics::state::uninit_headless();
     }
 }

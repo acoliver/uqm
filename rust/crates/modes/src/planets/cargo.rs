@@ -102,16 +102,13 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
         observe::{Io, Observer, Unobserved},
         Game,
     };
-    use crate::graphics::{
-        context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::LoadedFont,
-    };
+    use crate::graphics::{context::ContextLease, drawable::LoadedDrawable, font::LoadedFont};
     use std::{cell::Cell, rc::Rc};
 
     struct Fixture {
@@ -135,7 +132,7 @@ mod tests {
             )
             .unwrap();
         let heading = heading.unwrap();
-        game.kernel.star_con_font = heading.as_raw();
+        game.kernel.star_con_font = Some(heading.font());
         let icons = LoadedDrawable::create(2, 1, 1, 74).unwrap();
         game.kernel.misc_data_frame = icons.lease().frame(0).unwrap();
         let context = ContextLease::require(game.kernel.status_context);
@@ -197,8 +194,8 @@ mod tests {
         assert_eq!(game.world.data.flagship.element_amounts[0], 1);
         assert_eq!(other.world.data.flagship.element_amounts[0], 2);
         drop((cargo, context, canvas, other));
-        game.kernel.star_con_font = std::ptr::null_mut();
-        game.kernel.misc_data_frame = std::ptr::null_mut();
+        game.kernel.star_con_font = None;
+        game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
         display.finish(game);
     }
 
@@ -311,9 +308,9 @@ mod tests {
         assert_eq!(game.world.data.flagship.element_amounts[..2], [1, 0]);
         assert_eq!(game.world.data.flagship.total_element_mass, 1);
         drop((runtime, icons, heading, context, canvas));
-        game.kernel.star_con_font = std::ptr::null_mut();
-        game.kernel.misc_data_frame = std::ptr::null_mut();
-        game.kernel.flag_stat_frame = std::ptr::null_mut();
+        game.kernel.star_con_font = None;
+        game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
         drop(panel);
         display.finish(game);
     }

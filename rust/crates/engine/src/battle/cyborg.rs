@@ -512,9 +512,7 @@ pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> u8 {
     }
     let handle = cx.ship_element(owner);
     let ship = cx.weapon_origin(handle);
-    if cx.race_stats(rd).ship_info.crew_level == 0
-        || cx.subject_style(&ship).kind == crate::graphics::native_abi::EMPTY_PRIMITIVE
-    {
+    if cx.race_stats(rd).ship_info.crew_level == 0 || cx.subject_style(&ship).kind == 7 {
         return 0;
     }
     let mut ship_copy = ship;

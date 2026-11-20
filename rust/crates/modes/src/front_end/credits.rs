@@ -10,22 +10,17 @@ pub(crate) mod runtime {
         render::{HookRestore, Resources, Session},
         *,
     };
-    use crate::{
-        comm::{
-            locdata::{CPoint, CRect},
-            CommOptions,
-        },
-        engine::{
-            battle::Cx,
-            observe::{CheckpointView, Io},
-            world::activity::activity_flags::CHECK_ABORT,
-        },
-        graphics::{context_abi::ContextLease, native_abi::POINT},
-        sound::{
-            music::{self, MusicRequest},
-            resource_types::LoadedMusic,
-        },
-    };
+    use crate::comm::locdata::CPoint;
+    use crate::comm::locdata::CRect;
+    use crate::comm::CommOptions;
+    use crate::engine::battle::Cx;
+    use crate::engine::observe::CheckpointView;
+    use crate::engine::observe::Io;
+    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+    use crate::graphics::{context::ContextLease, geometry::Point};
+    use crate::sound::music;
+    use crate::sound::music::MusicRequest;
+    use crate::sound::resource_types::LoadedMusic;
     use std::{
         cell::{Cell, RefCell},
         rc::Rc,
@@ -85,7 +80,7 @@ pub(crate) mod runtime {
         let Some(resources) = Resources::load().map(Rc::new) else {
             return;
         };
-        context.draw_stamp(&resources.background_frame(), POINT { x: 0, y: 0 });
+        context.draw_stamp(&resources.background_frame(), Point { x: 0, y: 0 });
         context.fade_screen(253, (ONE_SECOND / 2) as i16);
         if with_outtakes {
             io.observer.checkpoint(&CheckpointView::CreditsStarted);

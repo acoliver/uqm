@@ -1,8 +1,7 @@
 //! Shipyard selection highlights and input mode feedback.
-use crate::engine::{
-    graphics::native_abi::{BYTE, EXTENT, POINT, RECT},
-    input::InputSession,
-};
+
+use crate::engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use crate::engine::input::InputSession;
 use crate::ui::shipyard_layout::{
     DMS_GetEscortShipRect, HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_HEIGHT,
     SHIP_WIN_WIDTH,
@@ -24,9 +23,9 @@ pub(super) const SOUND_SELECT: u16 = 1 << 4;
 pub(super) const SOUND_CANCEL: u16 = 1 << 5;
 
 pub(super) fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
-    let r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
+    let r = Rect {
+        corner: Point { x: 0, y: 0 },
+        extent: Extent {
             width: (cx.screen_dimensions().0
                 - crate::engine::math::battle_types::STATUS_WIDTH
                 - i32::from(crate::starbase::ids::SAFE_X) * 2
@@ -37,35 +36,35 @@ pub(super) fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
     highlight_rect(cx.kernel, r);
 }
 
-pub(super) fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
+pub(super) fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: u8) {
     highlight_rect(cx.kernel, DMS_GetEscortShipRect(slot));
 }
 
 pub(super) fn dms_flash_flag_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>) {
-    crate::graphics::context_abi::ContextLease::require(cx.kernel.status_context).select();
+    crate::graphics::context::ContextLease::require(cx.kernel.status_context).select();
     let r = crate::ui::sis::gauges::gauge_rect(true);
     highlight_rect(cx.kernel, r);
-    crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
+    crate::graphics::context::ContextLease::require(cx.kernel.space_context).select();
 }
 
-pub(super) fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
+pub(super) fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>, slot: u8) {
     let row = slot / HANGAR_SHIPS_ROW;
     let col = slot % HANGAR_SHIPS_ROW;
-    let r = RECT {
-        corner: POINT {
+    let r = Rect {
+        corner: Point {
             x: HANGAR_X_COORDS[col as usize],
             y: HANGAR_Y + HANGAR_DY * row as i16 + SHIP_WIN_HEIGHT - 6,
         },
-        extent: EXTENT {
+        extent: Extent {
             width: SHIP_WIN_WIDTH,
             height: 5,
         },
     };
-    crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
+    crate::graphics::context::ContextLease::require(cx.kernel.space_context).select();
     highlight_rect(cx.kernel, r);
 }
 
-pub(super) fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, state: BYTE) {
+pub(super) fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, state: u8) {
     if state >> 4 != 0 {
         dms_flash_flag_ship(cx);
     } else {
@@ -76,7 +75,7 @@ pub(super) fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, stat
 pub(super) fn dms_set_mode(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &InputSession,
-    state: BYTE,
+    state: u8,
     mode: ModifyMode,
 ) {
     match mode {

@@ -9,8 +9,6 @@ use battle::{
     PoolElement, Ship,
 };
 use std::{ffi::CStr, mem};
-use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
-use uqm_rust::graphics::pixmap_abi::SetAbsFrameIndex;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
@@ -194,11 +192,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
             assert_eq!((*crystal).playerNr, 0);
             assert_eq!(
                 (*crystal).current.image.frame.raw(),
-                SetAbsFrameIndex(
-                    ship.descriptor_mut().ship_data.weapon.view(0).raw().cast(),
-                    0
-                )
-                .cast()
+                (ship.descriptor_mut().ship_data.weapon.view(0).raw()).at(0)
             );
             assert_eq!((*crystal).current.image.frames, ship.frame_set(1));
             assert_eq!(
@@ -273,11 +267,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                 assert_eq!((*fragment).thrust, 2);
                 assert_eq!(
                     (*fragment).current.image.frame.raw(),
-                    SetAbsFrameIndex(
-                        ship.descriptor_mut().ship_data.weapon.view(0).raw().cast(),
-                        1
-                    )
-                    .cast()
+                    (ship.descriptor_mut().ship_data.weapon.view(0).raw()).at(1)
                 );
                 assert_eq!(
                     (*fragment).current.image.frames,
@@ -381,11 +371,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             );
             assert_eq!(
                 (*sparkle).current.image.frame.raw(),
-                SetAbsFrameIndex(
-                    ship.descriptor_mut().ship_data.weapon.view(0).raw().cast(),
-                    2
-                )
-                .cast()
+                (ship.descriptor_mut().ship_data.weapon.view(0).raw()).at(2)
             );
             assert_eq!((*crystal).life, 0);
             assert_eq!((*crystal).hits, 0);
@@ -396,7 +382,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             let animate = (*sparkle).preprocess_func.unwrap();
             (*sparkle).next.image.frame = ship.frame(1, 8);
             with_rng(17, 0, || hooks::invoke_element_pointer(animate, sparkle));
-            assert_eq!(GetFrameIndex((*sparkle).next.image.frame.raw().cast()), 3);
+            assert_eq!(((*sparkle).next.image.frame.raw()).index(), 3);
             assert_ne!((*sparkle).state_flags & CHANGING as u16, 0);
             (*sparkle).turn = 2;
             (*sparkle).thrust = 3;
@@ -410,11 +396,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!(
                 (*sparkle).next.image.frame.raw(),
-                SetAbsFrameIndex(
-                    ship.descriptor_mut().ship_data.weapon.view(0).raw().cast(),
-                    0
-                )
-                .cast()
+                (ship.descriptor_mut().ship_data.weapon.view(0).raw()).at(0)
             );
             assert_eq!((*sparkle).turn, 3);
             let tail = battle::tail();
@@ -459,11 +441,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 assert_eq!((*dog).current.image.frames, ship.frame_set(2));
                 assert_eq!(
                     (*dog).current.image.frame.raw(),
-                    SetAbsFrameIndex(
-                        ship.descriptor_mut().ship_data.special.view(0).raw().cast(),
-                        0
-                    )
-                    .cast()
+                    (ship.descriptor_mut().ship_data.special.view(0).raw()).at(0)
                 );
                 assert_eq!(
                     (*dog).parent,
@@ -702,10 +680,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             let animate = (*dog).preprocess_func.unwrap();
             for frame in 1..=6 {
                 with_rng(88, 0, || hooks::invoke_element_pointer(animate, dog));
-                assert_eq!(
-                    GetFrameIndex((*dog).next.image.frame.raw().cast()),
-                    frame % 6
-                );
+                assert_eq!(((*dog).next.image.frame.raw()).index(), frame % 6);
                 (*dog).current = (*dog).next.clone();
             }
             assert_eq!(

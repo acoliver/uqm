@@ -3,7 +3,7 @@
 use crate::engine::battle::access::lifecycle;
 use crate::mainloop::options_abi::{loadAddon, loadIndices, prepareAddons};
 use crate::ships::native::abi::*;
-use crate::{battle::status_native::init_status_offsets, graphics::native_font::LoadedFont};
+use crate::{battle::status_native::init_status_offsets, graphics::font::LoadedFont};
 
 /// Load the display, the resource indices and addons the preferences ask for,
 /// and the main colour map. Returns zero when the kernel could not load.

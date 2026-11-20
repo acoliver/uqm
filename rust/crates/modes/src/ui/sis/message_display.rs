@@ -1,11 +1,11 @@
 //! Message editing uses bounded font measurements and retained drawing targets.
 use super::*;
-use crate::graphics::context_abi::ContextFrame;
-use std::{ffi::CStr, ptr::NonNull};
+use crate::graphics::{drawable::ContextFrame, geometry::TextAlign};
+use std::ffi::CStr;
 
 fn draw_cursor(
     context: &ContextLease,
-    measurement: &crate::graphics::native_font::TextMeasurement,
+    measurement: &crate::graphics::font::TextMeasurement,
     cursor: i16,
     flags: u16,
     height: i16,
@@ -33,18 +33,18 @@ fn draw_cursor(
 
 fn draw_edit(
     context: &ContextLease,
-    font: &crate::graphics::native_font::FontLease,
+    font: &crate::graphics::font::FontLease,
     text: &CStr,
-    clip: RECT,
+    clip: Rect,
     edit: (i16, i16, u16),
 ) -> bool {
     let (cursor, extra, flags) = edit;
     let width = clip.extent.width;
-    let mut baseline = POINT {
+    let mut baseline = Point {
         x: 3,
         y: SIS_MESSAGE_HEIGHT - 2,
     };
-    let measurement = font.measure(text, baseline, TEXT_ALIGN_ALIGN_LEFT, u16::MAX);
+    let measurement = font.measure(text, baseline, TextAlign::Left, u16::MAX);
     if i32::from(measurement.rect.extent.width) + i32::from(baseline.x) + 2 >= i32::from(width) {
         return false;
     }
@@ -56,7 +56,7 @@ fn draw_edit(
             font,
             text,
             baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
+            TextAlign::Left,
             rgb15(27, 0, 27),
             extra as u16,
         );
@@ -67,21 +67,9 @@ fn draw_edit(
             crate::strings::unicode::split_utf8_prefix(text.to_bytes(), extra as usize);
         let suffix = CStr::from_bytes_with_nul(&text.to_bytes_with_nul()[prefix.len()..])
             .unwrap_or_else(|error| panic!("invalid message suffix: {error}"));
-        context.draw_text(
-            font,
-            suffix,
-            baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
-            rgb15(18, 0, 18),
-        );
+        context.draw_text(font, suffix, baseline, TextAlign::Left, rgb15(18, 0, 18));
     } else {
-        context.draw_text(
-            font,
-            text,
-            baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
-            rgb15(27, 0, 27),
-        );
+        context.draw_text(font, text, baseline, TextAlign::Left, rgb15(27, 0, 27));
     }
     true
 }
@@ -95,19 +83,19 @@ pub fn draw_message(
     flags: u16,
 ) -> bool {
     let context = ContextLease::require(kernel.off_screen_context);
-    let frame = ContextFrame::retain(NonNull::new(kernel.screen));
+    let frame = ContextFrame::retain(kernel.screen);
     let font = kernel
         .tiny_font_lease()
         .unwrap_or_else(|| panic!("SIS message requires its font"));
     let width =
         (screen_width - 78 - i32::from(SIS_TITLE_BOX_WIDTH) - i32::from(SIS_SPACER_BOX_WIDTH) - 2)
             as i16;
-    let clip = RECT {
-        corner: POINT {
+    let clip = Rect {
+        corner: Point {
             x: SIS_ORG_X + 1,
             y: SIS_ORG_Y - SIS_MESSAGE_HEIGHT,
         },
-        extent: EXTENT {
+        extent: Extent {
             width,
             height: SIS_MESSAGE_HEIGHT - 1,
         },
@@ -127,13 +115,13 @@ pub fn draw_message(
             *kernel.sis_highlight.context.borrow_mut() = None;
         }
         let drawn = context.with_batch(|| {
-            let baseline = POINT {
+            let baseline = Point {
                 x: width >> 1,
                 y: SIS_MESSAGE_HEIGHT - 2,
             };
             if cursor < 0 && extra < 0 {
                 context.clear();
-                context.draw_text(&font, text, baseline, TEXT_ALIGN_ALIGN_CENTER, color);
+                context.draw_text(&font, text, baseline, TextAlign::Center, color);
             } else {
                 if !draw_edit(&context, &font, text, clip, (cursor, extra, flags)) {
                     return false;
@@ -145,8 +133,8 @@ pub fn draw_message(
                     &kernel.sis_highlight,
                     &screen,
                     clip,
-                    Some(RECT {
-                        corner: POINT { x: 0, y: 0 },
+                    Some(Rect {
+                        corner: Point { x: 0, y: 0 },
                         extent: clip.extent,
                     }),
                 );
@@ -170,12 +158,12 @@ pub fn set_menu_flash(kernel: &Kernel, dimensions: (i32, i32), any: bool) {
                 &kernel.sis_highlight,
                 &screen,
                 clip,
-                Some(RECT {
-                    corner: POINT {
+                Some(Rect {
+                    corner: Point {
                         x: (dimensions.0 - 60) as i16 - clip.corner.x,
                         y: (dimensions.1 - 56) as i16 - clip.corner.y,
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: RADAR_WIDTH,
                         height: RADAR_HEIGHT,
                     },
@@ -188,8 +176,8 @@ pub fn set_menu_flash(kernel: &Kernel, dimensions: (i32, i32), any: bool) {
 #[cfg(test)]
 mod tests {
     use crate::graphics::{
-        context_abi::{ContextFrame, ContextLease},
-        native_abi::*,
+        context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Point,
+        geometry::TextAlign,
     };
     use crate::ui::settings::OPT_PC;
     use crate::ui::sis::{DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR};
@@ -222,15 +210,12 @@ mod tests {
             .unwrap_or_else(|error| panic!("campaign panel fixture failed: {error}"));
         game.kernel.screen_context = game.kernel.off_screen_context;
         let context = ContextLease::require(game.kernel.off_screen_context);
-        context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-            game.kernel.screen,
-        )));
+        context.set_frame(ContextFrame::retain(game.kernel.screen));
         let font = game
             .kernel
             .tiny_font_lease()
             .unwrap_or_else(|| panic!("campaign panel fixture requires its tiny font"));
-        let measurement =
-            font.measure(c"AA", POINT { x: 3, y: 6 }, TEXT_ALIGN_ALIGN_LEFT, u16::MAX);
+        let measurement = font.measure(c"AA", Point { x: 3, y: 6 }, TextAlign::Left, u16::MAX);
         let glyph = measurement.rect.corner;
         assert_eq!(measurement.characters, 2);
         let second = i16::from(measurement.deltas[0]);
@@ -273,7 +258,7 @@ mod tests {
                 ] {
                     let pixel = uqm_engine::test_support::native_probe::frame_pixel(
                         game.kernel.screen,
-                        POINT {
+                        Point {
                             x: 8 + glyph.x + offset,
                             y: 2 + glyph.y,
                         },
@@ -290,7 +275,7 @@ mod tests {
                         - i16::from(cursor < 2);
                     let pixel = uqm_engine::test_support::native_probe::frame_pixel(
                         game.kernel.screen,
-                        POINT { x, y: 2 },
+                        Point { x, y: 2 },
                     );
                     assert_eq!((pixel.r, pixel.g, pixel.b), (0, 0, 0));
                 }
@@ -359,10 +344,10 @@ mod tests {
         ));
         assert_eq!(context.clip_rect().extent.width, 320);
         let screen = game.kernel.screen;
-        game.kernel.screen = std::ptr::null_mut();
+        game.kernel.screen = crate::graphics::drawable::FrameId::NULL;
         assert!(ui::sis::draw_message(&game.kernel, 320, c"A", -1, -1, 0));
         game.kernel.screen = screen;
-        context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(screen)));
+        context.set_frame(ContextFrame::retain(screen));
         drop(font);
         game.kernel.release_tiny_font();
         let Err(error) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

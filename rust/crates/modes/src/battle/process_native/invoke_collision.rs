@@ -1,15 +1,15 @@
 //! Collision hooks retain the caller's pair ordering and point mutation order.
 
 use crate::engine::battle::{CollisionHook, Cx, ElementId};
-use crate::graphics::native_abi::POINT;
+use crate::graphics::geometry::Point;
 
 pub fn invoke_collision(
     cx: &mut Cx<'_>,
     hook: CollisionHook,
     a: ElementId,
-    pa: &mut POINT,
+    pa: &mut Point,
     b: ElementId,
-    pb: &mut POINT,
+    pb: &mut Point,
 ) {
     let parent = cx.element_parent_address(a) as usize;
     match hook {
@@ -22,9 +22,9 @@ pub fn invoke_collision(
 pub fn invoke_pair(
     cx: &mut Cx<'_>,
     a: ElementId,
-    pa: &mut POINT,
+    pa: &mut Point,
     b: ElementId,
-    pb: &mut POINT,
+    pb: &mut Point,
     test_is_player: bool,
 ) {
     for index in super::dispatch::collision_order(test_is_player) {

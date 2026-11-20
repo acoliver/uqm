@@ -15,12 +15,12 @@ use super::types::{CommData, TextAlign, TextValign};
 // ===========================================================================
 
 /// C `Color` struct: { BYTE r, g, b, a } — 4 bytes.
-pub use crate::graphics::native_abi::Color as CColor;
+pub use crate::graphics::geometry::Color as CColor;
 
 /// C `POINT` struct: { COORD x, y } where COORD = SIZE = SWORD = i16.
-pub use crate::graphics::native_abi::point as CPoint;
+pub use crate::graphics::geometry::Point as CPoint;
 
-/// C `RECT` struct (units.h / comm.h).
+/// C `Rect` struct (units.h / comm.h).
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct CRect {
@@ -30,17 +30,17 @@ pub struct CRect {
 }
 
 const _: () = {
-    use crate::graphics::native_abi::{EXTENT, RECT};
-    assert!(std::mem::size_of::<CRect>() == std::mem::size_of::<RECT>());
-    assert!(std::mem::align_of::<CRect>() == std::mem::align_of::<RECT>());
-    assert!(std::mem::offset_of!(CRect, corner) == std::mem::offset_of!(RECT, corner));
+    use crate::graphics::{geometry::Extent, geometry::Rect};
+    assert!(std::mem::size_of::<CRect>() == std::mem::size_of::<Rect>());
+    assert!(std::mem::align_of::<CRect>() == std::mem::align_of::<Rect>());
+    assert!(std::mem::offset_of!(CRect, corner) == std::mem::offset_of!(Rect, corner));
     assert!(
         std::mem::offset_of!(CRect, width)
-            == std::mem::offset_of!(RECT, extent) + std::mem::offset_of!(EXTENT, width)
+            == std::mem::offset_of!(Rect, extent) + std::mem::offset_of!(Extent, width)
     );
     assert!(
         std::mem::offset_of!(CRect, height)
-            == std::mem::offset_of!(RECT, extent) + std::mem::offset_of!(EXTENT, height)
+            == std::mem::offset_of!(Rect, extent) + std::mem::offset_of!(Extent, height)
     );
 };
 
@@ -178,10 +178,11 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, module_slots), 22);
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
-        assert_eq!(std::mem::size_of::<CGameState>(), 104);
+        // the stamp's frame is a 16-byte handle, not a C pointer
+        assert_eq!(std::mem::size_of::<CGameState>(), 112);
         assert_eq!(std::mem::offset_of!(CGameState, game_clock), 40);
         assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 56);
-        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 96);
+        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 104);
     }
 
     #[test]

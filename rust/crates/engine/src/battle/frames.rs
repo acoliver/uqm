@@ -3,12 +3,12 @@
 #[cfg(test)]
 use super::super::Kernel as KernelOwner;
 use super::ShipId;
-use crate::graphics::drawable_abi::{retain_frame_allocations, DrawableLease};
-use crate::graphics::native_abi::FRAME;
+use crate::graphics::drawable::FrameId;
+use crate::graphics::drawable::{retain_frames, DrawableLease};
 use std::{cell::Cell, rc::Rc};
 
 struct Array {
-    views: [Cell<FRAME>; 3],
+    views: [Cell<FrameId>; 3],
     leases: Vec<DrawableLease>,
     #[cfg(any(test, feature = "test-support"))]
     _fixture: Option<Box<dyn std::any::Any>>,
@@ -25,12 +25,12 @@ impl FrameArray {
     }
 
     /// Retain registered frames, rejecting unknown or retired addresses.
-    pub fn from_native(views: [FRAME; 3]) -> Self {
+    pub fn from_native(views: [FrameId; 3]) -> Self {
         Self::from_raw(views, None)
     }
 
-    fn from_raw(views: [FRAME; 3], source: Option<usize>) -> Self {
-        let leases = retain_frame_allocations(&views);
+    fn from_raw(views: [FrameId; 3], source: Option<usize>) -> Self {
+        let leases = retain_frames(&views);
         Self(Some(Rc::new(Array {
             views: views.map(|frame| {
                 Cell::new(if frame.is_null() {
@@ -38,7 +38,7 @@ impl FrameArray {
                 } else {
                     leases
                         .iter()
-                        .find_map(|lease| lease.frame_at_address(frame))
+                        .find_map(|lease| lease.owns_frame(frame).then_some(frame))
                         .unwrap_or_else(|| panic!("frame has no owning drawable lease"))
                 })
             }),
@@ -54,7 +54,7 @@ impl FrameArray {
             raw: self
                 .0
                 .as_ref()
-                .map_or(std::ptr::null_mut(), |a| a.views[index].get()),
+                .map_or(FrameId::NULL, |a| a.views[index].get()),
             owner: self,
             resolution: index,
             identity: FrameOwner::Drawable,
@@ -74,7 +74,7 @@ impl FrameArray {
         crate::collections::observation::record(
             crate::collections::observation::Event::ImageFrame {
                 slot: view.as_ptr() as usize,
-                address: frame.raw() as usize,
+                address: frame.raw().bits(),
                 source_view: true,
             },
         );
@@ -98,7 +98,7 @@ impl FrameArray {
         self.set_view(index, frame);
     }
 
-    fn frame_index(&self, resolution: usize, frame: FRAME) -> usize {
+    fn frame_index(&self, resolution: usize, frame: FrameId) -> usize {
         if frame.is_null() {
             return 0;
         }
@@ -120,7 +120,7 @@ impl FrameArray {
             .unwrap_or_else(|| panic!("frame has no owning drawable lease"))
     }
 
-    fn indexed(&self, resolution: usize, index: usize) -> FRAME {
+    fn indexed(&self, resolution: usize, index: usize) -> FrameId {
         let base = self.view(resolution).raw();
         if base.is_null() {
             return base;
@@ -143,12 +143,12 @@ impl FrameArray {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn fixture(views: [FRAME; 3], resource: impl std::any::Any) -> Self {
+    pub fn fixture(views: [FrameId; 3], resource: impl std::any::Any) -> Self {
         Self::fixture_source(views, resource, None)
     }
     #[cfg(any(test, feature = "test-support"))]
     pub fn fixture_source(
-        views: [FRAME; 3],
+        views: [FrameId; 3],
         resource: impl std::any::Any,
         source: Option<usize>,
     ) -> Self {
@@ -169,7 +169,7 @@ impl FrameArray {
             frames: self
                 .views()
                 .iter()
-                .map(|frame| frame.raw() as usize)
+                .map(|frame| frame.raw().bits())
                 .collect(),
             role: role.into(),
         });
@@ -197,7 +197,7 @@ impl FrameArray {
         self.0.is_none()
     }
 
-    pub fn as_ptr(&self) -> *mut FRAME {
+    pub fn as_ptr(&self) -> *mut FrameId {
         self.0
             .as_ref()
             .map_or(std::ptr::null_mut(), |array| array.views[0].as_ptr().cast())
@@ -271,8 +271,8 @@ impl FrameSetRef {
         self.frames.view(index).owned_by(self.owner)
     }
 
-    pub fn raw(&self) -> *mut FRAME {
-        self.frames.source_address() as *mut FRAME
+    pub fn raw(&self) -> *mut FrameId {
+        self.frames.source_address() as *mut FrameId
     }
 }
 impl PartialEq for FrameSetRef {
@@ -312,13 +312,13 @@ impl Frames {
         self.0.is_none()
     }
 
-    pub fn raw(&self) -> *mut FRAME {
+    pub fn raw(&self) -> *mut FrameId {
         self.0
             .as_ref()
             .map_or(std::ptr::null_mut(), FrameSetRef::raw)
     }
 
-    pub fn retain_shared(role: SharedFrames, source: &[FRAME]) -> Self {
+    pub fn retain_shared(role: SharedFrames, source: &[FrameId]) -> Self {
         let count = source.len();
         assert!(
             count == 1 || count == 3,
@@ -335,13 +335,13 @@ impl Frames {
 /// A view cannot outlive the array retaining its drawable allocation.
 #[derive(Clone, Copy, Debug)]
 pub struct FrameRef<'a> {
-    raw: FRAME,
+    raw: FrameId,
     owner: &'a FrameArray,
     resolution: usize,
     identity: FrameOwner,
 }
 impl FrameRef<'_> {
-    pub fn raw(self) -> FRAME {
+    pub fn raw(self) -> FrameId {
         self.raw
     }
     pub fn is_absent(self) -> bool {
@@ -396,13 +396,13 @@ impl FrameSelection {
             None => FrameArray::EMPTY.view(0),
         }
     }
-    pub fn raw(&self) -> FRAME {
+    pub fn raw(&self) -> FrameId {
         self.view().raw()
     }
     pub fn is_absent(&self) -> bool {
         self.set.is_none()
     }
-    pub(super) fn with_raw(&self, raw: FRAME) -> Self {
+    pub(super) fn with_raw(&self, raw: FrameId) -> Self {
         if raw.is_null() {
             return Self::ABSENT;
         }
@@ -418,7 +418,7 @@ impl FrameSelection {
     }
     /// Retain the registered allocation without dereferencing the supplied address.
     /// Unknown or expired addresses are rejected.
-    pub fn retain(raw: FRAME) -> Self {
+    pub fn retain(raw: FrameId) -> Self {
         FrameArray::from_raw([raw; 3], None).view(0).to_owned()
     }
 }
@@ -437,15 +437,14 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn bounded_shared_sources_preserve_identity_and_snapshot_slots() {
-        let mut source = [std::ptr::null_mut(); 3];
+        let mut source = [FrameId::NULL; 3];
         let address = source.as_mut_ptr();
         let frames = Frames::retain_shared(SharedFrames::Blast, &source);
-        source.fill(std::ptr::dangling_mut());
         assert_eq!(frames.raw(), address);
         for index in 0..3 {
             assert!(frames.view(index).is_absent());
         }
-        let single = [std::ptr::null_mut()];
+        let single = [FrameId::NULL];
         let frames = Frames::retain_shared(SharedFrames::Stars, &single);
         assert_eq!(frames.raw(), single.as_ptr().cast_mut());
         assert!(frames.view(2).is_absent());
@@ -454,7 +453,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "invalid native frame array length 2")]
     fn bounded_shared_sources_reject_invalid_lengths() {
-        Frames::retain_shared(SharedFrames::Blast, &[std::ptr::null_mut(); 2]);
+        Frames::retain_shared(SharedFrames::Blast, &[FrameId::NULL; 2]);
     }
 
     #[test]
@@ -467,12 +466,12 @@ mod tests {
         let old = Frames::ship(
             ship,
             Role::Weapon,
-            FrameArray::fixture([std::ptr::null_mut(); 3], ()),
+            FrameArray::fixture([FrameId::NULL; 3], ()),
         );
         let replacement = Frames::ship(
             ship,
             Role::Weapon,
-            FrameArray::fixture([std::ptr::null_mut(); 3], ()),
+            FrameArray::fixture([FrameId::NULL; 3], ()),
         );
         assert_eq!(old, old.clone());
         assert_ne!(old, replacement);
@@ -482,7 +481,7 @@ mod tests {
     #[serial_test::serial]
     fn native_sources_snapshot_views_without_borrowing_source_storage() {
         let frames = {
-            let mut source = [std::ptr::null_mut(); 3];
+            let mut source = [FrameId::NULL; 3];
             let address = source.as_mut_ptr();
             let frames = Frames::retain_shared(SharedFrames::Blast, &source);
             assert_eq!(frames.raw(), address);
@@ -508,7 +507,7 @@ mod tests {
     fn array_edits_and_retirement_observe_storage_without_releasing_clones() {
         observation::enable();
         observation::drain();
-        let array = FrameArray::fixture([std::ptr::null_mut(); 3], ());
+        let array = FrameArray::fixture([FrameId::NULL; 3], ());
         let copied = array.clone();
         array.observe("test-array");
         array.set_view(1, FrameArray::EMPTY.view(0));
@@ -538,66 +537,53 @@ mod replacement_tests {
     #[test]
     #[serial_test::serial]
     fn replacement_rejects_a_foreign_drawable_but_accepts_a_sibling_frame() {
-        use crate::graphics::drawable_abi::{AllocDrawable, DestroyDrawable};
-        // SAFETY: the test owns both serialized native allocations and their frame slots.
-        unsafe {
-            let a = AllocDrawable(2);
-            let b = AllocDrawable(1);
-            (*a).MaxIndex = 1;
-            let owner = FrameArray::from_native([(*a).Frame.cast(); 3]);
-            let first = owner.view(0);
-            let siblings = FrameArray::from_native([(*a).Frame.add(1).cast(); 3]);
-            let sibling = siblings.view(0);
-            let other = FrameArray::from_native([(*b).Frame.cast(); 3]);
-            let foreign = other.view(0);
-            let array = FrameArray::retain([first; 3]);
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || array.replace_view(0, foreign)
-            ))
-            .is_err());
-            assert_eq!(array.view(0), first);
-            let set = FrameSetRef::shared(SharedFrames::Blast, array.clone());
-            let selected = set.view(0).to_owned();
-            assert_eq!(
-                selected
-                    .set
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("absent selection"))
-                    .owner,
-                set.owner
-            );
-            array.replace_view(0, sibling);
-            assert_eq!(array.view(0), sibling);
-            assert_eq!(selected.raw(), first.raw());
-            assert_eq!(selected.with_raw(sibling.raw()).raw(), sibling.raw());
-            DestroyDrawable(a);
-            DestroyDrawable(b);
-        }
+        let a = LoadedDrawable::create(0, 1, 1, 2).unwrap();
+        let b = LoadedDrawable::create(0, 1, 1, 1).unwrap();
+        let owner = FrameArray::from_native([a.first_frame(); 3]);
+        let first = owner.view(0);
+        let siblings = FrameArray::from_native([a.first_frame().at(1); 3]);
+        let sibling = siblings.view(0);
+        let other = FrameArray::from_native([b.first_frame(); 3]);
+        let foreign = other.view(0);
+        let array = FrameArray::retain([first; 3]);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || array.replace_view(0, foreign)
+        ))
+        .is_err());
+        assert_eq!(array.view(0), first);
+        let set = FrameSetRef::shared(SharedFrames::Blast, array.clone());
+        let selected = set.view(0).to_owned();
+        assert_eq!(
+            selected
+                .set
+                .as_ref()
+                .unwrap_or_else(|| panic!("absent selection"))
+                .owner,
+            set.owner
+        );
+        array.replace_view(0, sibling);
+        assert_eq!(array.view(0), sibling);
+        assert_eq!(selected.raw(), first.raw());
+        assert_eq!(selected.with_raw(sibling.raw()).raw(), sibling.raw());
     }
 }
 
 impl crate::collections::observation::ImagePointer for FrameSelection {
     fn address(&self) -> usize {
-        self.raw() as usize
+        self.raw().bits()
     }
 }
 
-use crate::graphics::native_abi::frame_desc;
-use crate::{
-    collections::observation::observe_views,
-    graphics::{
-        drawable_abi::DestroyDrawable,
-        pixmap_abi::{CaptureDrawable, ReleaseDrawable},
-        resgfx::LoadGraphicInstance,
-    },
-};
-use std::ptr;
+use crate::collections::observation::observe_views;
+use crate::graphics::drawable::LoadedDrawable;
 
+/// Clear every slot, releasing each distinct drawable once; false when a
+/// release failed.
 fn release_images<const N: usize>(
-    frames: &mut [*mut frame_desc; N],
-    mut destroy: impl FnMut(*mut frame_desc) -> bool,
+    frames: &mut [FrameId; N],
+    mut destroy: impl FnMut(FrameId) -> bool,
 ) -> bool {
-    let mut freed = [ptr::null_mut(); N];
+    let mut freed = [FrameId::NULL; N];
     let mut result = true;
     for i in 0..N {
         let frame = frames[i];
@@ -606,19 +592,19 @@ fn release_images<const N: usize>(
                 result = false;
             }
             freed[i] = frame;
-            frames[i] = ptr::null_mut();
+            frames[i] = FrameId::NULL;
         }
     }
     result
 }
 
-pub fn load_graphic(key: &std::ffi::CStr) -> FRAME {
-    // SAFETY: the borrowed key remains live through decoding; a successful load owns its frames.
-    unsafe { CaptureDrawable(LoadGraphicInstance(key.as_ptr()).cast()) }
+/// Load a graphic resource and hand its ownership to the returned frame.
+pub fn load_graphic(key: &std::ffi::CStr) -> FrameId {
+    LoadedDrawable::load(key).map_or(FrameId::NULL, LoadedDrawable::into_frame)
 }
 
 pub fn load_animation(
-    frames: &mut [*mut frame_desc; 3],
+    frames: &mut [FrameId; 3],
     keys: [Option<&std::ffi::CStr>; 3],
     role: &str,
 ) -> u32 {
@@ -637,17 +623,18 @@ pub fn load_animation(
         }
         frames[index + 1] = frame;
     }
-    observe_views(frames, role, |frame| *frame as usize);
+    observe_views(frames, role, |frame| frame.bits());
     1
 }
 
-pub fn free_image<const N: usize>(frames: &mut [*mut frame_desc; N], role: &str) -> u32 {
-    let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
+/// Release frames loaded by [`load_animation`] or [`load_graphic`].
+pub fn free_image<const N: usize>(frames: &mut [FrameId; N], role: &str) -> u32 {
+    let _held = retain_frames(frames);
     let freed = release_images(frames, |frame| {
-        // SAFETY: every non-null address was validated and its allocation remains retained through release.
-        unsafe { DestroyDrawable(ReleaseDrawable(frame)) != 0 }
+        drop(LoadedDrawable::from_frame(frame));
+        true
     });
-    observe_views(frames, role, |frame| *frame as usize);
+    observe_views(frames, role, |frame| frame.bits());
     freed as u32
 }
 
@@ -656,7 +643,7 @@ mod animation_release_tests {
     use super::*;
     #[test]
     fn one_frame_and_empty_sets_use_the_same_release_contract() {
-        let frame = ptr::dangling_mut::<frame_desc>();
+        let frame = FrameId::from_bits(1 << 16);
         let mut frames = [frame];
         let mut destroyed = vec![];
         assert!(release_images(&mut frames, |frame| {
@@ -664,14 +651,14 @@ mod animation_release_tests {
             true
         }));
         assert_eq!(destroyed, [frame]);
-        assert_eq!(frames, [ptr::null_mut()]);
-        let mut empty: [*mut frame_desc; 0] = [];
+        assert_eq!(frames, [FrameId::NULL]);
+        let mut empty: [FrameId; 0] = [];
         assert!(release_images(&mut empty, |_| panic!("empty frame set")));
     }
     #[test]
     fn aliases_are_destroyed_once_and_all_slots_are_cleared() {
-        let a = ptr::dangling_mut::<frame_desc>();
-        let b = a.wrapping_add(1);
+        let a = FrameId::from_bits(1 << 16);
+        let b = FrameId::from_bits(1 << 16 | 1);
         let mut frames = [a, b, a];
         let mut destroyed = vec![];
         assert!(!release_images(&mut frames, |frame| {
@@ -679,11 +666,11 @@ mod animation_release_tests {
             frame != a
         }));
         assert_eq!(destroyed, [a, b]);
-        assert_eq!(frames, [ptr::null_mut(); 3]);
+        assert_eq!(frames, [FrameId::NULL; 3]);
     }
     #[test]
     fn null_slots_do_not_own_resources() {
-        let mut frames = [ptr::null_mut(); 3];
+        let mut frames = [FrameId::NULL; 3];
         assert!(release_images(&mut frames, |_| panic!(
             "null frame destroyed"
         )));

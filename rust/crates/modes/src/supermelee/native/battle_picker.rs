@@ -30,7 +30,7 @@ pub mod live {
     use super::move_cursor;
     use crate::battle::context_access::ContextOps;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::graphics::{context_abi::ContextLease, native_abi as render};
+    use crate::graphics::{context::ContextLease, drawable::FrameId, geometry::TextAlign};
 
     #[derive(Default)]
     pub struct FleetSelection {
@@ -48,7 +48,7 @@ pub mod live {
         random_index: u16,
         pub selecting: bool,
         pub done: bool,
-        highlight: Option<crate::graphics::context_abi::Highlight>,
+        highlight: Option<crate::graphics::highlight::Highlight>,
     }
 
     const FADE_ALL_TO_COLOR: u32 = 253;
@@ -67,12 +67,12 @@ pub mod live {
     }
     fn changed(state: &mut FleetSelection, player: usize) {
         let s = &mut state.player[player];
-        let r = render::RECT {
-            corner: render::POINT {
+        let r = crate::graphics::geometry::Rect {
+            corner: crate::graphics::geometry::Point {
                 x: 57 + 18 * s.col as i16,
                 y: 24 + 18 * s.row as i16 + (1 - player as i16) * 100,
             },
-            extent: render::EXTENT {
+            extent: crate::graphics::geometry::Extent {
                 width: 18,
                 height: 18,
             },
@@ -281,13 +281,13 @@ pub mod live {
         }
     }
     pub(crate) struct FleetPicker {
-        drawable: crate::graphics::drawable_abi::LoadedDrawable,
+        drawable: crate::graphics::drawable::LoadedDrawable,
     }
     impl FleetPicker {
         pub(crate) fn new(context: &ContextLease) -> Self {
-            let drawable = crate::graphics::drawable_abi::LoadedDrawable::create(2, 149, 55, 2)
+            let drawable = crate::graphics::drawable::LoadedDrawable::create(2, 149, 55, 2)
                 .unwrap_or_else(|| panic!("fleet picker allocation"));
-            let mask = crate::graphics::drawable_abi::LoadedDrawable::load(
+            let mask = crate::graphics::drawable::LoadedDrawable::load(
                 std::ffi::CStr::from_bytes_with_nul(MELEE_PICK_MASK_PMAP_ANIM)
                     .unwrap_or_else(|error| panic!("fleet mask resource: {error}")),
             )
@@ -297,28 +297,24 @@ pub mod live {
                     context.set_frame(drawable.lease().context_frame(player));
                     context.draw_stamp(
                         &mask.lease().context_frame(player),
-                        render::POINT { x: 0, y: 0 },
+                        crate::graphics::geometry::Point { x: 0, y: 0 },
                     );
                 }
             });
             Self { drawable }
         }
-        pub(crate) fn frames(&self) -> [crate::graphics::context_abi::ContextFrame; 2] {
+        pub(crate) fn frames(&self) -> [crate::graphics::drawable::ContextFrame; 2] {
             std::array::from_fn(|player| self.drawable.lease().context_frame(player))
         }
     }
     fn context(raw: CONTEXT) -> ContextLease {
-        ContextLease::retain(
-            std::ptr::NonNull::new(raw.cast()).unwrap_or_else(|| panic!("picker context")),
-        )
+        ContextLease::retain(raw.unwrap_or_else(|| panic!("picker context")))
     }
-    fn font(raw: FONT) -> crate::graphics::native_font::FontLease {
-        crate::graphics::native_font::FontLease::retain(
-            std::ptr::NonNull::new(raw.cast()).unwrap_or_else(|| panic!("picker font")),
-        )
+    fn font(raw: FONT) -> crate::graphics::font::FontLease {
+        crate::graphics::font::FontLease::retain(raw.unwrap_or_else(|| panic!("picker font")))
     }
-    fn retained_frame(raw: FRAME, index: usize) -> crate::graphics::context_abi::ContextFrame {
-        let leases = crate::graphics::drawable_abi::retain_frame_allocations(&[raw.cast()]);
+    fn retained_frame(raw: FrameId, index: usize) -> crate::graphics::drawable::ContextFrame {
+        let leases = crate::graphics::drawable::retain_frames(&[raw]);
         leases
             .first()
             .unwrap_or_else(|| panic!("picker drawable absent"))
@@ -327,7 +323,7 @@ pub mod live {
     fn frame(
         cx: &crate::engine::battle::Cx<'_>,
         player: usize,
-    ) -> crate::graphics::context_abi::ContextFrame {
+    ) -> crate::graphics::drawable::ContextFrame {
         cx.b.selection_frames
             .as_ref()
             .unwrap_or_else(|| panic!("battle selection frames not admitted"))[player]
@@ -335,7 +331,7 @@ pub mod live {
     }
     fn value(
         cx: &mut crate::engine::battle::Cx<'_>,
-        target: &crate::graphics::context_abi::ContextFrame,
+        target: &crate::graphics::drawable::ContextFrame,
         player: usize,
     ) {
         let mut worth = 0u16;
@@ -357,9 +353,9 @@ pub mod live {
             let x = target.rect().extent.width - 4;
             context.fill_rectangle(
                 rgb(0, 1, 15),
-                render::RECT {
-                    corner: render::POINT { x: x - 18, y: 2 },
-                    extent: render::EXTENT {
+                crate::graphics::geometry::Rect {
+                    corner: crate::graphics::geometry::Point { x: x - 18, y: 2 },
+                    extent: crate::graphics::geometry::Extent {
                         width: 18,
                         height: 5,
                     },
@@ -370,8 +366,8 @@ pub mod live {
             context.draw_text(
                 &font,
                 &text,
-                render::POINT { x, y: 7 },
-                TEXT_ALIGN_ALIGN_RIGHT,
+                crate::graphics::geometry::Point { x, y: 7 },
+                TextAlign::Right,
                 rgb(19, 0, 0),
             );
         });
@@ -381,7 +377,7 @@ pub mod live {
         context.with_selected(|| {
             context.draw_stamp(
                 &frame(cx, player),
-                render::POINT {
+                crate::graphics::geometry::Point {
                     x: 54,
                     y: 15 + (1 - player as i16) * 100,
                 },
@@ -393,7 +389,7 @@ pub mod live {
         master: &crate::ships::master_native::engine::MasterShip,
         side: usize,
         index: u16,
-        context: &crate::graphics::context_abi::ContextLease,
+        context: &crate::graphics::context::ContextLease,
     ) {
         let random = cx.rng;
         let mut queue = cx.kernel.ships(side);
@@ -401,12 +397,10 @@ pub mod live {
         let built = queue
             .build(master.species)
             .unwrap_or_else(|| panic!("battle ship pool exhausted"));
-        let icon = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-            master.info.icons.cast(),
-        ));
+        let icon = crate::graphics::drawable::ContextFrame::retain(master.info.icons);
         context.draw_stamp(
             &icon,
-            render::POINT {
+            crate::graphics::geometry::Point {
                 x: 4 + 18 * (index % 7) as i16,
                 y: 10 + 18 * (index / 7) as i16,
             },
@@ -435,7 +429,7 @@ pub mod live {
                 let frame = frame(cx, side);
                 context.set_frame(frame.clone());
                 let mut rect = frame.rect();
-                let baseline = render::POINT {
+                let baseline = crate::graphics::geometry::Point {
                     x: rect.extent.width >> 1,
                     y: rect.extent.height - 7 + 4,
                 };
@@ -453,7 +447,7 @@ pub mod live {
                     &font,
                     setup.teams[side_i as usize].c_name(),
                     baseline,
-                    TEXT_ALIGN_ALIGN_CENTER,
+                    TextAlign::Center,
                     rgb(10, 10, 31),
                 );
                 let text = CString::new(setup.fleet_value[side_i as usize].to_string())
@@ -461,8 +455,8 @@ pub mod live {
                 context.draw_text(
                     &font,
                     &text,
-                    render::POINT { x: 4, y: 7 },
-                    TEXT_ALIGN_ALIGN_LEFT,
+                    crate::graphics::geometry::Point { x: 4, y: 7 },
+                    TextAlign::Left,
                     rgb(4, 5, 31),
                 );
                 assert!(cx.kernel.ships(side).head().is_none());
@@ -489,7 +483,7 @@ pub mod live {
             context.set_frame(target.clone());
             context.draw_stamp(
                 &icon,
-                render::POINT {
+                crate::graphics::geometry::Point {
                     x: 3 + 18 * (ship.index % 7) as i16,
                     y: 9 + 18 * (ship.index / 7) as i16,
                 },
@@ -562,12 +556,11 @@ pub mod live {
             p.row = 0;
             p.col = 7;
             let context = ContextLease::retain(
-                std::ptr::NonNull::new(screen_context.cast())
-                    .unwrap_or_else(|| panic!("picker screen context")),
+                screen_context.unwrap_or_else(|| panic!("picker screen context")),
             );
-            let mut highlight = context.highlight(render::RECT {
-                corner: render::POINT { x: 0, y: 0 },
-                extent: render::EXTENT {
+            let mut highlight = context.highlight(crate::graphics::geometry::Rect {
+                corner: crate::graphics::geometry::Point { x: 0, y: 0 },
+                extent: crate::graphics::geometry::Extent {
                     width: 0,
                     height: 0,
                 },
@@ -667,7 +660,8 @@ pub mod live {
             draw(cx, player);
         }
         let screen = ContextLease::retain(
-            std::ptr::NonNull::new(cx.kernel.screen_context)
+            cx.kernel
+                .screen_context
                 .unwrap_or_else(|| panic!("melee selection screen")),
         );
         let deadline = screen

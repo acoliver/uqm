@@ -220,7 +220,7 @@ fn frame_index(d: &AnimationDescriptor, from: u16, random: &mut impl FnMut() -> 
 
 pub(crate) mod runtime {
     use super::*;
-    use crate::graphics::{native_abi::POINT, palette_cycle::PaletteCycle};
+    use crate::graphics::{geometry::Point, palette_cycle::PaletteCycle};
     use uqm_engine::time::counter_abi::GetTimeCounter;
 
     const EMPTY_DESC: AnimationDescriptor = AnimationDescriptor {
@@ -286,7 +286,7 @@ pub(crate) mod runtime {
         let next_mask = advance_at(comm, GetTimeCounter(), &mut random);
         let context = comm.animation_context();
         context.with_batch(|| {
-            if PaletteCycle::step_transforms() != 0 {
+            if PaletteCycle::step_transforms() {
                 full = 1;
             }
             for i in 0..usize::from(comm.data.definition.num_animations) {
@@ -430,7 +430,7 @@ pub(crate) mod runtime {
         let mut change = 0;
         context.with_batch(|| {
             if full != 0 {
-                context.draw_stamp(&frame, POINT { x: 0, y: 0 });
+                context.draw_stamp(&frame, Point { x: 0, y: 0 });
                 for descriptor in comm.data.definition.alien_ambient_array
                     [..usize::from(comm.data.definition.num_animations)]
                     .iter_mut()
@@ -443,7 +443,7 @@ pub(crate) mod runtime {
                     if descriptor.anim_flags & COLOR == 0 {
                         context.draw_stamp(
                             &frame.wrapped_frame(descriptor.start_index),
-                            POINT { x: 0, y: 0 },
+                            Point { x: 0, y: 0 },
                         );
                     }
                 }
@@ -463,7 +463,7 @@ pub(crate) mod runtime {
                 }
                 context.draw_stamp(
                     &frame.wrapped_frame(descriptor.start_index.wrapping_add(sequence.current)),
-                    POINT { x: 0, y: 0 },
+                    Point { x: 0, y: 0 },
                 );
                 sequence.change = 0;
                 change = 1;
