@@ -28,6 +28,17 @@ pub trait Files {
         self.open_read(path)?.read_to_end(&mut bytes)?;
         Ok(bytes)
     }
+
+    /// Write `contents` to `path`. A failed write removes the partial file.
+    fn write_or_remove(&self, path: &Path, contents: &[u8]) -> io::Result<()> {
+        let written = self.open_write(path).and_then(|mut file| {
+            file.write_all(contents)?;
+            file.finish()
+        });
+        written.inspect_err(|_| {
+            let _ = self.remove(path);
+        })
+    }
 }
 
 pub struct FileStream {

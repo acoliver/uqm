@@ -62,7 +62,7 @@ impl SessionCore {
     }
     pub(crate) fn replay_wait(&self, poll: impl FnMut() -> bool) -> bool {
         poll_replay_wait(self.replay_remote_player.is_some(), poll, || {
-            crate::threading::pacing::yield_input_loop(crate::platform::sys::yield_now);
+            crate::threading::pacing::yield_input_loop(uqm_engine::host::yield_now);
         })
     }
 }
