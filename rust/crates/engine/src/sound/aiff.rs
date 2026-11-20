@@ -494,7 +494,10 @@ impl AiffDecoder {
     }
 
     pub fn open(&mut self, path: &Path) -> DecodeResult<()> {
-        let data = crate::host::platform().disk().read(path).map_err(|e| DecodeError::IoError(e.to_string()))?;
+        let data = crate::host::platform()
+            .disk()
+            .read(path)
+            .map_err(|e| DecodeError::IoError(e.to_string()))?;
         let name = path.to_string_lossy();
         self.open_from_bytes(&data, &name)
     }

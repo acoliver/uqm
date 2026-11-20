@@ -28,7 +28,6 @@ pub const PROTOCOL_VERSION: [u8; 2] = [0, 4];
 pub const MIN_UQM_VERSION: [u8; 3] = [0, 6, 9];
 /// Game version announced to peers.
 pub const UQM_VERSION: [u8; 3] = [0, 8, 0];
-pub(crate) mod netinput;
-use crate::engine::platform::os::errno::set_errno;
 #[cfg(test)]
 mod driver_tests;
+pub(crate) mod netinput;

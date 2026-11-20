@@ -42,6 +42,6 @@ pub use platform::{
     platform, process_async, steps, AudioOutput, AudioPort, FillAudio, Platform,
 };
 pub use system::{
-    at_exit, elapsed, exit, sleep, spawn, thread_number, unix_millis, yield_now, Deadline, System,
-    Worker,
+    at_exit, elapsed, exit, sleep, sleep_precise, spawn, thread_number, unix_millis, yield_now,
+    Deadline, System, Worker,
 };

@@ -481,7 +481,7 @@ impl RaceDesc {
     pub fn cleanup(&mut self, world: &mut crate::battle::World) {
         self.raw.cleanup(world);
     }
-    /// Extract the legacy record; dereferencing its resource pointers remains unsafe.
+    /// Extract the legacy record.
     pub fn into_legacy(self) -> RaceDescriptor {
         *self.raw
     }
@@ -698,8 +698,7 @@ mod projection_tests {
     }
     #[test]
     fn ship_and_descriptor_values_preserve_resources_while_updating_stats() {
-        // SAFETY: zero is valid for nullable legacy ship fields and scalars.
-        let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
+        let mut ship = ShipRecord::default();
         let mut state = ShipState::decode(&ship);
         state.facing = 7;
         state.energy_counter = 9;
@@ -718,7 +717,6 @@ mod projection_tests {
         assert_eq!(descriptor.cyborg_control.weapon_range, 231);
         assert_eq!(descriptor.ship_data.ship_rsc[0], c"retained".as_ptr());
         let value = RaceDesc::from_storage(Box::new(descriptor));
-        // SAFETY: this value retains only test-local static resource tokens.
         let raw = value.into_legacy();
         assert_eq!(raw.ship_info.energy_level, 10);
     }
@@ -731,19 +729,6 @@ impl RaceDescriptor {
             uninit(world, &mut stats);
             RaceStats::apply(self, stats);
         }
-    }
-}
-
-#[cfg(test)]
-mod zero_descriptor_tests {
-    #[test]
-    fn zero_descriptor_has_no_native_race_state() {
-        // SAFETY: a zeroed legacy descriptor contains nullable callbacks, pointers, and scalar state.
-        let descriptor: super::RaceDescriptor = unsafe { std::mem::zeroed() };
-        assert!(matches!(
-            descriptor.race_state,
-            crate::battle::RaceState::None
-        ));
     }
 }
 

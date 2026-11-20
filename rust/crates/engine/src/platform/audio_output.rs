@@ -39,7 +39,10 @@ fn run(mut fill: FillAudio, shutdown: &AtomicBool) {
         eprintln!("[mixer_pump] no output audio device found");
         return;
     };
-    eprintln!("[mixer_pump] using device: {:?}", device.name().unwrap_or_default());
+    eprintln!(
+        "[mixer_pump] using device: {:?}",
+        device.name().unwrap_or_default()
+    );
     match device.default_output_config() {
         Ok(config) => eprintln!(
             "[mixer_pump] device default config: channels={} sample_rate={} sample_format={:?}",

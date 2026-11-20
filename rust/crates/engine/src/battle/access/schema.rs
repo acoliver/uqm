@@ -3,7 +3,7 @@ use super::super::record::VelocityDesc;
 use crate::graphics::{geometry::Point, intersection::Stamp};
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct ClockRecord {
     pub day_index: u8,
     pub month_index: u8,
@@ -12,8 +12,9 @@ pub struct ClockRecord {
     pub day_in_ticks: i16,
 }
 
+/// The default is the all-zero record the C initializer produced.
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct GameRecord {
     pub glob_flags: u8,
     pub crew_cost: u8,

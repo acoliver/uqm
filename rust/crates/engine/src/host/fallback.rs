@@ -157,6 +157,9 @@ impl System for TestSystem {
     fn sleep(&self, duration: Duration) {
         std::thread::sleep(duration);
     }
+    fn sleep_precise(&self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
     fn yield_now(&self) {
         std::thread::yield_now();
     }

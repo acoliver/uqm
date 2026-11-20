@@ -739,11 +739,14 @@ pub fn init_stream_decoder() -> AudioResult<()> {
 
     // The output device pulls 44.1 kHz stereo from the mixer.
     let mut pump = MixerPump::default();
-    *MIXER_OUTPUT.lock() = crate::host::platform()
-        .audio_output(Box::new(move |output| pump.fill(output)));
+    *MIXER_OUTPUT.lock() =
+        crate::host::platform().audio_output(Box::new(move |output| pump.fill(output)));
 
     ENGINE.shutdown.store(false, Ordering::Release);
-    *guard = Some(crate::host::spawn("audio stream decoder", stream_decoder_task));
+    *guard = Some(crate::host::spawn(
+        "audio stream decoder",
+        stream_decoder_task,
+    ));
     Ok(())
 }
 
@@ -779,7 +782,6 @@ impl MixerPump {
         }
     }
 }
-
 
 /// Shut down the streaming decoder subsystem.
 ///

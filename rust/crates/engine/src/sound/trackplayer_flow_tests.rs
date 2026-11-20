@@ -135,7 +135,11 @@ fn chunk_count() -> usize {
 
 fn texts() -> Vec<Option<String>> {
     let state = TRACK_STATE.lock();
-    state.chunks.iter().map(|chunk| chunk.text.clone()).collect()
+    state
+        .chunks
+        .iter()
+        .map(|chunk| chunk.text.clone())
+        .collect()
 }
 
 fn cur_chunk() -> Option<usize> {
@@ -500,11 +504,7 @@ fn playing_a_track_starts_speech_at_the_first_page_and_reports_the_total_length(
         ms_to_ticks(2000)
     );
     assert_eq!(cur_chunk(), Some(0));
-    assert_eq!(
-        cur_sub_chunk(),
-        Some(0),
-        "the first page is shown at once"
-    );
+    assert_eq!(cur_sub_chunk(), Some(0), "the first page is shown at once");
     assert_eq!(calls.lock().as_slice(), [0], "its callback fired once");
     assert_eq!(playing_track_num(), 1);
     assert!(playing_track());
@@ -890,10 +890,7 @@ fn subtitles_can_be_walked_from_the_first_page_to_the_last() {
     let history = subtitle_history();
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].text.as_c_str(), c"First line...");
-    assert_eq!(
-        TRACK_STATE.lock().chunks[0].track_num,
-        0
-    );
+    assert_eq!(TRACK_STATE.lock().chunks[0].track_num, 0);
     assert_eq!(subtitle_snapshot().unwrap(), history[0]);
     assert_eq!(history[1].text.as_c_str(), c"..Second line");
     fast_forward_page().unwrap();

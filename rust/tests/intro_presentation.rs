@@ -106,7 +106,8 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         let movie = window.shown();
         fade_screen(252, 0);
         swap_buffers(Redraw::Fading);
-        assert!(window.shown()
+        assert!(window
+            .shown()
             .as_chunks::<4>()
             .0
             .iter()
@@ -121,7 +122,8 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         drop(playback);
         draw_on_screen(Screen::Main, |canvas| canvas.words_mut().fill(0));
         swap_buffers(Redraw::Fading);
-        assert!(window.shown()
+        assert!(window
+            .shown()
             .as_chunks::<4>()
             .0
             .iter()

@@ -6,8 +6,8 @@
 
 use std::ffi::{CStr, CString};
 
-use parking_lot::Mutex;
 use crate::host::HostEvent;
+use parking_lot::Mutex;
 
 use super::controls::InputControls;
 use super::frames::{Target, FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
@@ -279,9 +279,9 @@ pub fn attach_controls(controls: &InputControls) {
 }
 
 fn init_joysticks() -> Result<(), InputInitError> {
-    let names = crate::host::platform()
-        .init_joysticks()
-        .map_err(|error| InputInitError(format!("Couldn't initialize joystick subsystem: {error}")))?;
+    let names = crate::host::platform().init_joysticks().map_err(|error| {
+        InputInitError(format!("Couldn't initialize joystick subsystem: {error}"))
+    })?;
     crate::log_abi::log_message(4, &format!("{} joysticks were found.", names.len()));
     if !names.is_empty() {
         crate::log_abi::log_message(4, "The names of the joysticks are:");

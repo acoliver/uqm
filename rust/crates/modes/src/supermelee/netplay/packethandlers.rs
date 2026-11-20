@@ -1,6 +1,6 @@
 //! Typed protocol transitions. UI effects are delivered before decoding the next packet.
 use super::{
-    netconnection::{Effect, Event, NetConnection},
+    netconnection::{Effect, Event, NetConnection, Rejected},
     packet::Packet,
     session::SessionCore,
 };
@@ -10,14 +10,10 @@ pub(super) fn handle(
     session: &SessionCore,
     conn: &mut NetConnection,
     packet: &Packet,
-) -> (Vec<Event>, i32) {
+) -> (Vec<Event>, Result<(), Rejected>) {
     let mut effects = Vec::new();
     let result = handle_packet(session, conn, packet, &mut effects);
     (effects, result)
-}
-fn bad_message() -> i32 {
-    super::set_errno(crate::engine::platform::os::errno::EBADMSG);
-    -1
 }
 fn battle_active(state: NetState) -> bool {
     (NetState::InBattle..=NetState::EndingBattle2).contains(&state)
@@ -51,16 +47,16 @@ fn handle_packet(
     conn: &mut NetConnection,
     packet: &Packet,
     effects: &mut Vec<Event>,
-) -> i32 {
+) -> Result<(), Rejected> {
     if !matches!(
         packet,
         Packet::Ping(_) | Packet::Ack(_) | Packet::Abort(_) | Packet::Reset(_)
     ) {
         if conn.flags.reset.local {
-            return 0;
+            return Ok(());
         }
         if conn.flags.reset.remote {
-            return bad_message();
+            return Err(Rejected);
         }
     }
     if !allowed(conn, packet) {
@@ -69,7 +65,7 @@ fn handle_packet(
             packet.kind(),
             conn.state
         );
-        return bad_message();
+        return Err(Rejected);
     }
     match packet {
         Packet::Init { protocol, version } => {
@@ -95,19 +91,19 @@ fn handle_packet(
         }
         Packet::InputDelay(delay) => {
             if *delay > 35 {
-                return -1;
+                return Err(Rejected);
             }
             conn.flags.input_delay = *delay as usize;
         }
         Packet::SelectShip(choice) => {
             if !session.select_remote(conn.player, *choice) {
-                return bad_message();
+                return Err(Rejected);
             }
             effects.push(conn.event(Effect::ShipSelected));
         }
         Packet::BattleInput(input) => {
             if !session.push_input(conn.player, *input) {
-                return -1;
+                return Err(Rejected);
             }
         }
         Packet::FrameCount(frame) => {
@@ -119,11 +115,11 @@ fn handle_packet(
             effects.push(conn.event(Effect::Abort(
                 u16::from_ne_bytes(reason.to_be_bytes()) as u32
             )));
-            return -1;
+            return Err(Rejected);
         }
         Packet::Reset(reason) => effects.extend(conn.remote_reset(u32::from(*reason))),
     }
-    0
+    Ok(())
 }
 fn local_side(conn: &NetConnection, side: u8) -> u16 {
     if side == 0 {
@@ -145,15 +141,14 @@ fn handle_init(
     protocol: &[u8; 2],
     version: &[u8; 3],
     effects: &mut Vec<Event>,
-) -> i32 {
+) -> Result<(), Rejected> {
     if *protocol != super::PROTOCOL_VERSION || *version < super::MIN_UQM_VERSION {
         conn.queue(Packet::Abort(super::ABORT_VERSION_MISMATCH as u16));
         effects.push(conn.event(Effect::Abort(super::ABORT_VERSION_MISMATCH)));
-        super::set_errno(crate::engine::platform::os::errno::ENOSYS);
-        return -1;
+        return Err(Rejected);
     }
     effects.extend(conn.remote_ready(session.frame_count.get()));
-    0
+    Ok(())
 }
 
 fn handle_fleet(
@@ -161,12 +156,12 @@ fn handle_fleet(
     side: u8,
     ships: &[(u8, u8)],
     effects: &mut Vec<Event>,
-) -> i32 {
+) -> Result<(), Rejected> {
     cancel_confirmation(conn, effects);
     let side = local_side(conn, side);
     for &(index, ship) in ships {
         if !(ship < 25 || ship == 255) || index >= 14 {
-            return bad_message();
+            return Err(Rejected);
         }
         effects.push(conn.event(Effect::Ship {
             side,
@@ -174,7 +169,7 @@ fn handle_fleet(
             ship: u32::from(ship),
         }));
     }
-    0
+    Ok(())
 }
 
 fn handle_handshake(conn: &mut NetConnection, packet: &Packet) {

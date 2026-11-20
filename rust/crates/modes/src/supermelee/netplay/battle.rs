@@ -16,7 +16,7 @@ impl SessionCore {
                 return;
             }
             Effect::Connected => ProtocolNoticeKind::Connected,
-            Effect::Error(error) => ProtocolNoticeKind::Error(error),
+            Effect::Error => ProtocolNoticeKind::Error,
             Effect::Closed => ProtocolNoticeKind::Closed,
             Effect::Abort(reason) => ProtocolNoticeKind::Abort(reason),
             Effect::ShipSelected => ProtocolNoticeKind::ShipSelected,

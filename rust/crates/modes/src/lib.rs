@@ -14,7 +14,6 @@ pub use uqm_engine::io;
 pub use uqm_engine::log_abi;
 pub use uqm_engine::logging;
 pub use uqm_engine::math;
-pub use uqm_engine::platform;
 pub use uqm_engine::resource;
 pub use uqm_engine::sound;
 pub use uqm_engine::state;

@@ -61,16 +61,6 @@ pub fn log_add(level: LogLevel, message: &str) {
     eprintln!("[{:?}] {}", level, message);
 }
 
-/// Initialize the logging system
-///
-/// # Safety
-/// This function calls into C code via FFI
-pub unsafe fn log_init(max_lines: i32) {
-    // Call the C log_init function
-    // For Phase 0, this is a stub
-    eprintln!("Logging initialized with max_lines = {}", max_lines);
-}
-
 /// Convenience macro for fatal errors
 #[macro_export]
 macro_rules! log_fatal {
@@ -162,13 +152,6 @@ mod tests {
     #[test]
     fn test_log_add() {
         log_add(LogLevel::Info, "Test message");
-    }
-
-    #[test]
-    fn test_log_init() {
-        unsafe {
-            log_init(100);
-        }
     }
 
     #[test]

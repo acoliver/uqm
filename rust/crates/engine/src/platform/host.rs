@@ -3,14 +3,14 @@
 
 use std::sync::Arc;
 
+use super::rodio_device::RODIO;
 use super::system::{OsDisk, OsSystem};
 use crate::callback::Dispatch;
 use crate::graphics::sdl::{input, SdlDisplay};
 use crate::host::clock::{Clock, RealClock, ReplayClock};
 use crate::host::{
-    AudioOutput, AudioPort, Display, FillAudio, Files, HostEvent, Net, Platform, System,
+    AudioOutput, AudioPort, Display, Files, FillAudio, HostEvent, Net, Platform, System,
 };
-use super::rodio_device::RODIO;
 use crate::sound::audio_device::ReplayAudioPort;
 
 fn open_display(

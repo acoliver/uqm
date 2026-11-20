@@ -155,8 +155,14 @@ mod tests {
         assert_eq!(clip.frames(), 2);
         let clip = PcmClip::from_bytes(&[0, 127, 128, 255], 8000, 1, 8, true).unwrap();
         assert_eq!(clip.samples, [-32768, -256, 0, 32512]);
-        assert!(PcmClip::from_bytes(&[], 8000, 1, 16, false).unwrap().samples.is_empty());
-        assert!(PcmClip::from_bytes(&[42], 8000, 1, 16, false).unwrap().samples.is_empty());
+        assert!(PcmClip::from_bytes(&[], 8000, 1, 16, false)
+            .unwrap()
+            .samples
+            .is_empty());
+        assert!(PcmClip::from_bytes(&[42], 8000, 1, 16, false)
+            .unwrap()
+            .samples
+            .is_empty());
         assert!(PcmClip::from_bytes(&[0; 3], 8000, 1, 24, false).is_none());
         assert!(PcmClip::from_bytes(&[0; 4], 0, 1, 16, false).is_none());
         assert!(PcmClip::from_bytes(&[0; 4], 8000, 0, 16, false).is_none());

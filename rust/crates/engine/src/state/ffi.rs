@@ -74,10 +74,6 @@ pub fn rust_reset_game_state(world: &mut crate::World) {
     });
 }
 
-
-
-
-
 pub use crate::world::story::GameStateOwnerError;
 
 /// Copy of the singleton's bytes: the game state a save writes as "GmSt".
@@ -192,8 +188,6 @@ fn normalize_copy_bits(
 
     Some((dest_bit, src_start_bit, src_end_bit))
 }
-
-
 
 fn read_story<R: Default>(world: &crate::World, f: impl FnOnce(&StoryState) -> R) -> R {
     world.story.as_ref().map_or_else(R::default, f)
@@ -369,8 +363,6 @@ mod tests {
         }
     }
 
-
-
     #[test]
     #[serial]
     fn test_rust_reset_game_state() {
@@ -387,13 +379,4 @@ mod tests {
             }
         }
     }
-
-
-
-
-
-
-
-
-
 }

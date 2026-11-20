@@ -186,22 +186,11 @@ impl GameThreadPacer {
 
 pub mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
-    #[cfg(target_os = "macos")]
-    use crate::threading::critical_timer::CriticalTimer;
-    #[cfg(not(target_os = "macos"))]
-    use crate::threading::hibernate_thread;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
-    #[cfg(not(target_os = "macos"))]
+    use std::sync::{Mutex, MutexGuard};
     use std::time::Duration;
-    use std::time::Instant;
 
     /// Only the game thread sleeps, so the lock is never contended.
     static STATS: Mutex<PacingStats> = Mutex::new(PacingStats::new());
-    static CLOCK_ORIGIN: OnceLock<Instant> = OnceLock::new();
-    /// macOS coalesces plain sleeps into ~16 ms steps on loaded hosts; see
-    /// `threading::critical_timer`. One queue lives as long as the process.
-    #[cfg(target_os = "macos")]
-    static SLEEP_TIMER: OnceLock<CriticalTimer> = OnceLock::new();
 
     use crate::time::counter_abi::get_time_counter;
 
@@ -211,7 +200,6 @@ pub mod linked {
 
     impl GameThread {
         fn enter() -> Self {
-            CLOCK_ORIGIN.get_or_init(Instant::now);
             GameThread {
                 stats: crate::sync::lock(&STATS),
             }
@@ -237,22 +225,11 @@ pub mod linked {
         }
 
         fn sleep_ms(&mut self, ms: u32) {
-            #[cfg(target_os = "macos")]
-            SLEEP_TIMER
-                .get_or_init(|| {
-                    CriticalTimer::new().unwrap_or_else(|error| {
-                        panic!("create pacing critical timer queue: {error}")
-                    })
-                })
-                .sleep(std::time::Duration::from_millis(u64::from(ms)))
-                .unwrap_or_else(|error| panic!("wait on pacing critical timer: {error}"));
-            #[cfg(not(target_os = "macos"))]
-            hibernate_thread(Duration::from_millis(u64::from(ms)));
+            crate::host::sleep_precise(Duration::from_millis(u64::from(ms)));
         }
 
         fn monotonic_us(&self) -> u64 {
-            let origin = CLOCK_ORIGIN.get_or_init(Instant::now);
-            u64::try_from(origin.elapsed().as_micros()).unwrap_or(u64::MAX)
+            u64::try_from(crate::host::elapsed().as_micros()).unwrap_or(u64::MAX)
         }
 
         fn stats(&mut self) -> &mut PacingStats {

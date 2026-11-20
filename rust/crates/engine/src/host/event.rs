@@ -37,5 +37,8 @@ pub enum HostEvent {
     Quit,
     /// A window or display change; `detail` is the platform's description,
     /// recorded as a presentation diagnostic, and `exposed` asks for a redraw.
-    Window { detail: String, exposed: bool },
+    Window {
+        detail: String,
+        exposed: bool,
+    },
 }

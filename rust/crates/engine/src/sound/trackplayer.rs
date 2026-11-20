@@ -943,7 +943,10 @@ fn find_prev_page_inner(chunks: &[SoundChunk], cur: Option<usize>) -> Option<usi
     // C parity: cur == NULL is treated as end-of-list, so the scan still
     // starts at the head and returns the last tagged page.
     let end = cur.unwrap_or(chunks.len()).min(chunks.len());
-    (0..end).rev().find(|&index| chunks[index].tag_me).or(Some(0))
+    (0..end)
+        .rev()
+        .find(|&index| chunks[index].tag_me)
+        .or(Some(0))
 }
 
 /// Handle a buffer tag event for subtitle synchronization.

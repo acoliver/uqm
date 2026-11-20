@@ -181,12 +181,10 @@ fn joystick_events_drive_bindings_and_only_deliberate_moves_become_gestures() {
             Target::Menu(4),
         );
     });
-    let button = |down| {
-        HostEvent::JoyButton {
-            port: 0,
-            button: 1,
-            down,
-        }
+    let button = |down| HostEvent::JoyButton {
+        port: 0,
+        button: 1,
+        down,
     };
     let axis = |value| HostEvent::JoyAxis {
         port: 0,

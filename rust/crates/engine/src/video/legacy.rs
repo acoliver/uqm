@@ -4,10 +4,10 @@ use super::descriptor::Descriptor;
 use super::player::VideoPlayer;
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::io::Dir;
+use crate::sound::audio_device::{self, PcmClip};
 use crate::sound::decoder::Decoder;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::resource_types::LoadedMusic;
-use crate::sound::audio_device::{self, PcmClip};
 use std::ffi::CStr;
 use std::sync::{Mutex, MutexGuard};
 

@@ -4,11 +4,10 @@ use std::path::PathBuf;
 
 pub mod audio_output;
 pub mod host;
-pub mod rodio_device;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod os;
-pub mod sys;
+pub mod rodio_device;
 pub mod system;
 
 /// Keep upstream's per-user location; packaged content never changes this path.

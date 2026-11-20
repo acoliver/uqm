@@ -159,7 +159,10 @@ mod tests {
         };
         assert!(detail.contains("Resized(1280, 960)") && detail.contains("timestamp: 7"));
         assert!(!exposed);
-        assert_eq!(translate(&Event::Quit { timestamp: 8 }), Some(HostEvent::Quit));
+        assert_eq!(
+            translate(&Event::Quit { timestamp: 8 }),
+            Some(HostEvent::Quit)
+        );
         assert_eq!(translate(&Event::AppTerminating { timestamp: 9 }), None);
     }
 }

@@ -11,12 +11,18 @@ use crate::host::{File, FileStat, FileStream, Files, System, Worker};
 /// through the C runtime.
 pub struct OsSystem {
     epoch: Instant,
+    /// macOS coalesces plain sleeps into ~16 ms steps on loaded hosts; see
+    /// `critical_timer`. One queue lives as long as the process.
+    #[cfg(target_os = "macos")]
+    pacing_timer: std::sync::OnceLock<crate::threading::critical_timer::CriticalTimer>,
 }
 
 impl OsSystem {
     pub fn new() -> Self {
         Self {
             epoch: Instant::now(),
+            #[cfg(target_os = "macos")]
+            pacing_timer: std::sync::OnceLock::new(),
         }
     }
 }
@@ -40,6 +46,21 @@ impl System for OsSystem {
         self.epoch.elapsed()
     }
     fn sleep(&self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
+    #[cfg(target_os = "macos")]
+    fn sleep_precise(&self, duration: Duration) {
+        use crate::threading::critical_timer::CriticalTimer;
+        self.pacing_timer
+            .get_or_init(|| {
+                CriticalTimer::new()
+                    .unwrap_or_else(|error| panic!("create pacing critical timer queue: {error}"))
+            })
+            .sleep(duration)
+            .unwrap_or_else(|error| panic!("wait on pacing critical timer: {error}"));
+    }
+    #[cfg(not(target_os = "macos"))]
+    fn sleep_precise(&self, duration: Duration) {
         std::thread::sleep(duration);
     }
     fn yield_now(&self) {

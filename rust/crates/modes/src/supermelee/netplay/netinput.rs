@@ -18,7 +18,6 @@ impl super::session::SessionCore {
     pub fn push_input(&self, player: usize, value: u8) -> bool {
         let mut input = self.input.borrow_mut();
         if input.buffers[player].len() == input.capacity {
-            super::set_errno(crate::engine::platform::os::errno::ENOBUFS);
             return false;
         }
         input.buffers[player].push_back(value);

@@ -37,7 +37,7 @@ impl World {
     /// Reset values while retaining global flags. Queues and resources have a separate lifetime.
     pub fn reset_game_data(&mut self) {
         let flags = self.data.game.glob_flags;
-        self.data = WorldData::new();
+        self.data = WorldData::default();
         self.set_activity(0);
         self.data.game.glob_flags = flags;
         self.story = Some(StoryState::new());

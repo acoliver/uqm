@@ -2,9 +2,8 @@
 
 use std::collections::HashMap;
 
-
-use super::mixer::{source as mixer_source, SourceProp, SourceState};
 use super::audio_device::{clip_frames, AudioCommand};
+use super::mixer::{source as mixer_source, SourceProp, SourceState};
 use crate::time::counter_abi::ONE_SECOND;
 
 pub(super) fn source_may_have_drained(handle: usize, replay: bool) -> bool {

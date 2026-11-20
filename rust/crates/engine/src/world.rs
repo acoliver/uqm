@@ -23,7 +23,7 @@ use crate::battle::link_queue::LinkQueue;
 use queues::CampaignQueues;
 use queues::{Encounter, Fleet, Fragment, Group};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct WorldData {
     pub flagship: SisState,
     pub game: GameRecord,
@@ -33,11 +33,6 @@ impl WorldData {
     pub fn calendar_date(&self) -> (u8, u8, u16) {
         let clock = &self.game.game_clock;
         (clock.month_index, clock.day_index, clock.year_index)
-    }
-
-    pub fn new() -> Self {
-        // SAFETY: these retained save/queue records contain only integers and nullable pointers.
-        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -127,7 +122,7 @@ impl World {
             activity: activity::ActivityState::new(0),
             campaign_probe: None,
             fleet_resources: std::collections::BTreeMap::new(),
-            data: WorldData::new(),
+            data: WorldData::default(),
             next_activity: 0,
             last_encounter_group: 0,
             queues: CampaignQueues::new(),
@@ -393,12 +388,6 @@ impl From<&uqm_save::SisState> for SisState {
             commander_name: s.commander_name,
             planet_name: s.planet_name,
         }
-    }
-}
-
-impl Default for WorldData {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

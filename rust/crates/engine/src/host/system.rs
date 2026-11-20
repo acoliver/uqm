@@ -16,6 +16,9 @@ pub trait System: Send + Sync {
     /// Real time since the host started.
     fn elapsed(&self) -> Duration;
     fn sleep(&self, duration: Duration);
+    /// Sleep for a frame-pacing wait, with as little timer coalescing as
+    /// the OS offers. Only the game thread paces.
+    fn sleep_precise(&self, duration: Duration);
     fn yield_now(&self);
     /// Milliseconds since the Unix epoch, or `None` when the clock reads earlier.
     fn unix_millis(&self) -> Option<u64>;
@@ -38,6 +41,11 @@ pub fn elapsed() -> Duration {
 
 pub fn sleep(duration: Duration) {
     system().sleep(duration);
+}
+
+/// Sleep for a frame-pacing wait; see [`System::sleep_precise`].
+pub fn sleep_precise(duration: Duration) {
+    system().sleep_precise(duration);
 }
 
 pub fn yield_now() {
