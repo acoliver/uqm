@@ -216,12 +216,16 @@ pub struct GraphicsOptions {
 /// C: `TFB_InitGraphics`: open the window and create the screens. A display
 /// that cannot be opened ends the process, as in C.
 pub fn init_graphics(driver: i32, flags: i32, options: GraphicsOptions, width: i32, height: i32) {
-    let display = match super::sdl::SdlDisplay::open(flags, options.native_position, width, height)
-    {
+    let display = match crate::host::platform().open_display(
+        flags,
+        options.native_position,
+        width,
+        height,
+    ) {
         Ok(display) => display,
         Err(error) => {
             log::error!("Graphics initialization failed: {error}");
-            std::process::exit(1);
+            crate::host::exit(1);
         }
     };
     state::init(
@@ -232,7 +236,7 @@ pub fn init_graphics(driver: i32, flags: i32, options: GraphicsOptions, width: i
             height,
         },
         Some(Presentation {
-            display: Box::new(display),
+            display,
             observer: options.observer,
         }),
     );
@@ -267,7 +271,7 @@ pub(crate) fn reinit_video(mode: VideoMode) {
         log::error!("Could not provide requested mode: reverting to last known driver.");
         if reinit_graphics(previous).is_err() {
             log::error!("Video reinitialization failed");
-            std::process::exit(1);
+            crate::host::exit(1);
         }
     }
     swap_buffers(Redraw::Yes);

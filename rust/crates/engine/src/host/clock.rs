@@ -1,12 +1,11 @@
 //! The game clock port and its two implementations.
 //!
-//! `OsClock` reads the monotonic OS clock. `ReplayClock` advances only when a
+//! `RealClock` reads the host's real time. `ReplayClock` advances only when a
 //! replayed sleep reaches its wake time, so a replay never depends on how fast
 //! the host runs.
 
 use std::panic::Location;
 use std::sync::Mutex;
-use std::time::Instant;
 
 use crate::time::counter_abi::{ticks_to_time_count, ONE_SECOND};
 
@@ -21,32 +20,18 @@ pub trait Clock: Send + Sync {
     fn steps(&self) -> u64;
 }
 
-/// Milliseconds since the clock was created, wrapping at `u32` like the SDL tick counter.
-pub struct OsClock {
-    epoch: Instant,
-}
+/// Milliseconds of real time since the host started, wrapping at `u32` like
+/// the SDL tick counter.
+#[derive(Default)]
+pub struct RealClock;
 
-impl OsClock {
-    pub fn new() -> Self {
-        Self {
-            epoch: Instant::now(),
-        }
-    }
-}
-
-impl Default for OsClock {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Clock for OsClock {
+impl Clock for RealClock {
     fn now_ticks(&self, caller: &'static Location<'static>) -> u32 {
         ticks_to_time_count(self.now_ms(caller))
     }
 
     fn now_ms(&self, _caller: &'static Location<'static>) -> u32 {
-        self.epoch.elapsed().as_millis() as u32
+        super::system::elapsed().as_millis() as u32
     }
 
     fn advance_to(&self, _wake: u32) {
@@ -150,7 +135,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "only replay sleeps may advance the clock")]
-    fn the_os_clock_cannot_be_advanced() {
-        OsClock::new().advance_to(1);
+    fn the_real_clock_cannot_be_advanced() {
+        RealClock.advance_to(1);
     }
 }

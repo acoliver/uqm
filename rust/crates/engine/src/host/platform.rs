@@ -7,9 +7,10 @@
 use std::panic::Location;
 use std::sync::{Arc, OnceLock};
 
-use super::clock::{Clock, OsClock, ReplayClock};
+use super::clock::Clock;
+use super::{Display, Files, Net, System};
 use crate::callback::Dispatch;
-use crate::sound::rodio_audio::{AudioCommand, ReplayAudioPort, RodioAudio, RODIO};
+use crate::sound::rodio_audio::AudioCommand;
 
 /// A running audio device, or its replay stand-in.
 pub trait AudioPort: Send + Sync {
@@ -27,87 +28,55 @@ pub trait Platform: Send + Sync {
     fn dispatch(&self) -> &Dispatch;
     /// Everything the window system has queued since the last poll.
     fn poll_input(&self) -> Vec<sdl2::event::Event>;
-}
-
-struct OsPlatform {
-    clock: OsClock,
-    audio: &'static RodioAudio,
-    dispatch: Dispatch,
-}
-
-impl OsPlatform {
-    fn new() -> Self {
-        Self {
-            clock: OsClock::new(),
-            audio: &RODIO,
-            dispatch: Dispatch::new(),
-        }
-    }
-}
-
-impl Platform for OsPlatform {
-    fn clock(&self) -> &dyn Clock {
-        &self.clock
-    }
-    fn audio(&self) -> &dyn AudioPort {
-        self.audio
-    }
-    fn dispatch(&self) -> &Dispatch {
-        &self.dispatch
-    }
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
-        crate::input_port::sdl_input::poll_sdl_events()
-    }
-}
-
-struct ReplayPlatform {
-    clock: Arc<ReplayClock>,
-    audio: ReplayAudioPort,
-    dispatch: Dispatch,
-}
-
-impl Platform for ReplayPlatform {
-    fn clock(&self) -> &dyn Clock {
-        &*self.clock
-    }
-    fn audio(&self) -> &dyn AudioPort {
-        &self.audio
-    }
-    fn dispatch(&self) -> &Dispatch {
-        &self.dispatch
-    }
-    /// A replay has no window system: its input is the script's.
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
-        Vec::new()
-    }
+    /// Real time, sleeping, threads and process exit.
+    fn system(&self) -> &dyn System;
+    /// A new network endpoint.
+    fn net(&self) -> Box<dyn Net>;
+    /// Host paths, which the virtual file system mounts.
+    fn disk(&self) -> Arc<dyn Files + Send + Sync>;
+    /// Open the game window at `width` x `height`; `position` places a
+    /// borderless window on the desktop.
+    fn open_display(
+        &self,
+        flags: i32,
+        position: Option<(i32, i32)>,
+        width: i32,
+        height: i32,
+    ) -> Result<Box<dyn Display>, String>;
 }
 
 static PLATFORM: OnceLock<Box<dyn Platform>> = OnceLock::new();
 
-/// Build and install the process platform: replay clock and audio for a
-/// replay, the OS clock and rodio otherwise. Installing twice is a bug.
-pub fn install(replay: bool) {
-    let platform: Box<dyn Platform> = if replay {
-        let clock = Arc::new(ReplayClock::default());
-        Box::new(ReplayPlatform {
-            audio: ReplayAudioPort::new(clock.clone()),
-            clock,
-            dispatch: Dispatch::new(),
-        })
-    } else {
-        Box::new(OsPlatform::new())
-    };
+/// Make `platform` the process platform. Installing twice is a bug.
+pub fn install_platform(platform: Box<dyn Platform>) {
     assert!(PLATFORM.set(platform).is_ok(), "platform installed twice");
 }
 
-/// The installed platform. Before installation the engine runs on the OS
-/// clock with no audio device.
+/// Build and install the process platform: replay clock and audio for a
+/// replay, the OS clock and rodio otherwise.
+pub fn install(replay: bool) {
+    install_platform(crate::platform::host::new(replay));
+}
+
+/// The installed platform.
 pub fn platform() -> &'static dyn Platform {
-    static UNINSTALLED: OnceLock<OsPlatform> = OnceLock::new();
     match PLATFORM.get() {
         Some(platform) => platform.as_ref(),
-        None => UNINSTALLED.get_or_init(OsPlatform::new),
+        None => uninstalled(),
     }
+}
+
+/// Tests that install no platform run on a stand-in with the real clock and
+/// file system, silent audio and no display.
+#[cfg(any(test, feature = "test-support"))]
+fn uninstalled() -> &'static dyn Platform {
+    static FALLBACK: OnceLock<super::fallback::TestPlatform> = OnceLock::new();
+    FALLBACK.get_or_init(super::fallback::TestPlatform::new)
+}
+
+#[cfg(not(any(test, feature = "test-support")))]
+fn uninstalled() -> &'static dyn Platform {
+    panic!("the engine ran before the application installed its platform")
 }
 
 #[track_caller]

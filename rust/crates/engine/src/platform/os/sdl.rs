@@ -31,12 +31,33 @@ pub fn init_video() -> Result<Version, String> {
     })
 }
 
+/// The handlers `at_exit` registered, run in reverse order at exit.
+static EXIT_HANDLERS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
+
+extern "C" fn run_exit_handlers() {
+    let handlers = std::mem::take(
+        &mut *EXIT_HANDLERS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+    );
+    for handler in handlers.into_iter().rev() {
+        handler();
+    }
+}
+
 /// Run `handler` when the process exits normally, including through
 /// `std::process::exit`.
-pub fn at_exit(handler: extern "C" fn()) {
-    // SAFETY: the handler is a plain function that lives for the whole process.
-    // atexit fails only when the process's handler table is full, which this
-    // game's single registration cannot cause.
-    let status = unsafe { libc::atexit(handler) };
-    assert_eq!(status, 0, "could not register an exit handler");
+pub fn at_exit(handler: fn()) {
+    static HOOK: std::sync::Once = std::sync::Once::new();
+    HOOK.call_once(|| {
+        // SAFETY: the hook is a plain function that lives for the whole
+        // process. atexit fails only when the process's handler table is
+        // full, which this game's single registration cannot cause.
+        let status = unsafe { libc::atexit(run_exit_handlers) };
+        assert_eq!(status, 0, "could not register an exit handler");
+    });
+    EXIT_HANDLERS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push(handler);
 }

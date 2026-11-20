@@ -1,15 +1,17 @@
-//! Captured OS-thread identity for thread-bound game resources.
+//! Captured thread identity for thread-bound game resources.
+
+use crate::host::thread_number;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ThreadAffinity(std::thread::ThreadId);
+pub struct ThreadAffinity(u64);
 
 impl ThreadAffinity {
     pub fn current() -> Self {
-        Self(std::thread::current().id())
+        Self(thread_number())
     }
 
     pub fn is_current(self) -> bool {
-        self.0 == std::thread::current().id()
+        self.0 == thread_number()
     }
 }
 

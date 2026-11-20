@@ -50,7 +50,7 @@ pub fn init_audio() -> i32 {
 
     if !start_mixer() {
         log::error!("Rust mixer initialization failed.");
-        std::process::exit(1);
+        crate::host::exit(1);
     }
 
     if init_stream_decoder() != 0 {
@@ -59,7 +59,7 @@ pub fn init_audio() -> i32 {
         return -1;
     }
 
-    crate::platform::os::sdl::at_exit(uninit_audio_at_exit);
+    crate::host::at_exit(uninit_audio);
 
     let options = sound_options();
     set_sfx_volume(options.sfx_scale);
@@ -68,10 +68,6 @@ pub fn init_audio() -> i32 {
 
     AUDIO_INITED.store(true, Ordering::SeqCst);
     0
-}
-
-extern "C" fn uninit_audio_at_exit() {
-    uninit_audio();
 }
 
 /// Stops the audio subsystem. Does nothing when `init_audio` has not

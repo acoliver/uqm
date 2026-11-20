@@ -2,12 +2,11 @@
 //! .hdr/.tbl/.frm/.duk files from the content tree. Frames are rendered into
 //! owned canvases; the decode, clock and state handling are real.
 
-use super::{blit_frame, PlaybackState, VideoPlayer};
+use super::{blit_frame, now, PlaybackState, VideoPlayer};
 use crate::graphics::canvas::{Canvas, PixelFormat};
 use crate::video::decoder::DukVideoDecoder;
 use crate::video::{VideoError, VideoFrame, DUCK_FPS};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 const LOGO_FRAMES: u32 = 231;
 
@@ -125,7 +124,7 @@ fn direct_window_mode_is_a_plain_switch() {
 fn started_ago(seconds: u64) -> VideoPlayer {
     let mut player = player();
     player.play();
-    player.start_time = Some(Instant::now() - Duration::from_secs(seconds));
+    player.start_time = Some(now() - seconds as f64);
     player
 }
 
@@ -156,7 +155,7 @@ fn the_first_frame_is_rendered_at_once_and_the_next_is_scheduled() {
     assert_eq!(player.last_rendered_frame, Some(0));
     assert!(player.position_ms() < 500);
     let due = player.next_frame_due.expect("the next frame is scheduled");
-    assert!(due > Instant::now() - Duration::from_millis(1));
+    assert!(due > now() - 0.001);
 }
 
 #[test]
@@ -164,7 +163,7 @@ fn calling_again_before_the_next_frame_is_due_renders_nothing() {
     let mut player = player();
     player.play();
     assert!(player.process_frame(&mut |_, _, _| {}));
-    player.next_frame_due = Some(Instant::now() + Duration::from_secs(60));
+    player.next_frame_due = Some(now() + 60.0);
     let before = (
         player.current_frame,
         player.last_rendered_frame,
@@ -297,10 +296,10 @@ fn the_playback_clock_depends_on_the_state() {
     let mut player = player();
     assert_eq!(player.current_time_seconds(), 0.0, "stopped");
 
-    let start = Instant::now() - Duration::from_secs(10);
+    let start = now() - 10.0;
     player.state = PlaybackState::Paused;
     player.start_time = Some(start);
-    player.pause_time = Some(start + Duration::from_secs(4));
+    player.pause_time = Some(start + 4.0);
     player.pause_duration = 1.5;
     assert!(
         (player.current_time_seconds() - 2.5).abs() < 1e-3,
@@ -331,7 +330,7 @@ fn resuming_adds_the_time_spent_paused() {
     let mut player = player();
     player.play();
     player.pause();
-    player.pause_time = Some(Instant::now() - Duration::from_secs(3));
+    player.pause_time = Some(now() - 3.0);
 
     player.play();
 

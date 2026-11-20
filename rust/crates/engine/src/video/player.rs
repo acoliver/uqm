@@ -8,8 +8,14 @@ use super::{
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::graphics::canvas::Canvas;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
 use xbrz::scale_rgba;
+
+/// Seconds of host real time; movies play at wall-clock speed, replays too.
+type Moment = f64;
+
+fn now() -> Moment {
+    crate::host::elapsed().as_secs_f64()
+}
 
 /// Current state of video playback
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -34,9 +40,9 @@ pub struct VideoPlayer {
     dst_y: i32,
 
     /// When playback started (or resumed).
-    start_time: Option<Instant>,
+    start_time: Option<Moment>,
     /// Time when playback was paused.
-    pause_time: Option<Instant>,
+    pause_time: Option<Moment>,
     /// Accumulated pause duration to subtract from elapsed time.
     pause_duration: f32,
 
@@ -46,7 +52,7 @@ pub struct VideoPlayer {
     loop_playback: bool,
 
     /// Next time (monotonic) when a new frame should be rendered.
-    next_frame_due: Option<Instant>,
+    next_frame_due: Option<Moment>,
 
     /// Last known playback position in milliseconds.
     pos_ms: u32,
@@ -117,15 +123,15 @@ impl VideoPlayer {
                 self.current_frame = 0;
                 self.last_rendered_frame = None;
                 self.pause_duration = 0.0;
-                self.start_time = Some(Instant::now());
+                self.start_time = Some(now());
                 self.pause_time = None;
                 self.state = PlaybackState::Playing;
-                self.next_frame_due = Some(Instant::now());
+                self.next_frame_due = Some(now());
                 self.pos_ms = 0;
             }
             PlaybackState::Paused => {
                 if let Some(pause_start) = self.pause_time {
-                    self.pause_duration += pause_start.elapsed().as_secs_f32();
+                    self.pause_duration += (now() - pause_start) as f32;
                 }
                 self.pause_time = None;
                 self.state = PlaybackState::Playing;
@@ -147,7 +153,7 @@ impl VideoPlayer {
 
     pub fn pause(&mut self) {
         if self.state == PlaybackState::Playing {
-            self.pause_time = Some(Instant::now());
+            self.pause_time = Some(now());
             self.state = PlaybackState::Paused;
         }
     }
@@ -167,20 +173,16 @@ impl VideoPlayer {
         self.pos_ms
     }
 
-    /// Advances playback and (if due) renders the next frame into `dst_surface`.
-    /// # Safety
-    ///
-    /// This is an FFI function called from C. The caller must ensure pointers are valid.
-    ///
+    /// Advances playback and (if due) renders the next frame through `blit`.
     /// Returns `true` while still playing, `false` when finished/stopped.
     pub fn process_frame(&mut self, blit: &mut dyn FnMut(&VideoFrame, i32, i32)) -> bool {
         if self.state != PlaybackState::Playing {
             return self.state == PlaybackState::Paused;
         }
 
-        let now = Instant::now();
+        let frame_time = now();
         if let Some(due) = self.next_frame_due {
-            if now < due {
+            if frame_time < due {
                 return true;
             }
         }
@@ -195,7 +197,7 @@ impl VideoPlayer {
                 self.current_frame = 0;
                 self.last_rendered_frame = None;
                 self.pause_duration = 0.0;
-                self.start_time = Some(Instant::now());
+                self.start_time = Some(now());
                 target_frame = 0;
             } else {
                 self.state = PlaybackState::Finished;
@@ -208,7 +210,7 @@ impl VideoPlayer {
 
         if self.last_rendered_frame == Some(self.current_frame) {
             // Even if called late/early, schedule the next expected frame time.
-            self.schedule_next_frame(now);
+            self.schedule_next_frame(frame_time);
             return true;
         }
 
@@ -285,13 +287,12 @@ impl VideoPlayer {
         }
 
         self.last_rendered_frame = Some(self.current_frame);
-        self.schedule_next_frame(now);
+        self.schedule_next_frame(frame_time);
         true
     }
 
-    fn schedule_next_frame(&mut self, now: Instant) {
-        let frame_time = Duration::from_secs_f64(1.0 / DUCK_FPS as f64);
-        self.next_frame_due = Some(now + frame_time);
+    fn schedule_next_frame(&mut self, now: Moment) {
+        self.next_frame_due = Some(now + 1.0 / f64::from(DUCK_FPS));
     }
 
     fn current_time_seconds(&self) -> f32 {
@@ -299,14 +300,14 @@ impl VideoPlayer {
             PlaybackState::Stopped => 0.0,
             PlaybackState::Playing => {
                 if let Some(start) = self.start_time {
-                    start.elapsed().as_secs_f32() - self.pause_duration
+                    (now() - start) as f32 - self.pause_duration
                 } else {
                     0.0
                 }
             }
             PlaybackState::Paused => {
                 if let (Some(start), Some(pause)) = (self.start_time, self.pause_time) {
-                    let elapsed_before_pause = pause.duration_since(start).as_secs_f32();
+                    let elapsed_before_pause = (pause - start) as f32;
                     elapsed_before_pause - self.pause_duration
                 } else {
                     self.current_frame as f32 / DUCK_FPS

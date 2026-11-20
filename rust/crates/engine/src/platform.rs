@@ -1,40 +1,13 @@
-//! Platform-owned paths and the C runtime's errno vocabulary.
+//! The OS platform: system services, files, display, audio and paths.
 
-use std::ffi::c_int;
 use std::path::PathBuf;
 
+pub mod host;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod os;
 pub mod sys;
-
-/// Translate OS failures to the C runtime errno vocabulary used by the UIO API.
-pub fn io_errno(error: &std::io::Error) -> c_int {
-    #[cfg(unix)]
-    if let Some(errno) = error.raw_os_error() {
-        return errno;
-    }
-    use std::io::ErrorKind;
-    match error.kind() {
-        ErrorKind::NotFound => libc::ENOENT,
-        ErrorKind::PermissionDenied => libc::EACCES,
-        ErrorKind::AlreadyExists => libc::EEXIST,
-        ErrorKind::InvalidInput | ErrorKind::InvalidData => libc::EINVAL,
-        ErrorKind::NotADirectory => libc::ENOTDIR,
-        ErrorKind::IsADirectory => libc::EISDIR,
-        ErrorKind::DirectoryNotEmpty => libc::ENOTEMPTY,
-        ErrorKind::Interrupted => libc::EINTR,
-        ErrorKind::WouldBlock => libc::EAGAIN,
-        ErrorKind::OutOfMemory => libc::ENOMEM,
-        ErrorKind::StorageFull => libc::ENOSPC,
-        _ => libc::EIO,
-    }
-}
-
-#[cfg(unix)]
-pub type FileMode = libc::mode_t;
-#[cfg(windows)]
-pub type FileMode = u16;
+pub mod system;
 
 /// Keep upstream's per-user location; packaged content never changes this path.
 pub fn default_config_dir() -> PathBuf {
@@ -46,7 +19,7 @@ pub fn default_config_dir() -> PathBuf {
                 std::env::var_os("USERPROFILE")
                     .map(|home| PathBuf::from(home).join("AppData/Roaming"))
             })
-            .expect("Windows must provide APPDATA or USERPROFILE")
+            .unwrap_or_else(|| panic!("Windows must provide APPDATA or USERPROFILE"))
             .join("uqm")
     }
     #[cfg(unix)]
@@ -55,32 +28,5 @@ pub fn default_config_dir() -> PathBuf {
             panic!("OS home directory unavailable");
         };
         home.join(".uqm/")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::io_errno;
-    use std::io::{Error, ErrorKind};
-
-    #[test]
-    fn virtual_file_errors_keep_their_errno_meaning() {
-        for (kind, expected) in [
-            (ErrorKind::NotFound, libc::ENOENT),
-            (ErrorKind::PermissionDenied, libc::EACCES),
-            (ErrorKind::InvalidInput, libc::EINVAL),
-            (ErrorKind::Other, libc::EIO),
-        ] {
-            assert_eq!(io_errno(&Error::from(kind)), expected, "{kind:?}");
-        }
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn native_file_errors_keep_the_original_errno() {
-        assert_eq!(
-            io_errno(&Error::from_raw_os_error(libc::EROFS)),
-            libc::EROFS
-        );
     }
 }

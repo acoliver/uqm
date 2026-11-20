@@ -21,6 +21,10 @@ fn main() {
         exit(1);
     }
 
+    // Every mode after this, the content check included, reads files and time
+    // through the platform.
+    uqm_rust::engine::host::install(parsed.replay.is_some());
+
     // Handle early-exit modes (version/usage) that bypass the full init
     match parsed.run_mode {
         options::RunMode::Version => {
@@ -44,7 +48,6 @@ fn main() {
         options::RunMode::Normal => {}
     }
 
-    uqm_rust::engine::host::install(parsed.replay.is_some());
     logging::init(&parsed.log_file);
 
     // The frame loop runs on this thread; see threading::qos. Declared after

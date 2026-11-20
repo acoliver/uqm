@@ -53,6 +53,7 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
 
     // This process owns its SDL instance; no native window or user config is used.
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
+    uqm_rust::engine::host::install(false);
     let options = uqm_rust::graphics::present::GraphicsOptions::default();
     unsafe {
         uqm_rust::graphics::present::init_graphics(0, 0, options, 320, 240);

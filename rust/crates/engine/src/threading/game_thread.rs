@@ -2,11 +2,11 @@
 //! cooperative yield pumps window events (rust_thrcommon.c).
 use super::task_switch;
 use std::sync::atomic::{AtomicBool, Ordering};
+use crate::host::thread_number;
 use std::sync::Mutex;
-use std::thread::{self, ThreadId};
 
 /// The game thread, which owns SDL dispatch and the draw queue.
-static GAME_THREAD: Mutex<Option<ThreadId>> = Mutex::new(None);
+static GAME_THREAD: Mutex<Option<u64>> = Mutex::new(None);
 /// Between `init_game_thread` and `uninit_game_thread`.
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
@@ -14,7 +14,7 @@ fn on_game_thread() -> bool {
     *GAME_THREAD
         .lock()
         .unwrap_or_else(|error| panic!("thread owner lock: {error}"))
-        == Some(thread::current().id())
+        == Some(thread_number())
 }
 
 /// Declare the calling thread the game thread (C: `InitThreadSystem`).
@@ -26,7 +26,7 @@ pub fn init_game_thread() {
     *GAME_THREAD
         .lock()
         .unwrap_or_else(|error| panic!("thread owner lock: {error}")) =
-        Some(thread::current().id());
+        Some(thread_number());
 }
 
 /// Retire the thread system once every worker has stopped

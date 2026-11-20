@@ -18,11 +18,15 @@
 ///
 /// Synthetic directories:
 /// - Implied parent directories are synthesized (e.g., "a/b/c.txt" creates "a" and "a/b")
+use crate::host::Files;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use zip::ZipArchive;
+
+/// The host file system an archive is read from.
+pub type Disk = Arc<dyn Files + Send + Sync>;
 
 /// Metadata for a single entry in a ZIP archive
 #[derive(Debug, Clone)]
@@ -46,7 +50,6 @@ pub struct ZipEntry {
 }
 
 /// Index of a ZIP archive, built at mount time
-#[derive(Debug)]
 pub struct ZipIndex {
     /// Map from normalized path to entry metadata
     pub entries: HashMap<String, ZipEntry>,
@@ -54,6 +57,17 @@ pub struct ZipIndex {
     pub directories: HashSet<String>,
     /// Path to the archive file
     pub archive_path: PathBuf,
+    disk: Disk,
+}
+
+impl std::fmt::Debug for ZipIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ZipIndex")
+            .field("entries", &self.entries)
+            .field("directories", &self.directories)
+            .field("archive_path", &self.archive_path)
+            .finish()
+    }
 }
 
 impl ZipIndex {
@@ -64,8 +78,8 @@ impl ZipIndex {
     /// any file paths that imply intermediate directories.
     ///
     /// Returns Err if the archive cannot be opened or parsed.
-    pub fn new(archive_path: &Path) -> Result<Self, std::io::Error> {
-        let file = File::open(archive_path)?;
+    pub fn new(disk: Disk, archive_path: &Path) -> Result<Self, std::io::Error> {
+        let file = disk.open_read(archive_path)?;
         let mut archive = ZipArchive::new(file).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -143,6 +157,7 @@ impl ZipIndex {
             entries,
             directories,
             archive_path: archive_path.to_path_buf(),
+            disk,
         })
     }
 
@@ -209,7 +224,7 @@ impl ZipIndex {
             ));
         }
 
-        let file = File::open(&self.archive_path)?;
+        let file = self.disk.open_read(&self.archive_path)?;
         let mut archive = ZipArchive::new(file).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -256,7 +271,7 @@ impl ZipIndex {
             ));
         }
 
-        ZipEntryReader::new(&self.archive_path, entry.index, entry.uncompressed_size)
+        ZipEntryReader::new(&*self.disk, &self.archive_path, entry.index)
     }
 }
 
@@ -270,8 +285,8 @@ pub struct ZipEntryReader {
 }
 
 impl ZipEntryReader {
-    fn new(archive_path: &Path, index: usize, _size: u64) -> Result<Self, std::io::Error> {
-        let file = File::open(archive_path)?;
+    fn new(disk: &dyn Files, archive_path: &Path, index: usize) -> Result<Self, std::io::Error> {
+        let file = disk.open_read(archive_path)?;
         let mut archive = ZipArchive::new(file).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -425,6 +440,7 @@ fn get_direct_child(dir_path: &str, entry_path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -508,7 +524,7 @@ mod tests {
         zip.finish()?;
 
         // Now test the index
-        let index = ZipIndex::new(&zip_path)?;
+        let index = ZipIndex::new(crate::host::platform().disk(), &zip_path)?;
 
         // Check entries
         assert!(index.contains("readme.txt"));
@@ -557,7 +573,7 @@ mod tests {
 
         zip.finish()?;
 
-        let index = ZipIndex::new(&zip_path)?;
+        let index = ZipIndex::new(crate::host::platform().disk(), &zip_path)?;
         let content = index.read_entry("file.txt")?;
 
         // The last entry should win
@@ -581,7 +597,7 @@ mod tests {
         zip.write_all(b"0123456789")?;
         zip.finish()?;
 
-        let index = ZipIndex::new(&zip_path)?;
+        let index = ZipIndex::new(crate::host::platform().disk(), &zip_path)?;
         let mut reader = index.open_entry("test.txt")?;
 
         // Test reading
@@ -609,13 +625,13 @@ mod error_tests {
     fn directories_missing_entries_and_invalid_archives_have_distinct_errors() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("archive.zip");
-        let mut writer = zip::ZipWriter::new(File::create(&path).unwrap());
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
         let options = zip::write::SimpleFileOptions::default();
         writer.add_directory("docs/", options).unwrap();
         writer.start_file("docs/data", options).unwrap();
         writer.write_all(b"payload").unwrap();
         writer.finish().unwrap();
-        let index = ZipIndex::new(&path).unwrap();
+        let index = ZipIndex::new(crate::host::platform().disk(), &path).unwrap();
         assert!(index.get_entry("docs/data").is_some());
         assert!(index.get_entry("absent").is_none());
         assert_eq!(
@@ -630,7 +646,7 @@ mod error_tests {
         assert!(matches!(index.open_entry("absent"), Err(e) if e.kind() == ErrorKind::NotFound));
         std::fs::write(&path, b"invalid zip").unwrap();
         assert_eq!(
-            ZipIndex::new(&path).unwrap_err().kind(),
+            ZipIndex::new(crate::host::platform().disk(), &path).unwrap_err().kind(),
             ErrorKind::InvalidData
         );
         assert_eq!(

@@ -11,17 +11,16 @@ pub use game_thread::{init_game_thread, uninit_game_thread, yield_game_thread, y
 #[cfg(target_os = "macos")]
 pub mod qos;
 
-use std::thread;
 use std::time::Duration;
 
 /// Yield execution to other threads (C: `TaskSwitch` -> `SDL_Delay(1)`).
 pub fn task_switch() {
-    thread::sleep(Duration::from_millis(1));
+    crate::host::sleep(Duration::from_millis(1));
 }
 
 /// Sleep the current thread for `duration`.
 pub fn hibernate_thread(duration: Duration) {
-    thread::sleep(duration);
+    crate::host::sleep(duration);
 }
 
 #[cfg(test)]

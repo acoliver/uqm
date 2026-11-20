@@ -22,8 +22,6 @@
 //! - `.tbl` - Vector table for decoding (256 * 16 bytes)
 
 use std::fmt;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 use super::{
@@ -363,16 +361,10 @@ impl DukVideoDecoder {
 
     /// Reads a file entirely into a byte vector
     fn read_file(path: &Path) -> Result<Vec<u8>, VideoError> {
-        let mut file = File::open(path).map_err(|e| {
-            VideoError::IoError(format!("Failed to open {}: {}", path.display(), e))
-        })?;
-
-        let mut data = Vec::new();
-        file.read_to_end(&mut data).map_err(|e| {
-            VideoError::IoError(format!("Failed to read {}: {}", path.display(), e))
-        })?;
-
-        Ok(data)
+        crate::host::platform()
+            .disk()
+            .read(path)
+            .map_err(|e| VideoError::IoError(format!("Failed to read {}: {}", path.display(), e)))
     }
 
     /// Reads frame offsets from .frm file

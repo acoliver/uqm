@@ -7,11 +7,11 @@
 //! mount it came from is removed.
 
 use crate::host::{File, FileStat, FileStream, Files};
-use crate::io::zip_reader::{ZipEntryReader, ZipIndex};
+use crate::io::zip_reader::{Disk, ZipEntryReader, ZipIndex};
 use parking_lot::Mutex;
 use std::collections::BTreeSet;
 use std::ffi::{CStr, CString};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -55,10 +55,11 @@ struct Mount {
     read_only: bool,
 }
 
-#[derive(Default)]
 struct MountTable {
     mounts: Vec<Mount>,
     next_id: usize,
+    /// The host file system behind directory mounts and archives.
+    disk: Disk,
 }
 
 struct Resolution<'a> {
@@ -67,7 +68,7 @@ struct Resolution<'a> {
 }
 
 /// Mounts plus the retained content, config, save and melee directories.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Vfs {
     table: Arc<Mutex<MountTable>>,
     dirs: Arc<Mutex<Retained>>,
@@ -82,9 +83,23 @@ struct Retained {
     content_mount: Option<MountId>,
 }
 
+impl Default for Vfs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Vfs {
+    /// A file system with no mounts over the platform's host files.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            table: Arc::new(Mutex::new(MountTable {
+                mounts: Vec::new(),
+                next_id: 0,
+                disk: crate::host::platform().disk(),
+            })),
+            dirs: Arc::default(),
+        }
     }
 
     /// Mount host directory `host` at `point`.
@@ -114,8 +129,9 @@ impl Vfs {
         read_only: bool,
     ) -> io::Result<MountId> {
         let archive = normalize(&source.path, name);
-        let index = Arc::new(ZipIndex::new(&archive)?);
-        Ok(self.table.lock().add(
+        let mut table = self.table.lock();
+        let index = Arc::new(ZipIndex::new(table.disk.clone(), &archive)?);
+        Ok(table.add(
             point,
             archive,
             Backing::Archive(index),
@@ -444,12 +460,7 @@ impl MountTable {
         let virtual_path = normalize(base, path);
         if write {
             let target = self.write_path(host, base, &virtual_path, path)?;
-            let file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(target)?;
-            return Ok(FileStream::new(FileData::File(file)));
+            return self.disk.open_write(&target);
         }
         let mut covered = false;
         for mount in &self.mounts {
@@ -460,13 +471,11 @@ impl MountTable {
             let opened = match &mount.backing {
                 Backing::Archive(index) => index
                     .open_entry(&suffix.to_string_lossy())
-                    .map(FileData::ZipEntry),
-                Backing::Directory => {
-                    std::fs::File::open(confine(&mount.root, suffix)).map(FileData::File)
-                }
+                    .map(FileStream::new),
+                Backing::Directory => self.disk.open_read(&confine(&mount.root, suffix)),
             };
             match opened {
-                Ok(file) => return Ok(FileStream::new(file)),
+                Ok(file) => return Ok(file),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(error),
             }
@@ -474,9 +483,7 @@ impl MountTable {
         if covered {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
-        std::fs::File::open(normalize(host, path))
-            .map(FileData::File)
-            .map(FileStream::new)
+        self.disk.open_read(&normalize(host, path))
     }
 
     fn write_path(
@@ -517,7 +524,8 @@ impl MountTable {
 
     fn remove_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<()> {
         let virtual_path = normalize(base, path);
-        std::fs::remove_file(self.write_path(host, base, &virtual_path, path)?)
+        self.disk
+            .remove(&self.write_path(host, base, &virtual_path, path)?)
     }
 
     fn stat_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<FileStat> {
@@ -547,8 +555,8 @@ impl MountTable {
                     }
                 }
                 Backing::Directory => {
-                    if let Ok(meta) = std::fs::metadata(confine(&mount.root, suffix)) {
-                        return Ok(stat_of(&meta));
+                    if let Ok(stat) = self.disk.stat(&confine(&mount.root, suffix)) {
+                        return Ok(stat);
                     }
                 }
             }
@@ -556,7 +564,7 @@ impl MountTable {
         if covered {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
-        std::fs::metadata(normalize(host, path)).map(|meta| stat_of(&meta))
+        self.disk.stat(&normalize(host, path))
     }
 
     fn list_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<Vec<String>> {
@@ -571,7 +579,7 @@ impl MountTable {
             covered = true;
             let entries = match &mount.backing {
                 Backing::Archive(zip) => zip.list_directory(&suffix.to_string_lossy()),
-                Backing::Directory => match directory_names(&confine(&mount.root, suffix)) {
+                Backing::Directory => match self.disk.list(&confine(&mount.root, suffix)) {
                     Ok(names) => names,
                     Err(_) => continue,
                 },
@@ -585,27 +593,9 @@ impl MountTable {
         if covered {
             Ok(names)
         } else {
-            directory_names(&normalize(host, path))
+            self.disk.list(&normalize(host, path))
         }
     }
-}
-
-fn stat_of(meta: &std::fs::Metadata) -> FileStat {
-    FileStat {
-        len: meta.len(),
-        is_dir: meta.is_dir(),
-        is_file: meta.is_file(),
-    }
-}
-
-fn directory_names(path: &Path) -> io::Result<Vec<String>> {
-    Ok(std::fs::read_dir(path)?
-        .filter_map(|entry| {
-            entry
-                .ok()
-                .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        })
-        .collect())
 }
 
 /// Top-level host directories that a directory is opened on directly instead
@@ -704,53 +694,21 @@ pub fn matches_pattern(name: &str, pattern: &str, kind: Match) -> bool {
     }
 }
 
-pub enum FileData {
-    File(std::fs::File),
-    ZipEntry(ZipEntryReader),
-}
-
-impl File for FileData {
+impl File for ZipEntryReader {
     fn len(&self) -> io::Result<u64> {
-        match self {
-            FileData::File(file) => file.metadata().map(|meta| meta.len()),
-            FileData::ZipEntry(entry) => Ok(entry.size()),
-        }
+        Ok(self.size())
     }
 }
 
-impl Read for FileData {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            FileData::File(file) => file.read(buf),
-            FileData::ZipEntry(entry) => entry.read(buf),
-        }
-    }
-}
-
-impl Write for FileData {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            FileData::File(file) => file.write(buf),
-            FileData::ZipEntry(_) => Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Cannot write to ZIP entry",
-            )),
-        }
+impl Write for ZipEntryReader {
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Cannot write to ZIP entry",
+        ))
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match self {
-            FileData::File(file) => file.flush(),
-            FileData::ZipEntry(_) => Ok(()),
-        }
-    }
-}
-
-impl Seek for FileData {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        match self {
-            FileData::File(file) => file.seek(pos),
-            FileData::ZipEntry(entry) => entry.seek(pos),
-        }
+        Ok(())
     }
 }
