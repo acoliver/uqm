@@ -1,0 +1,15 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running `target/debug/uqm-xtask clippy --base origin/main`
+    Checking uqm v0.9.0 (/Volumes/XS1000/acoliver/projects/uqm/tmp/wt/U7-P/rust)
+    Checking uqm-xtask v0.9.0 (/Volumes/XS1000/acoliver/projects/uqm/tmp/wt/U7-P/rust/xtask)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.86s
+clippy deny set: 0 findings
+unsafe_op_in_unsafe_fn: 3907
+clippy::undocumented_unsafe_blocks: 1023
+clippy::unwrap_used: 346
+clippy::expect_used: 287
+clippy::mem_forget: 1
+uqm: lint debt regression:
+clippy::expect_used|uqm-engine::@path::src::test_support::native_session.rs: 0 -> 1
+clippy::expect_used|uqm-engine::callback::@file: 0 -> 1
+clippy::expect_used|uqm-engine::input_port::sdl_input::@file: 1 -> 2

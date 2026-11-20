@@ -25,6 +25,8 @@ pub trait Platform: Send + Sync {
     fn audio(&self) -> &dyn AudioPort;
     /// The game's callback queue and alarms.
     fn dispatch(&self) -> &Dispatch;
+    /// Everything the window system has queued since the last poll.
+    fn poll_input(&self) -> Vec<sdl2::event::Event>;
 }
 
 struct OsPlatform {
@@ -53,6 +55,9 @@ impl Platform for OsPlatform {
     fn dispatch(&self) -> &Dispatch {
         &self.dispatch
     }
+    fn poll_input(&self) -> Vec<sdl2::event::Event> {
+        crate::input_port::sdl_input::poll_sdl_events()
+    }
 }
 
 struct ReplayPlatform {
@@ -70,6 +75,10 @@ impl Platform for ReplayPlatform {
     }
     fn dispatch(&self) -> &Dispatch {
         &self.dispatch
+    }
+    /// A replay has no window system: its input is the script's.
+    fn poll_input(&self) -> Vec<sdl2::event::Event> {
+        Vec::new()
     }
 }
 

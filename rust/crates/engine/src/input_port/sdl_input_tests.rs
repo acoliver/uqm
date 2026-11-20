@@ -1,5 +1,7 @@
 use super::*;
 use crate::resource::ffi_bridge::{InitResourceSystem, UninitResourceSystem};
+use sdl2::keyboard::Keycode;
+use sdl2::mouse::MouseButton;
 use serial_test::serial;
 
 #[test]
@@ -43,213 +45,340 @@ fn character_buffer_keeps_255_chars_drops_overflow_and_wraps() {
     assert_eq!((buffer.head, buffer.tail, buffer.last), (0, 0, 0));
 }
 
-fn event(kind: u32) -> sys::SDL_Event {
-    let mut event: sys::SDL_Event = unsafe { std::mem::zeroed() };
-    event.type_ = kind;
-    event
+fn key_event(down: bool, sym: i32, keymod: Mod, repeat: bool) -> Event {
+    let keycode = Keycode::from_i32(sym);
+    if down {
+        Event::KeyDown {
+            timestamp: 0,
+            window_id: 0,
+            keycode,
+            scancode: None,
+            keymod,
+            repeat,
+        }
+    } else {
+        Event::KeyUp {
+            timestamp: 0,
+            window_id: 0,
+            keycode,
+            scancode: None,
+            keymod,
+            repeat,
+        }
+    }
 }
 
-struct Driver;
+fn mouse(down: bool) -> Event {
+    let (timestamp, window_id, which, mouse_btn, clicks, x, y) =
+        (0, 0, 0, MouseButton::Left, 1, 0, 0);
+    if down {
+        Event::MouseButtonDown {
+            timestamp,
+            window_id,
+            which,
+            mouse_btn,
+            clicks,
+            x,
+            y,
+        }
+    } else {
+        Event::MouseButtonUp {
+            timestamp,
+            window_id,
+            which,
+            mouse_btn,
+            clicks,
+            x,
+            y,
+        }
+    }
+}
+
+fn text(text: &str) -> Event {
+    Event::TextInput {
+        timestamp: 0,
+        window_id: 0,
+        text: text.to_owned(),
+    }
+}
+
+/// A driver with fresh state whose controls are bound as the resources say.
+struct Driver {
+    controls: InputControls,
+}
 
 impl Driver {
     fn new() -> Self {
-        ffi::rust_v_control_uninit();
-        ffi::rust_v_control_init();
+        *INPUT.lock() = DriverState::new();
+        let controls = InputControls::default();
+        install_controls(&controls);
+        Self { controls }
+    }
 
-        *INPUT.lock() = InputState::new();
-        INPUT.lock().initialized = true;
-        Self
+    fn menu(&self, index: usize) -> i32 {
+        self.controls.immediate().menu[index]
+    }
+
+    fn bind_menu(&self, sym: i32, index: usize) {
+        self.controls
+            .vcontrol(|vc| vc.add_key_binding(sym, Target::Menu(index)));
     }
 }
 
 impl Drop for Driver {
     fn drop(&mut self) {
-        TFB_UninitInput();
-        *INPUT.lock() = InputState::new();
+        uninit_input();
+        *INPUT.lock() = DriverState::new();
     }
 }
 
 #[test]
 #[serial]
 fn character_modes_defer_sdl_changes_to_events_and_clear_input() {
-    let _driver = Driver::new();
-    let mut target = 0;
-    unsafe {
-        ffi::rust_vcontrol_add_key_binding(32, &mut target);
-        ffi::rust_vcontrol_process_key_down(32);
-    }
-    EnterCharacterMode();
-    assert_eq!(target, 0);
+    let driver = Driver::new();
+    driver.bind_menu(32, 0);
+    process_input_event(&key_event(true, 32, Mod::empty(), false));
+    assert_eq!(driver.menu(0), 0x101);
+    enter_character_mode();
+    assert_eq!(driver.menu(0), 0, "entering releases the controls");
     assert!(INPUT.lock().character_mode);
     assert!(!INPUT.lock().applied_character_mode);
-    let mut text = event(0x303);
-    for (dest, byte) in unsafe { &mut text.text.text }
-        .iter_mut()
-        .zip("é水\0".as_bytes())
-    {
-        *dest = *byte as c_char;
-    }
-    unsafe { process_input_event(&text) };
+    process_input_event(&text("é水"));
     assert!(INPUT.lock().applied_character_mode);
-    assert_eq!(GetNextCharacter(), u32::from('é'));
-    assert_eq!(GetNextCharacter(), u32::from('水'));
-    assert_eq!(GetNextCharacter(), 0);
-    assert_eq!(GetLastCharacter(), u32::from('水'));
-    ExitCharacterMode();
-    assert_eq!(GetLastCharacter(), 0);
+    assert_eq!(next_character(), u32::from('é'));
+    assert_eq!(next_character(), u32::from('水'));
+    assert_eq!(next_character(), 0);
+    assert_eq!(last_character(), u32::from('水'));
+    exit_character_mode();
+    assert_eq!(last_character(), 0);
     assert!(!INPUT.lock().character_mode);
     assert!(INPUT.lock().applied_character_mode);
-    unsafe { process_input_event(&event(0x400)) };
+    process_input_event(&mouse(false));
     assert!(!INPUT.lock().applied_character_mode);
 }
 
 #[test]
 #[serial]
 fn numlock_keypad_characters_bypass_controls_only_in_character_mode() {
-    let _driver = Driver::new();
-    let key = super::super::keynames::sdl2_keys::SDLK_KP_1;
-    let mut target = 0;
-    unsafe { ffi::rust_vcontrol_add_key_binding(key, &mut target) };
-    let mut key_down = event(0x300);
-    key_down.key.keysym.sym = key;
-    key_down.key.keysym.mod_ = sys::SDL_Keymod::KMOD_NUM as u16;
-    EnterCharacterMode();
-    unsafe { process_input_event(&key_down) };
-    assert_eq!(target, 0);
-    ExitCharacterMode();
-    unsafe { process_input_event(&key_down) };
-    assert_eq!(target & 0xff, 1);
-    TFB_ResetControls();
-    EnterCharacterMode();
-    key_down.key.keysym.mod_ = 0;
-    unsafe { process_input_event(&key_down) };
-    assert_eq!(target & 0xff, 1);
-    TFB_ResetControls();
-    key_down.key.keysym.sym = super::super::keynames::sdl2_keys::SDLK_KP_ENTER;
-    key_down.key.keysym.mod_ = sys::SDL_Keymod::KMOD_NUM as u16;
-    assert!(!unsafe { is_numpad_character(&key_down, true) });
+    let driver = Driver::new();
+    let key = sdl2_keys::SDLK_KP_1;
+    driver.bind_menu(key, 0);
+    let down = key_event(true, key, Mod::NUMMOD, false);
+    enter_character_mode();
+    process_input_event(&down);
+    assert_eq!(driver.menu(0), 0);
+    exit_character_mode();
+    process_input_event(&down);
+    assert_eq!(driver.menu(0) & 0xff, 1);
+    reset_controls();
+    enter_character_mode();
+    process_input_event(&key_event(true, key, Mod::empty(), false));
+    assert_eq!(driver.menu(0) & 0xff, 1, "without NumLock it is a control");
+    reset_controls();
+    let enter = key_event(true, sdl2_keys::SDLK_KP_ENTER, Mod::NUMMOD, false);
+    assert!(!is_numpad_character(&enter, true));
+    assert!(is_numpad_character(&down, true));
+    assert!(!is_numpad_character(&down, false));
 }
 
 #[test]
 #[serial]
-fn input_gate_mouse_buttons_frame_start_and_reset_match_c() {
-    let _driver = Driver::new();
-    unsafe {
-        INPUT.lock().mouse_button_down = false;
-        INPUT.lock().initialized = false;
-        process_input_event(&event(0x401));
-        assert!(!mouse_button_down());
-        INPUT.lock().initialized = true;
-        process_input_event(&event(0x401));
-        assert!(mouse_button_down());
-        process_input_event(&event(0x402));
-        assert!(!mouse_button_down());
-    }
-    let mut target = 0;
-    unsafe {
-        ffi::rust_vcontrol_add_key_binding(32, &mut target);
-        ffi::rust_vcontrol_process_key_down(32);
-    }
-    assert_eq!(target, 0x101);
-    BeginInputFrame();
-    assert_eq!(target, 1);
+fn input_gate_mouse_buttons_frame_start_and_reset() {
+    process_input_event(&mouse(true));
+    assert!(!mouse_button_down(), "no controls, no input");
+    let driver = Driver::new();
+    process_input_event(&mouse(true));
+    assert!(mouse_button_down());
+    process_input_event(&mouse(false));
+    assert!(!mouse_button_down());
+    driver.bind_menu(32, 0);
+    process_input_event(&key_event(true, 32, Mod::empty(), false));
+    assert_eq!(driver.menu(0), 0x101);
+    process_input_event(&key_event(true, 32, Mod::empty(), true));
+    assert_eq!(driver.menu(0), 0x101, "a repeat is not another press");
+    begin_input_frame();
+    assert_eq!(driver.menu(0), 1);
     INPUT.lock().characters.text_input(b"x\0");
-    TFB_ResetControls();
-    assert_eq!(target, 0);
-    assert_eq!(GetNextCharacter(), 0);
-    assert_eq!(GetLastCharacter(), 0);
+    reset_controls();
+    assert_eq!(driver.menu(0), 0);
+    assert_eq!(next_character(), 0);
+    assert_eq!(last_character(), 0);
 }
 
-unsafe fn put(key: &str, value: &str) {
-    res_PutString(
-        CString::new(key).unwrap().as_ptr(),
-        CString::new(value).unwrap().as_ptr(),
+#[test]
+#[serial]
+fn joystick_events_drive_bindings_and_only_deliberate_moves_become_gestures() {
+    let driver = Driver::new();
+    driver.controls.vcontrol(|vc| {
+        vc.init_joystick(0, "Pad".into(), 1, 2, 1).unwrap();
+        vc.bind(Gesture::JoyButton { port: 0, button: 1 }, Target::Menu(3));
+        vc.bind(
+            Gesture::JoyAxis {
+                port: 0,
+                axis: 0,
+                polarity: -1,
+            },
+            Target::Menu(4),
+        );
+    });
+    let button = |down| {
+        if down {
+            Event::JoyButtonDown {
+                timestamp: 0,
+                which: 0,
+                button_idx: 1,
+            }
+        } else {
+            Event::JoyButtonUp {
+                timestamp: 0,
+                which: 0,
+                button_idx: 1,
+            }
+        }
+    };
+    let axis = |value| Event::JoyAxisMotion {
+        timestamp: 0,
+        which: 0,
+        axis_idx: 0,
+        value,
+    };
+    process_input_event(&button(true));
+    assert_eq!(driver.menu(3), 1);
+    assert_eq!(
+        driver.controls.vcontrol(|vc| vc.last_gesture()),
+        Some(Gesture::JoyButton { port: 0, button: 1 })
     );
+    process_input_event(&button(false));
+    assert_eq!(driver.menu(3), 0);
+    driver.controls.vcontrol(|vc| vc.clear_gesture());
+    process_input_event(&axis(-12000));
+    assert_eq!(driver.menu(4), 1, "past the dead zone it drives the word");
+    assert_eq!(driver.controls.vcontrol(|vc| vc.last_gesture()), None);
+    process_input_event(&axis(-20000));
+    assert_eq!(
+        driver.controls.vcontrol(|vc| vc.last_gesture()),
+        Some(Gesture::JoyAxis {
+            port: 0,
+            axis: 0,
+            polarity: -1
+        })
+    );
+}
+
+fn put(key: &str, value: &str) {
+    let (key, value) = (CString::new(key).unwrap(), CString::new(value).unwrap());
+    // SAFETY: both strings are terminated and live for the call.
+    unsafe { res_PutString(key.as_ptr(), value.as_ptr()) };
 }
 
 #[test]
 #[serial]
 fn resource_controls_register_menu_alternates_templates_and_removal() {
-    let _driver = Driver::new();
+    // SAFETY: serial tests own the resource system.
     unsafe {
         UninitResourceSystem();
         InitResourceSystem();
-        put("menu.pause.1", "key Space");
-        put("menu.pause.2", "key Return");
-        put("menu.pause.4", "key Escape");
-        put(
-            "keys.1.name",
-            "a name longer than twenty nine bytes is truncated",
-        );
-        put("keys.1.up.1", "key Up");
-        put("keys.1.up.2", "key w");
-        let mut menu = [0; 24];
-        let mut flight = [0; 14];
-        tfb_set_input_vectors(menu.as_mut_ptr(), 24, flight.as_mut_ptr(), 2, 7);
-        {
-            let mut state = INPUT.lock();
-            state.controls = (0..28).map(|_| empty_gesture()).collect();
-            state.register_controls();
-            state.register_flight();
-            assert_eq!(state.controls[0].gesture_type, 1);
-            assert_eq!(state.controls[1].gesture_type, 1);
-            assert_eq!(state.controls[2].gesture_type, 0);
-            assert_eq!(state.control_index(1, 6, 1), Some(27));
-            for indices in [(-1, 0, 0), (2, 0, 0), (0, 7, 0), (0, 0, 2)] {
-                assert!(state
-                    .control_index(indices.0, indices.1, indices.2)
-                    .is_none());
-            }
-        }
-        let names = super::super::templates::input_templates();
-        assert_eq!(names[0].to_bytes(), b"a name longer than twenty nin");
-        assert!(names[1].is_empty());
-        ffi::rust_vcontrol_process_key_down(32);
-        assert_eq!(menu[0] & 0xff, 1);
-        ffi::rust_vcontrol_process_key_down(27);
-        assert_eq!(menu[0] & 0xff, 1, "alternate after a gap is not loaded");
-        ffi::rust_vcontrol_process_key_down(super::super::keynames::sdl2_keys::SDLK_UP);
-        assert_eq!(flight[0] & 0xff, 1);
-        let mut buffer = [0 as c_char; 40];
-        InterrogateInputState(0, 0, 1, buffer.as_mut_ptr(), 40);
-        assert_eq!(CStr::from_ptr(buffer.as_ptr()), c"w");
-        InterrogateInputState(2, 0, 0, buffer.as_mut_ptr(), 40);
-        assert_eq!(buffer[0], 0);
-        RemoveInputState(0, 0, 1);
-        assert_eq!(res_HasKey(c"keys.1.up.2".as_ptr()), 0);
-        ffi::rust_vcontrol_reset_input();
-        ffi::rust_vcontrol_process_key_down(i32::from(b'w'));
-        assert_eq!(flight[0], 0);
-        TFB_UninitInput();
-        UninitResourceSystem();
     }
+    put("menu.pause.1", "key Space");
+    put("menu.pause.2", "key Return");
+    put("menu.pause.4", "key Escape");
+    put(
+        "keys.1.name",
+        "a name longer than twenty nine bytes is truncated",
+    );
+    put("keys.1.up.1", "key Up");
+    put("keys.1.up.2", "key w");
+    let driver = Driver::new();
+    assert_eq!(
+        DriverState::control_index(1, 6, 1),
+        Some(((FLIGHT_KEYS + 6) * ALTERNATES) + 1)
+    );
+    for (template, control, alternate) in [(-1, 0, 0), (6, 0, 0), (0, 7, 0), (0, 0, 2)] {
+        assert_eq!(
+            DriverState::control_index(template, control, alternate),
+            None
+        );
+    }
+    let names = input_templates();
+    assert_eq!(names[0].to_bytes(), b"a name longer than twenty nin");
+    assert!(names[1].is_empty());
+    process_input_event(&key_event(true, 32, Mod::empty(), false));
+    assert_eq!(driver.menu(0) & 0xff, 1);
+    process_input_event(&key_event(true, 27, Mod::empty(), false));
+    assert_eq!(
+        driver.menu(0) & 0xff,
+        1,
+        "the alternate after a gap is not loaded"
+    );
+    process_input_event(&key_event(true, sdl2_keys::SDLK_UP, Mod::empty(), false));
+    assert_eq!(driver.controls.immediate().key[0][0] & 0xff, 1);
+    assert_eq!(control_name(0, 0, 1), "w");
+    assert_eq!(control_name(5, 0, 0), "");
+    remove_input_state(0, 0, 1);
+    // SAFETY: the key is a terminated string.
+    assert_eq!(unsafe { res_HasKey(c"keys.1.up.2".as_ptr()) }, 0);
+    assert_eq!(control_name(0, 0, 1), "");
+    driver.controls.vcontrol(|vc| vc.reset_states());
+    process_input_event(&key_event(true, i32::from(b'w'), Mod::empty(), false));
+    assert_eq!(driver.controls.immediate().key[0][0], 0, "no longer bound");
+    drop(driver);
+    // SAFETY: as above.
+    unsafe { UninitResourceSystem() };
 }
 
 #[test]
 #[serial]
-fn interrogation_formats_each_joystick_gesture_and_truncates() {
+fn rebinding_waits_for_a_gesture_then_binds_and_saves_it() {
+    // SAFETY: serial tests own the resource system.
+    unsafe {
+        UninitResourceSystem();
+        InitResourceSystem();
+    }
+    put("keys.1.up.1", "key Up");
+    let driver = Driver::new();
+    let mut polls = 0;
+    rebind_input_state(0, 0, 0, || {
+        polls += 1;
+        if polls == 3 {
+            process_input_event(&key_event(true, 32, Mod::empty(), false));
+        }
+    });
+    assert_eq!(polls, 3);
+    assert_eq!(control_name(0, 0, 0), "Space");
+    let key = flight_key(0, "up", 0);
+    // SAFETY: the key is a terminated string; the value is copied at once.
+    let saved = unsafe { CStr::from_ptr(res_GetString(key.as_ptr())) };
+    assert_eq!(saved, c"key Space");
+    process_input_event(&key_event(true, 32, Mod::empty(), false));
+    assert_eq!(driver.controls.immediate().key[0][0] & 0xff, 1);
+    process_input_event(&key_event(true, sdl2_keys::SDLK_UP, Mod::empty(), false));
+    assert_eq!(
+        driver.controls.immediate().key[0][0] & 0xff,
+        1,
+        "the old key no longer drives it"
+    );
+    drop(driver);
+    // SAFETY: as above.
+    unsafe { UninitResourceSystem() };
+}
+
+#[test]
+#[serial]
+fn interrogation_formats_each_gesture_kind() {
     let _driver = Driver::new();
     {
         let mut state = INPUT.lock();
-        state.num_templates = 1;
-        state.num_flight = 2;
-        state.controls = [
-            Gesture::JoyButton { port: 2, button: 3 },
-            Gesture::JoyAxis {
-                port: 1,
-                axis: 2,
-                polarity: -1,
-            },
-            Gesture::JoyHat {
-                port: 0,
-                hat: 1,
-                dir: 8,
-            },
-        ]
-        .iter()
-        .map(VCONTROL_GESTURE::from_gesture)
-        .collect();
-        state.controls.push(empty_gesture());
+        state.configured[0] = Some(Gesture::JoyButton { port: 2, button: 3 });
+        state.configured[1] = Some(Gesture::JoyAxis {
+            port: 1,
+            axis: 2,
+            polarity: -1,
+        });
+        state.configured[2] = Some(Gesture::JoyHat {
+            port: 0,
+            hat: 1,
+            dir: 8,
+        });
     }
     for (control, alternate, expected) in [
         (0, 0, "[J2 B4]"),
@@ -257,16 +386,6 @@ fn interrogation_formats_each_joystick_gesture_and_truncates() {
         (1, 0, "[J0 H1 8]"),
         (1, 1, ""),
     ] {
-        let mut buffer = [0 as c_char; 20];
-        unsafe {
-            InterrogateInputState(0, control, alternate, buffer.as_mut_ptr(), 20);
-            assert_eq!(CStr::from_ptr(buffer.as_ptr()).to_str().unwrap(), expected);
-        }
+        assert_eq!(control_name(0, control, alternate), expected);
     }
-    let mut buffer = [0x55 as c_char; 5];
-    unsafe {
-        InterrogateInputState(0, 0, 0, buffer.as_mut_ptr(), 4);
-        assert_eq!(CStr::from_ptr(buffer.as_ptr()), c"[J2");
-    }
-    assert_eq!(buffer[4], 0x55);
 }

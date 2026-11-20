@@ -4,7 +4,7 @@
 //! starts and defers any queued while it runs to the next call. Alarms are a
 //! min-heap by deadline; cancellation is lazy because alarms are few.
 
-use std::collections::{BinaryHeap, HashSet, VecDeque};
+use std::collections::{binary_heap::PeekMut, BinaryHeap, HashSet, VecDeque};
 
 use parking_lot::Mutex;
 
@@ -155,17 +155,17 @@ impl Dispatch {
         let mut guard = self.alarms.lock();
         loop {
             let alarms = &mut *guard;
-            let Some(top) = alarms.heap.peek() else {
+            let Some(top) = alarms.heap.peek_mut() else {
                 return false;
             };
             if alarms.cancelled.remove(&top.id) {
-                alarms.heap.pop();
+                PeekMut::pop(top);
                 continue;
             }
             if now_ms < top.deadline_ms {
                 return false;
             }
-            let alarm = alarms.heap.pop().expect("peeked alarm");
+            let alarm = PeekMut::pop(top);
             drop(guard);
             (alarm.task)();
             return true;

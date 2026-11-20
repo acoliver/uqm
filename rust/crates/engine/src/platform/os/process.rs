@@ -11,6 +11,16 @@ pub fn real_user_id() -> u32 {
     unsafe { libc::getuid() }
 }
 
+/// Run `handler` when the process exits normally, including through
+/// `std::process::exit`.
+pub fn at_exit(handler: extern "C" fn()) {
+    // SAFETY: the handler is a plain function that lives for the whole process.
+    // atexit fails only when the process's handler table is full, which this
+    // game's single registration cannot cause.
+    let status = unsafe { libc::atexit(handler) };
+    assert_eq!(status, 0, "could not register an exit handler");
+}
+
 /// The effective user ID of this process.
 #[must_use]
 pub fn effective_user_id() -> u32 {

@@ -20,10 +20,6 @@ pub fn ticks_to_time_count(ticks: u32) -> u32 {
         .wrapping_add((ticks % 1000) * ONE_SECOND / 1000)
 }
 
-pub fn InitTimeSystem() {}
-
-pub fn UnInitTimeSystem() {}
-
 #[track_caller]
 pub fn GetTimeCounter() -> u32 {
     crate::host::now_ticks()
@@ -35,8 +31,6 @@ mod tests {
 
     #[test]
     fn entry_points_are_safe_rust_functions() {
-        let _: fn() = InitTimeSystem;
-        let _: fn() = UnInitTimeSystem;
         let _: fn() -> u32 = GetTimeCounter;
     }
 

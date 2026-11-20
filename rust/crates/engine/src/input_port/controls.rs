@@ -4,13 +4,14 @@ use super::frames::{
     InputFrames, InputState, FLIGHT_KEYS, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_RIGHT, KEY_SPECIAL,
     KEY_UP, KEY_WEAPON, TEMPLATES,
 };
-use std::cell::UnsafeCell;
+use super::vcontrol::VControl;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::ThreadId;
 
 #[derive(Default)]
 struct ControllerState {
-    immediate: Box<UnsafeCell<InputState>>,
+    /// The live control words and the bindings that write them.
+    vcontrol: VControl,
     frames: InputFrames,
     player_controls: [u32; 2],
     paused: bool,
@@ -64,15 +65,13 @@ impl InputControls {
             .unwrap_or_else(|_| panic!("input state poisoned"))
     }
 
-    /// The provider may write this stable buffer only on the owner thread,
-    /// between control operations. No state guard crosses a provider call.
-    pub fn immediate_ptr(&self) -> *mut InputState {
-        self.state().immediate.get()
+    /// Run `f` on this runtime's bindings and control words.
+    pub fn vcontrol<R>(&self, f: impl FnOnce(&mut VControl) -> R) -> R {
+        f(&mut self.state().vcontrol)
     }
 
     pub fn immediate(&self) -> InputState {
-        // SAFETY: the thread check excludes concurrent provider access; no borrowed view escapes.
-        unsafe { self.state().immediate.get().read() }
+        *self.state().vcontrol.state()
     }
 
     pub fn current(&self) -> InputState {
@@ -122,11 +121,7 @@ impl InputControls {
     }
 
     pub fn set_menu_key(&self, index: usize, pressed: bool) {
-        // SAFETY: only the provider thread accesses this buffer, through its retained raw pointer.
-        unsafe {
-            std::ptr::addr_of_mut!((*self.state().immediate.get()).menu[index])
-                .write(i32::from(pressed))
-        };
+        self.state().vcontrol.state_mut().menu[index] = i32::from(pressed);
     }
 
     pub fn clear_menu_pulse(&self, index: usize) {
@@ -134,13 +129,9 @@ impl InputControls {
     }
 
     pub fn set_player_key(&self, player: usize, key: usize, pressed: bool) {
-        let state = self.state();
+        let mut state = self.state();
         let template = state.player_controls[player] as usize;
-        // SAFETY: the owner thread serializes these writes with the provider.
-        unsafe {
-            std::ptr::addr_of_mut!((*state.immediate.get()).key[template][key])
-                .write(i32::from(pressed))
-        };
+        state.vcontrol.state_mut().key[template][key] = i32::from(pressed);
     }
 
     pub fn player_controls(&self) -> [u32; 2] {

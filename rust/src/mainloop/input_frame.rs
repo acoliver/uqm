@@ -26,36 +26,14 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
     }
 }
 
-use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
-use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
-
-unsafe fn present_complete_transaction() {
-    // Drain even when batching already consumed part of the transaction, then
-    // publish exactly one frame. TFB_FlushGraphics alone does not swap when the
-    // queue is already empty.
-    TFB_FlushGraphicsEx(1);
-    TFB_SwapBuffers(0);
-}
-
-/// Execute every committed draw command without presenting a frame.
-///
-/// Queued draw commands hold pointers into the resources they draw with
-/// (glyph data of a font, for example). Owners call this before freeing such a
-/// resource. A build without the C archive has no draw queue to drain.
-pub fn drain_committed_draws() {
-    // SAFETY: Called on the game/main thread, where the legacy renderer
-    // consumes the draw queue.
-    unsafe { TFB_FlushGraphicsEx(1) };
-}
+pub use crate::engine::host::display::drain_committed_draws;
 
 /// Present drawing committed before a synchronous `DoInput` loop begins.
 ///
 /// Nested menus often draw their initial state immediately before calling
 /// `DoInput`; the outer callback cannot return while that nested loop runs.
 pub fn rust_begin_input_loop() {
-    // SAFETY: Called on the game/main thread after the owner has completed the
-    // draw transaction that establishes this input loop's initial state.
-    unsafe { present_complete_transaction() };
+    crate::engine::host::display::present_committed_draws();
 }
 
 /// Complete the typed input callback and notify its supplied observer.
@@ -70,9 +48,7 @@ pub fn rust_complete_input_frame(
     let result = complete_input_frame(|| keep_running != 0);
 
     if result.present {
-        // SAFETY: Called on the game/main thread at the same boundary where
-        // legacy rendering would make committed input-frame draws visible.
-        unsafe { present_complete_transaction() };
+        crate::engine::host::display::present_committed_draws();
     }
 
     io.observer.simulation(cx, "input-loop");

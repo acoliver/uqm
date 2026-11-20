@@ -26,6 +26,7 @@ mod files;
 pub use files::{File, FileStat, FileStream, Files};
 
 pub mod clock;
+pub mod display;
 mod platform;
 pub use clock::Clock;
 pub use platform::{

@@ -44,8 +44,7 @@ pub trait InputRuntime {
     fn observer(&self) -> Box<dyn crate::observe::Observer>;
     fn yield_poll(&self, cx: &mut Cx<'_>);
     fn yield_task(&self, _cx: &mut Cx<'_>) {
-        // SAFETY: the installed runtime retains initialized game-thread input and display.
-        unsafe { crate::threading::legacy_abi::TaskSwitch() };
+        crate::threading::yield_task();
     }
     fn sleep(&self, cx: &mut Cx<'_>, ticks: u32);
     fn sleep_until(&self, cx: &mut Cx<'_>, deadline: u32);

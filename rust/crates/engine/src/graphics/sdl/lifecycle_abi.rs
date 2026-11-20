@@ -164,23 +164,19 @@ pub unsafe extern "C" fn TFB_ProcessEvents() {
     if crate::host::is_replay() {
         return;
     }
-    let mut event = std::mem::MaybeUninit::uninit();
-    while sdl2_sys::SDL_PollEvent(event.as_mut_ptr()) > 0 {
-        let event = event.assume_init();
-        // SAFETY: SDL_PollEvent initialized this event, including its shared tag.
-        let event_type = event.type_;
-        if event_type == sdl2_sys::SDL_EventType::SDL_WINDOWEVENT as u32
-            || event_type == sdl2_sys::SDL_EventType::SDL_DISPLAYEVENT as u32
-        {
-            ffi::observe_display_event(sdl2::event::Event::from_ll(event));
+    use sdl2::event::{Event, WindowEvent};
+    for event in crate::host::platform().poll_input() {
+        if matches!(event, Event::Window { .. } | Event::Display { .. }) {
+            ffi::observe_display_event(event.clone());
         }
         crate::input_port::process_input_event(&event);
-        if event_type == sdl2_sys::SDL_EventType::SDL_QUIT as u32 {
-            ptr::write_volatile(ptr::addr_of_mut!(QuitPosted), 1);
-        } else if event_type == sdl2_sys::SDL_EventType::SDL_WINDOWEVENT as u32
-            && event.window.event == sdl2_sys::SDL_WindowEventID::SDL_WINDOWEVENT_EXPOSED as u8
-        {
-            TFB_SwapBuffers(2);
+        match event {
+            Event::Quit { .. } => ptr::write_volatile(ptr::addr_of_mut!(QuitPosted), 1),
+            Event::Window {
+                win_event: WindowEvent::Exposed,
+                ..
+            } => TFB_SwapBuffers(2),
+            _ => {}
         }
     }
 }

@@ -1,13 +1,12 @@
 use uqm_engine::input_port::controls::InputControls;
 
 #[test]
-fn provider_buffer_keeps_its_address_when_the_input_owner_moves() {
+fn control_words_survive_the_input_owner_moving() {
     let input = InputControls::default();
-    let address = input.immediate_ptr();
+    input.set_menu_key(8, true);
     let input = Box::new(input);
-    assert_eq!(input.immediate_ptr(), address);
     input.set_menu_key(9, true);
-    assert_eq!(input.immediate().menu[9], 1);
+    assert_eq!(input.immediate().menu[8..10], [1, 1]);
 }
 
 #[test]
@@ -25,7 +24,6 @@ fn input_owners_do_not_share_keys_templates_or_pause_exit_state() {
     assert!(first.exit_requested());
     assert!(!second.paused());
     assert!(!second.exit_requested());
-    assert_ne!(first.immediate_ptr(), second.immediate_ptr());
 }
 
 #[test]
@@ -45,10 +43,9 @@ fn sampled_frames_and_menu_sound_masks_remain_local() {
 }
 
 #[test]
-fn retained_input_handles_share_the_provider_buffer_and_live_snapshots() {
+fn retained_input_handles_share_the_control_words_and_live_snapshots() {
     let owner = InputControls::default();
     let observer = owner.clone();
-    assert_eq!(owner.immediate_ptr(), observer.immediate_ptr());
     observer.set_menu_key(9, true);
     let keys = owner.immediate();
     owner.advance(keys, keys, 7);

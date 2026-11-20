@@ -6,19 +6,13 @@
 //! It calls the C init sequence, runs the game loop on the main thread
 //! (no separate game thread), and tears down subsystems on exit.
 
-use std::ffi::CString;
 use std::process::exit;
 
 use uqm_rust::mainloop::logging;
 use uqm_rust::mainloop::options;
 
 fn main() {
-    // Collect args as C strings for the C init sequence
     let args: Vec<String> = std::env::args().collect();
-    let c_args: Vec<CString> = args
-        .iter()
-        .map(|s| CString::new(s.as_str()).unwrap_or_default())
-        .collect();
     // Parse command-line options in Rust (replaces C parseOptions)
     let parsed = options::parse(&args);
 
@@ -98,7 +92,7 @@ fn main() {
     let mut application = uqm_rust::app::Application::new(game, observer);
 
     application.install_input(input);
-    let exit_code = uqm_rust::app::run(&mut application, &c_args, &parsed);
+    let exit_code = uqm_rust::app::run(&mut application, &args, &parsed);
     let observer = application.observer().cloned();
     let exit_code = finish_automation(
         observer.as_deref(),

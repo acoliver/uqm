@@ -175,14 +175,12 @@ impl GameThreadPacer {
     }
     pub fn sleep_for(&mut self, duration: u32) {
         crate::graphics::dcqueue_abi::require_presentation(&self._context);
-        // SAFETY: the retained context admits this initialized display's graphics thread.
-        unsafe { linked::sleep_thread(duration) };
+        linked::sleep_thread(duration);
     }
 
     pub fn sleep_until(&mut self, deadline: u32) {
         crate::graphics::dcqueue_abi::require_presentation(&self._context);
-        // SAFETY: this admitted graphics thread owns the initialized display being pumped.
-        unsafe { linked::sleep_thread_until(deadline) };
+        linked::sleep_thread_until(deadline);
     }
 }
 
@@ -207,10 +205,6 @@ pub mod linked {
 
     use crate::time::counter_abi::GetTimeCounter;
 
-    use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
-
-    use crate::graphics::dcqueue_abi::TFB_FlushGraphics;
-
     struct GameThread {
         stats: MutexGuard<'static, PacingStats>,
     }
@@ -230,12 +224,8 @@ pub mod linked {
         }
 
         fn pump_and_flush(&mut self) {
-            // SAFETY: both are C entry points with no arguments, called from
-            // the game thread that owns the display.
-            unsafe {
-                TFB_ProcessEvents();
-                TFB_FlushGraphics();
-            }
+            crate::host::display::process_events();
+            crate::host::display::flush_draws();
         }
 
         fn now_ticks(&self) -> u32 {
@@ -283,10 +273,7 @@ pub mod linked {
     }
 
     /// Sleep for `sleep_time` game time units after servicing the display.
-    ///
-    /// # Safety
-    /// Called on the SDL game thread with input and graphics initialized.
-    pub unsafe fn sleep_thread(sleep_time: u32) {
+    pub fn sleep_thread(sleep_time: u32) {
         if crate::host::is_replay() {
             replay_sleep_for(sleep_time);
         } else {
@@ -295,10 +282,7 @@ pub mod linked {
     }
 
     /// Sleep until the game clock reaches `wake_time`.
-    ///
-    /// # Safety
-    /// Called on the SDL game thread with input and graphics initialized.
-    pub unsafe fn sleep_thread_until(wake_time: u32) {
+    pub fn sleep_thread_until(wake_time: u32) {
         if crate::host::is_replay() {
             replay_sleep(wake_time);
         } else {
@@ -313,8 +297,8 @@ mod tests {
 
     #[test]
     fn linked_sleep_entry_points_use_rust_signatures_and_unsigned_ticks() {
-        let _: unsafe fn(u32) = super::linked::sleep_thread;
-        let _: unsafe fn(u32) = super::linked::sleep_thread_until;
+        let _: fn(u32) = super::linked::sleep_thread;
+        let _: fn(u32) = super::linked::sleep_thread_until;
     }
 
     /// Scripted clock. Flushes cost the scripted number of ticks (zero once

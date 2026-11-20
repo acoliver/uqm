@@ -7,7 +7,7 @@ use crate::sound::heart_ffi::{
     init_stream_decoder, set_music_volume, set_sfx_volume, set_speech_volume, uninit_stream_decoder,
 };
 use crate::sound::mixer::ffi::{rust_mixer_init, rust_mixer_uninit};
-use crate::sound::volume_globals::{musicVolume, sfxVolumeScale, speechVolumeScale};
+use crate::sound::volume_globals::sound_options;
 
 const MIXER_FREQUENCY: u32 = 44100;
 // MIX_FORMAT_MAKE(2, 2): 16-bit samples, two channels.
@@ -19,10 +19,8 @@ static AUDIO_INITED: AtomicBool = AtomicBool::new(false);
 /// Starts the mixer and the stream decoder thread.
 /// Returns 0 on success and -1 when the stream decoder fails to start. A mixer that cannot start is fatal.
 ///
-/// # Safety
 /// Must be called once from the main thread before any audio call.
-#[no_mangle]
-pub unsafe extern "C" fn initAudio(_driver: i32, _flags: i32) -> i32 {
+pub fn init_audio() -> i32 {
     log::info!("initAudio: Using Rust mixer backend");
 
     if rust_mixer_init(
@@ -42,20 +40,24 @@ pub unsafe extern "C" fn initAudio(_driver: i32, _flags: i32) -> i32 {
         return -1;
     }
 
-    libc::atexit(unInitAudio);
+    crate::platform::os::process::at_exit(uninit_audio_at_exit);
 
-    set_sfx_volume(sfxVolumeScale);
-    set_speech_volume(speechVolumeScale);
-    set_music_volume(musicVolume);
+    let options = sound_options();
+    set_sfx_volume(options.sfx_scale);
+    set_speech_volume(options.speech_scale);
+    set_music_volume(options.music_volume);
 
     AUDIO_INITED.store(true, Ordering::SeqCst);
     0
 }
 
-/// Stops the audio subsystem. Does nothing when `initAudio` has not
+extern "C" fn uninit_audio_at_exit() {
+    uninit_audio();
+}
+
+/// Stops the audio subsystem. Does nothing when `init_audio` has not
 /// succeeded or the subsystem is already down.
-#[no_mangle]
-pub extern "C" fn unInitAudio() {
+pub fn uninit_audio() {
     if !AUDIO_INITED.swap(false, Ordering::SeqCst) {
         return;
     }

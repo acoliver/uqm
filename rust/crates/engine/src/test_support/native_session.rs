@@ -5,10 +5,7 @@
 
 use crate::{
     graphics::sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
-    input::{
-        frames::{FLIGHT_KEYS, MENU_KEYS, TEMPLATES},
-        InputSession,
-    },
+    input::InputSession,
     input_port::sdl_input,
     io::{install, uninstall, Dir, Placement, Vfs},
 };
@@ -155,17 +152,8 @@ pub struct NativeInput(InputSession);
 
 impl NativeInput {
     pub fn bind(input: &InputSession) -> Self {
-        let state = input.immediate_ptr();
-        // SAFETY: the retained input owns both stable vectors until the guard unbinds them.
-        unsafe {
-            sdl_input::tfb_set_input_vectors(
-                ptr::addr_of_mut!((*state).menu).cast(),
-                MENU_KEYS as i32,
-                ptr::addr_of_mut!((*state).key).cast(),
-                TEMPLATES as i32,
-                FLIGHT_KEYS as i32,
-            );
-            assert_eq!(sdl_input::TFB_InitInput(0, 0), 0);
+        if let Err(error) = sdl_input::init_input(input.controls()) {
+            panic!("native input did not start: {error}");
         }
         Self(input.clone())
     }
@@ -173,38 +161,30 @@ impl NativeInput {
 
 impl Drop for NativeInput {
     fn drop(&mut self) {
-        sdl_input::TFB_UninitInput();
-        // SAFETY: callbacks have returned, so nothing reads the vectors being detached.
-        unsafe { sdl_input::tfb_set_input_vectors(ptr::null_mut(), 0, ptr::null_mut(), 0, 0) };
+        sdl_input::uninit_input();
         self.0.clear_menu_state();
     }
 }
 
 /// Deliver a key-down for ASCII `key` to the initialized native provider.
 pub fn key_down(key: u8) {
-    // SAFETY: an all-zero SDL_Event is valid, and the fields set make it a key-down.
-    unsafe {
-        let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-        event.type_ = 0x300;
-        event.key.state = 1;
-        event.key.keysym.sym = i32::from(key);
-        event.key.keysym.scancode = sdl2_sys::SDL_Scancode::SDL_SCANCODE_W;
-        sdl_input::process_input_event(&event);
-    }
+    sdl_input::process_input_event(&sdl2::event::Event::KeyDown {
+        timestamp: 0,
+        window_id: 0,
+        keycode: sdl2::keyboard::Keycode::from_i32(i32::from(key)),
+        scancode: Some(sdl2::keyboard::Scancode::W),
+        keymod: sdl2::keyboard::Mod::empty(),
+        repeat: false,
+    });
 }
 
-/// Deliver one SDL text-input event carrying `text` (at most 31 bytes).
+/// Deliver one SDL text-input event carrying `text`.
 pub fn text_input(text: &str) {
-    assert!(text.len() < 32);
-    // SAFETY: an all-zero SDL_Event is valid; the text is NUL terminated by the zeroed tail.
-    unsafe {
-        let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-        event.type_ = 0x303;
-        for (slot, byte) in event.text.text.iter_mut().zip(text.bytes()) {
-            *slot = byte as std::ffi::c_char;
-        }
-        sdl_input::process_input_event(&event);
-    }
+    sdl_input::process_input_event(&sdl2::event::Event::TextInput {
+        timestamp: 0,
+        window_id: 0,
+        text: text.to_owned(),
+    });
 }
 
 /// Reload `index` from whatever directory is currently the content directory.

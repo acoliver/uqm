@@ -1,60 +1,38 @@
-//! Kernel resource teardown, ported from cleanup.c (GPL-2.0-or-later).
+//! Kernel resource teardown.
 
-use crate::graphics::context_abi::DestroyContext;
-use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
-use std::ptr;
+use crate::engine::battle::access::lifecycle;
 
-use crate::game_init::kernel_abi::UninitPlayerInput;
-/// # Safety
-/// Run on the game thread after the game loop stops, before graphics teardown.
-pub unsafe fn free_kernel(kernel: &mut crate::engine::Kernel) {
-    {
-        UninitPlayerInput();
-        crate::resource::ffi_bridge::UninitResourceSystem();
-        DestroyDrawable(ReleaseDrawable(kernel.screen));
-        kernel.screen = ptr::null_mut();
-        DestroyContext(kernel.screen_context.cast());
-        kernel.screen_context = ptr::null_mut();
-        crate::video::control::UninitVideoPlayer();
-    }
+/// Release the display, the resource system and the video player.
+pub fn free_kernel(kernel: &mut crate::engine::Kernel) {
+    kernel.uninit_resources();
+    kernel.close_screen();
 }
 
-unsafe fn uninit_contexts(kernel: &mut crate::engine::Kernel) {
-    {
-        crate::engine::battle::access::lifecycle::uninit_elements(&mut *kernel);
-        DestroyContext(kernel.off_screen_context.cast());
-        DestroyContext(kernel.space_context.cast());
-        DestroyContext(kernel.status_context.cast());
-    }
+fn uninit_contexts(kernel: &mut crate::engine::Kernel) {
+    lifecycle::uninit_elements(&mut *kernel);
+    kernel.destroy_contexts();
 }
 
-unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
+fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
     kernel.uninit_space();
-    {
-        kernel.release_menu_sounds();
-        kernel.release_encounter_text();
-        DestroyDrawable(ReleaseDrawable(kernel.status_frame));
-        DestroyDrawable(ReleaseDrawable(kernel.activity_frame));
-        kernel.release_tiny_font();
-        kernel.release_battle_font();
-        kernel.reset_race_capacities(0);
-        kernel.activity_frame = ptr::null_mut();
-    }
+    kernel.release_menu_sounds();
+    kernel.release_encounter_text();
+    kernel.release_tiny_font();
+    kernel.release_battle_font();
+    kernel.release_status_frames();
+    kernel.reset_race_capacities(0);
 }
 
-/// # Safety
-/// Game thread only; all game resource owners must still be initialized.
-pub unsafe fn free_game_data(cx: &mut crate::engine::battle::Cx<'_>) {
+/// Release the navigation, lander and hyperspace data of the active game.
+pub fn free_game_data(cx: &mut crate::engine::battle::Cx<'_>) {
     cx.kernel.release_navigation_graphics();
     cx.kernel.lander_resources = None;
     cx.kernel.solar_presentation.assets = None;
     crate::navigation::hyper_data::free_hyper_data(cx.kernel);
 }
 
-/// # Safety
-/// Game thread only, after the active game has stopped using its resources.
-pub unsafe fn uninit_game_kernel(cx: &mut crate::engine::battle::Cx<'_>) {
-    // SAFETY: this entry copies the initialization status before cleanup calls.
+/// Tear the kernel down if it was initialized, after the active game stopped.
+pub fn uninit_game_kernel(cx: &mut crate::engine::battle::Cx<'_>) {
     let initialized = !cx.kernel.activity_frame.is_null();
     if initialized {
         free_game_data(cx);

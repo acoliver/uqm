@@ -49,7 +49,23 @@ pub struct InputState {
     pub menu: [i32; MENU_KEYS],
 }
 
+/// One control word of an [`InputState`], the destination of a binding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Target {
+    Menu(usize),
+    Flight { template: usize, key: usize },
+}
+
 impl InputState {
+    /// The control word `target` names. Bindings are built from validated
+    /// indices, so an out-of-range target is a caller bug and panics.
+    pub fn slot(&mut self, target: Target) -> &mut i32 {
+        match target {
+            Target::Menu(index) => &mut self.menu[index],
+            Target::Flight { template, key } => &mut self.key[template][key],
+        }
+    }
+
     pub fn any_button_pressed(&self) -> bool {
         self.key
             .iter()

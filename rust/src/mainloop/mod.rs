@@ -23,14 +23,10 @@
 //!
 //! @plan PLAN-20260707-MAINLOOP.P03
 
-pub mod c_main_extern;
 pub mod content;
 pub mod dir_prep;
-pub mod init_reference;
-pub mod init_wrappers;
 pub mod input_frame;
 pub mod logging;
-pub mod main2_abi;
 pub mod options;
 pub mod options_abi;
 pub use uqm_modes::mainloop::restart_menu;
@@ -60,8 +56,6 @@ pub enum MainLoopError {
     #[error("starbase: {0}")]
     Starbase(#[from] crate::starbase::StarbaseError),
 }
-
-pub mod platform_abi;
 
 pub mod input_abi;
 pub mod lifecycle_abi;

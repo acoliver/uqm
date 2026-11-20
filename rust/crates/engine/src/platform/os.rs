@@ -10,6 +10,7 @@
 //! number through the environment, so its functions take `RawFd`.
 
 pub mod errno;
+pub mod sdl;
 pub mod stderr;
 
 #[cfg(unix)]

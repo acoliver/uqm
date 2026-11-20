@@ -149,7 +149,7 @@ pub fn pause_game(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
                     while (input.immediate().menu[KEY_PAUSE as usize] != 0) == pressed
                         && input.paused()
                     {
-                        uqm_engine::input_port::sdl_input::BeginInputFrame();
+                        uqm_engine::input_port::sdl_input::begin_input_frame();
                         uqm_engine::threading::yield_game_thread();
                     }
                 }

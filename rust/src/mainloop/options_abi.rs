@@ -14,10 +14,7 @@ pub fn loadIndices(dir: &Dir) -> usize {
             log::warn!("Skipping resource index '{name}': name contains NUL");
             continue;
         };
-        // SAFETY: both arguments are terminated or null.
-        unsafe {
-            crate::resource::ffi_bridge::load_resource_index(dir, name.as_ptr(), std::ptr::null())
-        };
+        crate::io::load_resource_index(dir, &name, None);
     }
     indices.len()
 }

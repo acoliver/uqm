@@ -1,184 +1,83 @@
-//! Live game kernel and resource globals, ported from setup.c.
-#![allow(non_snake_case)]
+//! Game kernel start-up: the display, the resources and the status display.
 
-use crate::graphics::native_abi as gfx;
-use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
-use crate::ships::native::abi::*;
-use crate::strings::{
-    sresins::LoadStringTableInstance,
-    string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable},
-};
-use crate::{battle::status_native::init_status_offsets, engine::battle::access::lifecycle};
-use std::{ffi::CStr, ptr};
-
+use crate::engine::battle::access::lifecycle;
 use crate::mainloop::options_abi::{loadAddon, loadIndices, prepareAddons};
+use crate::ships::native::abi::*;
+use crate::{battle::status_native::init_status_offsets, graphics::native_font::LoadedFont};
 
-unsafe fn context(name: &CStr) -> CONTEXT {
-    #[cfg(feature = "debug-process")]
-    {
-        context_abi::CreateContextAux(name.as_ptr()).cast()
-    }
-    #[cfg(not(feature = "debug-process"))]
-    {
-        let _ = name;
-        context_abi::CreateContextAux().cast()
-    }
-}
-
-/// # Safety
-/// SDL, IO and resource registration prerequisites must be initialized on the game thread.
-pub unsafe fn LoadKernel(
-    kernel: &mut crate::engine::Kernel,
-    world: &mut crate::engine::World,
-) -> u32 {
-    {
-        crate::video::control::InitVideoPlayer(1);
-        kernel.screen_context = context(c"ScreenContext");
-        if kernel.screen_context.is_null() {
-            return 0;
-        }
-        kernel.screen = pixmap_abi::CaptureDrawable(drawable_abi::CreateDisplay(
-            3,
-            ptr::addr_of_mut!(kernel.screen_width),
-            ptr::addr_of_mut!(kernel.screen_height),
-        ))
-        .cast();
-        if kernel.screen.is_null() {
-            return 0;
-        }
-        context_abi::SetContext(kernel.screen_context.cast());
-        drawable_abi::SetContextFGFrame(kernel.screen.cast());
-        context_abi::SetContextOrigin(gfx::POINT { x: 0, y: 0 });
-        kernel.h_res_index = crate::resource::ffi_bridge::InitResourceSystem();
-        if kernel.h_res_index.is_null() {
-            return 0;
-        }
-        let Some(content) = crate::io::content_dir() else {
-            return 0;
-        };
-        if loadIndices(&content) == 0 {
-            return 0;
-        }
-        let preferences = kernel.configuration.preferences();
-        if preferences.music_3do != 0 {
-            loadAddon(&content, "3domusic");
-        }
-        kernel.using_speech = preferences.speech;
-        if preferences.speech != 0 && !loadAddon(&content, "3dovoice") {
-            kernel.using_speech = 0;
-        }
-        if preferences.music_remix != 0 {
-            loadAddon(&content, "remix");
-        }
-        if preferences.intro == OPT_3DO as i32 {
-            loadAddon(&content, "3dovideo");
-        }
-        prepareAddons(&content, &kernel.configuration.addons());
-        let map = CaptureStringTable(LoadStringTableInstance(c"colortable.main".as_ptr()));
-        if map.is_null() {
-            return 0;
-        }
-        crate::graphics::cmap_abi::SetColorMap(crate::graphics::cmap_abi::GetColorMapAddress(
-            map.cast(),
-        ));
-        DestroyStringTable(ReleaseStringTable(map));
-        world.set_activity(u16::MAX);
-        1
-    }
-}
-
-/// # Safety
-/// Game-thread context creation after LoadKernel.
-pub unsafe fn InitContexts(kernel: &mut crate::engine::Kernel) -> u32 {
-    {
-        kernel.status_context = context(c"StatusContext");
-        if kernel.status_context.is_null() {
-            return 0;
-        }
-        context_abi::SetContext(kernel.status_context.cast());
-        drawable_abi::SetContextFGFrame(kernel.screen.cast());
-        let mut rect = gfx::RECT {
-            corner: gfx::POINT {
-                x: (ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
-                y: SAFE_Y as i16,
-            },
-            extent: gfx::EXTENT {
-                width: STATUS_WIDTH as i16,
-                height: (ScreenHeight - 2 * SAFE_Y as i32) as i16,
-            },
-        };
-        context_abi::SetContextClipRect(&mut rect);
-        kernel.space_context = context(c"SpaceContext");
-        if kernel.space_context.is_null() {
-            return 0;
-        }
-        kernel.off_screen_context = context(c"OffScreenContext");
-        if kernel.off_screen_context.is_null() {
-            return 0;
-        }
-        u32::from(lifecycle::init_elements(
-            &mut *kernel,
-            MAX_DISPLAY_ELEMENTS as u16,
-        ))
-    }
-}
-
-unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
-    // SAFETY: only resource loaders run during the owner borrow.
-    let loaded = {
-        kernel.reset_race_capacities(crate::ships::native::abi::MAX_SHIPS_PER_SIDE as usize);
-        let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.starcon") else {
-            return 0;
-        };
-        kernel.install_battle_font(font);
-        let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.tiny") else {
-            return 0;
-        };
-        kernel.install_tiny_font(font);
-        kernel.activity_frame = pixmap_abi::CaptureDrawable(
-            crate::graphics::resgfx::LoadGraphicInstance(c"graphics.activity".as_ptr()).cast(),
-        )
-        .cast();
-        if kernel.activity_frame.is_null() {
-            return 0;
-        }
-        kernel.status_frame = pixmap_abi::CaptureDrawable(
-            crate::graphics::resgfx::LoadGraphicInstance(c"graphics.status".as_ptr()).cast(),
-        )
-        .cast();
-        if kernel.status_frame.is_null() {
-            return 0;
-        }
-        let Some(text) = crate::strings::owned_table::LoadedTextTable::load(c"text.starcon") else {
-            return 0;
-        };
-        kernel.install_game_text(text);
-        let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.micro") else {
-            return 0;
-        };
-        kernel.install_micro_font(font);
-        let Some(bank) = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.menu") else {
-            return 0;
-        };
-        kernel.install_menu_sounds(bank);
-        1
-    };
-    if loaded == 0 {
+/// Load the display, the resource indices and addons the preferences ask for,
+/// and the main colour map. Returns zero when the kernel could not load.
+pub fn load_kernel(kernel: &mut crate::engine::Kernel, world: &mut crate::engine::World) -> u32 {
+    if !kernel.open_screen() || !kernel.init_resources() {
         return 0;
     }
-    init_status_offsets(kernel, ScreenHeight);
-    u32::from(kernel.init_space(activity))
+    let Some(content) = crate::io::content_dir() else {
+        return 0;
+    };
+    if loadIndices(&content) == 0 {
+        return 0;
+    }
+    let preferences = kernel.configuration.preferences();
+    if preferences.music_3do != 0 {
+        loadAddon(&content, "3domusic");
+    }
+    kernel.using_speech = preferences.speech;
+    if preferences.speech != 0 && !loadAddon(&content, "3dovoice") {
+        kernel.using_speech = 0;
+    }
+    if preferences.music_remix != 0 {
+        loadAddon(&content, "remix");
+    }
+    if preferences.intro == OPT_3DO as i32 {
+        loadAddon(&content, "3dovideo");
+    }
+    prepareAddons(&content, &kernel.configuration.addons());
+    if !kernel.load_main_colormap() {
+        return 0;
+    }
+    world.set_activity(u16::MAX);
+    1
 }
 
-/// # Safety
-/// Called on the game thread with base resources and graphics initialized.
-pub unsafe fn InitGameKernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
-    // SAFETY: the copied resource handle retains no owner borrow.
+fn init_contexts(kernel: &mut crate::engine::Kernel) -> bool {
+    kernel.create_contexts() && lifecycle::init_elements(&mut *kernel, MAX_DISPLAY_ELEMENTS as u16)
+}
+
+fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> bool {
+    kernel.reset_race_capacities(MAX_SHIPS_PER_SIDE as usize);
+    let Some(font) = LoadedFont::load(c"font.starcon") else {
+        return false;
+    };
+    kernel.install_battle_font(font);
+    let Some(font) = LoadedFont::load(c"font.tiny") else {
+        return false;
+    };
+    kernel.install_tiny_font(font);
+    if !kernel.load_status_frames() {
+        return false;
+    }
+    let Some(text) = crate::strings::owned_table::LoadedTextTable::load(c"text.starcon") else {
+        return false;
+    };
+    kernel.install_game_text(text);
+    let Some(font) = LoadedFont::load(c"font.micro") else {
+        return false;
+    };
+    kernel.install_micro_font(font);
+    let Some(bank) = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.menu") else {
+        return false;
+    };
+    kernel.install_menu_sounds(bank);
+    init_status_offsets(kernel, i32::from(kernel.screen_height));
+    kernel.init_space(activity)
+}
+
+/// Load the fonts, frames, text and sounds the game needs and create the
+/// drawing contexts, unless a previous call already did.
+pub fn init_game_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
     let needs_init = kernel.activity_frame.is_null();
-    if needs_init && (init_kernel(kernel, activity) == 0 || InitContexts(kernel) == 0) {
+    if needs_init && !(init_kernel(kernel, activity) && init_contexts(kernel)) {
         return 0;
     }
     1
 }
-
-pub fn UninitPlayerInput() {}
