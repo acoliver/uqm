@@ -14,7 +14,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         assert!(status.success());
         return;
     }
-    crate::time::source::install(true);
+    crate::host::install(true);
     let directory = crate::io::fixture::TempMount::new().as_content();
     let source = std::path::Path::new(env!("UQM_RUST_ROOT")).join("../sc2/content/addons/3dovideo");
     let ships = "addons/3dovideo/ships";

@@ -6,7 +6,7 @@ use crate::engine::observe::battle::{BattleTick, ReplacementGate};
 
 impl AutomationObserver {
     pub(crate) fn native_diagnostics(&self) -> bool {
-        self.native_trace.is_some() && !crate::time::source::is_replay()
+        self.native_trace.is_some() && !crate::engine::host::is_replay()
     }
 
     pub(crate) fn observes_pkunk_rebirth(&self) -> bool {

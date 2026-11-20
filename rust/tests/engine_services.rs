@@ -65,7 +65,7 @@ fixture.absent = 3DOVID:missing.duk
     }
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    uqm_rust::time::source::install(true);
+    uqm_rust::engine::host::install(true);
     // SAFETY: this isolated test owns the repository, graphics state and every loaded resource.
     unsafe {
         let mount = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
@@ -187,7 +187,7 @@ fn string_bank_deduplicates_across_chunks_and_preserves_split_tails() {
 
 fn replay_audio_exports_follow_sample_completion_and_transport() {
     use uqm_rust::sound::rodio_audio::*;
-    use uqm_rust::time::{counter_abi::ONE_SECOND, source};
+    use uqm_rust::{engine::host as source, time::counter_abi::ONE_SECOND};
 
     let pcm = [0u8; 2000];
     // SAFETY: replay audio was selected before initialization; every byte slice stays live during calls.

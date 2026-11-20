@@ -1,7 +1,7 @@
 use uqm_rust::callback::ffi::{
     Alarm_addAbsoluteMs, Alarm_init, Alarm_processOne, Alarm_uninit, Async_process,
 };
-use uqm_rust::time::{counter_abi::GetTimeCounter, source};
+use uqm_rust::{engine::host as source, time::counter_abi::GetTimeCounter};
 
 #[test]
 fn replay_alarms_follow_game_time_while_host_time_passes() {

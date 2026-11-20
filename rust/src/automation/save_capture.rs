@@ -19,7 +19,7 @@ impl Request {
         let output = std::env::var_os("UQM_SAVE_CAPTURE_OUT")
             .unwrap_or_else(|| panic!("UQM_SAVE_CAPTURE_SOURCE requires UQM_SAVE_CAPTURE_OUT"));
         assert!(
-            crate::time::source::is_replay(),
+            crate::engine::host::is_replay(),
             "save capture requires --replay"
         );
         let source = PathBuf::from(source);
@@ -85,7 +85,7 @@ impl Request {
         anyhow::ensure!(loaded != 0, "LoadGame failed for {}", self.source.display());
         let activity = cx.world.next_activity;
         self.loaded_activity = Some(activity);
-        self.loaded_tick = crate::time::source::now_ms();
+        self.loaded_tick = crate::engine::host::now_ms();
         // Preserve NextActivity for the production main-loop load resolution.
         cx.world.set_activity(0x1000);
         cx.kernel.last_activity = 0x1000;
@@ -103,14 +103,14 @@ impl Request {
             self.admits_capture(activity, false),
             "invalid save capture boundary"
         );
-        let tick = crate::time::source::now_ms();
+        let tick = crate::engine::host::now_ms();
         // SAFETY: the main loop has resolved CHECK_LOAD to NextActivity and
         // initialized the mode; its first admitted input has not been consumed.
         let save = unsafe {
             crate::savegame::live::save::capture(cx, cx.solar_frame, b"runtime-capture")?
         };
         anyhow::ensure!(
-            tick == crate::time::source::now_ms(),
+            tick == crate::engine::host::now_ms(),
             "capture advanced replay clock"
         );
         let bytes = crate::savegame::encode_save(&save)?;

@@ -3,7 +3,7 @@
 //! This module implements the game clock and date arithmetic, handling
 //! time-based events and game progression.
 
-pub use uqm_engine::time::{clock_abi, clock_bridge, counter_abi, source};
+pub use uqm_engine::time::{clock_abi, clock_bridge, counter_abi};
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;

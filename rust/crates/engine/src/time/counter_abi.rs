@@ -26,7 +26,7 @@ pub fn UnInitTimeSystem() {}
 
 #[track_caller]
 pub fn GetTimeCounter() -> u32 {
-    super::source::now_ticks()
+    crate::host::now_ticks()
 }
 
 #[cfg(test)]

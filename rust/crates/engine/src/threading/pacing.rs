@@ -118,9 +118,9 @@ pub trait PacingEnv {
 
 /// Wait at DoInput's native yield boundary without flushing partial draws.
 pub fn yield_input_loop(native_yield: impl FnOnce()) {
-    if crate::time::source::is_replay() {
+    if crate::host::is_replay() {
         // The native 1 ms sleep rounds up to one 840-Hz replay tick.
-        crate::time::source::advance_to(crate::time::source::now_ticks().saturating_add(1));
+        crate::host::advance_to(crate::host::now_ticks().saturating_add(1));
     } else {
         native_yield();
     }
@@ -275,7 +275,7 @@ pub mod linked {
         let mut env = GameThread::enter();
         env.process_async();
         env.pump_and_flush();
-        crate::time::source::advance_to(wake);
+        crate::host::advance_to(wake);
         crate::sound::stream::advance_replay();
     }
 
@@ -288,7 +288,7 @@ pub mod linked {
     /// # Safety
     /// Called on the SDL game thread with input and graphics initialized.
     pub unsafe fn sleep_thread(sleep_time: u32) {
-        if crate::time::source::is_replay() {
+        if crate::host::is_replay() {
             replay_sleep_for(sleep_time);
         } else {
             sleep_for(&mut GameThread::enter(), sleep_time);
@@ -300,7 +300,7 @@ pub mod linked {
     /// # Safety
     /// Called on the SDL game thread with input and graphics initialized.
     pub unsafe fn sleep_thread_until(wake_time: u32) {
-        if crate::time::source::is_replay() {
+        if crate::host::is_replay() {
             replay_sleep(wake_time);
         } else {
             sleep_until(&mut GameThread::enter(), wake_time);

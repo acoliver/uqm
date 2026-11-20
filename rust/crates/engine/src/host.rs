@@ -24,3 +24,10 @@ pub fn native_net() -> Box<dyn Net> {
 
 mod files;
 pub use files::{File, FileStat, FileStream, Files};
+
+pub mod clock;
+mod platform;
+pub use clock::Clock;
+pub use platform::{
+    advance_to, install, is_replay, now_ms, now_ticks, platform, steps, AudioPort, Platform,
+};

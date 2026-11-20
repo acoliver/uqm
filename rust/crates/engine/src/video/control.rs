@@ -189,7 +189,7 @@ mod tests {
             assert!(status.success());
             return;
         }
-        crate::time::source::install(true);
+        crate::host::install(true);
         let directory = crate::video::ffi_tests::logo_directory().as_content();
         directory.write(
             "video.rmp",

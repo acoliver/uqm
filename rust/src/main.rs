@@ -50,7 +50,7 @@ fn main() {
         options::RunMode::Normal => {}
     }
 
-    uqm_rust::time::source::install(parsed.replay.is_some());
+    uqm_rust::engine::host::install(parsed.replay.is_some());
     logging::init(&parsed.log_file);
 
     // The frame loop runs on this thread; see threading::qos. Declared after
