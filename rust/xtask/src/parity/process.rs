@@ -65,15 +65,18 @@ fn supervise(child: &mut Child, budget: Duration) -> Result<Completion> {
     }
 }
 
+/// The process group a child leads. Callers create it with `process_group(0)`.
+#[cfg(unix)]
+pub(crate) fn child_group(child: &Child) -> std::io::Result<rustix::process::Pid> {
+    i32::try_from(child.id())
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))
+}
+
 #[cfg(unix)]
 pub(crate) fn kill_group(child: &Child) -> std::io::Result<()> {
-    let group = libc::pid_t::try_from(child.id())
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
-    // SAFETY: kill takes integer arguments only. Callers create the child's
-    // dedicated process group with process_group(0); the negative ID targets it.
-    if unsafe { libc::kill(-group, libc::SIGKILL) } == -1 {
-        return Err(std::io::Error::last_os_error());
-    }
+    rustix::process::kill_process_group(child_group(child)?, rustix::process::Signal::KILL)?;
     Ok(())
 }
 
