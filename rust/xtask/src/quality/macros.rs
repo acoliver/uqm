@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::parse::{discouraged::Speculative, ParseStream, Parser};
 
 pub const HANDLERS: &[(&str, &str)] = &[
-    ("src/collections/hash_table.rs", "define_hash_table"),
     ("src/comm/live/comandr.rs", "callbacks"),
     ("src/world/story/schema.rs", "game_state_fields"),
 ];
