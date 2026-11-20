@@ -1,39 +1,26 @@
-//! Audio subsystem bring-up and tear-down: the Rust mixer, the C decoder
-//! registry, and the stream decoder thread owned by the audio heart.
+//! Audio subsystem bring-up and tear-down: the Rust mixer and the stream
+//! decoder thread owned by the audio heart.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::sound::formats::DecoderFormats;
 use crate::sound::heart_ffi::{
     init_stream_decoder, set_music_volume, set_sfx_volume, set_speech_volume, uninit_stream_decoder,
 };
 use crate::sound::mixer::ffi::{rust_mixer_init, rust_mixer_uninit};
-use crate::sound::volume_globals::{musicVolume, sfxVolumeScale, speechVolumeScale};
-
-// Values of the `audio_FORMAT_*` enumerators in audiocore.h. The decoders
-// tag their output with these.
-const AUDIO_FORMAT_MONO16: u32 = 22;
-const AUDIO_FORMAT_STEREO16: u32 = 23;
-const AUDIO_FORMAT_MONO8: u32 = 24;
-const AUDIO_FORMAT_STEREO8: u32 = 25;
+use crate::sound::volume_globals::sound_options;
 
 const MIXER_FREQUENCY: u32 = 44100;
 // MIX_FORMAT_MAKE(2, 2): 16-bit samples, two channels.
 const MIXER_FORMAT_STEREO16: u32 = 0x0202;
 const MIXER_QUALITY_MEDIUM: u32 = 1;
 
-use super::decoder_api::{init_decoders, uninit_decoders};
-
 static AUDIO_INITED: AtomicBool = AtomicBool::new(false);
 
-/// Starts the mixer, the sound decoders and the stream decoder thread.
-/// Returns 0 on success and -1 when decoders or the stream decoder fail to
-/// start. A mixer that cannot start is fatal.
+/// Starts the mixer and the stream decoder thread.
+/// Returns 0 on success and -1 when the stream decoder fails to start. A mixer that cannot start is fatal.
 ///
-/// # Safety
 /// Must be called once from the main thread before any audio call.
-#[no_mangle]
-pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
+pub fn init_audio() -> i32 {
     log::info!("initAudio: Using Rust mixer backend");
 
     if rust_mixer_init(
@@ -47,47 +34,34 @@ pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
         std::process::exit(1);
     }
 
-    log::info!("Initializing sound decoders.");
-    let formats = DecoderFormats {
-        big_endian: false,
-        want_big_endian: false,
-        mono8: AUDIO_FORMAT_MONO8,
-        stereo8: AUDIO_FORMAT_STEREO8,
-        mono16: AUDIO_FORMAT_MONO16,
-        stereo16: AUDIO_FORMAT_STEREO16,
-    };
-    if init_decoders(flags, &formats) != 0 {
-        log::error!("Sound decoders initialization failed.");
-        rust_mixer_uninit();
-        return -1;
-    }
-    log::info!("Sound decoders initialized.");
-
     if init_stream_decoder() != 0 {
         log::error!("Stream decoder initialization failed.");
         rust_mixer_uninit();
         return -1;
     }
 
-    libc::atexit(unInitAudio);
+    crate::platform::os::sdl::at_exit(uninit_audio_at_exit);
 
-    set_sfx_volume(sfxVolumeScale);
-    set_speech_volume(speechVolumeScale);
-    set_music_volume(musicVolume);
+    let options = sound_options();
+    set_sfx_volume(options.sfx_scale);
+    set_speech_volume(options.speech_scale);
+    set_music_volume(options.music_volume);
 
     AUDIO_INITED.store(true, Ordering::SeqCst);
     0
 }
 
-/// Stops the audio subsystem. Does nothing when `initAudio` has not
+extern "C" fn uninit_audio_at_exit() {
+    uninit_audio();
+}
+
+/// Stops the audio subsystem. Does nothing when `init_audio` has not
 /// succeeded or the subsystem is already down.
-#[no_mangle]
-pub extern "C" fn unInitAudio() {
+pub fn uninit_audio() {
     if !AUDIO_INITED.swap(false, Ordering::SeqCst) {
         return;
     }
 
     uninit_stream_decoder();
-    uninit_decoders();
     rust_mixer_uninit();
 }

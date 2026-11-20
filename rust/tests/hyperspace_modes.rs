@@ -294,11 +294,8 @@ fn flagship_entry(loading: bool) {
 fn load_palette_fixture(
 ) -> Result<[Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2], Box<dyn std::error::Error>>
 {
-    use std::{ffi::CString, ptr};
     use uqm_rust::{
-        graphics::palette_cycle::PaletteCycle,
-        io::uio_bridge as uio,
-        resource::ffi_bridge::{InitResourceSystem, LoadResourceIndex},
+        graphics::palette_cycle::PaletteCycle, resource::ffi_bridge::InitResourceSystem,
     };
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     std::fs::create_dir_all(&root)?;
@@ -316,34 +313,13 @@ fn load_palette_fixture(
         directory.path().join("palettes.rmp"),
         "fixture.hyper = BINTAB:12.ct\nfixture.quasi = BINTAB:90.ct\n",
     )?;
-    let host = CString::new(
-        directory
-            .path()
-            .canonicalize()?
-            .to_str()
-            .ok_or("fixture path is not UTF-8")?,
-    )?;
     // SAFETY: this serialized fixture restores the content directory before closing its own mount.
     unsafe {
-        uio::uio_init();
-        let repository = uio::uio_openRepository(0);
-        let mount = uio::uio_mountDir(
-            repository,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut(),
+        let content = uqm_engine::test_support::native_session::ContentMount::new(
+            &directory.path().canonicalize()?,
         );
-        assert!(!mount.is_null());
-        let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-        let previous = uqm_rust::mainloop::dir_prep::contentDir;
-        uqm_rust::mainloop::dir_prep::contentDir = content.cast();
         InitResourceSystem();
-        LoadResourceIndex(content.cast(), c"palettes.rmp".as_ptr(), ptr::null());
+        content.load_index("palettes.rmp");
         let palettes = [
             Some(
                 PaletteCycle::load(c"fixture.hyper")
@@ -354,10 +330,7 @@ fn load_palette_fixture(
                     .ok_or("quasispace fixture palette failed to load")?,
             ),
         ];
-        uqm_rust::mainloop::dir_prep::contentDir = previous;
-        uio::uio_closeDir(content);
-        uio::uio_closeRepository(repository);
-        uio::uio_unInit();
+        drop(content);
         Ok(palettes)
     }
 }

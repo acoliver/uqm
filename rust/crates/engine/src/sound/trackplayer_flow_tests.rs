@@ -101,14 +101,14 @@ fn speech_admission_requires_borrowed_strings_and_bounded_clip_slices() {
 }
 
 /// A decoder with `pcm_chunks` blocks of audio that lasts `secs` seconds.
-fn voice(pcm_chunks: usize, secs: f32) -> Box<dyn SoundDecoder> {
+fn voice(pcm_chunks: usize, secs: f32) -> Box<dyn Decoder> {
     let chunks = (0..pcm_chunks).map(|i| vec![i as u8; 400]).collect();
     Box::new(ScriptedDecoder::new(chunks).with_length(secs))
 }
 
 /// More audio than the eight prefill buffers can hold, so the first chunk's
 /// decoder is still the active one right after `play_track`.
-fn long_voice(secs: f32) -> Box<dyn SoundDecoder> {
+fn long_voice(secs: f32) -> Box<dyn Decoder> {
     voice(20, secs)
 }
 

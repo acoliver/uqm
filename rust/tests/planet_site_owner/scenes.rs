@@ -1,8 +1,5 @@
 use super::*;
-use std::{
-    ffi::{CStr, CString},
-    ptr,
-};
+use std::{ffi::CStr, ptr};
 #[cfg(feature = "debug-process")]
 use uqm_rust::planets::generate::{slylandro::HomeSite, syreen::StarbaseSite};
 use uqm_rust::{
@@ -12,7 +9,6 @@ use uqm_rust::{
         native_abi::*,
         sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
     },
-    io::uio_bridge as uio,
     planets::generate::{
         andro::AndrosynthSite, burv::BurvScenes, spa::SpathiSite, thrad::ThraddashSite,
         vault::VaultSite, wreck::WreckSite, zoq::ZoqFotPikSite,
@@ -154,7 +150,6 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         rmp.push_str(&format!("text.{key} = STRTAB:{key}.txt\n"));
     }
     std::fs::write(directory.path().join("fixture.rmp"), rmp).unwrap();
-    let path = CString::new(directory.path().to_str().unwrap()).unwrap();
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     // SAFETY: this serialized fixture owns SDL, the mount and all its native allocations on one thread.
@@ -169,29 +164,8 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
             ),
             0
         );
-        uio::uio_init();
-        let repo = uio::uio_openRepository(0);
-        assert!(!uio::uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            path.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut()
-        )
-        .is_null());
-        let content = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-        let previous = uqm_rust::mainloop::dir_prep::contentDir;
-        uqm_rust::mainloop::dir_prep::contentDir = content.cast();
-        uqm_rust::resource::ffi_bridge::InitResourceSystem();
-        uqm_rust::resource::ffi_bridge::LoadResourceIndex(
-            content.cast(),
-            c"fixture.rmp".as_ptr(),
-            ptr::null(),
-        );
+        let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
+        content.init_resources("fixture.rmp");
         let mut game = campaign();
         check_scene(
             &mut game,
@@ -384,10 +358,7 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         TFB_FlushGraphics();
         drop(game);
         uqm_rust::resource::ffi_bridge::UninitResourceSystem();
-        uqm_rust::mainloop::dir_prep::contentDir = previous;
-        uio::uio_closeDir(content);
-        uio::uio_closeRepository(repo);
-        uio::uio_unInit();
+        drop(content);
         TFB_UninitGraphics();
     }
 }

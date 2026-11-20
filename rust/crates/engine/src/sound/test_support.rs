@@ -3,10 +3,9 @@
 //! Streams, the track player and the mixer share process-wide state, so tests
 //! that drive them take `ENGINE_TEST_LOCK`.
 
-use super::decoder::{DecodeError, SoundDecoder};
-use super::formats::{AudioFormat, DecoderFormats};
+use super::decoder::{DecodeError, Decoder};
+use super::formats::AudioFormat;
 use parking_lot::Mutex;
-use std::path::Path;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -101,28 +100,10 @@ impl ScriptedDecoder {
     }
 }
 
-impl SoundDecoder for ScriptedDecoder {
+impl Decoder for ScriptedDecoder {
     fn name(&self) -> &'static str {
         "scripted"
     }
-    fn init_module(&mut self, _flags: i32, _formats: &DecoderFormats) -> bool {
-        true
-    }
-    fn term_module(&mut self) {}
-    fn get_error(&mut self) -> i32 {
-        0
-    }
-    fn init(&mut self) -> bool {
-        true
-    }
-    fn term(&mut self) {}
-    fn open(&mut self, _path: &Path) -> Result<(), DecodeError> {
-        Ok(())
-    }
-    fn open_from_bytes(&mut self, _data: &[u8], _name: &str) -> Result<(), DecodeError> {
-        Ok(())
-    }
-    fn close(&mut self) {}
     fn decode(&mut self, buf: &mut [u8]) -> Result<usize, DecodeError> {
         if self.fail_after == Some(self.next) {
             return Err(DecodeError::DecoderError("scripted failure".into()));

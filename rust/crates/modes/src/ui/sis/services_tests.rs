@@ -131,7 +131,6 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
             height: 5,
         },
     };
-    crate::callback::ffi::Alarm_init();
     {
         use crate::ui::shipyard_selection::{dms_set_mode, ModifyMode};
         let input = crate::engine::input::InputSession::default();
@@ -163,7 +162,7 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
     assert!(game.kernel.sis_highlight.context.borrow().is_some());
     clear_flash(&game.kernel);
     assert!(game.kernel.sis_highlight.context.borrow().is_none());
-    crate::callback::ffi::Alarm_uninit();
+    uqm_engine::host::dispatch().clear();
     drop(screen);
     drop(context);
     drop(effect);

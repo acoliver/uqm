@@ -1,11 +1,6 @@
-//! Sound decoder trait definition
-//!
-//! Defines the `SoundDecoder` trait that all audio decoders must implement.
-//! This mirrors the C `TFB_SoundDecoderFuncs` vtable pattern.
+//! The sound `Decoder` trait and the time-limited wrapper over it.
 
-use std::path::Path;
-
-use super::formats::{AudioFormat, DecoderFormats};
+use super::formats::AudioFormat;
 
 /// Error type for decoder operations
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,54 +43,14 @@ impl std::error::Error for DecodeError {}
 /// Result type for decoder operations
 pub type DecodeResult<T> = Result<T, DecodeError>;
 
-/// Sound decoder trait
+/// A sound decoder positioned on opened audio.
 ///
-/// All audio decoders must implement this trait. The interface mirrors the
-/// C `TFB_SoundDecoderFuncs` vtable for compatibility.
-pub trait SoundDecoder: Send {
+/// Each decoder type opens its own input (`open_from_bytes` for single-file
+/// formats, `open_from_data` for paired files) and then hands the opened
+/// instance to the stream layer as `Box<dyn Decoder>`.
+pub trait Decoder: Send {
     /// Returns the decoder name (e.g., "Ogg Vorbis", "WAV")
     fn name(&self) -> &'static str;
-
-    /// Initialize the decoder module with format settings
-    ///
-    /// Called once when the decoder type is registered.
-    fn init_module(&mut self, flags: i32, formats: &DecoderFormats) -> bool;
-
-    /// Terminate the decoder module
-    ///
-    /// Called once when the decoder type is unregistered.
-    fn term_module(&mut self);
-
-    /// Returns the last error code, clearing it
-    fn get_error(&mut self) -> i32;
-
-    /// Initialize a decoder instance
-    fn init(&mut self) -> bool;
-
-    /// Terminate a decoder instance
-    fn term(&mut self);
-
-    /// Open an audio file for decoding
-    ///
-    /// # Arguments
-    /// * `path` - Path to the audio file
-    ///
-    /// # Returns
-    /// `true` if the file was opened successfully
-    fn open(&mut self, path: &Path) -> DecodeResult<()>;
-
-    /// Open an audio file from raw bytes
-    ///
-    /// # Arguments
-    /// * `data` - Raw audio file data
-    /// * `name` - Name for logging purposes
-    ///
-    /// # Returns
-    /// `true` if the data was opened successfully
-    fn open_from_bytes(&mut self, data: &[u8], name: &str) -> DecodeResult<()>;
-
-    /// Close the currently open audio file
-    fn close(&mut self);
 
     /// Decode audio data into the provided buffer
     ///
@@ -103,13 +58,10 @@ pub trait SoundDecoder: Send {
     /// * `buf` - Buffer to write decoded PCM data into
     ///
     /// # Returns
-    /// Number of bytes decoded, or negative error code
+    /// Number of bytes decoded, or `EndOfFile` once the audio is exhausted
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize>;
 
     /// Seek to a specific PCM sample position
-    ///
-    /// # Arguments
-    /// * `pcm_pos` - Target sample position
     ///
     /// # Returns
     /// Actual position after seeking
@@ -117,8 +69,6 @@ pub trait SoundDecoder: Send {
 
     /// Get the current frame number (for formats with frames)
     fn get_frame(&self) -> u32;
-
-    // Accessor methods for decoder state
 
     /// Returns the sample frequency in Hz
     fn frequency(&self) -> u32;
@@ -141,7 +91,7 @@ pub trait SoundDecoder: Send {
 /// Mirrors C's `SoundDecoder_Load(dir, file, bufsize, startTime, runTime)` behavior:
 /// seeks to `start_sample` on open, returns EOF after `end_sample`.
 pub struct LimitedDecoder {
-    inner: Box<dyn SoundDecoder>,
+    inner: Box<dyn Decoder>,
     start_sample: u32,
     end_sample: u32,
     /// Bytes per sample frame (e.g., 4 for stereo16)
@@ -159,7 +109,7 @@ impl LimitedDecoder {
     /// * `inner` - The underlying decoder (already opened with data)
     /// * `start_time_ms` - Start time in milliseconds
     /// * `run_time_ms` - Maximum run time in milliseconds (0 = unlimited)
-    pub fn new(mut inner: Box<dyn SoundDecoder>, start_time_ms: u32, run_time_ms: i32) -> Self {
+    pub fn new(mut inner: Box<dyn Decoder>, start_time_ms: u32, run_time_ms: i32) -> Self {
         let freq = inner.frequency();
         let format = inner.format();
         let total_length = inner.length();
@@ -201,41 +151,9 @@ impl LimitedDecoder {
     }
 }
 
-impl SoundDecoder for LimitedDecoder {
+impl Decoder for LimitedDecoder {
     fn name(&self) -> &'static str {
         self.inner.name()
-    }
-
-    fn init_module(&mut self, flags: i32, formats: &DecoderFormats) -> bool {
-        self.inner.init_module(flags, formats)
-    }
-
-    fn term_module(&mut self) {
-        self.inner.term_module()
-    }
-
-    fn get_error(&mut self) -> i32 {
-        self.inner.get_error()
-    }
-
-    fn init(&mut self) -> bool {
-        self.inner.init()
-    }
-
-    fn term(&mut self) {
-        self.inner.term()
-    }
-
-    fn open(&mut self, path: &Path) -> DecodeResult<()> {
-        self.inner.open(path)
-    }
-
-    fn open_from_bytes(&mut self, data: &[u8], name: &str) -> DecodeResult<()> {
-        self.inner.open_from_bytes(data, name)
-    }
-
-    fn close(&mut self) {
-        self.inner.close()
     }
 
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {

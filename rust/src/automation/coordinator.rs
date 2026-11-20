@@ -489,8 +489,8 @@ impl AutomationObserver {
     }
 
     fn elapsed_ms(&self) -> u64 {
-        if crate::time::source::is_replay() {
-            u64::from(crate::time::source::now_ms())
+        if crate::engine::host::is_replay() {
+            u64::from(crate::engine::host::now_ms())
         } else {
             self.started_at.elapsed().as_millis() as u64
         }
@@ -505,7 +505,7 @@ impl AutomationObserver {
         let summary = serde_json::json!({
             "completed": inner.terminal_class == Some(TerminalClass::Success),
             "inputs_admitted": inner.input_seen,
-            "steps": crate::time::source::steps(),
+            "steps": crate::engine::host::steps(),
             "presents": inner.present_seen,
             "final_activity": inner.replay_final_activity,
         });

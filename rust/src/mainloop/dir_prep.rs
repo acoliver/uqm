@@ -2,32 +2,14 @@
 //!
 //! Rust port of `options.c`'s `prepareConfigDir`, `prepareContentDir`,
 //! `prepareMeleeDir`, `prepareSaveDir`, and `prepareShadowAddons`.
-//! Path resolution, env-var expansion, and directory creation happen in
-//! pure Rust; uio mounting calls into `crate::io::uio_bridge` (already
-//! Rust-implemented), and C-side globals are set via bridge accessors.
+//! Path resolution, env-var expansion and directory creation happen in pure
+//! Rust; mounts and the retained directories go into the process [`Vfs`].
 
 use std::ffi::CString;
-use std::path::PathBuf;
-use std::ptr;
+use std::path::{Path, PathBuf};
 
-use libc::{c_char, c_int};
-
-use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
-
-// ---------------------------------------------------------------------------
-// Constants matching C headers
-// ---------------------------------------------------------------------------
-
-const UIO_FSTYPE_STDIO: c_int = 1;
-const UIO_FSTYPE_ZIP: c_int = 2;
-
-const UIO_MOUNT_RDONLY: c_int = 1 << 1; // 2
-const UIO_MOUNT_TOP: c_int = 1 << 2; // 4
-const UIO_MOUNT_BELOW: c_int = 2 << 2; // 8
-const UIO_MOUNT_ABOVE: c_int = 3 << 2; // 12
-
-const MATCH_PREFIX: c_int = 1;
-const MATCH_REGEX: c_int = 4;
+use crate::engine::host::Files;
+use crate::io::{Dir, Match, MountId, Placement, Vfs};
 
 // ---------------------------------------------------------------------------
 // Error type
@@ -133,50 +115,18 @@ fn expand_dollar_vars(input: &str) -> String {
     result
 }
 
-// ---------------------------------------------------------------------------
-// Direct C global access for directory handles (options.h/setup.c)
-// ---------------------------------------------------------------------------
-
-pub use crate::io::handles::{
-    configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir,
-};
-
-// uio_* are Rust-implemented (USE_RUST_UIO) — same crate, call directly
-use crate::io::uio_bridge::{
-    uio_DirList_free, uio_closeDir, uio_getDirList, uio_mountDir, uio_openDir, uio_openDirRelative,
-    uio_transplantDir,
-};
-
-// ---------------------------------------------------------------------------
-// Helper: null AutoMount pointer (C uses `static uio_AutoMount *autoMount[] = { NULL }`)
-// ---------------------------------------------------------------------------
-
-/// Mount a stdio directory at "/" (or mountPoint) and return the handle.
-unsafe fn mount_stdio_dir(
-    repo: *mut uio_Repository,
-    mount_point: &str,
-    source_path: &str,
-    flags: c_int,
-) -> *mut uio_MountHandle {
-    let mp = CString::new(mount_point).unwrap();
-    let sp = CString::new(source_path).unwrap();
-    uio_mountDir(
-        repo,
-        mp.as_ptr(),
-        UIO_FSTYPE_STDIO,
-        ptr::null_mut(),
-        ptr::null(),
-        sp.as_ptr(),
-        ptr::null_mut(),
-        flags,
-        ptr::null_mut(),
-    )
-}
-
-/// Open a directory in the repository and return the handle.
-unsafe fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle {
-    let p = CString::new(path).unwrap();
-    uio_openDir(repo, p.as_ptr(), 0)
+/// Mount every `.zip` / `.uqm` archive found in `dir` at `point`.
+fn mount_dir_zips(vfs: &Vfs, dir: &Dir, point: &str, placement: Placement) {
+    let archives = dir.list_matching(
+        Path::new(""),
+        "\\.([zZ][iI][pP]|[uU][qQ][mM])$",
+        Match::Regex,
+    );
+    for name in archives {
+        if let Err(error) = vfs.mount_zip(point, dir, Path::new(&name), placement, true) {
+            tracing::warn!("Could not mount '{name}': {error}.");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -195,8 +145,8 @@ pub(crate) fn config_path(explicit: Option<&str>) -> Result<PathBuf, DirPrepErro
 }
 
 /// Resolves the path (default `~/.uqm/`), creates it if needed, mounts
-/// it at "/" in the uio repository, and sets the C `configDir` global.
-pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> {
+/// it at "/" and retains it as the config directory.
+pub fn prepare_config_dir(vfs: &Vfs, config_dir: Option<&str>) -> Result<(), DirPrepError> {
     let path = config_path(config_dir)?;
     let path_str = path.to_string_lossy().to_string();
 
@@ -208,26 +158,8 @@ pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> 
 
     tracing::debug!("Using config dir '{}'", path_str);
 
-    let repo = unsafe { repository };
-
-    // Mount config dir at "/"
-    let mount = unsafe { mount_stdio_dir(repo, "/", &path_str, UIO_MOUNT_TOP) };
-    if mount.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not mount config dir: {path_str}"
-        )));
-    }
-
-    // Open "/" and set global
-    let dir = unsafe { open_dir(repo, "/") };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(
-            "Could not open config dir after mount".to_string(),
-        ));
-    }
-
-    unsafe { configDir = dir };
-
+    vfs.mount_dir("/", &path, Placement::Top, false);
+    vfs.set_config_dir(vfs.open_dir(Path::new("/")));
     Ok(())
 }
 
@@ -239,7 +171,7 @@ pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> 
 ///
 /// Resolves `$UQM_SAVE_DIR` (default `${UQM_CONFIG_DIR}/save`), creates
 /// it, and opens `save` relative to the config dir.
-pub fn prepare_save_dir() -> Result<(), DirPrepError> {
+pub fn prepare_save_dir(vfs: &Vfs) -> Result<(), DirPrepError> {
     let raw =
         std::env::var("UQM_SAVE_DIR").unwrap_or_else(|_| "${UQM_CONFIG_DIR}/save".to_string());
     let path = expand_path(&raw)?;
@@ -250,16 +182,10 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
 
     tracing::debug!("Saved games are kept in {}.", path_str);
 
-    let config_dir = unsafe { configDir };
-    let save = CString::new("save").unwrap();
-    let dir = unsafe { uio_openDirRelative(config_dir, save.as_ptr(), 0) };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not open save dir: {path_str}"
-        )));
-    }
-
-    unsafe { saveDir = dir };
+    let config = vfs
+        .config_dir()
+        .ok_or_else(|| DirPrepError::MountFailed(format!("Could not open save dir: {path_str}")))?;
+    vfs.set_save_dir(config.open_relative(Path::new("save")));
     Ok(())
 }
 
@@ -271,7 +197,7 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
 ///
 /// Resolves `$UQM_MELEE_DIR` (default `${UQM_CONFIG_DIR}/teams`), creates
 /// it, and opens `teams` relative to the config dir.
-pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
+pub fn prepare_melee_dir(vfs: &Vfs) -> Result<(), DirPrepError> {
     let raw =
         std::env::var("UQM_MELEE_DIR").unwrap_or_else(|_| "${UQM_CONFIG_DIR}/teams".to_string());
     let path = expand_path(&raw)?;
@@ -280,16 +206,10 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
     std::env::set_var("UQM_MELEE_DIR", &path_str);
     std::fs::create_dir_all(&path)?;
 
-    let config_dir = unsafe { configDir };
-    let teams = CString::new("teams").unwrap();
-    let dir = unsafe { uio_openDirRelative(config_dir, teams.as_ptr(), 0) };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not open melee teams dir: {path_str}"
-        )));
-    }
-
-    unsafe { meleeDir = dir };
+    let config = vfs.config_dir().ok_or_else(|| {
+        DirPrepError::MountFailed(format!("Could not open melee teams dir: {path_str}"))
+    })?;
+    vfs.set_melee_dir(config.open_relative(Path::new("teams")));
     Ok(())
 }
 
@@ -302,6 +222,7 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
 /// Finds the content dir (by looking for a `version` file), mounts it at
 /// "/", mounts any `/packages/*.zip` files, and mounts addon packs.
 pub fn prepare_content_dir(
+    vfs: &Vfs,
     configuration: &uqm_engine::configuration::Configuration,
     content_dir: Option<&str>,
     addon_dir: Option<&str>,
@@ -317,69 +238,34 @@ pub fn prepare_content_dir(
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
     configuration.set_content_path(retained_path);
 
-    let repo = unsafe { repository };
+    let mount = vfs.mount_dir("/", &content_path, Placement::Top, true);
+    vfs.set_content_mount(mount);
+    let dir = vfs.open_dir(Path::new("/"));
+    vfs.set_content_dir(dir.clone());
 
-    // Mount content dir at "/"
-    let mount = unsafe { mount_stdio_dir(repo, "/", &path_str, UIO_MOUNT_TOP | UIO_MOUNT_RDONLY) };
-    if mount.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not mount content dir: {path_str}"
-        )));
-    }
-    unsafe { contentMountHandle = mount };
+    mount_packages_zips(vfs, mount);
 
-    // Open "/" and set global
-    let dir = unsafe { open_dir(repo, "/") };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(
-            "Could not open content dir after mount".to_string(),
-        ));
-    }
-    unsafe { contentDir = dir };
-
-    // Mount /packages zips
-    unsafe { mount_packages_zips(repo, dir) };
-
-    // Mount addon dir
     if let Some(ad) = addon_dir {
         tracing::debug!("Using '{}' as addon dir.", ad);
-        unsafe { mount_addon_dir_explicit(repo, ad) };
+        vfs.mount_dir("addons", Path::new(ad), Placement::Top, true);
     }
 
-    // Scan and list addon packs
-    unsafe { scan_addon_packs(dir) };
+    scan_addon_packs(vfs, &dir, mount);
 
     Ok(())
 }
 
 /// Mount zip files from /packages directory below content root.
-unsafe fn mount_packages_zips(repo: *mut uio_Repository, _content_dir: *mut uio_DirHandle) {
-    let packages = CString::new("/packages").unwrap();
-    let pkg_dir = uio_openDir(repo, packages.as_ptr(), 0);
-    if pkg_dir.is_null() {
-        return;
-    }
-    mount_dir_zips(pkg_dir, "/", UIO_MOUNT_BELOW);
-    uio_closeDir(pkg_dir);
-}
-
-/// Mount an explicit addon directory (from `--addondir`).
-unsafe fn mount_addon_dir_explicit(repo: *mut uio_Repository, addon_dir: &str) {
-    let mount = mount_stdio_dir(repo, "addons", addon_dir, UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
-    if mount.is_null() {
-        tracing::warn!(
-            "Could not mount addon directory: {}; '--addon' options are ignored.",
-            addon_dir
-        );
-    }
+fn mount_packages_zips(vfs: &Vfs, content_mount: MountId) {
+    let packages = vfs.open_dir(Path::new("/packages"));
+    mount_dir_zips(vfs, &packages, "/", Placement::Below(content_mount));
 }
 
 /// Scan the `addons/` directory inside content, list available packs,
 /// and mount their zip files.
-unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
-    let addons_str = CString::new("addons").unwrap();
-    let addons_dir = uio_openDirRelative(content_dir, addons_str.as_ptr(), 0);
-    if addons_dir.is_null() {
+fn scan_addon_packs(vfs: &Vfs, content: &Dir, content_mount: MountId) {
+    let addons = content.open_relative(Path::new("addons"));
+    if addons.list(Path::new("")).is_err() {
         tracing::warn!(
             "There's no 'addons' directory in the 'content' directory; \
              '--addon' options are ignored."
@@ -388,107 +274,33 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
     }
 
     // Mount zips directly in addons/
-    mount_dir_zips(addons_dir, "addons", UIO_MOUNT_BELOW);
+    mount_dir_zips(vfs, &addons, "addons", Placement::Below(content_mount));
 
     // List and log addon subdirectories
-    let empty = CString::new("").unwrap();
-    let dir_list = uio_getDirList(addons_dir, empty.as_ptr(), empty.as_ptr(), MATCH_PREFIX);
-    if !dir_list.is_null() {
-        let dl = &*dir_list;
-        if dl.numNames == 0 || dl.names.is_null() {
-            tracing::info!("0 available addon packs.");
-        } else {
-            let names_slice = std::slice::from_raw_parts(dl.names, dl.numNames as usize);
-            let mut count = 0;
-            for name_ptr in names_slice {
-                if name_ptr.is_null() {
-                    continue;
-                }
-                let name = std::ffi::CStr::from_ptr(*name_ptr);
-                let name_str = name.to_string_lossy();
-
-                if name_str.starts_with('.') {
-                    continue;
-                }
-
-                count += 1;
-                tracing::info!("    {}. {}", count, name_str);
-
-                // Mount zips inside each addon subdir
-                let addon_c = CString::new(name_str.to_string()).unwrap();
-                let addon_dir_handle = uio_openDirRelative(addons_dir, addon_c.as_ptr(), 0);
-                if !addon_dir_handle.is_null() {
-                    let mountname = format!("addons/{name_str}");
-                    mount_dir_zips(addon_dir_handle, &mountname, UIO_MOUNT_BELOW);
-                    uio_closeDir(addon_dir_handle);
-                }
-            }
-
-            if count == 0 {
-                tracing::info!("0 available addon packs.");
-            } else {
-                tracing::info!(
-                    "{} available addon pack{}.",
-                    count,
-                    if count == 1 { "" } else { "s" }
-                );
-            }
-        }
-
-        uio_DirList_free(dir_list);
-    } else {
-        tracing::info!("0 available addon packs.");
-    }
-
-    uio_closeDir(addons_dir);
-}
-
-/// Mount all `.zip` / `.uqm` files found in `dir_handle` at `mount_point`.
-unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, relative_flags: c_int) {
-    let empty = CString::new("").unwrap();
-    let pattern = CString::new("\\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
-    let content_mount = unsafe { contentMountHandle };
-
-    let dir_list = uio_getDirList(dir_handle, empty.as_ptr(), pattern.as_ptr(), MATCH_REGEX);
-    if dir_list.is_null() {
-        return;
-    }
-
-    let dl = &*dir_list;
-    if dl.numNames == 0 || dl.names.is_null() {
-        uio_DirList_free(dir_list);
-        return;
-    }
-
-    let names_slice = std::slice::from_raw_parts(dl.names, dl.numNames as usize);
-    for name_ptr in names_slice {
-        if name_ptr.is_null() {
+    let mut count = 0;
+    for name in addons.list_matching(Path::new(""), "", Match::Prefix) {
+        if name.starts_with('.') {
             continue;
         }
-        let name = std::ffi::CStr::from_ptr(*name_ptr);
-
-        let mp = CString::new(mount_point).unwrap();
-        let result = uio_mountDir(
-            unsafe { repository },
-            mp.as_ptr(),
-            UIO_FSTYPE_ZIP,
-            dir_handle,
-            *name_ptr,
-            c"/".as_ptr() as *const c_char,
-            ptr::null_mut(),
-            relative_flags | UIO_MOUNT_RDONLY,
-            content_mount,
+        count += 1;
+        tracing::info!("    {}. {}", count, name);
+        let addon = addons.open_relative(Path::new(&name));
+        mount_dir_zips(
+            vfs,
+            &addon,
+            &format!("addons/{name}"),
+            Placement::Below(content_mount),
         );
-        if result.is_null() {
-            tracing::warn!(
-                "Could not mount '{}': {}.",
-                name.to_string_lossy(),
-                std::io::Error::last_os_error()
-            );
-        }
     }
-
-    uio_DirList_free(dir_list);
+    if count == 0 {
+        tracing::info!("0 available addon packs.");
+    } else {
+        tracing::info!(
+            "{} available addon pack{}.",
+            count,
+            if count == 1 { "" } else { "s" }
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -499,163 +311,25 @@ unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, rela
 ///
 /// For each addon, looks for a `shadow-content` subdirectory and mounts
 /// its zips (and non-zip content) on top of "/".
-pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
-    let content_dir = unsafe { contentDir };
-    if content_dir.is_null() {
-        return Ok(());
-    }
-
-    let addons_str = CString::new("addons").unwrap();
-    let addons_dir = unsafe { uio_openDirRelative(content_dir, addons_str.as_ptr(), 0) };
-    if addons_dir.is_null() {
+pub fn prepare_shadow_addons(vfs: &Vfs, addons: &[String]) {
+    let (Some(content), Some(content_mount)) = (vfs.content_dir(), vfs.content_mount()) else {
+        return;
+    };
+    let addons_dir = content.open_relative(Path::new("addons"));
+    if addons_dir.list(Path::new("")).is_err() {
         // No addon dir — fail silently (will fail again later)
-        return Ok(());
+        return;
     }
-
-    let shadow_name = "shadow-content";
-
     for addon in addons {
-        let addon_c = CString::new(addon.as_str()).unwrap();
-        let addon_dir = unsafe { uio_openDirRelative(addons_dir, addon_c.as_ptr(), 0) };
-        if addon_dir.is_null() {
+        let shadow = addons_dir
+            .open_relative(Path::new(addon))
+            .open_relative(Path::new("shadow-content"));
+        if shadow.list(Path::new("")).is_err() {
             continue;
         }
-
-        let shadow_c = CString::new(shadow_name).unwrap();
-        let shadow_dir = unsafe { uio_openDirRelative(addon_dir, shadow_c.as_ptr(), 0) };
-        if !shadow_dir.is_null() {
-            tracing::debug!("Mounting shadow content of '{}' addon", addon);
-
-            unsafe {
-                // Mount shadow zips
-                mount_dir_zips(shadow_dir, "/", UIO_MOUNT_ABOVE);
-
-                // Mount non-zipped shadow content
-                let slash = CString::new("/").unwrap();
-                uio_transplantDir(
-                    slash.as_ptr(),
-                    shadow_dir,
-                    UIO_MOUNT_RDONLY | UIO_MOUNT_ABOVE,
-                    contentMountHandle,
-                );
-            }
-
-            unsafe { uio_closeDir(shadow_dir) };
-        }
-
-        unsafe { uio_closeDir(addon_dir) };
-    }
-
-    unsafe { uio_closeDir(addons_dir) };
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// FFI exports (called from C when RUST_OWNS_MAIN)
-// ---------------------------------------------------------------------------
-
-/// # Safety
-/// C strings must be valid UTF-8 or NULL.
-pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c_int {
-    let dir = if config_dir.is_null() {
-        None
-    } else {
-        Some(
-            std::ffi::CStr::from_ptr(config_dir)
-                .to_string_lossy()
-                .to_string(),
-        )
-    };
-    match prepare_config_dir(dir.as_deref()) {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_config_dir failed: {:?}", e);
-            -1
-        }
-    }
-}
-
-/// # Safety
-/// C strings must be valid UTF-8 or NULL.
-pub unsafe fn rust_prepare_content_dir(
-    configuration: &uqm_engine::configuration::Configuration,
-    content_dir: *const c_char,
-    addon_dir: *const c_char,
-    _exec_file: *const c_char,
-) -> c_int {
-    let cdir = if content_dir.is_null() {
-        None
-    } else {
-        Some(
-            std::ffi::CStr::from_ptr(content_dir)
-                .to_string_lossy()
-                .to_string(),
-        )
-    };
-    let adir = if addon_dir.is_null() {
-        None
-    } else {
-        Some(
-            std::ffi::CStr::from_ptr(addon_dir)
-                .to_string_lossy()
-                .to_string(),
-        )
-    };
-    match prepare_content_dir(configuration, cdir.as_deref(), adir.as_deref()) {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_content_dir failed: {:?}", e);
-            -1
-        }
-    }
-}
-
-/// # Safety
-/// No parameters — safe to call.
-pub unsafe extern "C" fn rust_prepare_save_dir() -> c_int {
-    match prepare_save_dir() {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_save_dir failed: {:?}", e);
-            -1
-        }
-    }
-}
-
-/// # Safety
-/// No parameters — safe to call.
-pub unsafe extern "C" fn rust_prepare_melee_dir() -> c_int {
-    match prepare_melee_dir() {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_melee_dir failed: {:?}", e);
-            -1
-        }
-    }
-}
-
-/// # Safety
-/// `addons` must be a NULL-terminated array of C strings.
-pub unsafe extern "C" fn rust_prepare_shadow_addons(addons: *const *const c_char) -> c_int {
-    if addons.is_null() {
-        return 0;
-    }
-    let mut list = Vec::new();
-    let mut i = 0;
-    loop {
-        let ptr = *addons.add(i);
-        if ptr.is_null() {
-            break;
-        }
-        list.push(std::ffi::CStr::from_ptr(ptr).to_string_lossy().to_string());
-        i += 1;
-    }
-    match prepare_shadow_addons(&list) {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_shadow_addons failed: {:?}", e);
-            -1
-        }
+        tracing::debug!("Mounting shadow content of '{}' addon", addon);
+        mount_dir_zips(vfs, &shadow, "/", Placement::Above(content_mount));
+        vfs.transplant("/", &shadow, Placement::Above(content_mount));
     }
 }
 

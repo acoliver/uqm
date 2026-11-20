@@ -7,13 +7,10 @@ use uqm_rust::graphics::{
     native_abi::{EXTENT, POINT, RECT},
     sdl::lifecycle_abi::{TFB_InitGraphics, TFB_SwapBuffers, TFB_UninitGraphics},
 };
-use uqm_rust::io::uio_bridge as uio;
 use uqm_rust::mainloop::input_frame::rust_complete_input_frame;
 use uqm_rust::video::{
     decoder::DukVideoDecoder,
-    ffi::{
-        tfb_play_video, tfb_process_video_frame, tfb_stop_video, TFB_VideoClip, TFB_VideoDecoder,
-    },
+    ffi::{tfb_play_video, tfb_process_video_frame, tfb_stop_video, ClipSource, TFB_VideoClip},
     DUCK_FPS,
 };
 
@@ -55,7 +52,6 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
     let mut decoder = DukVideoDecoder::open(fixture.path(), "logo").unwrap();
     let first = decoder.decode_frame(0).unwrap();
     assert!(first.data.iter().any(|p| p & 0x00ff_ffff != 0));
-    let host = CString::new(fixture.path().to_str().unwrap()).unwrap();
 
     // This process owns its SDL instance; no native window or user config is used.
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
@@ -77,25 +73,16 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         };
         TFB_BBox_RegisterRect(&bounds);
 
-        uio::uio_init();
-        let repo = uio::uio_openRepository(0);
-        let mount = uio::uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut(),
-        );
-        assert!(!mount.is_null());
-        let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-        assert!(!dir.is_null());
-        let mut descriptor: TFB_VideoDecoder = std::mem::zeroed();
-        descriptor.filename = c"logo.duk".as_ptr().cast_mut();
-        descriptor.dir = dir.cast();
+        let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
+        let descriptor = ClipSource {
+            w: 0,
+            h: 0,
+            length: 0.0,
+            audio_synced: false,
+            dir: uqm_rust::io::content_dir().unwrap(),
+            filename: CString::new("logo.duk").unwrap(),
+        };
+        let mut descriptor = descriptor;
         let mut clip: TFB_VideoClip = std::mem::zeroed();
         clip.decoder = &mut descriptor;
         clip.loop_frame = u32::MAX;
@@ -146,9 +133,7 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
             .0
             .iter()
             .all(|p| p[..3] == [0, 0, 0]));
-        uio::uio_closeDir(dir);
-        uio::uio_closeRepository(repo);
-        uio::uio_unInit();
+        drop(mount);
         TFB_UninitGraphics();
     }
 }

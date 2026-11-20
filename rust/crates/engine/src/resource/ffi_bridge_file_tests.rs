@@ -3,73 +3,39 @@
 //! helpers, and loading resource data from a content directory.
 
 use std::ffi::{c_void, CStr, CString};
+use std::io::Write;
+use std::path::Path;
 use std::ptr;
 
 use serial_test::serial;
-use tempfile::TempDir;
 
 use super::*;
-use crate::io::uio_bridge::{
-    uio_Repository, uio_closeDir, uio_closeRepository, uio_init, uio_mountDir, uio_openDir,
-    uio_openRepository, uio_unInit,
-};
+use crate::io::fixture::TempMount;
 
-const UIO_FSTYPE_STDIO: c_int = 1;
-const UIO_MOUNT_TOP: c_int = 1 << 2;
-
-/// A temporary directory mounted at the root of a fresh UIO repository.
+/// A temporary directory mounted at the root of a fresh file system.
 struct Content {
-    files: TempDir,
-    repository: *mut uio_Repository,
-    dir: *mut c_void,
+    mount: TempMount,
+    dir: crate::io::Dir,
 }
 
 impl Content {
     fn new(files: &[(&str, &[u8])]) -> Self {
         reset_state();
-        let temp = TempDir::new().unwrap();
+        let mount = TempMount::new();
         for (name, data) in files {
-            std::fs::write(temp.path().join(name), data).unwrap();
+            mount.write(name, data);
         }
-        unsafe {
-            uio_init();
-            let repository = uio_openRepository(0);
-            let root = c("/");
-            let host = c(temp.path().to_str().unwrap());
-            let mount = uio_mountDir(
-                repository,
-                root.as_ptr(),
-                UIO_FSTYPE_STDIO,
-                ptr::null_mut(),
-                ptr::null(),
-                host.as_ptr(),
-                ptr::null_mut(),
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-            );
-            assert!(!mount.is_null());
-            let dir = uio_openDir(repository, root.as_ptr(), 0);
-            assert!(!dir.is_null());
-            Content {
-                files: temp,
-                repository,
-                dir: dir.cast(),
-            }
-        }
+        let dir = mount.dir();
+        Content { mount, dir }
     }
 
     fn host(&self, name: &str) -> std::path::PathBuf {
-        self.files.path().join(name)
+        self.mount.path_of(name)
     }
 }
 
 impl Drop for Content {
     fn drop(&mut self) {
-        unsafe {
-            uio_closeDir(self.dir.cast());
-            uio_closeRepository(self.repository);
-            uio_unInit();
-        }
         reset_state();
     }
 }
@@ -87,8 +53,8 @@ fn load(content: &Content, name: &str, prefix: Option<&str>) {
     let name = c(name);
     let prefix = prefix.map(c);
     unsafe {
-        LoadResourceIndex(
-            content.dir,
+        load_resource_index(
+            &content.dir,
             name.as_ptr(),
             prefix.as_ref().map_or(ptr::null(), |p| p.as_ptr()),
         )
@@ -117,20 +83,15 @@ fn has_key(key: &str) -> bool {
 }
 
 fn save(content: &Content, name: &str, root: Option<&str>, strip: c_int) {
-    let name = c(name);
-    let root = root.map(c);
-    unsafe {
-        SaveResourceIndex(
-            content.dir,
-            name.as_ptr(),
-            root.as_ref().map_or(ptr::null(), |r| r.as_ptr()),
-            strip,
-        )
-    };
+    let mut output = content.dir.open_write(Path::new(name)).unwrap();
+    for line in serialize_index(root, strip != 0) {
+        output.write_all(line.as_bytes()).unwrap();
+    }
+    output.finish().unwrap();
 }
 
 fn open(content: &Content, name: &str, mode: &str) -> *mut c_void {
-    unsafe { res_OpenResFile(content.dir, c(name).as_ptr(), c(mode).as_ptr()) }
+    unsafe { open_res_file(&content.dir, c(name).as_ptr(), c(mode).as_ptr()) }
 }
 
 #[test]
@@ -184,7 +145,7 @@ fn loading_an_unusable_index_changes_nothing() {
     load(&content, "empty.rmp", None);
     load(&content, "binary.rmp", None);
     load(&content, "missing.rmp", None);
-    unsafe { LoadResourceIndex(content.dir, ptr::null(), ptr::null()) };
+    unsafe { load_resource_index(&content.dir, ptr::null(), ptr::null()) };
     assert!(!has_key("anything"));
     assert_eq!(unsafe { CountResourceTypes() }, 5);
 }
@@ -248,14 +209,6 @@ fn saving_skips_entries_whose_type_cannot_be_written_back() {
 
 #[test]
 #[serial]
-fn saving_with_no_file_name_does_nothing() {
-    let content = Content::new(&[]);
-    unsafe { SaveResourceIndex(content.dir, ptr::null(), ptr::null(), 0) };
-    assert_eq!(std::fs::read_dir(content.files.path()).unwrap().count(), 0);
-}
-
-#[test]
-#[serial]
 fn opening_a_directory_yields_the_sentinel_and_missing_files_yield_null() {
     let content = Content::new(&[("data.bin", b"abc")]);
     std::fs::create_dir(content.host("sub")).unwrap();
@@ -263,8 +216,8 @@ fn opening_a_directory_yields_the_sentinel_and_missing_files_yield_null() {
     assert_eq!(open(&content, "sub", "rb"), STREAM_SENTINEL);
     assert!(open(&content, "missing.bin", "rb").is_null());
     unsafe {
-        assert!(res_OpenResFile(content.dir, ptr::null(), c("rb").as_ptr()).is_null());
-        assert!(res_OpenResFile(content.dir, c("data.bin").as_ptr(), ptr::null()).is_null());
+        assert!(open_res_file(&content.dir, ptr::null(), c("rb").as_ptr()).is_null());
+        assert!(open_res_file(&content.dir, c("data.bin").as_ptr(), ptr::null()).is_null());
     }
 }
 
@@ -343,7 +296,7 @@ fn file_helpers_treat_null_and_directory_streams_as_empty() {
 fn files_remove_reports_failure_for_a_missing_file() {
     use crate::host::Files;
     let content = Content::new(&[("old.dat", b"x"), ("keep.dat", b"y")]);
-    let files = unsafe { crate::io::uio_owned::directory(content.dir.cast()) }.unwrap();
+    let files = content.dir.clone();
     assert!(files.remove(std::path::Path::new("old.dat")).is_ok());
     assert_eq!(
         files
@@ -373,8 +326,8 @@ unsafe extern "C" fn record_length(fp: *mut c_void, length: u32) -> *mut c_void 
 #[serial]
 fn loading_a_resource_from_a_path_hands_the_open_file_to_the_loader() {
     let content = Content::new(&[("res.bin", b"Zabcd"), ("empty.bin", b"")]);
+    content.mount.vfs().set_content_dir(content.dir.clone());
     unsafe {
-        contentDir = content.dir.cast();
         let loaded = LoadResourceFromPath(c("res.bin").as_ptr(), Some(record_length));
         assert_eq!(
             loaded as usize,
@@ -387,7 +340,6 @@ fn loading_a_resource_from_a_path_hands_the_open_file_to_the_loader() {
         assert!(LoadResourceFromPath(c("missing.bin").as_ptr(), Some(record_length)).is_null());
         assert!(LoadResourceFromPath(ptr::null(), Some(record_length)).is_null());
         assert!(LoadResourceFromPath(c("res.bin").as_ptr(), None).is_null());
-        contentDir = ptr::null_mut();
     }
 }
 

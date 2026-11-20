@@ -43,29 +43,27 @@ fn on_battle_frame(
     );
 }
 
-unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout: u32) {
+fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout: u32) {
     for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
-        crate::threading::legacy_abi::TaskSwitch();
+        crate::threading::yield_task();
         crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species);
     }
-    crate::threading::legacy_abi::TaskSwitch();
-    crate::game_init::kernel_abi::InitGameKernel(cx.kernel, cx.world.activity());
+    crate::threading::yield_task();
+    crate::game_init::kernel_abi::init_game_kernel(cx.kernel, cx.world.activity());
     let input = cx.kernel.input_runtime();
     while crate::time::counter_abi::GetTimeCounter() <= timeout
         && cx.world.activity() & CHECK_ABORT as u16 == 0
     {
         input.update(cx);
-        if crate::time::source::is_replay() {
+        if crate::engine::host::is_replay() {
             crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
         } else {
-            crate::threading::legacy_abi::TaskSwitch();
+            crate::threading::yield_task();
         };
     }
 }
 
-/// # Safety
-/// Called by the game loop on the SDL owner thread during kernel initialization.
-pub unsafe fn uqm_splash_with_bg_init_kernel(
+pub fn uqm_splash_with_bg_init_kernel(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
@@ -74,9 +72,7 @@ pub unsafe fn uqm_splash_with_bg_init_kernel(
     });
 }
 
-/// # Safety
-/// The game kernel and battle state must be initialized on the SDL owner thread.
-pub unsafe fn battle_with_frame_callback(
+pub fn battle_with_frame_callback(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {

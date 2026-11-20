@@ -1,243 +1,78 @@
-//! Keyboard binding management
-//!
-//! Handles keyboard key bindings to control state variables.
+//! Keyboard bindings from keycodes to control words.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// A keyboard key binding that maps a keycode to a control state variable.
-#[derive(Debug, Clone)]
-pub struct KeyBinding {
-    /// Target control state variable address (as usize for FFI)
-    pub target: usize,
-    /// SDL keycode
-    pub keycode: i32,
-}
+use super::frames::{InputState, Target};
 
-impl KeyBinding {
-    /// Create a new key binding
-    pub fn new(keycode: i32, target: usize) -> Self {
-        Self { keycode, target }
-    }
-}
+/// Control words count presses in their low byte and carry a start bit set by
+/// the press that began the frame.
+pub const START_BIT: i32 = 0x100;
+pub const COUNT_MASK: i32 = 0xFF;
 
-/// Number of buckets for keyboard binding hash table
-pub const KEYBOARD_INPUT_BUCKETS: usize = 512;
-
-static KEY_DOWN_COUNT: AtomicUsize = AtomicUsize::new(0);
-static KEY_UP_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-/// Keyboard binding manager
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct KeyboardBindings {
-    /// Hash buckets: keycode → list of bindings
-    buckets: [Vec<KeyBinding>; KEYBOARD_INPUT_BUCKETS],
-    /// Fast lookup: keycode → bucket index
-    keycode_to_bucket: HashMap<i32, usize>,
-}
-
-impl Default for KeyboardBindings {
-    fn default() -> Self {
-        Self::new()
-    }
+    bindings: HashMap<i32, Vec<Target>>,
 }
 
 impl KeyboardBindings {
-    /// Create a new empty keyboard binding manager
     pub fn new() -> Self {
-        // Initialize empty buckets
-        const EMPTY_VEC: Vec<KeyBinding> = Vec::new();
-        Self {
-            buckets: [EMPTY_VEC; KEYBOARD_INPUT_BUCKETS],
-            keycode_to_bucket: HashMap::new(),
-        }
+        Self::default()
     }
 
-    /// Compute bucket index for a keycode
-    fn bucket_index(keycode: i32) -> usize {
-        (keycode as usize) % KEYBOARD_INPUT_BUCKETS
-    }
-
-    /// Add a key binding
-    pub fn add_binding(&mut self, keycode: i32, target: usize) -> bool {
-        let bucket_idx = Self::bucket_index(keycode);
-        let bucket = &mut self.buckets[bucket_idx];
-
-        // Check if this exact binding already exists
-        for binding in bucket.iter() {
-            if binding.keycode == keycode && binding.target == target {
-                return false; // Already bound
-            }
+    /// Bind `keycode` to `target`; `false` when that exact binding exists.
+    pub fn add_binding(&mut self, keycode: i32, target: Target) -> bool {
+        let targets = self.bindings.entry(keycode).or_default();
+        if targets.contains(&target) {
+            return false;
         }
-
-        bucket.push(KeyBinding::new(keycode, target));
-        self.keycode_to_bucket.insert(keycode, bucket_idx);
+        targets.push(target);
         true
     }
 
-    /// Remove a key binding
-    pub fn remove_binding(&mut self, keycode: i32, target: usize) -> bool {
-        let bucket_idx = Self::bucket_index(keycode);
-        let bucket = &mut self.buckets[bucket_idx];
-
-        let original_len = bucket.len();
-        bucket.retain(|b| !(b.keycode == keycode && b.target == target));
-
-        if bucket.len() != original_len {
-            // Check if there are any remaining bindings for this keycode
-            if !bucket.iter().any(|b| b.keycode == keycode) {
-                self.keycode_to_bucket.remove(&keycode);
-            }
-            true
-        } else {
-            false
+    pub fn remove_binding(&mut self, keycode: i32, target: Target) -> bool {
+        let Some(targets) = self.bindings.get_mut(&keycode) else {
+            return false;
+        };
+        let before = targets.len();
+        targets.retain(|bound| *bound != target);
+        let removed = targets.len() != before;
+        if targets.is_empty() {
+            self.bindings.remove(&keycode);
         }
-    }
-
-    /// Remove all bindings for a keycode
-    pub fn remove_all_for_key(&mut self, keycode: i32) -> usize {
-        let bucket_idx = Self::bucket_index(keycode);
-        let bucket = &mut self.buckets[bucket_idx];
-
-        let original_len = bucket.len();
-        bucket.retain(|b| b.keycode != keycode);
-        let removed = original_len - bucket.len();
-
-        if removed > 0 {
-            self.keycode_to_bucket.remove(&keycode);
-        }
-
         removed
     }
 
-    /// Clear all bindings
     pub fn clear(&mut self) {
-        for bucket in self.buckets.iter_mut() {
-            bucket.clear();
-        }
-        self.keycode_to_bucket.clear();
+        self.bindings.clear();
     }
 
-    /// Get all bindings for a keycode
-    pub fn get_bindings(&self, keycode: i32) -> impl Iterator<Item = &KeyBinding> {
-        let bucket_idx = Self::bucket_index(keycode);
-        self.buckets[bucket_idx]
-            .iter()
-            .filter(move |b| b.keycode == keycode)
-    }
-
-    /// Check if a keycode has any bindings
     pub fn has_bindings(&self, keycode: i32) -> bool {
-        self.keycode_to_bucket.contains_key(&keycode)
+        self.bindings.contains_key(&keycode)
     }
 
-    /// Get total number of bindings
     pub fn binding_count(&self) -> usize {
-        self.buckets.iter().map(|b| b.len()).sum()
+        self.bindings.values().map(Vec::len).sum()
     }
 
-    /// Handle key down event - increments target and sets STARTBIT
-    ///
-    /// This matches the C behavior:
-    /// `*(target) = (*(target)+1) | VCONTROL_STARTBIT`
-    ///
-    /// The STARTBIT (0x100) indicates this key was just pressed this frame.
-    /// The lower bits (VCONTROL_MASK = 0xFF) count how many times key is pressed
-    /// (for multiple bindings to the same key).
-    ///
-    /// # Safety
-    /// Caller must ensure target addresses are valid writable i32 pointers
-    pub unsafe fn handle_key_down(&self, keycode: i32) {
-        const VCONTROL_STARTBIT: i32 = 0x100;
-        let n = KEY_DOWN_COUNT.fetch_add(1, Ordering::Relaxed);
-        if n < 80 {
-            crate::bridge_log::rust_bridge_log_msg(&format!(
-                "RUST_INPUT_KBD_DOWN: keycode=0x{:X}",
-                keycode
-            ));
-        }
-        for binding in self.get_bindings(keycode) {
-            let target_ptr = binding.target as *mut i32;
-            if !target_ptr.is_null() {
-                let before = *target_ptr;
-                *target_ptr = (*target_ptr + 1) | VCONTROL_STARTBIT;
-                if n < 80 {
-                    crate::bridge_log::rust_bridge_log_msg(&format!(
-                        "RUST_INPUT_KBD_DOWN_BIND: key=0x{:X} target={:p} before={} after={}",
-                        keycode, target_ptr, before, *target_ptr
-                    ));
-                }
-            }
+    pub fn targets(&self) -> impl Iterator<Item = Target> + '_ {
+        self.bindings.values().flatten().copied()
+    }
+
+    /// Count the press and mark it as the frame's start.
+    pub fn handle_key_down(&self, keycode: i32, state: &mut InputState) {
+        for &target in self.bindings.get(&keycode).into_iter().flatten() {
+            let slot = state.slot(target);
+            *slot = (*slot + 1) | START_BIT;
         }
     }
 
-    /// Handle key up event - decrements target (keeping STARTBIT if present)
-    ///
-    /// This matches the C behavior:
-    /// ```c
-    /// int v = *(target) & VCONTROL_MASK;
-    /// if (v > 0) *(target) = (v-1) | (*(target) & VCONTROL_STARTBIT);
-    /// ```
-    ///
-    /// # Safety
-    /// Caller must ensure target addresses are valid writable i32 pointers
-    pub unsafe fn handle_key_up(&self, keycode: i32) {
-        const VCONTROL_STARTBIT: i32 = 0x100;
-        const VCONTROL_MASK: i32 = 0xFF;
-        let n = KEY_UP_COUNT.fetch_add(1, Ordering::Relaxed);
-        if n < 80 {
-            crate::bridge_log::rust_bridge_log_msg(&format!(
-                "RUST_INPUT_KBD_UP: keycode=0x{:X}",
-                keycode
-            ));
-        }
-        for binding in self.get_bindings(keycode) {
-            let target_ptr = binding.target as *mut i32;
-            if !target_ptr.is_null() {
-                let before = *target_ptr;
-                let v = *target_ptr & VCONTROL_MASK;
-                if v > 0 {
-                    *target_ptr = (v - 1) | (*target_ptr & VCONTROL_STARTBIT);
-                }
-                if n < 80 {
-                    crate::bridge_log::rust_bridge_log_msg(&format!(
-                        "RUST_INPUT_KBD_UP_BIND: key=0x{:X} target={:p} before={} after={}",
-                        keycode, target_ptr, before, *target_ptr
-                    ));
-                }
-            }
-        }
-    }
-
-    /// Reset all bound control states to 0
-    ///
-    /// # Safety
-    /// Caller must ensure target addresses are valid writable i32 pointers
-    pub unsafe fn reset_all_states(&self) {
-        for bucket in self.buckets.iter() {
-            for binding in bucket.iter() {
-                let target_ptr = binding.target as *mut i32;
-                if !target_ptr.is_null() {
-                    *target_ptr = 0;
-                }
-            }
-        }
-    }
-
-    /// Begin a new input frame - clear start bits from all bound targets
-    ///
-    /// # Safety
-    /// Caller must ensure target addresses are valid writable i32 pointers
-    pub unsafe fn begin_frame(&self) {
-        // Clear the VCONTROL_STARTBIT from all bound targets
-        // VCONTROL_STARTBIT = 0x100, VCONTROL_MASK = 0xFF
-        const VCONTROL_MASK: i32 = 0xFF;
-        for bucket in self.buckets.iter() {
-            for binding in bucket.iter() {
-                let target_ptr = binding.target as *mut i32;
-                if !target_ptr.is_null() {
-                    *target_ptr &= VCONTROL_MASK;
-                }
+    /// Count the release, keeping the start bit.
+    pub fn handle_key_up(&self, keycode: i32, state: &mut InputState) {
+        for &target in self.bindings.get(&keycode).into_iter().flatten() {
+            let slot = state.slot(target);
+            let count = *slot & COUNT_MASK;
+            if count > 0 {
+                *slot = (count - 1) | (*slot & START_BIT);
             }
         }
     }
@@ -247,153 +82,61 @@ impl KeyboardBindings {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_new_bindings() {
-        let bindings = KeyboardBindings::new();
-        assert_eq!(bindings.binding_count(), 0);
-    }
+    const A: Target = Target::Menu(0);
+    const B: Target = Target::Menu(1);
 
     #[test]
-    fn test_add_binding() {
+    fn bindings_are_unique_per_key_and_target() {
         let mut bindings = KeyboardBindings::new();
-        assert!(bindings.add_binding(32, 0x1000)); // Space key
-        assert_eq!(bindings.binding_count(), 1);
+        assert!(bindings.add_binding(32, A));
+        assert!(!bindings.add_binding(32, A));
+        assert!(bindings.add_binding(32, B));
+        assert_eq!(bindings.binding_count(), 2);
         assert!(bindings.has_bindings(32));
     }
 
     #[test]
-    fn test_add_duplicate_binding() {
+    fn removing_one_target_keeps_the_others() {
         let mut bindings = KeyboardBindings::new();
-        assert!(bindings.add_binding(32, 0x1000));
-        assert!(!bindings.add_binding(32, 0x1000)); // Duplicate
-        assert_eq!(bindings.binding_count(), 1);
-    }
-
-    #[test]
-    fn test_multiple_bindings_same_key() {
-        let mut bindings = KeyboardBindings::new();
-        assert!(bindings.add_binding(32, 0x1000));
-        assert!(bindings.add_binding(32, 0x2000)); // Different target
-        assert_eq!(bindings.binding_count(), 2);
-
-        let count = bindings.get_bindings(32).count();
-        assert_eq!(count, 2);
-    }
-
-    #[test]
-    fn test_remove_binding() {
-        let mut bindings = KeyboardBindings::new();
-        bindings.add_binding(32, 0x1000);
-        bindings.add_binding(32, 0x2000);
-
-        assert!(bindings.remove_binding(32, 0x1000));
-        assert_eq!(bindings.binding_count(), 1);
-        assert!(bindings.has_bindings(32)); // Still has one binding
-    }
-
-    #[test]
-    fn test_remove_nonexistent_binding() {
-        let mut bindings = KeyboardBindings::new();
-        assert!(!bindings.remove_binding(32, 0x1000));
-    }
-
-    #[test]
-    fn test_remove_all_for_key() {
-        let mut bindings = KeyboardBindings::new();
-        bindings.add_binding(32, 0x1000);
-        bindings.add_binding(32, 0x2000);
-        bindings.add_binding(65, 0x3000); // 'a' key
-
-        let removed = bindings.remove_all_for_key(32);
-        assert_eq!(removed, 2);
+        bindings.add_binding(32, A);
+        bindings.add_binding(32, B);
+        assert!(bindings.remove_binding(32, A));
+        assert!(!bindings.remove_binding(32, A));
+        assert!(bindings.has_bindings(32));
+        assert!(bindings.remove_binding(32, B));
         assert!(!bindings.has_bindings(32));
-        assert!(bindings.has_bindings(65));
-        assert_eq!(bindings.binding_count(), 1);
     }
 
     #[test]
-    fn test_clear() {
+    fn clear_forgets_every_key() {
         let mut bindings = KeyboardBindings::new();
-        bindings.add_binding(32, 0x1000);
-        bindings.add_binding(65, 0x2000);
-        bindings.add_binding(66, 0x3000);
-
+        bindings.add_binding(32, A);
+        bindings.add_binding(65, B);
         bindings.clear();
         assert_eq!(bindings.binding_count(), 0);
-        assert!(!bindings.has_bindings(32));
+        assert!(!bindings.has_bindings(65));
     }
 
     #[test]
-    fn test_key_down_up() {
+    fn press_counts_and_sets_the_start_bit_and_release_keeps_it() {
         let mut bindings = KeyboardBindings::new();
-        let mut target: i32 = 0;
-        let target_addr = &mut target as *mut i32 as usize;
-
-        bindings.add_binding(32, target_addr);
-
-        // VCONTROL_STARTBIT (0x100) is set on key down, plus the count (1)
-        // So key down sets target to 0x101 (257)
-        // Key up decrements the count but preserves STARTBIT, so 0x100 (256)
-        const VCONTROL_STARTBIT: i32 = 0x100;
-        const VCONTROL_MASK: i32 = 0xFF;
-
-        unsafe {
-            bindings.handle_key_down(32);
-            assert_eq!(target & VCONTROL_MASK, 1); // Count is 1
-            assert_ne!(target & VCONTROL_STARTBIT, 0); // STARTBIT is set
-
-            bindings.handle_key_up(32);
-            assert_eq!(target & VCONTROL_MASK, 0); // Count is 0
-        }
+        let mut state = InputState::default();
+        bindings.add_binding(32, A);
+        bindings.add_binding(32, B);
+        bindings.handle_key_down(32, &mut state);
+        assert_eq!(state.menu[..2], [START_BIT | 1; 2]);
+        bindings.handle_key_up(32, &mut state);
+        assert_eq!(state.menu[..2], [START_BIT; 2]);
+        bindings.handle_key_up(32, &mut state);
+        assert_eq!(state.menu[0], START_BIT, "the count never goes below zero");
     }
 
     #[test]
-    fn test_multiple_targets_same_key() {
-        let mut bindings = KeyboardBindings::new();
-        let mut target1: i32 = 0;
-        let mut target2: i32 = 0;
-
-        bindings.add_binding(32, &mut target1 as *mut i32 as usize);
-        bindings.add_binding(32, &mut target2 as *mut i32 as usize);
-
-        const VCONTROL_MASK: i32 = 0xFF;
-
-        unsafe {
-            bindings.handle_key_down(32);
-            assert_eq!(target1 & VCONTROL_MASK, 1);
-            assert_eq!(target2 & VCONTROL_MASK, 1);
-
-            bindings.handle_key_up(32);
-            assert_eq!(target1 & VCONTROL_MASK, 0);
-            assert_eq!(target2 & VCONTROL_MASK, 0);
-        }
-    }
-
-    #[test]
-    fn test_reset_all_states() {
-        let mut bindings = KeyboardBindings::new();
-        let mut target1: i32 = 5;
-        let mut target2: i32 = 10;
-
-        bindings.add_binding(32, &mut target1 as *mut i32 as usize);
-        bindings.add_binding(65, &mut target2 as *mut i32 as usize);
-
-        unsafe {
-            bindings.reset_all_states();
-            assert_eq!(target1, 0);
-            assert_eq!(target2, 0);
-        }
-    }
-
-    #[test]
-    fn test_bucket_distribution() {
-        let mut bindings = KeyboardBindings::new();
-
-        // Add keys that should hash to different buckets
-        for i in 0..100 {
-            bindings.add_binding(i, 0x1000 + i as usize);
-        }
-
-        assert_eq!(bindings.binding_count(), 100);
+    fn unbound_keys_change_nothing() {
+        let bindings = KeyboardBindings::new();
+        let mut state = InputState::default();
+        bindings.handle_key_down(32, &mut state);
+        bindings.handle_key_up(32, &mut state);
+        assert_eq!(state, InputState::default());
     }
 }

@@ -1,47 +1,14 @@
-// @plan PLAN-20260225-AUDIO-HEART.P18
-// @requirement REQ-CROSS-FFI-01..04, REQ-CROSS-GENERAL-03, REQ-CROSS-GENERAL-08
-//! FFI shim layer — C-callable wrappers for the Rust audio heart.
-//!
-//! Every function is a thin shim: convert C types → Rust types, call
-//! the Rust API, convert results → C types. No logic beyond pointer
-//! conversion and error translation. All unsafe code is confined here.
+//! Safe facade over the audio heart: stream, track, music and channel
+//! operations, content loading and the volume controls that the game modes call.
 
-pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
-
-use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
-use std::panic::{self, AssertUnwindSafe};
+use std::ffi::{c_int, c_uint, CStr};
 use std::path::Path;
-use std::ptr::null_mut;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-/// Wrap a closure so panics don't cross the FFI boundary (which would call
-/// abort).  Logs the panic payload to stderr.
-///
-/// Returns `Ok(R)` on success or `Err(())` on panic.
-fn ffi_catch<F, R>(f: F) -> Result<R, ()>
-where
-    F: FnOnce() -> R,
-{
-    match panic::catch_unwind(AssertUnwindSafe(f)) {
-        Ok(v) => Ok(v),
-        Err(payload) => {
-            let msg = if let Some(s) = payload.downcast_ref::<&str>() {
-                (*s).to_string()
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "unknown panic".to_string()
-            };
-            eprintln!("[FFI PANIC] {msg}");
-            Err(())
-        }
-    }
-}
-
 use super::control;
-use super::decoder::{LimitedDecoder, SoundDecoder};
+use super::decoder::{DecodeResult, Decoder, LimitedDecoder};
 use super::mixer::buffer as mixer_buffer;
 use super::mixer::{mixer_get_format, mixer_get_frequency};
 use super::music;
@@ -51,48 +18,53 @@ use super::stream;
 use super::trackplayer;
 use super::types::*;
 
-// =============================================================================
-// C FFI helpers — UIO + string table access
-// =============================================================================
-
-use crate::io::handles::contentDir;
-
-#[allow(
-    non_snake_case,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-unsafe fn HMalloc(size: usize) -> *mut c_void {
-    crate::memory::rust_hmalloc(size)
-}
-
-#[allow(
-    non_snake_case,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-unsafe fn HFree(ptr: *mut c_void) {
-    crate::memory::rust_hfree(ptr)
-}
-
-unsafe fn read_content_file(path: *const c_char) -> Option<Vec<u8>> {
-    crate::io::uio_owned::read_file(contentDir.cast(), path)
+/// The bytes of a content file, absent when unreadable or empty.
+fn read_content_file(path: &str) -> Option<Vec<u8>> {
+    use crate::host::Files;
+    crate::io::content_dir()?
+        .read(Path::new(path))
         .ok()
         .filter(|data| !data.is_empty())
 }
 
-/// Create a Rust decoder for a file, based on extension.
-fn create_decoder_for_extension(ext: &str) -> Option<Box<dyn SoundDecoder>> {
-    let mut decoder: Box<dyn SoundDecoder> = match ext {
-        "ogg" => Box::new(super::ogg::OggDecoder::new()),
-        "wav" => Box::new(super::wav::WavDecoder::new()),
-        "mod" => Box::new(super::mod_decoder::ModDecoder::new()),
-        "aif" | "aiff" => Box::new(super::aiff::AiffDecoder::new()),
-        _ => {
-            eprintln!("create_decoder_for_extension: unknown ext '{}'", ext);
-            return None;
+#[derive(Clone, Copy)]
+enum Kind {
+    Ogg,
+    Wav,
+    Mod,
+    Aiff,
+}
+
+impl Kind {
+    fn of(ext: &str) -> Option<Self> {
+        match ext {
+            "ogg" => Some(Self::Ogg),
+            "wav" => Some(Self::Wav),
+            "mod" => Some(Self::Mod),
+            "aif" | "aiff" => Some(Self::Aiff),
+            _ => {
+                eprintln!("Kind::of: unknown ext '{ext}'");
+                None
+            }
         }
-    };
-    decoder.init();
-    Some(decoder)
+    }
+
+    fn open(self, data: &[u8], name: &str) -> DecodeResult<Box<dyn Decoder>> {
+        macro_rules! open {
+            ($decoder:expr) => {{
+                let mut decoder = $decoder;
+                decoder.init();
+                decoder.open_from_bytes(data, name)?;
+                Ok(Box::new(decoder))
+            }};
+        }
+        match self {
+            Self::Ogg => open!(super::ogg::OggDecoder::new()),
+            Self::Wav => open!(super::wav::WavDecoder::new()),
+            Self::Mod => open!(super::mod_decoder::ModDecoder::new()),
+            Self::Aiff => open!(super::aiff::AiffDecoder::new()),
+        }
+    }
 }
 
 /// Get the file extension from a filename.
@@ -109,7 +81,7 @@ fn create_per_page_decoders(
     track_name: Option<&str>,
     track_text: Option<&str>,
     timestamp: Option<&str>,
-) -> Vec<Box<dyn SoundDecoder>> {
+) -> Vec<Box<dyn Decoder>> {
     let name = match track_name {
         Some(n) => n,
         None => return Vec::new(),
@@ -189,10 +161,7 @@ fn create_per_page_decoders(
         }
     }
 
-    let file_data = CString::new(name).ok().and_then(|c_name| {
-        // SAFETY: c_name owns the terminated path throughout this content read.
-        unsafe { read_content_file(c_name.as_ptr()) }
-    });
+    let file_data = read_content_file(name);
     page_decoders(name, file_data.as_deref(), &page_run_times)
 }
 
@@ -208,16 +177,16 @@ fn page_decoders(
     name: &str,
     file_data: Option<&[u8]>,
     page_run_times: &[i32],
-) -> Vec<Box<dyn SoundDecoder>> {
+) -> Vec<Box<dyn Decoder>> {
     let Some(ext) = file_extension(name) else {
         return Vec::new();
     };
-    let mut decoders: Vec<Box<dyn SoundDecoder>> = Vec::with_capacity(page_run_times.len());
+    let mut decoders: Vec<Box<dyn Decoder>> = Vec::with_capacity(page_run_times.len());
     let mut dec_offset_ms: u32 = 0;
 
     for (page_idx, &run_time_ms) in page_run_times.iter().enumerate() {
-        let real = create_decoder_for_extension(ext).zip(file_data);
-        let Some((mut dec, data)) = real else {
+        let real = Kind::of(ext).zip(file_data);
+        let Some((kind, data)) = real else {
             if run_time_ms == 0 {
                 break;
             }
@@ -227,13 +196,16 @@ fn page_decoders(
             decoders.push(Box::new(silent));
             continue;
         };
-        if let Err(e) = dec.open_from_bytes(data, name) {
-            eprintln!(
-                "[SpliceTrack] decoder open failed for {} page {}: {:?}",
-                name, page_idx, e
-            );
-            break;
-        }
+        let dec = match kind.open(data, name) {
+            Ok(dec) => dec,
+            Err(e) => {
+                eprintln!(
+                    "[SpliceTrack] decoder open failed for {} page {}: {:?}",
+                    name, page_idx, e
+                );
+                break;
+            }
+        };
 
         // Preserve sign like C SoundDecoder_Load(..., runTime):
         // negative run_time means "do not clamp" (play to end from offset).
@@ -264,61 +236,7 @@ fn page_decoders(
 }
 
 // =============================================================================
-// Helpers
-// =============================================================================
-
-#[cfg(test)]
-unsafe fn c_str_to_option(ptr: *const c_char) -> Option<&'static str> {
-    if ptr.is_null() {
-        None
-    } else {
-        CStr::from_ptr(ptr).to_str().ok()
-    }
-}
-
-/// MUSIC_REF is a double pointer: `Box<Arc<Mutex<SoundSample>>>` stored as
-/// `*mut *mut c_void`. The outer Box is the "MUSIC_REF" handle.
-/// Borrow the Arc from a MUSIC_REF (double-pointer) WITHOUT taking ownership.
-///
-/// # Safety
-/// The handle must identify a live, non-null native music allocation for this borrow.
-pub unsafe fn music_ref_borrow(music_ref_ptr: *mut c_void) -> MusicRef {
-    let arc_ptr = *(music_ref_ptr as *const *const Mutex<SoundSample>);
-    Arc::increment_strong_count(arc_ptr);
-    MusicRef(Arc::from_raw(arc_ptr))
-}
-
-/// Take ownership of the Arc from a MUSIC_REF (for destroy).
-unsafe fn music_ref_take(music_ref_ptr: *mut c_void) -> MusicRef {
-    let arc_ptr = *(music_ref_ptr as *const *const Mutex<SoundSample>);
-    MusicRef(Arc::from_raw(arc_ptr))
-}
-
-/// Check if a MUSIC_REF is the `(MUSIC_REF)~0` sentinel meaning "current music".
-fn is_music_ref_sentinel(ptr: *mut c_void) -> bool {
-    ptr as usize == usize::MAX
-}
-
-/// Borrow an Arc from a raw pointer without consuming ownership.
-/// Used by TFB_* functions that receive Arc::into_raw pointers directly.
-unsafe fn arc_borrow<T>(ptr: *const T) -> Arc<T> {
-    Arc::increment_strong_count(ptr);
-    Arc::from_raw(ptr)
-}
-
-fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Send>> {
-    if ptr.is_null() {
-        return None;
-    }
-    let callbacks = unsafe { *(ptr as *const CTfbSoundCallbacks) };
-    Some(Box::new(CCallbackWrapper {
-        callbacks,
-        sample_ptr: ptr,
-    }))
-}
-
-// =============================================================================
-// Stream FFI (18 functions)
+// Stream operations
 // =============================================================================
 
 pub fn init_stream_decoder() -> c_int {
@@ -335,147 +253,8 @@ pub fn uninit_stream_decoder() {
     let _ = stream::uninit_stream_decoder();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_CreateSoundSample(
-    decoder_ptr: *mut c_void,
-    num_buffers: c_uint,
-    callbacks_ptr: *mut c_void,
-) -> *mut c_void {
-    // decoder_ptr is a fat pointer (Box::into_raw of Box<dyn SoundDecoder>)
-    // stored as two usizes: (data_ptr, vtable_ptr). C code must pass this
-    // through unchanged from wherever it was created (Rust side).
-    let decoder: Option<Box<dyn SoundDecoder>> = if decoder_ptr.is_null() {
-        None
-    } else {
-        // Reconstruct fat pointer from the raw pointer pair
-        let fat_ptr = decoder_ptr as *mut Box<dyn SoundDecoder>;
-        Some(*Box::from_raw(fat_ptr))
-    };
-    let callbacks = convert_c_callbacks(callbacks_ptr);
-    match stream::create_sound_sample(decoder, num_buffers, callbacks) {
-        Ok(sample) => {
-            let arc = Arc::new(Mutex::new(sample));
-            Arc::into_raw(arc) as *mut c_void
-        }
-        Err(e) => {
-            eprintln!("TFB_CreateSoundSample: {}", e);
-            null_mut()
-        }
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_DestroySoundSample(sample_ptr: *mut c_void) {
-    if sample_ptr.is_null() {
-        return;
-    }
-    let arc = Arc::from_raw(sample_ptr as *const Mutex<SoundSample>);
-    let _ = stream::destroy_sound_sample(&mut arc.lock());
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SetSoundSampleData(sample_ptr: *mut c_void, data_ptr: *mut c_void) {
-    if sample_ptr.is_null() {
-        return;
-    }
-    let arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let mut sample = arc.lock();
-    let data = Box::new(data_ptr as usize);
-    stream::set_sound_sample_data(&mut sample, data);
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_GetSoundSampleData(sample_ptr: *mut c_void) -> *mut c_void {
-    if sample_ptr.is_null() {
-        return null_mut();
-    }
-    let arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let sample = arc.lock();
-    match stream::get_sound_sample_data(&sample) {
-        Some(data) => match data.downcast_ref::<usize>() {
-            Some(&addr) => addr as *mut c_void,
-            None => null_mut(),
-        },
-        None => null_mut(),
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SetSoundSampleCallbacks(
-    sample_ptr: *mut c_void,
-    callbacks_ptr: *mut c_void,
-) {
-    if sample_ptr.is_null() {
-        return;
-    }
-    let arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let mut sample = arc.lock();
-    let callbacks = convert_c_callbacks(callbacks_ptr);
-    stream::set_sound_sample_callbacks(&mut sample, callbacks);
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_GetSoundSampleDecoder(sample_ptr: *mut c_void) -> *mut c_void {
-    if sample_ptr.is_null() {
-        return null_mut();
-    }
-    let arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let sample = arc.lock();
-    match stream::get_sound_sample_decoder(&sample) {
-        Some(dec) => dec as *const dyn SoundDecoder as *mut c_void,
-        None => null_mut(),
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PlayStream(
-    sample_ptr: *mut c_void,
-    source: u32,
-    looping: bool,
-    scope: bool,
-    rewind: bool,
-) {
-    let _ = ffi_catch(|| {
-        if sample_ptr.is_null() {
-            return;
-        }
-        let sample_arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-        let _ = stream::play_stream(sample_arc, source as usize, looping, scope, rewind);
-    });
-}
-
 pub fn stop_stream(source: u32) {
-    let _ = ffi_catch(|| {
-        let _ = stream::stop_stream(source as usize);
-    });
+    let _ = stream::stop_stream(source as usize);
 }
 
 pub fn pause_stream(source: u32) {
@@ -491,89 +270,11 @@ pub fn seek_stream(source: u32, pos: u32) {
 }
 
 pub fn playing_stream(source: u32) -> u8 {
-    if stream::playing_stream(source as usize) {
-        1
-    } else {
-        0
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_FindTaggedBuffer(
-    sample_ptr: *mut c_void,
-    buffer: c_uint,
-) -> *mut c_void {
-    if sample_ptr.is_null() {
-        return null_mut();
-    }
-    let arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let sample = arc.lock();
-    match stream::find_tagged_buffer(&sample, buffer as usize) {
-        Some(tag) => tag as *const SoundTag as *mut c_void,
-        None => null_mut(),
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_TagBuffer(
-    sample_ptr: *mut c_void,
-    buffer: c_uint,
-    data: c_uint,
-) -> c_int {
-    if sample_ptr.is_null() {
-        return 0;
-    }
-    let arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let mut sample = arc.lock();
-    if stream::tag_buffer(&mut sample, buffer as usize, data as usize) {
-        1
-    } else {
-        0
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_ClearBufferTag(tag_ptr: *mut c_void) {
-    if tag_ptr.is_null() {
-        return;
-    }
-    let tag = &mut *(tag_ptr as *mut SoundTag);
-    stream::clear_buffer_tag(tag);
+    u8::from(stream::playing_stream(source as usize))
 }
 
 pub fn set_music_stream_fade(how_long: i32, end_volume: c_int) -> bool {
     stream::set_music_stream_fade(how_long.max(0) as u32, end_volume)
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn GraphForegroundStream(
-    data_ptr: *mut u8,
-    width: i32,
-    height: i32,
-    want_speech: c_int,
-) -> c_int {
-    if data_ptr.is_null() || width <= 0 || height <= 0 {
-        return 0;
-    }
-    let slice = std::slice::from_raw_parts_mut(data_ptr, width as usize);
-    stream::graph_foreground_stream(slice, width as usize, height as usize, want_speech != 0)
-        as c_int
 }
 
 // =============================================================================
@@ -627,8 +328,7 @@ pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
     let mut decoders = Vec::new();
     for clip in track_names.iter().take(trackplayer::MAX_MULTI_TRACKS) {
         let name = clip.to_string_lossy();
-        // SAFETY: the borrowed clip is terminated and remains live for this load.
-        let data = unsafe { read_content_file(clip.as_ptr()) };
+        let data = read_content_file(&name);
         // C loads the complete clip, or its timed null decoder when voice
         // content is absent. Never append an audio chunk without a decoder.
         decoders.extend(page_decoders(
@@ -691,134 +391,8 @@ pub fn get_track_position(in_units: c_int) -> c_int {
 }
 
 // =============================================================================
-// Music FFI (10 functions)
+// Music and speech
 // =============================================================================
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PLRPlaySong(
-    music_ref_ptr: *mut c_void,
-    continuous: c_int,
-    priority: c_int,
-) {
-    eprintln!(
-        "[audio_heart] PLRPlaySong called: ptr={:?} continuous={} priority={}",
-        music_ref_ptr, continuous, priority
-    );
-    if music_ref_ptr.is_null() {
-        eprintln!("[audio_heart] PLRPlaySong: null ptr, returning");
-        return;
-    }
-    if is_music_ref_sentinel(music_ref_ptr) {
-        eprintln!("[audio_heart] PLRPlaySong: sentinel ~0, returning");
-        return;
-    }
-    let music_ref = music_ref_borrow(music_ref_ptr);
-    eprintln!("[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song");
-    match music::plr_play_song(&music_ref, continuous != 0, priority) {
-        Ok(()) => eprintln!("[audio_heart] PLRPlaySong: success"),
-        Err(e) => eprintln!("[audio_heart] PLRPlaySong: error: {:?}", e),
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn PLRStop(music_ref_ptr: *mut c_void) {
-    if music_ref_ptr.is_null() {
-        return;
-    }
-    if is_music_ref_sentinel(music_ref_ptr) {
-        let _ = music::plr_stop_current();
-        return;
-    }
-    let music_ref = music_ref_borrow(music_ref_ptr);
-    let _ = music::plr_stop(&music_ref);
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn PLRPlaying(music_ref_ptr: *mut c_void) -> c_int {
-    if music_ref_ptr.is_null() {
-        return 0;
-    }
-    if is_music_ref_sentinel(music_ref_ptr) {
-        return if music::plr_playing_current() { 1 } else { 0 };
-    }
-    let music_ref = music_ref_borrow(music_ref_ptr);
-    if music::plr_playing(&music_ref) {
-        1
-    } else {
-        0
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn PLRSeek(music_ref_ptr: *mut c_void, pos: c_uint) {
-    if music_ref_ptr.is_null() {
-        return;
-    }
-    if is_music_ref_sentinel(music_ref_ptr) {
-        let _ = music::plr_seek_current(pos);
-        return;
-    }
-    let music_ref = music_ref_borrow(music_ref_ptr);
-    let _ = music::plr_seek(&music_ref, pos);
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn PLRPause(music_ref_ptr: *mut c_void) {
-    if music_ref_ptr.is_null() {
-        return;
-    }
-    // C checks MusicRef == curMusicRef || MusicRef == ~0 before pausing
-    // Rust just pauses the current stream regardless
-    let _ = music::plr_pause();
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn PLRResume(music_ref_ptr: *mut c_void) {
-    if music_ref_ptr.is_null() {
-        return;
-    }
-    let _ = music::plr_resume();
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn snd_PlaySpeech(music_ref_ptr: *mut c_void) {
-    if music_ref_ptr.is_null() {
-        return;
-    }
-    if is_music_ref_sentinel(music_ref_ptr) {
-        return;
-    }
-    let music_ref = music_ref_borrow(music_ref_ptr);
-    let _ = music::snd_play_speech(&music_ref);
-}
 
 pub fn snd_stop_speech() {
     let _ = music::snd_stop_speech();
@@ -843,58 +417,19 @@ pub fn fade_music(end_vol: u8, how_long: i16) -> u32 {
 }
 
 // =============================================================================
-// SFX FFI (8 functions)
+// Effect channels
 // =============================================================================
 
-/// Play a sound entry whose data holds a pointer to a decoded sample.
-///
-/// # Safety
-/// A non-null entry and its sample-pointer slot must be readable. The sample
-/// must remain live for the call, and the audio subsystem must be initialized.
-pub unsafe fn play_channel(
-    channel: c_uint,
-    snd_ptr: *mut crate::strings::string_table::StringTableEntry,
-    pos: SoundPosition,
-    positional_object: usize,
-    priority: u8,
-) {
-    if snd_ptr.is_null() {
-        return;
-    }
-    let entry = &*snd_ptr;
-    if entry.data.is_null() {
-        return;
-    }
-    let sample_ptr = *(entry.data as *const *const SoundSample);
-    if sample_ptr.is_null() {
-        return;
-    }
-    let _ = sfx::play_sample(
-        channel as usize,
-        &*sample_ptr,
-        pos,
-        positional_object,
-        i32::from(priority),
-    );
-}
-
 pub fn stop_channel(channel: c_uint, priority: c_int) {
-    let _ = ffi_catch(|| sfx::stop_channel(channel as usize, priority));
+    let _ = sfx::stop_channel(channel as usize, priority);
 }
 
 pub fn channel_playing(channel: c_uint) -> c_int {
-    ffi_catch(|| {
-        if sfx::channel_playing(channel as usize) {
-            1
-        } else {
-            0
-        }
-    })
-    .unwrap_or(0)
+    c_int::from(sfx::channel_playing(channel as usize))
 }
 
 pub fn set_channel_volume(channel: c_uint, volume: c_int, priority: c_int) {
-    let _ = ffi_catch(|| sfx::set_channel_volume(channel as usize, volume, priority));
+    sfx::set_channel_volume(channel as usize, volume, priority);
 }
 
 pub fn update_sound_position(source_index: c_uint, pos: SoundPosition) {
@@ -909,55 +444,16 @@ pub fn set_positional_object(source_index: c_uint, object: usize) {
     sfx::set_positional_object(source_index as usize, object);
 }
 
-/// Release a sound bank transferred by the SNDRES loader.
-///
-/// # Safety
-/// `bank_ptr` must be null or the unconsumed result of LoadedSoundBank::into_raw.
-pub unsafe fn destroy_sound(bank_ptr: *mut c_void) {
-    if !bank_ptr.is_null() {
-        drop(std::rc::Rc::from_raw(
-            bank_ptr.cast::<super::owned_bank::Bank>(),
-        ));
-    }
-}
-
 // =============================================================================
-// Control FFI (7 functions)
+// Global control
 // =============================================================================
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int {
-    eprintln!("[audio_heart] InitSound called");
-    match control::init_sound() {
-        Ok(()) => {
-            eprintln!("[audio_heart] InitSound: success");
-            1
-        }
-        Err(e) => {
-            eprintln!("[audio_heart] InitSound: error: {}", e);
-            0
-        }
-    }
-}
-
-pub fn uninit_sound() {
-    control::uninit_sound();
-}
 
 pub fn stop_sound() {
     control::stop_sound();
 }
 
 pub fn sound_playing() -> c_int {
-    if control::sound_playing() {
-        1
-    } else {
-        0
-    }
+    c_int::from(control::sound_playing())
 }
 
 pub fn wait_for_sound_end(channel: u16) {
@@ -979,313 +475,124 @@ pub fn set_speech_volume(volume: f32) {
 }
 
 // =============================================================================
-// File Loading FFI (4 functions)
+// Content loading
 // =============================================================================
 
-/// Load a sound bank (.snd file listing). Returns a STRING_TABLE (C struct)
-/// where each entry's `.data` points to a `*mut SoundSample`.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
-    if filename.is_null() {
-        return null_mut();
-    }
-    let name = match CStr::from_ptr(filename).to_str() {
-        Ok(s) => s,
-        Err(_) => return null_mut(),
+/// Load a sound bank listing: each line names a clip next to the listing, and
+/// every clip is decoded to PCM up front.
+pub fn load_sound_bank(name: &str) -> Option<super::owned_bank::LoadedSoundBank> {
+    eprintln!("load_sound_bank: loading bank {name}");
+    let Some(listing) = read_content_file(name) else {
+        eprintln!("load_sound_bank({name}): failed to read file");
+        return None;
     };
-
-    eprintln!("LoadSoundFile: loading bank {}", name);
-
-    // Read the bank file (text) via UIO
-    let c_name = CString::new(name).unwrap_or_default();
-    let data = match read_content_file(c_name.as_ptr()) {
-        Some(d) => d,
-        None => {
-            eprintln!("LoadSoundFile({}): failed to read file", name);
-            return null_mut();
-        }
-    };
-
-    // Extract directory prefix from the bank filename
     let dir_prefix = match name.rfind('/').or_else(|| name.rfind('\\')) {
         Some(pos) => &name[..=pos],
         None => "",
     };
-
-    // Parse lines — each line is a sound filename relative to the bank's directory
-    let text = String::from_utf8_lossy(&data);
+    let text = String::from_utf8_lossy(&listing);
     let mut samples: Vec<SoundSample> = Vec::new();
-
     for line in text.lines() {
         let snd_name = line.trim();
         if snd_name.is_empty() {
             continue;
         }
-
-        // Build full path: dir_prefix + sound filename
-        let full_path = format!("{}{}", dir_prefix, snd_name);
-        eprintln!("LoadSoundFile: loading sound {}", full_path);
-
-        let ext = match file_extension(snd_name) {
-            Some(e) => e,
-            None => {
-                eprintln!("LoadSoundFile: no extension for '{}', skipping", snd_name);
-                continue;
-            }
-        };
-
-        let mut decoder = match create_decoder_for_extension(ext) {
-            Some(d) => d,
-            None => {
-                eprintln!(
-                    "LoadSoundFile: no decoder for .{}, skipping {}",
-                    ext, snd_name
-                );
-                continue;
-            }
-        };
-
-        // Read sound file
-        let c_path = CString::new(full_path.as_str()).unwrap_or_default();
-        let snd_data = match read_content_file(c_path.as_ptr()) {
-            Some(d) => d,
-            None => {
-                eprintln!("LoadSoundFile: couldn't read {}", full_path);
-                continue;
-            }
-        };
-
-        // Open decoder
-        if let Err(e) = decoder.open_from_bytes(&snd_data, snd_name) {
-            eprintln!("LoadSoundFile: decoder failed for {}: {:?}", full_path, e);
+        let full_path = format!("{dir_prefix}{snd_name}");
+        eprintln!("load_sound_bank: loading sound {full_path}");
+        let Some(ext) = file_extension(snd_name) else {
+            eprintln!("load_sound_bank: no extension for '{snd_name}', skipping");
             continue;
-        }
-
+        };
+        let Some(kind) = Kind::of(ext) else {
+            eprintln!("load_sound_bank: no decoder for .{ext}, skipping {snd_name}");
+            continue;
+        };
+        let Some(snd_data) = read_content_file(&full_path) else {
+            eprintln!("load_sound_bank: couldn't read {full_path}");
+            continue;
+        };
+        let mut decoder = match kind.open(&snd_data, snd_name) {
+            Ok(decoder) => decoder,
+            Err(e) => {
+                eprintln!("load_sound_bank: decoder failed for {full_path}: {e:?}");
+                continue;
+            }
+        };
         let freq = decoder.frequency();
         let format = decoder.format();
         let length = decoder.length();
-
-        eprintln!(
-            "LoadSoundFile: decoder {} rate={} format={:?}",
-            snd_name, freq, format
-        );
-
-        // Decode all PCM data
+        eprintln!("load_sound_bank: decoder {snd_name} rate={freq} format={format:?}");
         let pcm = match super::types::decode_all(decoder.as_mut()) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!(
-                    "LoadSoundFile: decode_all failed for {}: {:?}",
-                    full_path, e
-                );
+                eprintln!("load_sound_bank: decode_all failed for {full_path}: {e:?}");
                 continue;
             }
         };
-
         eprintln!(
-            "LoadSoundFile: decoded {} bytes for {}",
-            pcm.len(),
-            snd_name
+            "load_sound_bank: decoded {} bytes for {snd_name}",
+            pcm.len()
         );
 
-        // Create sample with 1 buffer (SFX: pre-decoded, no streaming decoder)
+        // One buffer per effect: pre-decoded, no streaming decoder.
         let mut sample = match stream::create_sound_sample(None, 1, None) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("LoadSoundFile: create_sound_sample failed: {}", e);
+                eprintln!("load_sound_bank: create_sound_sample failed: {e}");
                 continue;
             }
         };
         sample.length = length;
-
-        // Store decoded PCM in the mixer buffer
         if !sample.buffers.is_empty() && !pcm.is_empty() {
-            let mixer_freq = mixer_get_frequency();
-            let mixer_fmt = mixer_get_format();
             let _ = mixer_buffer::mixer_buffer_data(
                 sample.buffers[0],
                 format.to_mixer_format(),
                 &pcm,
                 freq,
-                mixer_freq,
-                mixer_fmt,
+                mixer_get_frequency(),
+                mixer_get_format(),
             );
         }
-
         samples.push(sample);
     }
-
     if samples.is_empty() {
-        eprintln!("LoadSoundFile({}): no sounds decoded", name);
-        return null_mut();
+        eprintln!("load_sound_bank({name}): no sounds decoded");
+        return None;
     }
-
-    let snd_ct = samples.len();
-
-    let bank = super::owned_bank::LoadedSoundBank::from_samples(samples);
-
-    eprintln!("LoadSoundFile({}): loaded {} sounds", name, snd_ct);
-    bank.into_raw()
+    eprintln!("load_sound_bank({name}): loaded {} sounds", samples.len());
+    Some(super::owned_bank::LoadedSoundBank::from_samples(samples))
 }
 
-/// Load a music file. Returns a MUSIC_REF (double pointer: `*mut *mut Arc<Mutex<SoundSample>>`).
-/// The caller (resource system) stores this as opaque `void*`.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
-    if filename.is_null() {
-        return null_mut();
-    }
-    let name = match CStr::from_ptr(filename).to_str() {
-        Ok(s) => s,
-        Err(_) => return null_mut(),
-    };
-
-    eprintln!("LoadMusicFile: loading {}", name);
-
-    // Determine decoder type from extension
-    let ext = match file_extension(name) {
-        Some(e) => e,
-        None => {
-            eprintln!("LoadMusicFile({}): no file extension", name);
-            return null_mut();
+/// Load a streaming music file with 64 buffers.
+pub fn load_music(name: &str) -> Option<MusicRef> {
+    eprintln!("load_music: loading {name}");
+    let kind = Kind::of(file_extension(name)?)?;
+    let data = read_content_file(name)?;
+    let decoder = match kind.open(&data, name) {
+        Ok(decoder) => decoder,
+        Err(e) => {
+            eprintln!("load_music({name}): decoder open failed: {e:?}");
+            return None;
         }
     };
-    let mut decoder = match create_decoder_for_extension(ext) {
-        Some(d) => d,
-        None => {
-            eprintln!("LoadMusicFile({}): no decoder for .{}", name, ext);
-            return null_mut();
-        }
-    };
-
-    // Read file via UIO
-    let c_name = CString::new(name).unwrap_or_default();
-    let data = match read_content_file(c_name.as_ptr()) {
-        Some(d) => d,
-        None => {
-            eprintln!("LoadMusicFile({}): failed to read file", name);
-            return null_mut();
-        }
-    };
-
-    // Open decoder from bytes
-    if let Err(e) = decoder.open_from_bytes(&data, name) {
-        eprintln!("LoadMusicFile({}): decoder open failed: {:?}", name, e);
-        return null_mut();
-    }
-
     eprintln!(
-        "LoadMusicFile: decoder rate={} format={:?} length={:.1}s",
+        "load_music: decoder rate={} format={:?} length={:.1}s",
         decoder.frequency(),
         decoder.format(),
         decoder.length()
     );
-
-    // Create SoundSample with 64 buffers (streaming)
-    let sample = match stream::create_sound_sample(Some(decoder), 64, None) {
-        Ok(s) => s,
+    match stream::create_sound_sample(Some(decoder), 64, None) {
+        Ok(sample) => Some(MusicRef(Arc::new(Mutex::new(sample)))),
         Err(e) => {
-            eprintln!("LoadMusicFile({}): create_sound_sample failed: {}", name, e);
-            return null_mut();
+            eprintln!("load_music({name}): create_sound_sample failed: {e}");
+            None
         }
-    };
-
-    // Wrap in Arc<Mutex> for shared streaming access
-    let arc = Arc::new(Mutex::new(sample));
-
-    // Allocate MUSIC_REF: a pointer-sized slot holding the Arc raw pointer.
-    // This matches C's `h = AllocMusicData(sizeof(void*)); *h = sample;`
-    let slot = HMalloc(std::mem::size_of::<*mut c_void>()) as *mut *const Mutex<SoundSample>;
-    if slot.is_null() {
-        eprintln!("LoadMusicFile({}): HMalloc failed", name);
-        return null_mut();
     }
-    *slot = Arc::into_raw(arc);
-    slot as *mut c_void
 }
 
-/// Free a MUSIC_REF. The pointer is a double-pointer: `*mut *const Mutex<SoundSample>`.
-/// We take ownership of the Arc (decrement refcount) and free the outer slot.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn destroy_music(music_ref_ptr: *mut c_void) {
-    if music_ref_ptr.is_null() {
-        return;
-    }
-    // Take ownership of the Arc (drops refcount)
-    let music_ref = music_ref_take(music_ref_ptr);
+/// Release a loaded music reference and its stream buffers.
+pub fn destroy_music(music_ref: MusicRef) {
     let _ = music::release_music_data(music_ref);
-    // Free the outer pointer slot
-    HFree(music_ref_ptr);
-}
-
-// =============================================================================
-// C Callback Wrapper
-// =============================================================================
-
-/// C callback function pointer types matching the C TFB_SoundCallbacks struct.
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct CTfbSoundCallbacks {
-    pub on_start_stream: Option<unsafe extern "C" fn(*mut c_void) -> c_int>,
-    pub on_end_chunk: Option<unsafe extern "C" fn(*mut c_void, c_uint) -> c_int>,
-    pub on_end_stream: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub on_tagged_buffer: Option<unsafe extern "C" fn(*mut c_void, *mut c_void)>,
-    pub on_queue_buffer: Option<unsafe extern "C" fn(*mut c_void, c_uint)>,
-}
-
-/// Wraps C function pointers in a Rust StreamCallbacks implementation.
-struct CCallbackWrapper {
-    callbacks: CTfbSoundCallbacks,
-    sample_ptr: *mut c_void,
-}
-
-unsafe impl Send for CCallbackWrapper {}
-
-impl StreamCallbacks for CCallbackWrapper {
-    fn on_start_stream(&mut self, _sample: &mut SoundSample) -> bool {
-        if let Some(f) = self.callbacks.on_start_stream {
-            unsafe { f(self.sample_ptr) != 0 }
-        } else {
-            true
-        }
-    }
-
-    fn on_end_chunk(&mut self, _sample: &mut SoundSample, buffer: usize) -> bool {
-        if let Some(f) = self.callbacks.on_end_chunk {
-            unsafe { f(self.sample_ptr, buffer as c_uint) != 0 }
-        } else {
-            true
-        }
-    }
-
-    fn on_end_stream(&mut self, _sample: &mut SoundSample) {
-        if let Some(f) = self.callbacks.on_end_stream {
-            unsafe { f(self.sample_ptr) }
-        }
-    }
-
-    fn on_tagged_buffer(&mut self, _sample: &mut SoundSample, tag: &SoundTag) {
-        if let Some(f) = self.callbacks.on_tagged_buffer {
-            unsafe { f(self.sample_ptr, tag as *const SoundTag as *mut c_void) }
-        }
-    }
-
-    fn on_queue_buffer(&mut self, _sample: &mut SoundSample, buffer: usize) {
-        if let Some(f) = self.callbacks.on_queue_buffer {
-            unsafe { f(self.sample_ptr, buffer as c_uint) }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1338,41 +645,9 @@ mod tests {
 
     use super::*;
 
-    // --- P19 TDD ---
-
-    // REQ-CROSS-FFI-02: Null safety
     #[test]
-
-    fn test_create_sound_sample_null_decoder() {
-        let ptr = unsafe { TFB_CreateSoundSample(null_mut(), 4, null_mut()) };
-        assert!(!ptr.is_null());
-        unsafe { TFB_DestroySoundSample(ptr) };
-    }
-
-    #[test]
-
-    fn test_destroy_sound_sample_null_ptr() {
-        unsafe { TFB_DestroySoundSample(null_mut()) }; // should not panic
-    }
-
-    #[test]
-
-    fn test_set_sound_sample_data_null_ptr() {
-        unsafe { TFB_SetSoundSampleData(null_mut(), null_mut()) }; // no-op
-    }
-
-    #[test]
-
-    fn test_get_sound_sample_data_null_ptr() {
-        let result = unsafe { TFB_GetSoundSampleData(null_mut()) };
-        assert!(result.is_null());
-    }
-
-    // REQ-CROSS-FFI-03: Error translation
-    #[test]
-
     fn test_init_stream_decoder_return_type() {
-        // Verify FFI function signature returns c_int
+        // Verify the facade signature returns c_int
         let f: fn() -> c_int = init_stream_decoder;
         let _ = f; // type-check only; calling mutates global state
     }
@@ -1384,55 +659,15 @@ mod tests {
     }
 
     #[test]
-
     fn test_playing_track_matches_trackplayer_state() {
         let result = playing_track();
         assert_eq!(result, trackplayer::playing_track_num());
     }
 
     #[test]
-
     fn test_sound_playing_returns_int() {
         let result = sound_playing();
         assert!(result == 0 || result == 1);
-    }
-
-    #[test]
-
-    fn test_load_sound_file_null_returns_null() {
-        let result = unsafe { LoadSoundFile(std::ptr::null()) };
-        assert!(result.is_null());
-    }
-
-    // REQ-CROSS-FFI-04: String conversion (already working)
-    #[test]
-    fn test_c_str_to_option_empty() {
-        let s = CString::new("").unwrap();
-        let result = unsafe { c_str_to_option(s.as_ptr()) };
-        assert_eq!(result, Some(""));
-    }
-
-    // REQ-CROSS-GENERAL-08: Callbacks
-    #[test]
-    fn test_callback_wrapper_default_on_start() {
-        let mut wrapper = CCallbackWrapper {
-            callbacks: CTfbSoundCallbacks {
-                on_start_stream: None,
-                on_end_chunk: None,
-                on_end_stream: None,
-                on_tagged_buffer: None,
-                on_queue_buffer: None,
-            },
-            sample_ptr: null_mut(),
-        };
-        let mut sample = stream::create_sound_sample(None, 4, None).unwrap();
-        assert!(wrapper.on_end_chunk(&mut sample, 0));
-    }
-
-    #[test]
-    fn test_c_callback_wrapper_is_send() {
-        fn assert_send<T: Send>() {}
-        assert_send::<CCallbackWrapper>();
     }
 
     #[test]

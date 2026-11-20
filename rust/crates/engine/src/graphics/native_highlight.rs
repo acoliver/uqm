@@ -4,10 +4,7 @@ use super::{
     native_abi::*,
     native_context::{ContextFrame, ContextLease},
 };
-use crate::{
-    callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove},
-    time::counter_abi::ONE_SECOND,
-};
+use crate::{callback::AlarmId, time::counter_abi::ONE_SECOND};
 use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub struct Highlight {
@@ -205,17 +202,20 @@ impl ScheduledState {
         let ms = (next / ONE_SECOND)
             .wrapping_mul(1000)
             .wrapping_add((next % ONE_SECOND) * 1000 / ONE_SECOND);
-        self.alarm = Some(
-            Alarm_addAbsoluteMs(ms, tick, self.id)
-                .unwrap_or_else(|| panic!("scheduled highlight requires initialized alarms")),
-        );
+        self.alarm = Some(crate::host::dispatch().add_alarm_absolute_ms(ms, tick, self.id));
     }
 }
 
 impl Drop for ScheduledState {
     fn drop(&mut self) {
-        Alarm_remove(self.alarm.take());
+        cancel_alarm(self.alarm.take());
         ffi::native_allocations().highlights.remove(&self.id);
+    }
+}
+
+fn cancel_alarm(alarm: Option<AlarmId>) {
+    if let Some(alarm) = alarm {
+        crate::host::dispatch().remove_alarm(alarm);
     }
 }
 
@@ -242,7 +242,7 @@ impl ScheduledHighlight {
 
     pub fn pause(&mut self) {
         let mut state = self.0.borrow_mut();
-        Alarm_remove(state.alarm.take());
+        cancel_alarm(state.alarm.take());
         state.paused = true;
     }
 

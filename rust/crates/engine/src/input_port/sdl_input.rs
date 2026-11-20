@@ -1,19 +1,24 @@
 //! SDL2 input driver and resource-backed control configuration.
+//!
+//! This is the SDL boundary of input: it polls SDL, feeds the events to the
+//! registered `InputControls` and keeps the configured gesture of every
+//! control so the setup menu can show, clear and rebind them.
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
-use std::ptr;
+use std::ffi::{CStr, CString};
 
 use parking_lot::Mutex;
+use sdl2::event::Event;
+use sdl2::keyboard::Mod;
 use sdl2::sys;
 
-use super::c_api::*;
-use super::ffi::{self, GestureUnion, VCONTROL_GESTURE, VCONTROL_NONE};
-use super::keynames::key_name;
-use super::vcontrol::Gesture;
-use crate::io::handles::{configDir as CONFIG_DIR, contentDir as CONTENT_DIR};
+use super::controls::InputControls;
+use super::frames::{Target, FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
+use super::gesture::Gesture;
+use super::keynames::{key_name, sdl2_keys};
+use super::templates::bounded_template_name;
+use crate::io::Dir;
 use crate::resource::ffi_bridge::{
-    res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove, LoadResourceIndex,
-    SaveResourceIndex,
+    res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove,
 };
 
 const ALTERNATES: usize = 2;
@@ -44,7 +49,8 @@ const MENU_NAMES: &[&str] = &[
 ];
 const FLIGHT_NAMES: &[&str] = &["up", "down", "left", "right", "weapon", "special", "escape"];
 
-use super::templates::bounded_template_name;
+/// The longest gesture text a resource value holds.
+const GESTURE_TEXT_MAX: usize = 38;
 
 pub fn input_templates() -> [CString; 6] {
     INPUT
@@ -126,112 +132,29 @@ impl CharacterBuffer {
     }
 }
 
-struct InputState {
-    menu: usize,
-    num_menu: usize,
-    flight: usize,
-    num_templates: usize,
-    num_flight: usize,
-    controls: Vec<VCONTROL_GESTURE>,
+struct DriverState {
+    /// The controls the SDL events drive; set between init and uninit.
+    controls: Option<InputControls>,
+    /// The gesture configured for each template, control and alternate.
+    configured: Vec<Option<Gesture>>,
     names: [String; 6],
-    initialized: bool,
     mouse_button_down: bool,
     character_mode: bool,
     applied_character_mode: bool,
     characters: CharacterBuffer,
 }
 
-impl InputState {
-    const fn new() -> Self {
-        Self {
-            menu: 0,
-            num_menu: 0,
-            flight: 0,
-            num_templates: 0,
-            num_flight: 0,
-            controls: Vec::new(),
-            names: [const { String::new() }; 6],
-            initialized: false,
-            mouse_button_down: false,
-            character_mode: false,
-            applied_character_mode: false,
-            characters: CharacterBuffer::new(),
-        }
-    }
+static INPUT: Mutex<DriverState> = Mutex::new(DriverState::new());
 
-    fn control_index(&self, template: c_int, control: c_int, alternate: c_int) -> Option<usize> {
-        if template < 0
-            || control < 0
-            || alternate < 0
-            || template as usize >= self.num_templates
-            || control as usize >= self.num_flight
-            || alternate as usize >= ALTERNATES
-        {
-            return None;
-        }
-        Some(
-            (template as usize * self.num_flight + control as usize) * ALTERNATES
-                + alternate as usize,
-        )
-    }
-
-    fn target(&self, template: usize, control: usize) -> *mut c_int {
-        (self.flight as *mut c_int).wrapping_add(template * self.num_flight + control)
-    }
-
-    unsafe fn register_controls(&mut self) {
-        for (index, name) in MENU_NAMES.iter().take(self.num_menu).enumerate() {
-            let mut alternate = 1;
-            loop {
-                let key = resource_key(format!("menu.{name}.{alternate}"));
-                if res_IsString(key.as_ptr()) == 0 {
-                    break;
-                }
-                let mut gesture = empty_gesture();
-                vcontrol_parse_gesture(&mut gesture, res_GetString(key.as_ptr()));
-                vcontrol_add_gesture_binding(&mut gesture, (self.menu as *mut c_int).add(index));
-                alternate += 1;
-            }
-        }
-    }
-
-    unsafe fn register_flight(&mut self) {
-        for template in 0..self.num_templates {
-            let key = resource_key(format!("keys.{}.name", template + 1));
-            let name = if res_IsString(key.as_ptr()) != 0 {
-                CStr::from_ptr(res_GetString(key.as_ptr()))
-            } else {
-                c""
-            };
-            self.names[template] = bounded_template_name(name).to_string_lossy().into_owned();
-            for (control, name) in FLIGHT_NAMES.iter().take(self.num_flight).enumerate() {
-                for alternate in 0..ALTERNATES {
-                    let key = flight_key(template, name, alternate);
-                    let index = (template * self.num_flight + control) * ALTERNATES + alternate;
-                    if res_IsString(key.as_ptr()) == 0 {
-                        self.controls[index].gesture_type = VCONTROL_NONE;
-                        continue;
-                    }
-                    vcontrol_parse_gesture(&mut self.controls[index], res_GetString(key.as_ptr()));
-                    let target = self.target(template, control);
-                    vcontrol_add_gesture_binding(&mut self.controls[index], target);
-                }
-            }
-        }
-    }
-}
-
-static INPUT: Mutex<InputState> = Mutex::new(InputState::new());
-
-fn empty_gesture() -> VCONTROL_GESTURE {
-    VCONTROL_GESTURE {
-        gesture_type: VCONTROL_NONE,
-        gesture: GestureUnion { data: [0; 3] },
+fn flight_target(template: usize, control: usize) -> Target {
+    Target::Flight {
+        template,
+        key: control,
     }
 }
 
 fn resource_key(mut key: String) -> CString {
-    key.truncate(38);
+    key.truncate(GESTURE_TEXT_MAX);
     CString::new(key).expect("control resource keys contain no NUL")
 }
 
@@ -239,114 +162,210 @@ fn flight_key(template: usize, name: &str, alternate: usize) -> CString {
     resource_key(format!("keys.{}.{name}.{}", template + 1, alternate + 1))
 }
 
-fn fatal(message: &str) -> ! {
-    crate::log_abi::log_message(0, message);
-    std::process::exit(1)
-}
-
-/// # Safety
-/// The vectors must hold the stated element counts and outlive all bindings.
-pub unsafe extern "C" fn tfb_set_input_vectors(
-    menu: *mut c_int,
-    num_menu: c_int,
-    flight: *mut c_int,
-    num_templates: c_int,
-    num_flight: c_int,
-) {
-    if num_menu < 0 || num_templates < 0 || num_flight < 0 {
-        fatal("TFB_SetInputVectors(): invalid vector size");
-    }
-    let mut state = INPUT.lock();
-    state.menu = menu as usize;
-    state.num_menu = num_menu as usize;
-    state.flight = flight as usize;
-    state.num_templates = num_templates as usize;
-    state.num_flight = num_flight as usize;
-}
-
-/// # Safety
-/// Input vectors and the resource directories must have been initialized.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
-    if sys::SDL_InitSubSystem(sys::SDL_INIT_JOYSTICK) == -1 {
-        fatal(&format!(
-            "Couldn't initialize joystick subsystem: {}",
-            CStr::from_ptr(sys::SDL_GetError()).to_string_lossy()
-        ));
-    }
-    crate::log_abi::log_message(
-        4,
-        &format!("{} joysticks were found.", sys::SDL_NumJoysticks()),
-    );
-    let joysticks = sys::SDL_NumJoysticks();
-    if joysticks > 0 {
-        crate::log_abi::log_message(4, "The names of the joysticks are:");
-        for index in 0..joysticks {
-            crate::log_abi::log_message(
-                4,
-                &format!(
-                    "    {}",
-                    CStr::from_ptr(sys::SDL_JoystickNameForIndex(index)).to_string_lossy()
-                ),
-            );
+/// The gesture text of a resource string, if the resource exists.
+fn resource_gesture(key: &CStr) -> Option<Option<Gesture>> {
+    // SAFETY: `key` is a terminated string and a present string resource has a
+    // terminated, live value that is copied before the next resource change.
+    unsafe {
+        if res_IsString(key.as_ptr()) == 0 {
+            return None;
         }
-        sys::SDL_JoystickEventState(sys::SDL_ENABLE as c_int);
+        let spec = CStr::from_ptr(res_GetString(key.as_ptr()));
+        Some(Gesture::parse(&spec.to_string_lossy()))
     }
+}
+
+impl DriverState {
+    const fn new() -> Self {
+        Self {
+            controls: None,
+            configured: Vec::new(),
+            names: [const { String::new() }; 6],
+            mouse_button_down: false,
+            character_mode: false,
+            applied_character_mode: false,
+            characters: CharacterBuffer::new(),
+        }
+    }
+
+    fn control_index(template: i32, control: i32, alternate: i32) -> Option<usize> {
+        let in_range =
+            |value: i32, limit: usize| usize::try_from(value).ok().filter(|v| *v < limit);
+        Some(
+            (in_range(template, TEMPLATES)? * FLIGHT_KEYS + in_range(control, FLIGHT_KEYS)?)
+                * ALTERNATES
+                + in_range(alternate, ALTERNATES)?,
+        )
+    }
+
+    fn register_menu_controls(&self, controls: &InputControls) {
+        for (index, name) in MENU_NAMES.iter().take(MENU_KEYS).enumerate() {
+            for alternate in 1.. {
+                let key = resource_key(format!("menu.{name}.{alternate}"));
+                let Some(gesture) = resource_gesture(&key) else {
+                    break;
+                };
+                if let Some(gesture) = gesture {
+                    controls.vcontrol(|vc| vc.bind(gesture, Target::Menu(index)));
+                }
+            }
+        }
+    }
+
+    fn register_flight_controls(&mut self, controls: &InputControls) {
+        for template in 0..TEMPLATES {
+            let key = resource_key(format!("keys.{}.name", template + 1));
+            let name = resource_gesture_name(&key);
+            self.names[template] = bounded_template_name(&name).to_string_lossy().into_owned();
+            for (control, name) in FLIGHT_NAMES.iter().take(FLIGHT_KEYS).enumerate() {
+                for alternate in 0..ALTERNATES {
+                    let key = flight_key(template, name, alternate);
+                    let index = (template * FLIGHT_KEYS + control) * ALTERNATES + alternate;
+                    let Some(gesture) = resource_gesture(&key) else {
+                        self.configured[index] = None;
+                        continue;
+                    };
+                    self.configured[index] = gesture;
+                    if let Some(gesture) = gesture {
+                        controls.vcontrol(|vc| vc.bind(gesture, flight_target(template, control)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The value of a string resource, empty when it is absent.
+fn resource_gesture_name(key: &CStr) -> CString {
+    // SAFETY: as in `resource_gesture`.
+    unsafe {
+        if res_IsString(key.as_ptr()) != 0 {
+            CStr::from_ptr(res_GetString(key.as_ptr())).to_owned()
+        } else {
+            CString::default()
+        }
+    }
+}
+
+/// Why the input driver could not start.
+#[derive(Debug)]
+pub struct InputInitError(pub String);
+
+impl std::fmt::Display for InputInitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for InputInitError {}
+
+/// Start the driver: bring up SDL's joystick subsystem, load the configured
+/// gestures and bind them to `controls`.
+pub fn init_input(controls: &InputControls) -> Result<(), InputInitError> {
+    init_joysticks()?;
+    install_controls(controls);
+    Ok(())
+}
+
+fn install_controls(controls: &InputControls) {
     let mut state = INPUT.lock();
     state.character_mode = false;
-    ffi::rust_v_control_init();
-    if state.menu == 0 || state.flight == 0 {
-        fatal("initKeyConfig(): invalid input vectors");
+    controls.vcontrol(|vc| vc.init());
+    state.configured = vec![None; TEMPLATES * FLIGHT_KEYS * ALTERNATES];
+    let content = crate::io::content_dir();
+    let config = crate::io::config_dir();
+    load_index(content.as_ref(), c"menu.key", c"menu.");
+    load_index(config.as_ref(), c"override.cfg", c"menu.");
+    state.register_menu_controls(controls);
+    load_index(config.as_ref(), c"flight.cfg", c"keys.");
+    // SAFETY: the key is a terminated string.
+    if unsafe { res_HasKey(c"keys.1.name".as_ptr()) } == 0 {
+        load_index(content.as_ref(), c"uqm.key", c"keys.");
     }
-    let count = state.num_templates * state.num_flight * ALTERNATES;
-    state.controls = (0..count).map(|_| empty_gesture()).collect();
-    LoadResourceIndex(CONTENT_DIR.cast(), c"menu.key".as_ptr(), c"menu.".as_ptr());
-    LoadResourceIndex(
-        CONFIG_DIR.cast(),
-        c"override.cfg".as_ptr(),
-        c"menu.".as_ptr(),
-    );
-    state.register_controls();
-    LoadResourceIndex(CONFIG_DIR.cast(), c"flight.cfg".as_ptr(), c"keys.".as_ptr());
-    if res_HasKey(c"keys.1.name".as_ptr()) == 0 {
-        LoadResourceIndex(CONTENT_DIR.cast(), c"uqm.key".as_ptr(), c"keys.".as_ptr());
-    }
-    state.register_flight();
-    ffi::rust_vcontrol_reset_input();
-    state.initialized = true;
-    0
+    state.register_flight_controls(controls);
+    controls.vcontrol(|vc| vc.reset_states());
+    state.controls = Some(controls.clone());
 }
 
-#[no_mangle]
-pub extern "C" fn TFB_UninitInput() {
+/// Send the SDL events and control resets to `controls` without loading the
+/// configured bindings, for hosts that bind controls themselves.
+pub fn attach_controls(controls: &InputControls) {
+    INPUT.lock().controls = Some(controls.clone());
+}
+
+fn init_joysticks() -> Result<(), InputInitError> {
+    // SAFETY: SDL's joystick calls are made on the thread that owns SDL, after
+    // the video subsystem start-up; the names SDL returns are terminated strings.
+    unsafe {
+        if sys::SDL_InitSubSystem(sys::SDL_INIT_JOYSTICK) == -1 {
+            return Err(InputInitError(format!(
+                "Couldn't initialize joystick subsystem: {}",
+                CStr::from_ptr(sys::SDL_GetError()).to_string_lossy()
+            )));
+        }
+        let joysticks = sys::SDL_NumJoysticks();
+        crate::log_abi::log_message(4, &format!("{joysticks} joysticks were found."));
+        if joysticks > 0 {
+            crate::log_abi::log_message(4, "The names of the joysticks are:");
+            for index in 0..joysticks {
+                crate::log_abi::log_message(
+                    4,
+                    &format!(
+                        "    {}",
+                        CStr::from_ptr(sys::SDL_JoystickNameForIndex(index)).to_string_lossy()
+                    ),
+                );
+            }
+            sys::SDL_JoystickEventState(sys::SDL_ENABLE as i32);
+        }
+    }
+    Ok(())
+}
+
+/// Load a resource index from `dir`; an absent directory loads nothing.
+fn load_index(dir: Option<&Dir>, file: &CStr, prefix: &CStr) {
+    if let Some(dir) = dir {
+        crate::io::load_resource_index(dir, file, Some(prefix));
+    }
+}
+
+pub fn uninit_input() {
     let mut state = INPUT.lock();
-    ffi::rust_v_control_uninit();
-    state.controls = Vec::new();
+    if let Some(controls) = state.controls.take() {
+        controls.vcontrol(|vc| vc.uninit());
+    }
+    state.configured = Vec::new();
 }
 
-#[no_mangle]
-pub extern "C" fn EnterCharacterMode() {
+/// Forget the template names the configuration file defined, so the
+/// resources loaded next provide them.
+pub fn forget_template_names() {
+    for template in 1..=TEMPLATES {
+        let key = resource_key(format!("config.keys.{template}.name"));
+        // SAFETY: the resource key is a terminated string, live for the call.
+        unsafe { res_Remove(key.as_ptr()) };
+    }
+}
+
+pub fn enter_character_mode() {
     let mut state = INPUT.lock();
     state.characters.clear();
     state.character_mode = true;
-    unsafe { ffi::rust_vcontrol_reset_input() };
+    reset_bound_controls(&state);
 }
 
-#[no_mangle]
-pub extern "C" fn ExitCharacterMode() {
+pub fn exit_character_mode() {
     let mut state = INPUT.lock();
-    unsafe { ffi::rust_vcontrol_reset_input() };
+    reset_bound_controls(&state);
     state.character_mode = false;
     state.characters.clear();
 }
 
-#[no_mangle]
-pub extern "C" fn GetNextCharacter() -> u32 {
+pub fn next_character() -> u32 {
     INPUT.lock().characters.next()
 }
 
-#[no_mangle]
-pub extern "C" fn GetLastCharacter() -> u32 {
+pub fn last_character() -> u32 {
     INPUT.lock().characters.last
 }
 
@@ -354,81 +373,160 @@ pub fn mouse_button_down() -> bool {
     INPUT.lock().mouse_button_down
 }
 
-unsafe fn is_numpad_character(event: &sys::SDL_Event, character_mode: bool) -> bool {
-    character_mode
-        && matches!(event.type_, 0x300 | 0x301)
-        && event.key.keysym.mod_ & sys::SDL_Keymod::KMOD_NUM as u16 != 0
-        && (super::keynames::sdl2_keys::SDLK_KP_1..=super::keynames::sdl2_keys::SDLK_KP_PERIOD)
-            .contains(&event.key.keysym.sym)
-}
-
-/// # Safety
-/// `event` must point to a valid SDL2 event, with valid SDL text input bytes.
-pub unsafe extern "C" fn process_input_event(event: *const sys::SDL_Event) {
-    let mut state = INPUT.lock();
-    if !state.initialized {
-        return;
-    }
-    let event = &*event;
-    match event.type_ {
-        0x401 => state.mouse_button_down = true,
-        0x402 => state.mouse_button_down = false,
-        _ => {}
-    }
-    if state.character_mode && !state.applied_character_mode {
-        state.applied_character_mode = true;
-        sys::SDL_StartTextInput();
-    }
-    if !state.character_mode && state.applied_character_mode {
-        state.applied_character_mode = false;
-        sys::SDL_StopTextInput();
-    }
-    if !is_numpad_character(event, state.character_mode) {
-        vcontrol_handle_event((event as *const sys::SDL_Event).cast());
-    }
-    if event.type_ == 0x303 {
-        let text = &event.text.text;
-        let bytes = std::slice::from_raw_parts(text.as_ptr().cast::<u8>(), text.len());
-        state.characters.text_input(bytes);
+fn reset_bound_controls(state: &DriverState) {
+    if let Some(controls) = &state.controls {
+        controls.vcontrol(|vc| vc.reset_states());
     }
 }
 
-#[no_mangle]
-pub extern "C" fn TFB_ResetControls() {
+/// Release every control and drop the typed characters.
+pub fn reset_controls() {
     let mut state = INPUT.lock();
-    unsafe { ffi::rust_vcontrol_reset_input() };
+    reset_bound_controls(&state);
     state.characters.clear();
 }
 
-unsafe fn write_buffer(buffer: *mut c_char, maxlen: c_int, text: &str) {
-    if maxlen > 0 {
-        let len = text.len().min(maxlen as usize - 1);
-        ptr::copy_nonoverlapping(text.as_ptr(), buffer.cast(), len);
-        *buffer.add(len) = 0;
+/// Start a frame: the start bits of the last frame's presses are cleared.
+pub fn begin_input_frame() {
+    if let Some(controls) = &INPUT.lock().controls {
+        controls.vcontrol(|vc| vc.begin_frame());
     }
 }
 
-/// # Safety
-/// `buffer` must be writable for `maxlen` bytes (at least one for invalid indices).
-#[no_mangle]
-pub unsafe extern "C" fn InterrogateInputState(
-    template: c_int,
-    control: c_int,
-    alternate: c_int,
-    buffer: *mut c_char,
-    maxlen: c_int,
-) {
-    let text = control_name(template, control, alternate);
-    write_buffer(buffer, maxlen, &text);
+/// Drain SDL's event queue.
+pub fn poll_sdl_events() -> Vec<Event> {
+    let mut events = Vec::new();
+    let mut raw = std::mem::MaybeUninit::<sys::SDL_Event>::uninit();
+    // SAFETY: SDL_PollEvent initializes the whole event whenever it returns 1.
+    while unsafe { sys::SDL_PollEvent(raw.as_mut_ptr()) } > 0 {
+        events.push(Event::from_ll(unsafe { raw.assume_init() }));
+    }
+    events
 }
 
-pub fn control_name(template: c_int, control: c_int, alternate: c_int) -> String {
+/// Keypad digits typed with NumLock on are characters, not controls, while
+/// text is being entered.
+fn is_numpad_character(event: &Event, character_mode: bool) -> bool {
+    match event {
+        Event::KeyDown {
+            keycode: Some(key),
+            keymod,
+            ..
+        }
+        | Event::KeyUp {
+            keycode: Some(key),
+            keymod,
+            ..
+        } => {
+            character_mode
+                && keymod.contains(Mod::NUMMOD)
+                && (sdl2_keys::SDLK_KP_1..=sdl2_keys::SDLK_KP_PERIOD).contains(&key.into_i32())
+        }
+        _ => false,
+    }
+}
+
+fn sync_text_input(state: &mut DriverState) {
+    if state.character_mode && !state.applied_character_mode {
+        state.applied_character_mode = true;
+        // SAFETY: SDL text input toggling takes no arguments.
+        unsafe { sys::SDL_StartTextInput() };
+    }
+    if !state.character_mode && state.applied_character_mode {
+        state.applied_character_mode = false;
+        // SAFETY: as above.
+        unsafe { sys::SDL_StopTextInput() };
+    }
+}
+
+/// Deliver one SDL event to the registered controls.
+pub fn process_input_event(event: &Event) {
+    let mut state = INPUT.lock();
+    let Some(controls) = state.controls.clone() else {
+        return;
+    };
+    match event {
+        Event::MouseButtonDown { .. } => state.mouse_button_down = true,
+        Event::MouseButtonUp { .. } => state.mouse_button_down = false,
+        _ => {}
+    }
+    sync_text_input(&mut state);
+    if !is_numpad_character(event, state.character_mode) {
+        controls.vcontrol(|vc| apply_event(vc, event));
+    }
+    if let Event::TextInput { text, .. } = event {
+        state.characters.text_input(text.as_bytes());
+    }
+}
+
+/// Apply one event to the bindings and remember the gestures worth rebinding.
+fn apply_event(vc: &mut super::vcontrol::VControl, event: &Event) {
+    match *event {
+        Event::KeyDown {
+            keycode: Some(key),
+            repeat: false,
+            ..
+        } => {
+            let sym = key.into_i32();
+            vc.handle_key_down(sym);
+            vc.set_last_gesture(Gesture::Key(sym));
+        }
+        Event::KeyUp {
+            keycode: Some(key), ..
+        } => vc.handle_key_up(key.into_i32()),
+        Event::JoyAxisMotion {
+            which,
+            axis_idx,
+            value,
+            ..
+        } => {
+            vc.handle_joy_axis(which, i32::from(axis_idx), value);
+            // Only a deliberate push is a gesture.
+            if !(-15000..=15000).contains(&value) {
+                vc.set_last_gesture(Gesture::JoyAxis {
+                    port: which,
+                    axis: i32::from(axis_idx),
+                    polarity: if value < 0 { -1 } else { 1 },
+                });
+            }
+        }
+        Event::JoyHatMotion {
+            which,
+            hat_idx,
+            state,
+            ..
+        } => {
+            vc.handle_joy_hat(which, i32::from(hat_idx), state.to_raw());
+            vc.set_last_gesture(Gesture::JoyHat {
+                port: which,
+                hat: i32::from(hat_idx),
+                dir: state.to_raw(),
+            });
+        }
+        Event::JoyButtonDown {
+            which, button_idx, ..
+        } => {
+            vc.handle_joy_button(which, i32::from(button_idx), true);
+            vc.set_last_gesture(Gesture::JoyButton {
+                port: which,
+                button: i32::from(button_idx),
+            });
+        }
+        Event::JoyButtonUp {
+            which, button_idx, ..
+        } => vc.handle_joy_button(which, i32::from(button_idx), false),
+        _ => {}
+    }
+}
+
+/// The text the setup menu shows for a configured control.
+pub fn control_name(template: i32, control: i32, alternate: i32) -> String {
     let state = INPUT.lock();
-    let Some(index) = state.control_index(template, control, alternate) else {
+    let Some(index) = DriverState::control_index(template, control, alternate) else {
         crate::log_abi::log_message(3, "InterrogateInputState(): invalid control index");
         return String::new();
     };
-    match state.controls[index].to_gesture() {
+    match state.configured.get(index).copied().flatten() {
         Some(Gesture::Key(key)) => key_name(key).to_owned(),
         Some(Gesture::JoyButton { port, button }) => format!("[J{} B{}]", port as i32, button + 1),
         Some(Gesture::JoyAxis {
@@ -446,72 +544,48 @@ pub fn control_name(template: c_int, control: c_int, alternate: c_int) -> String
     }
 }
 
-#[no_mangle]
-pub extern "C" fn RemoveInputState(template: c_int, control: c_int, alternate: c_int) {
+/// Unbind a flight control alternate and forget its configured resource.
+pub fn remove_input_state(template: i32, control: i32, alternate: i32) {
     let mut state = INPUT.lock();
-    let Some(index) = state.control_index(template, control, alternate) else {
+    let Some(index) = DriverState::control_index(template, control, alternate) else {
         crate::log_abi::log_message(3, "RemoveInputState(): invalid control index");
         return;
     };
-    let target = state.target(template as usize, control as usize);
-    // SAFETY: the validated indices refer to this provider's retained vectors.
-    unsafe { vcontrol_remove_gesture_binding(&mut state.controls[index], target) };
-    state.controls[index].gesture_type = VCONTROL_NONE;
-    let key = flight_key(
-        template as usize,
-        FLIGHT_NAMES[control as usize],
-        alternate as usize,
-    );
-    // SAFETY: the resource key remains terminated and live for the synchronous removal.
+    let (template, control, alternate) = (template as usize, control as usize, alternate as usize);
+    if let (Some(controls), Some(gesture)) = (&state.controls, state.configured[index]) {
+        controls.vcontrol(|vc| vc.unbind(gesture, flight_target(template, control)));
+    }
+    state.configured[index] = None;
+    let key = flight_key(template, FLIGHT_NAMES[control], alternate);
+    // SAFETY: the resource key is a terminated string, live for the call.
     unsafe { res_Remove(key.as_ptr()) };
 }
 
-pub use rebind_input_state as RebindInputState;
-
-pub fn rebind_input_state(
-    template: c_int,
-    control: c_int,
-    alternate: c_int,
-    mut poll: impl FnMut(),
-) {
-    let Some(index) = INPUT.lock().control_index(template, control, alternate) else {
+/// Wait for the player to make a gesture and bind it to a flight control
+/// alternate. `poll` runs one frame of the caller's loop between checks.
+pub fn rebind_input_state(template: i32, control: i32, alternate: i32, mut poll: impl FnMut()) {
+    let Some(index) = DriverState::control_index(template, control, alternate) else {
         crate::log_abi::log_message(3, "RebindInputState(): invalid control index");
         return;
     };
-    RemoveInputState(template, control, alternate);
-    let mut gesture = empty_gesture();
-    ffi::rust_vcontrol_clear_gesture();
-    // SAFETY: each poll writes this complete, live gesture record.
-    while unsafe { vcontrol_get_last_gesture(&mut gesture) } == 0 {
+    remove_input_state(template, control, alternate);
+    let Some(controls) = INPUT.lock().controls.clone() else {
+        return;
+    };
+    controls.vcontrol(|vc| vc.clear_gesture());
+    let gesture = loop {
+        if let Some(gesture) = controls.vcontrol(|vc| vc.last_gesture()) {
+            break gesture;
+        }
         poll();
-    }
-    let mut state = INPUT.lock();
-    let target = state.target(template as usize, control as usize);
-    let key = flight_key(
-        template as usize,
-        FLIGHT_NAMES[control as usize],
-        alternate as usize,
-    );
-    let mut value = [0 as c_char; 40];
-    // SAFETY: validated indices retain the destination and the formatter's full output buffer.
-    unsafe {
-        vcontrol_add_gesture_binding(&mut gesture, target);
-        state.controls[index] = gesture;
-        vcontrol_dump_gesture(value.as_mut_ptr(), 39, &mut state.controls[index]);
-        res_PutString(key.as_ptr(), value.as_ptr());
-    }
-}
-
-/// # Safety
-/// `path` must be a live UIO directory and `filename` a NUL-terminated string.
-#[no_mangle]
-pub unsafe extern "C" fn SaveKeyConfiguration(path: *mut c_void, filename: *const c_char) {
-    SaveResourceIndex(path, filename, c"keys.".as_ptr(), 1);
-}
-
-#[no_mangle]
-pub extern "C" fn BeginInputFrame() {
-    unsafe { ffi::rust_vcontrol_begin_frame() };
+    };
+    let (template, control, alternate) = (template as usize, control as usize, alternate as usize);
+    controls.vcontrol(|vc| vc.bind(gesture, flight_target(template, control)));
+    INPUT.lock().configured[index] = Some(gesture);
+    let key = flight_key(template, FLIGHT_NAMES[control], alternate);
+    let value = resource_key(gesture.to_string());
+    // SAFETY: both strings are terminated and live for the call.
+    unsafe { res_PutString(key.as_ptr(), value.as_ptr()) };
 }
 
 #[cfg(test)]

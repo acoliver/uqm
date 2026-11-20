@@ -1,15 +1,12 @@
 //! Real virtual controls, restart dispatch, input reset and save enumeration.
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use std::{ffi::CString, ptr};
+use uqm_rust::input::frames::Target;
 use uqm_rust::{
     engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
     front_end::gameopt::{picker_action, PickerAction},
     graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
-    input::ffi::*,
-    io::uio_bridge as uio,
     mainloop::{
-        dir_prep::saveDir,
         input_abi::{FlushInput, UpdateInputState},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
@@ -47,12 +44,12 @@ const CANCEL: usize = 10;
 const RETURN: i32 = 13;
 const ESCAPE: i32 = 27;
 
-unsafe fn key_event(symbol: i32, down: bool, repeat: bool) {
-    let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-    event.key.type_ = if down { 0x300 } else { 0x301 };
-    event.key.keysym.sym = symbol;
-    event.key.repeat = u8::from(repeat);
-    rust_vcontrol_handle_event(ptr::from_ref(&event).cast());
+fn key_event(input: &uqm_rust::engine::input::InputSession, symbol: i32, down: bool, repeat: bool) {
+    input.vcontrol(|vc| match (down, repeat) {
+        (true, false) => vc.handle_key_down(symbol),
+        (true, true) => {}
+        (false, _) => vc.handle_key_up(symbol),
+    });
 }
 
 struct PickerProbe {
@@ -76,18 +73,18 @@ unsafe fn picker_frame(
     state.actions.push(action);
     match action {
         PickerAction::Continue if state.actions.len() == 1 => {
-            key_event(RETURN, true, true);
-            key_event(ESCAPE, true, true);
+            key_event(input, RETURN, true, true);
+            key_event(input, ESCAPE, true, true);
             UpdateInputState(cx, input);
             state.repeat_pulses = (input.pulsed().menu[SELECT], input.pulsed().menu[CANCEL]);
-            key_event(RETURN, false, false);
-            key_event(ESCAPE, false, false);
-            key_event(RETURN, true, false);
+            key_event(input, RETURN, false, false);
+            key_event(input, ESCAPE, false, false);
+            key_event(input, RETURN, true, false);
             1
         }
         PickerAction::EmptySlot => {
-            key_event(RETURN, false, false);
-            key_event(ESCAPE, true, false);
+            key_event(input, RETURN, false, false);
+            key_event(input, ESCAPE, true, false);
             1
         }
         _ => 0,
@@ -100,9 +97,8 @@ unsafe fn open_from_restart_while_select_is_held(
 ) {
     FlushInput(input);
     crate::battle_context::with(|cx| cx.world.set_activity(0));
-    key_event(RETURN, true, false);
-    // SAFETY: the serialized fixture owns initialized game-thread input.
-    crate::battle_context::with(|cx| unsafe { UpdateInputState(cx, input) });
+    key_event(input, RETURN, true, false);
+    crate::battle_context::with(|cx| UpdateInputState(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
     let context = uqm_rust::graphics::context_abi::LoadedContext::create(c"load-picker-restart");
     let mut owner = RestartMenu::default();
@@ -134,7 +130,7 @@ unsafe fn open_from_restart_while_select_is_held(
     );
     assert_eq!(crate::battle_context::with(|cx| cx.world.activity()), 4);
     // A queued Cancel is cleared at the same ownership boundary as Select.
-    key_event(ESCAPE, true, false);
+    key_event(input, ESCAPE, true, false);
     let mut picker = PickerProbe {
         occupied,
         actions: Vec::new(),
@@ -163,8 +159,8 @@ unsafe fn open_from_restart_while_select_is_held(
         ]
     };
     assert_eq!(picker.actions, expected);
-    key_event(RETURN, false, false);
-    key_event(ESCAPE, false, false);
+    key_event(input, RETURN, false, false);
+    key_event(input, ESCAPE, false, false);
 }
 
 #[test]
@@ -180,24 +176,14 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
             Init_DrawCommandQueue();
             input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
-            assert_eq!(rust_v_control_init(), 0);
-            assert_eq!(
-                rust_vcontrol_add_key_binding(
-                    RETURN,
-                    ptr::addr_of_mut!((*input.immediate_ptr()).menu[SELECT])
-                ),
-                0
-            );
-            assert_eq!(
-                rust_vcontrol_add_key_binding(
-                    ESCAPE,
-                    ptr::addr_of_mut!((*input.immediate_ptr()).menu[CANCEL])
-                ),
-                0
-            );
+            uqm_rust::input::sdl_input::attach_controls(input.controls());
+            input.vcontrol(|vc| {
+                vc.init();
+                assert!(vc.add_key_binding(RETURN, Target::Menu(SELECT)));
+                assert!(vc.add_key_binding(ESCAPE, Target::Menu(CANCEL)));
+            });
 
             let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
-            saveDir = ptr::null_mut();
             assert!(!profile.path().join("save").exists());
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
@@ -205,26 +191,13 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
 
             let saves = profile.path().join("save");
             std::fs::create_dir(&saves).unwrap();
-            uio::uio_init();
-            let repo = uio::uio_openRepository(0);
-            let path = CString::new(saves.to_str().unwrap()).unwrap();
-            assert!(!uio::uio_mountDir(
-                repo,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                4,
-                ptr::null_mut()
-            )
-            .is_null());
-            let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-            saveDir = dir.cast();
+            let vfs = uqm_rust::io::Vfs::new();
+            vfs.mount_dir("/", &saves, uqm_rust::io::Placement::Top, false);
+            let files = vfs.open_dir(std::path::Path::new("/"));
+            vfs.set_save_dir(files.clone());
+            let previous = uqm_rust::io::install(vfs);
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
-            let files = uqm_rust::io::uio_owned::directory(saveDir.cast()).unwrap();
             let slots = SaveSlots::new(&files);
             let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
             for slot in 0..50 {
@@ -274,11 +247,15 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                 picker_action(false, false, true, true, false),
                 PickerAction::Select
             );
-            saveDir = ptr::null_mut();
-            uio::uio_closeDir(dir);
-            uio::uio_closeRepository(repo);
-            uio::uio_unInit();
-            rust_v_control_uninit();
+            match previous {
+                Some(previous) => {
+                    uqm_rust::io::install(previous);
+                }
+                None => {
+                    uqm_rust::io::uninstall();
+                }
+            }
+            uqm_rust::input::sdl_input::uninit_input();
             Uninit_DrawCommandQueue();
         }
     });

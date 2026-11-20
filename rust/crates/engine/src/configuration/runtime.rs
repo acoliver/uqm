@@ -6,12 +6,10 @@ use crate::{
         sdl::lifecycle_abi::GfxFlags,
         tfb_draw_abi::TFB_DrawScreen_ReinitVideo,
     },
-    io::{handles::configDir, uio_owned::Directory},
+    io::Dir,
     sound::{
         heart_ffi::{set_music_volume, set_speech_volume},
-        volume_globals::{
-            musicVolume, musicVolumeScale, sfxVolumeScale, snddriver, soundflags, speechVolumeScale,
-        },
+        volume_globals::{sound_options, update_sound_options},
     },
     video::control::{InitVideoPlayer, UninitVideoPlayer},
 };
@@ -35,30 +33,24 @@ pub struct AudioSettings {
 pub struct RuntimeSettings {
     pub display: DisplaySettings,
     pub audio: AudioSettings,
-    pub directory: Directory,
+    pub directory: Dir,
 }
 
 impl RuntimeSettings {
     pub fn capture(context: &ContextLease) -> Self {
         let _target = context.target();
         // SAFETY: the retained context checks the serialized graphics owner thread.
-        let (display, audio, volumes, directory) = unsafe {
-            (
-                [
-                    GraphicsDriver,
-                    GfxFlags,
-                    ScreenWidthActual,
-                    ScreenHeightActual,
-                ],
-                [snddriver, soundflags],
-                [musicVolumeScale, sfxVolumeScale, speechVolumeScale],
-                configDir,
-            )
+        let display = unsafe {
+            [
+                GraphicsDriver,
+                GfxFlags,
+                ScreenWidthActual,
+                ScreenHeightActual,
+            ]
         };
-        let directory = std::ptr::NonNull::new(directory)
+        let sound = sound_options();
+        let directory = crate::io::config_dir()
             .unwrap_or_else(|| panic!("configuration directory not initialized"));
-        // SAFETY: application initialization retains this live directory on the owner thread.
-        let directory = unsafe { Directory::retain(directory) };
         Self {
             directory,
             display: DisplaySettings {
@@ -68,11 +60,11 @@ impl RuntimeSettings {
                 height: display[3],
             },
             audio: AudioSettings {
-                driver: audio[0],
-                flags: audio[1],
-                music: volumes[0],
-                sfx: volumes[1],
-                speech: volumes[2],
+                driver: sound.driver,
+                flags: sound.flags,
+                music: sound.music_scale,
+                sfx: sound.sfx_scale,
+                speech: sound.speech_scale,
             },
         }
     }
@@ -102,13 +94,12 @@ impl RuntimeSettings {
             unsafe { InitVideoPlayer(1) };
         }
         if let Some([music, sfx, speech]) = volumes {
-            // SAFETY: the context's application thread serializes the audio settings too.
-            let current_volume = unsafe {
-                musicVolumeScale = music;
-                sfxVolumeScale = sfx;
-                speechVolumeScale = speech;
-                musicVolume as u16
-            };
+            update_sound_options(|options| {
+                options.music_scale = music;
+                options.sfx_scale = sfx;
+                options.speech_scale = speech;
+            });
+            let current_volume = sound_options().music_volume as u16;
             set_music_volume(i32::from(current_volume));
             set_speech_volume(speech);
         }

@@ -91,7 +91,6 @@ impl Observer for Recorded {
 }
 
 pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)) {
-    crate::callback::ffi::Alarm_init();
     let mut game = Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
@@ -136,7 +135,7 @@ pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)
     drop(context);
     drop(misc);
     display.finish(game);
-    crate::callback::ffi::Alarm_uninit();
+    uqm_engine::host::dispatch().clear();
 }
 
 #[test]

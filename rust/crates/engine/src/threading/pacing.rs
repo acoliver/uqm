@@ -118,9 +118,9 @@ pub trait PacingEnv {
 
 /// Wait at DoInput's native yield boundary without flushing partial draws.
 pub fn yield_input_loop(native_yield: impl FnOnce()) {
-    if crate::time::source::is_replay() {
+    if crate::host::is_replay() {
         // The native 1 ms sleep rounds up to one 840-Hz replay tick.
-        crate::time::source::advance_to(crate::time::source::now_ticks().saturating_add(1));
+        crate::host::advance_to(crate::host::now_ticks().saturating_add(1));
     } else {
         native_yield();
     }
@@ -175,20 +175,17 @@ impl GameThreadPacer {
     }
     pub fn sleep_for(&mut self, duration: u32) {
         crate::graphics::dcqueue_abi::require_presentation(&self._context);
-        // SAFETY: the retained context admits this initialized display's graphics thread.
-        unsafe { linked::sleep_thread(duration) };
+        linked::sleep_thread(duration);
     }
 
     pub fn sleep_until(&mut self, deadline: u32) {
         crate::graphics::dcqueue_abi::require_presentation(&self._context);
-        // SAFETY: this admitted graphics thread owns the initialized display being pumped.
-        unsafe { linked::sleep_thread_until(deadline) };
+        linked::sleep_thread_until(deadline);
     }
 }
 
 pub mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
-    use crate::callback::ffi::{Async_process, Async_timeBeforeNextMs};
     #[cfg(target_os = "macos")]
     use crate::threading::critical_timer::CriticalTimer;
     #[cfg(not(target_os = "macos"))]
@@ -208,10 +205,6 @@ pub mod linked {
 
     use crate::time::counter_abi::GetTimeCounter;
 
-    use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
-
-    use crate::graphics::dcqueue_abi::TFB_FlushGraphics;
-
     struct GameThread {
         stats: MutexGuard<'static, PacingStats>,
     }
@@ -227,16 +220,12 @@ pub mod linked {
 
     impl PacingEnv for GameThread {
         fn process_async(&mut self) {
-            Async_process();
+            crate::host::process_async();
         }
 
         fn pump_and_flush(&mut self) {
-            // SAFETY: both are C entry points with no arguments, called from
-            // the game thread that owns the display.
-            unsafe {
-                TFB_ProcessEvents();
-                TFB_FlushGraphics();
-            }
+            crate::host::display::process_events();
+            crate::host::display::flush_draws();
         }
 
         fn now_ticks(&self) -> u32 {
@@ -244,7 +233,7 @@ pub mod linked {
         }
 
         fn async_wait_ms(&self) -> u32 {
-            Async_timeBeforeNextMs()
+            crate::host::async_wait_ms()
         }
 
         fn sleep_ms(&mut self, ms: u32) {
@@ -275,7 +264,7 @@ pub mod linked {
         let mut env = GameThread::enter();
         env.process_async();
         env.pump_and_flush();
-        crate::time::source::advance_to(wake);
+        crate::host::advance_to(wake);
         crate::sound::stream::advance_replay();
     }
 
@@ -284,11 +273,8 @@ pub mod linked {
     }
 
     /// Sleep for `sleep_time` game time units after servicing the display.
-    ///
-    /// # Safety
-    /// Called on the SDL game thread with input and graphics initialized.
-    pub unsafe fn sleep_thread(sleep_time: u32) {
-        if crate::time::source::is_replay() {
+    pub fn sleep_thread(sleep_time: u32) {
+        if crate::host::is_replay() {
             replay_sleep_for(sleep_time);
         } else {
             sleep_for(&mut GameThread::enter(), sleep_time);
@@ -296,11 +282,8 @@ pub mod linked {
     }
 
     /// Sleep until the game clock reaches `wake_time`.
-    ///
-    /// # Safety
-    /// Called on the SDL game thread with input and graphics initialized.
-    pub unsafe fn sleep_thread_until(wake_time: u32) {
-        if crate::time::source::is_replay() {
+    pub fn sleep_thread_until(wake_time: u32) {
+        if crate::host::is_replay() {
             replay_sleep(wake_time);
         } else {
             sleep_until(&mut GameThread::enter(), wake_time);
@@ -314,8 +297,8 @@ mod tests {
 
     #[test]
     fn linked_sleep_entry_points_use_rust_signatures_and_unsigned_ticks() {
-        let _: unsafe fn(u32) = super::linked::sleep_thread;
-        let _: unsafe fn(u32) = super::linked::sleep_thread_until;
+        let _: fn(u32) = super::linked::sleep_thread;
+        let _: fn(u32) = super::linked::sleep_thread_until;
     }
 
     /// Scripted clock. Flushes cost the scripted number of ticks (zero once

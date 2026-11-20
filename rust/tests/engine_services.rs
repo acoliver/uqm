@@ -4,9 +4,8 @@ use std::ptr;
 use uqm_rust::graphics::sdl::lifecycle_abi::{
     GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics,
 };
-use uqm_rust::io::uio_bridge as uio;
 use uqm_rust::resource::ffi_bridge::_cur_resfile_name;
-use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::LoadStringTableFile};
+use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::load_string_table_file};
 use uqm_rust::video::{control::*, ffi::*, legacy::*};
 
 fn retained_playback_keeps_its_clip_after_descriptor_drop() {
@@ -64,33 +63,17 @@ fixture.absent = 3DOVID:missing.duk
         )
         .unwrap();
     }
-    let host = CString::new(directory.path().to_str().unwrap()).unwrap();
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    uqm_rust::time::source::install(true);
+    uqm_rust::engine::host::install(true);
     // SAFETY: this isolated test owns the repository, graphics state and every loaded resource.
     unsafe {
-        uio::uio_init();
-        let repository = uio::uio_openRepository(0);
-        let mount = uio::uio_mountDir(
-            repository,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            4,
-            ptr::null_mut(),
-        );
-        assert!(!mount.is_null());
-        let dir = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-        assert!(!dir.is_null());
-        uqm_rust::io::handles::contentDir = dir;
+        let mount = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
+        let dir = uqm_rust::io::content_dir().unwrap();
         retained_string_table_loads_owned_text();
         assert!((*ptr::addr_of!(_cur_resfile_name)).is_null());
         _cur_resfile_name = c"busy".as_ptr();
-        assert!(LoadStringTableFile(dir.cast(), c"strings.txt".as_ptr()).is_null());
+        assert!(load_string_table_file(&dir, c"strings.txt".as_ptr()).is_null());
         _cur_resfile_name = ptr::null();
         let options = GraphicsOptions::default();
         assert_eq!(
@@ -118,30 +101,17 @@ fixture.absent = 3DOVID:missing.duk
         assert_eq!(DestroyVideo(clip), 1);
         assert_eq!(DestroyVideo(ptr::null_mut()), 0);
         uqm_rust::resource::ffi_bridge::InitResourceSystem();
-        uqm_rust::resource::ffi_bridge::LoadResourceIndex(
-            dir.cast(),
+        uqm_rust::resource::ffi_bridge::load_resource_index(
+            &dir,
             c"video.rmp".as_ptr(),
             ptr::null(),
         );
         retained_playback_keeps_its_clip_after_descriptor_drop();
         assert!(VidPlaying().is_null());
         assert!(!rust_present_video_to_window(ptr::null(), 0, 0, 0));
-        assert!(!rust_play_video(dir.cast(), ptr::null(), 0, 0, false));
-        assert!(!rust_play_video(
-            dir.cast(),
-            c"absent.duk".as_ptr(),
-            0,
-            0,
-            false
-        ));
+        assert!(!rust_play_video(&dir, "absent.duk", 0, 0, false));
         std::fs::write(directory.path().join("broken.duk"), b"bad").unwrap();
-        assert!(!rust_play_video(
-            dir.cast(),
-            c"broken.duk".as_ptr(),
-            0,
-            0,
-            false
-        ));
+        assert!(!rust_play_video(&dir, "broken.duk", 0, 0, false));
         let pixels = [
             255u8, 0, 0, 255, 99, 99, 99, 99, 0, 255, 0, 255, 88, 88, 88, 88,
         ];
@@ -150,10 +120,7 @@ fixture.absent = 3DOVID:missing.duk
         assert!(!rust_process_video_frame());
         uqm_rust::sound::rodio_audio::rust_audio_uninit();
         TFB_UninitGraphics();
-        uqm_rust::io::handles::contentDir = ptr::null_mut();
-        uio::uio_closeDir(dir);
-        uio::uio_closeRepository(repository);
-        uio::uio_unInit();
+        drop(mount);
     }
     replay_audio_exports_follow_sample_completion_and_transport();
 }
@@ -220,7 +187,7 @@ fn string_bank_deduplicates_across_chunks_and_preserves_split_tails() {
 
 fn replay_audio_exports_follow_sample_completion_and_transport() {
     use uqm_rust::sound::rodio_audio::*;
-    use uqm_rust::time::{counter_abi::ONE_SECOND, source};
+    use uqm_rust::{engine::host as source, time::counter_abi::ONE_SECOND};
 
     let pcm = [0u8; 2000];
     // SAFETY: replay audio was selected before initialization; every byte slice stays live during calls.

@@ -103,12 +103,9 @@ pub unsafe fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 
 /// Initialize the memory management system
 ///
-/// # Safety
-/// Called during the game lifecycle.
-///
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-LIFE-001, REQ-MEM-LIFE-003, REQ-MEM-LIFE-005, REQ-MEM-LIFE-006
-pub unsafe fn rust_mem_init() -> bool {
+pub fn rust_mem_init() -> bool {
     // In later phases, this might initialize custom allocators
     log_add(LogLevel::Info, "Rust memory management initialized.");
     true
@@ -116,12 +113,9 @@ pub unsafe fn rust_mem_init() -> bool {
 
 /// Deinitialize the memory management system
 ///
-/// # Safety
-/// Called during the game lifecycle.
-///
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-LIFE-002, REQ-MEM-LIFE-004, REQ-MEM-LIFE-005
-pub unsafe fn rust_mem_uninit() -> bool {
+pub fn rust_mem_uninit() -> bool {
     // In later phases, this might deinitialize custom allocators
     log_add(LogLevel::Info, "Rust memory management deinitialized.");
     true

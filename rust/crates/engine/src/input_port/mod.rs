@@ -13,15 +13,12 @@
 //!
 //! # Thread Safety
 //!
-//! The main VControl state is protected by a RwLock for thread-safe access
-//! from event handlers.
+//! Each `InputControls` owns its `VControl`, so bindings and the control words
+//! they write live and die together.
 
-mod c_api;
 pub mod controls;
-pub mod ffi;
-#[cfg(test)]
-mod ffi_behavior_tests;
 pub mod frames;
+pub mod gesture;
 pub mod joystick;
 pub mod keyboard;
 pub mod keynames;
@@ -31,11 +28,10 @@ pub(crate) use sdl_input::process_input_event;
 pub mod templates;
 pub mod vcontrol;
 
-pub use joystick::{HatDirection, Joystick, JoystickAxis, JoystickHat};
-pub use keyboard::KeyBinding;
+pub use gesture::Gesture;
+pub use joystick::Joystick;
 pub use keynames::{key_from_name, key_name};
 pub use menu_binding::{query_menu_binding, MenuBindingResult};
-pub use templates::ControlTemplate;
-pub use vcontrol::{VControl, VControlError, VCONTROL};
+pub use vcontrol::{VControl, VControlError};
 
 pub mod session;

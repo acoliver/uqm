@@ -46,5 +46,4 @@ fn input_session_clones_keep_the_supplied_control_and_configuration_owners() {
         .update_preferences(|preferences| preferences.fonts = 2);
     assert_eq!(controls.immediate().menu[9], 1);
     assert_eq!(configuration.preferences().fonts, 2);
-    assert_eq!(retained.immediate_ptr(), controls.immediate_ptr());
 }

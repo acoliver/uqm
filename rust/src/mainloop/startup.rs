@@ -15,71 +15,131 @@ fn graphics_config(parsed: &super::options::ParsedOptions) -> (i32, i32) {
     (i32::from(!parsed.opengl), flags)
 }
 
-mod live {
+use crate::automation::input_ffi::graphics_options;
+use crate::mainloop::{dir_prep, options, options_abi as globals};
+use crate::sound::volume_globals::update_sound_options;
+use std::ffi::CString;
 
-    use crate::automation::input_ffi::graphics_options;
-    use crate::mainloop::{dir_prep, options, options_abi as globals};
-    use crate::{game_init::kernel_abi, sound::volume_globals};
-    use std::{
-        ffi::{c_char, CString},
-        ptr,
-    };
+fn c_option(value: &Option<String>) -> Option<CString> {
+    value
+        .as_ref()
+        .map(|value| CString::new(value.as_str()).expect("option contains NUL"))
+}
 
-    fn c_option(value: &Option<String>) -> Option<CString> {
-        value
-            .as_ref()
-            .map(|value| CString::new(value.as_str()).expect("option contains NUL"))
+/// Bring every subsystem up on the SDL owner thread, once, after command-line
+/// parsing. Returns the process exit status: zero when the game may start.
+pub fn initialize(
+    input: &crate::engine::input::InputSession,
+    parsed: &options::ParsedOptions,
+    args: &[String],
+    observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+) -> i32 {
+    if !start_services(parsed, args) {
+        return 1;
     }
+    let vfs = crate::io::Vfs::new();
+    crate::io::install(vfs.clone());
+    apply_options(input, parsed);
+    if !prepare_directories(&vfs, input, parsed) {
+        return 1;
+    }
+    if !start_media(input, parsed, observer) {
+        return 1;
+    }
+    0
+}
 
-    /// # Safety
-    /// Called once on the SDL owner thread after command-line parsing.
-    pub unsafe fn initialize(
-        input: &crate::engine::input::InputSession,
-        parsed: &options::ParsedOptions,
-        argc: i32,
-        argv: *mut *mut c_char,
-        observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
-    ) -> i32 {
-        crate::log_abi::log_init(15);
-        crate::bridge_log::rust_bridge_init();
-        if let Some(path) = &parsed.log_file {
-            if let Err(error) = crate::platform::os::stderr::redirect_stderr(path.as_ref()) {
-                eprintln!("Could not open logfile: {error}");
-                return 1;
-            }
-            for i in 0..argc as usize {
-                log::info!(
-                    "argv[{i}] = [{}]",
-                    std::ffi::CStr::from_ptr(*argv.add(i)).to_string_lossy()
-                );
-            }
+/// Logging, SDL, memory and the game thread.
+fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
+    crate::log_abi::log_init(15);
+    crate::bridge_log::rust_bridge_init();
+    if let Some(path) = &parsed.log_file {
+        if let Err(error) = crate::platform::os::stderr::redirect_stderr(path.as_ref()) {
+            eprintln!("Could not open logfile: {error}");
+            return false;
         }
-        log::info!("The Ur-Quan Masters v{}\nThis software comes with ABSOLUTELY NO WARRANTY; for details see the included 'COPYING' file.", env!("CARGO_PKG_VERSION"));
-        if crate::mainloop::init_wrappers::rust_tfb_preinit() != 0 {
-            return 1;
+        for (i, arg) in args.iter().enumerate() {
+            log::info!("argv[{i}] = [{arg}]");
         }
-        if !crate::memory::rust_mem_init() {
-            return 1;
+    }
+    log::info!("The Ur-Quan Masters v{}\nThis software comes with ABSOLUTELY NO WARRANTY; for details see the included 'COPYING' file.", env!("CARGO_PKG_VERSION"));
+    tracing::info!("Initializing base SDL functionality.");
+    match crate::platform::os::sdl::init_video() {
+        Ok(version) => tracing::info!(
+            "Using SDL version {}.{}.{} (compiled with {}.{}.{})",
+            version.major,
+            version.minor,
+            version.patch,
+            version.major,
+            version.minor,
+            version.patch,
+        ),
+        Err(error) => {
+            tracing::error!("{error}");
+            return false;
         }
-        crate::threading::legacy_abi::InitThreadSystem();
-        crate::mainloop::init_wrappers::rust_log_init_threads();
-        if kernel_abi::initIO() != 0 {
-            return 1;
-        }
-        if let Err(error) = dir_prep::prepare_config_dir(parsed.config_dir.as_deref()) {
-            log::error!("Config directory: {error:?}");
-            return 1;
-        }
+    }
+    if !crate::memory::rust_mem_init() {
+        return false;
+    }
+    crate::threading::init_game_thread();
+    true
+}
 
-        input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
-        input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
-        for i in 1..=6 {
-            let key = CString::new(format!("config.keys.{i}.name")).unwrap();
-            crate::resource::ffi_bridge::res_Remove(key.as_ptr());
-        }
-        volume_globals::snddriver = parsed.sound_driver;
-        volume_globals::soundflags = parsed.sound_quality;
-        let preferences = uqm_engine::configuration::Preferences {
+/// The config, content, melee and save directories and the addon shadows.
+fn prepare_directories(
+    vfs: &crate::io::Vfs,
+    input: &crate::engine::input::InputSession,
+    parsed: &options::ParsedOptions,
+) -> bool {
+    if let Err(error) = dir_prep::prepare_config_dir(vfs, parsed.config_dir.as_deref()) {
+        log::error!("Config directory: {error:?}");
+        return false;
+    }
+    input.configuration.set_addons(
+        parsed
+            .addons
+            .iter()
+            .map(|name| CString::new(name.as_str()).expect("addon name contains NUL"))
+            .collect(),
+    );
+    if let Err(error) = dir_prep::prepare_content_dir(
+        vfs,
+        &input.configuration,
+        parsed.content_dir.as_deref(),
+        parsed.addon_dir.as_deref(),
+    ) {
+        log::error!("Content directory: {error:?}");
+        return false;
+    }
+    if let Err(error) = dir_prep::prepare_melee_dir(vfs) {
+        log::error!("Melee directory: {error:?}");
+        return false;
+    }
+    if let Err(error) = dir_prep::prepare_save_dir(vfs) {
+        log::error!("Save directory: {error:?}");
+        return false;
+    }
+    dir_prep::prepare_shadow_addons(vfs, &parsed.addons);
+    true
+}
+
+/// Copy the parsed options into the sound options, the player controls and the
+/// preferences the game reads.
+fn apply_options(input: &crate::engine::input::InputSession, parsed: &options::ParsedOptions) {
+    input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
+    input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
+    crate::input::sdl_input::forget_template_names();
+    update_sound_options(|options| {
+        options.driver = parsed.sound_driver;
+        options.flags = parsed.sound_quality;
+        options.music_scale = parsed.music_volume_scale;
+        options.sfx_scale = parsed.sfx_volume_scale;
+        options.speech_scale = parsed.speech_volume_scale;
+    });
+    input
+        .configuration
+        .set_preferences(uqm_engine::configuration::Preferences {
             music_3do: parsed.use_3do_music as u32,
             music_remix: parsed.use_remix_music as u32,
             speech: parsed.use_speech as u32,
@@ -94,79 +154,41 @@ mod live {
             smooth_scroll: parsed.smooth_scroll,
             melee_scale: parsed.melee_scale,
             ..Default::default()
-        };
-        input.configuration.set_preferences(preferences);
-        volume_globals::musicVolumeScale = parsed.music_volume_scale;
-        volume_globals::sfxVolumeScale = parsed.sfx_volume_scale;
-        volume_globals::speechVolumeScale = parsed.speech_volume_scale;
-        input.configuration.set_addons(
-            parsed
-                .addons
-                .iter()
-                .map(|name| CString::new(name.as_str()).expect("addon name contains NUL"))
-                .collect(),
-        );
-        if let Err(error) = dir_prep::prepare_content_dir(
-            &input.configuration,
-            parsed.content_dir.as_deref(),
-            parsed.addon_dir.as_deref(),
-        ) {
-            log::error!("Content directory: {error:?}");
-            return 1;
-        }
-        if let Err(error) = dir_prep::prepare_melee_dir() {
-            log::error!("Melee directory: {error:?}");
-            return 1;
-        }
-        if let Err(error) = dir_prep::prepare_save_dir() {
-            log::error!("Save directory: {error:?}");
-            return 1;
-        }
-        if let Err(error) = dir_prep::prepare_shadow_addons(&parsed.addons) {
-            log::warn!("Shadow addons: {error:?}");
-        }
-        crate::time::counter_abi::InitTimeSystem();
-        crate::threading::task_abi::InitTaskSystem();
-        crate::callback::ffi::Alarm_init();
-        crate::callback::ffi::Callback_init();
-
-        let (driver, flags) = super::graphics_config(parsed);
-        let backend = graphics_options(c_option(&parsed.graphics_backend), observer);
-        if crate::graphics::sdl::lifecycle_abi::TFB_InitGraphics(
-            driver,
-            flags,
-            ptr::from_ref(&backend).cast(),
-            parsed.resolution_width,
-            parsed.resolution_height,
-        ) != 0
-        {
-            return 1;
-        }
-        let gamma = if globals::setGammaCorrection(parsed.gamma) {
-            parsed.gamma
-        } else {
-            1.0
-        };
-        input
-            .configuration
-            .update_preferences(|preferences| preferences.gamma = gamma);
-        crate::graphics::cmap_abi::InitColorMaps();
-        let immediate = input.immediate_ptr();
-        crate::input::sdl_input::tfb_set_input_vectors(
-            ptr::addr_of_mut!((*immediate).menu).cast(),
-            24,
-            ptr::addr_of_mut!((*immediate).key).cast(),
-            6,
-            7,
-        );
-        if crate::input::sdl_input::TFB_InitInput(0, 0) != 0 {
-            return 1;
-        }
-        0
-    }
+        });
 }
 
-pub use live::*;
+/// Graphics, colour maps and input.
+fn start_media(
+    input: &crate::engine::input::InputSession,
+    parsed: &options::ParsedOptions,
+    observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+) -> bool {
+    let (driver, flags) = graphics_config(parsed);
+    let backend = graphics_options(c_option(&parsed.graphics_backend), observer);
+    if !crate::engine::host::display::init_graphics(
+        driver,
+        flags,
+        &backend,
+        parsed.resolution_width,
+        parsed.resolution_height,
+    ) {
+        return false;
+    }
+    let gamma = if globals::setGammaCorrection(parsed.gamma) {
+        parsed.gamma
+    } else {
+        1.0
+    };
+    input
+        .configuration
+        .update_preferences(|preferences| preferences.gamma = gamma);
+    crate::graphics::cmap_abi::InitColorMaps();
+    if let Err(error) = crate::input::sdl_input::init_input(input.controls()) {
+        log::error!("{error}");
+        return false;
+    }
+    true
+}
 
 #[cfg(test)]
 mod tests {

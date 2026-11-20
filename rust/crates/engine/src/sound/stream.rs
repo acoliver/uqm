@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use parking_lot::{Condvar, Mutex};
 
-use super::decoder::{DecodeError, SoundDecoder};
+use super::decoder::{DecodeError, Decoder};
 use super::formats::AudioFormat;
 use super::mixer::buffer as mixer_buffer;
 use super::mixer::mix as mixer_mix;
@@ -88,7 +88,7 @@ static SOURCES: std::sync::LazyLock<Vec<Mutex<SoundSource>>> = std::sync::LazyLo
 // @plan PLAN-20260225-AUDIO-HEART.P08
 // @requirement REQ-STREAM-SAMPLE-01..05
 pub fn create_sound_sample(
-    decoder: Option<Box<dyn SoundDecoder>>,
+    decoder: Option<Box<dyn Decoder>>,
     num_buffers: u32,
     callbacks: Option<Box<dyn StreamCallbacks + Send>>,
 ) -> AudioResult<SoundSample> {
@@ -138,7 +138,7 @@ pub fn set_sound_sample_callbacks(
 }
 
 /// Get a reference to the sample's decoder.
-pub fn get_sound_sample_decoder(sample: &SoundSample) -> Option<&dyn SoundDecoder> {
+pub fn get_sound_sample_decoder(sample: &SoundSample) -> Option<&dyn Decoder> {
     sample.decoder.as_deref()
 }
 
@@ -724,12 +724,12 @@ pub fn init_stream_decoder() -> AudioResult<()> {
         }
     }
 
-    if crate::time::source::is_replay() {
+    if crate::host::is_replay() {
         let previous = ENGINE
             .replay_mixer
             .lock()
             .replace(super::replay_audio::ReplayMixer::new(
-                crate::time::source::now_ticks(),
+                crate::host::now_ticks(),
             ));
         assert!(
             previous.is_none(),
@@ -1009,10 +1009,7 @@ pub(crate) fn advance_replay() {
         let Some(mixer) = mixer.as_mut() else {
             return;
         };
-        mixer.frames_until(
-            crate::time::source::now_ticks(),
-            mixer_mix::mixer_get_frequency(),
-        )
+        mixer.frames_until(crate::host::now_ticks(), mixer_mix::mixer_get_frequency())
     };
     consume_replay_frames(frames);
 }

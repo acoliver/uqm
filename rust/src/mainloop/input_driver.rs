@@ -5,26 +5,21 @@ use super::live::*;
 fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     let controls = step.input;
     if reset {
-        // SAFETY: the native driver owns game-thread input for this synchronous loop.
-        unsafe { FlushInput(controls) };
+        FlushInput(controls);
     }
     crate::mainloop::input_frame::rust_begin_input_loop();
     loop {
-        // SAFETY: event dispatch and task switching run on the initialized game thread.
-        unsafe {
-            crate::callback::ffi::Async_process();
-            crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
-            process_utility_keys(controls);
-            super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
-        }
+        crate::engine::host::process_async();
+        crate::engine::host::display::process_events();
+        process_utility_keys(controls);
+        super::yield_input_loop(crate::threading::yield_task);
         if step
             .input(crate::engine::observe::InputView::BeforeUpdate)
             .stop
         {
             break;
         }
-        // SAFETY: the driver is the sole writer of this input frame.
-        unsafe { UpdateInputState(step.cx, controls) };
+        UpdateInputState(step.cx, controls);
         let activity = step.cx.world.activity();
         if step
             .input(crate::engine::observe::InputView::AfterUpdate(activity))
@@ -32,7 +27,6 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         {
             break;
         }
-        // SAFETY: the native loop owns initialized input and sound resources on this thread.
         step.play_menu_sound();
         step.input_hook();
         let keep = step.frame();
@@ -41,8 +35,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         }
     }
     if reset {
-        // SAFETY: the synchronous loop still owns initialized input on this thread.
-        unsafe { FlushInput(controls) };
+        FlushInput(controls);
     }
 }
 
@@ -55,8 +48,7 @@ fn process_utility_keys(input: &crate::engine::input::InputSession) {
         std::process::exit(0);
     }
     if state.menu[KEY_FULLSCREEN as usize] != 0 {
-        // SAFETY: the driver owns game-thread input for this synchronous loop.
-        unsafe { FlushInput(input) };
+        FlushInput(input);
         crate::graphics::tfb_draw_abi::toggle_fullscreen();
     }
 }
@@ -149,36 +141,28 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
     }
 
     fn yield_poll(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
-        {
-            crate::callback::ffi::Async_process();
-            // SAFETY: the retained runtime and handoff own game-thread event pumping.
-            unsafe { crate::threading::legacy_abi::TaskSwitch() };
-        };
+        crate::engine::host::process_async();
+        crate::threading::yield_task();
     }
 
     fn sleep(&self, _cx: &mut crate::engine::battle::Cx<'_>, ticks: u32) {
-        // SAFETY: the retained runtime supplies the initialized game-thread lifecycle.
-        unsafe { crate::threading::pacing::linked::sleep_thread(ticks) };
+        crate::threading::pacing::linked::sleep_thread(ticks);
     }
 
     fn sleep_until(&self, _cx: &mut crate::engine::battle::Cx<'_>, deadline: u32) {
-        // SAFETY: pacing runs callbacks and presentation inside the caller's bounded handoff.
-        unsafe { crate::threading::pacing::linked::sleep_thread_until(deadline) };
+        crate::threading::pacing::linked::sleep_thread_until(deadline);
     }
 
     fn flush(&self) {
-        // SAFETY: this runtime retains the initialized input buffers.
-        unsafe { FlushInput(&self.input) };
+        FlushInput(&self.input);
     }
 
     fn confirm_exit(&self, cx: &mut crate::engine::battle::Cx<'_>) -> bool {
-        // SAFETY: the modal driver retains its input session and borrows the active owner.
-        unsafe { ConfirmExit(cx, &self.input) != 0 }
+        ConfirmExit(cx, &self.input) != 0
     }
 
     fn update(&self, cx: &mut crate::engine::battle::Cx<'_>) {
-        // SAFETY: the retained context supplies initialized game-thread input resources.
-        unsafe { UpdateInputState(cx, &self.input) };
+        UpdateInputState(cx, &self.input);
     }
 
     fn run(
@@ -201,7 +185,6 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
     }
 
     fn battle_input(&self, input: &crate::engine::battle::input::InputContext) -> u8 {
-        // SAFETY: InputContext validates its player when installed by the game thread.
         self.input.current_battle_input(input.player())
     }
 }

@@ -527,9 +527,7 @@ pub mod live {
                     pressed = button;
                     button = false;
                 }
-                {
-                    Async_process();
-                };
+                uqm_engine::host::process_async();
                 cx.kernel.input_runtime().sleep(cx, 840 / 40);
                 if cx.world.activity() & CHECK_ABORT as u16 != 0
                     || button

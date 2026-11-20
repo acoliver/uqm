@@ -45,13 +45,9 @@ pub const match_EUNKNOWN: i32 = -1;
 pub const match_ENOSYS: i32 = -2;
 pub const match_ECUSTOM: i32 = -3;
 pub const match_ENOTINIT: i32 = -4;
-pub const uio_FSTYPE_STDIO: u32 = 1;
-pub const uio_FSTYPE_ZIP: u32 = 2;
-pub const uio_MOUNT_RDONLY: u32 = 2;
 pub const EOF: i32 = -1;
 pub const FILENAME_MAX: u32 = 1024;
 pub const P_tmpdir: &[u8; 10] = b"/var/tmp/\0";
-pub const uio_OD_ROOT: u32 = 1;
 pub const UNICHAR_DEGREE_SIGN: u32 = 176;
 pub const STR_DEGREE_SIGN: &[u8; 3] = b"\xC2\xB0\0";
 pub const UNICHAR_INFINITY_SIGN: u32 = 8734;
@@ -880,14 +876,7 @@ pub type UNICODE = ::std::os::raw::c_char;
 pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
-pub use crate::graphics::native_abi::uio_DirHandle;
 pub use crate::graphics::native_abi::Color;
-pub const match_MatchType_match_MATCH_LITERAL: match_MatchType = 0;
-pub const match_MatchType_match_MATCH_PREFIX: match_MatchType = 1;
-pub const match_MatchType_match_MATCH_SUFFIX: match_MatchType = 2;
-pub const match_MatchType_match_MATCH_SUBSTRING: match_MatchType = 3;
-pub const match_MatchType_match_MATCH_REGEX: match_MatchType = 4;
-pub type match_MatchType = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct resource_index_desc {
@@ -1753,7 +1742,6 @@ pub const TFB_DRAWCOMMANDTYPE_CALLBACK: _bindgen_ty_28 = 14;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
 pub use crate::graphics::native_abi::tfb_drawcommandqueue;
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
-pub use crate::callback::ffi::Async_process;
 
 #[cfg(test)]
 mod ship_abi_tests {

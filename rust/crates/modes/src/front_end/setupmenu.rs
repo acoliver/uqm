@@ -158,7 +158,7 @@ impl SetupSession {
                 runtime.flush();
             }
             Action::Clear(control) => {
-                sdl_input::RemoveInputState(
+                sdl_input::remove_input_state(
                     self.menu.choices[20] as i32,
                     control as i32,
                     self.menu.binding_column as i32,

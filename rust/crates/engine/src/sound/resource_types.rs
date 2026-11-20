@@ -1,74 +1,91 @@
-//! Sound bank and music instance loading. The `SNDRES` and `MUSICRES`
-//! resource types are registered by the resource system itself.
+//! Music ownership and the loaders and free routines behind the `SNDRES` and
+//! `MUSICRES` resource types, whose data the resource system stores as opaque
+//! pointers.
 
-use std::ffi::{c_char, c_void};
+use std::ffi::{c_void, CStr};
 
-use crate::resource::ffi_bridge::{res_DetachResource, res_GetResource};
+use super::heart_ffi::{destroy_music, load_music, load_sound_bank};
+use super::owned_bank::LoadedSoundBank;
+use super::types::MusicRef;
 
 /// Exclusive release authority for a detached music resource.
-#[derive(Debug)]
-pub struct LoadedMusic(std::ptr::NonNull<c_void>);
+pub struct LoadedMusic(MusicRef);
 
 impl LoadedMusic {
-    pub fn load(resource: &std::ffi::CStr) -> Option<Self> {
-        crate::resource::ffi_bridge::detach_resource_of_type(resource, "MUSICRES").map(Self)
+    pub fn load(resource: &CStr) -> Option<Self> {
+        let handle = crate::resource::ffi_bridge::detach_resource_of_type(resource, "MUSICRES")?;
+        // SAFETY: the MUSICRES loader stores one boxed `MusicRef` and detaching transfers it.
+        Some(Self(*unsafe {
+            Box::from_raw(handle.as_ptr().cast::<MusicRef>())
+        }))
     }
 
-    pub fn load_file(path: &std::ffi::CStr) -> Option<Self> {
+    pub fn load_file(path: &CStr) -> Option<Self> {
         crate::graphics::ffi::assert_owner_thread();
-        // SAFETY: the serialized content loader receives a terminated path and transfers ownership.
-        std::ptr::NonNull::new(unsafe { super::heart_ffi::LoadMusicFile(path.as_ptr()) }).map(Self)
+        load_music(path.to_str().ok()?).map(Self)
     }
 
-    pub fn playback(&self) -> super::types::MusicRef {
-        // SAFETY: this owner keeps the detached Arc handle alive while it is cloned.
-        unsafe { super::heart_ffi::music_ref_borrow(self.0.as_ptr()) }
+    pub fn playback(&self) -> MusicRef {
+        self.0.clone()
     }
 
-    pub fn as_raw(&self) -> *mut c_void {
-        self.0.as_ptr()
+    /// An address identifying this music while a video clip plays it; never dereferenced.
+    pub fn identity(&self) -> *mut c_void {
+        std::sync::Arc::as_ptr(&self.0 .0).cast_mut().cast()
+    }
+}
+
+impl std::fmt::Debug for LoadedMusic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("LoadedMusic")
+            .field(&self.identity())
+            .finish()
     }
 }
 
 impl Drop for LoadedMusic {
     fn drop(&mut self) {
-        // SAFETY: this non-cloneable owner frees its detached resource exactly once.
-        unsafe { super::heart_ffi::destroy_music(self.0.as_ptr()) };
+        destroy_music(self.0.clone());
     }
 }
 
-/// Loads the sound bank behind `res` and takes ownership of it from the
-/// resource system.
-///
-/// # Safety
-/// `res` must be a NUL-terminated resource key.
-#[no_mangle]
-pub unsafe extern "C" fn LoadSoundInstance(res: *const c_char) -> *mut c_void {
-    let data = res_GetResource(res);
-    if !data.is_null() {
-        res_DetachResource(res);
-    }
-    data
+/// The `SNDRES` loader: a bank handle for the resource system, or null.
+pub fn sound_bank_handle(name: &str) -> *mut c_void {
+    load_sound_bank(name).map_or(std::ptr::null_mut(), LoadedSoundBank::into_raw)
 }
 
-/// Loads the music behind `res` and takes ownership of it from the
-/// resource system.
+/// The `MUSICRES` loader: a music handle for the resource system, or null.
+pub fn music_handle(name: &str) -> *mut c_void {
+    load_music(name).map_or(std::ptr::null_mut(), |music| {
+        Box::into_raw(Box::new(music)).cast()
+    })
+}
+
+/// Free an `SNDRES` handle that was never detached.
 ///
 /// # Safety
-/// `res` must be a NUL-terminated resource key.
-#[no_mangle]
-pub unsafe extern "C" fn LoadMusicInstance(res: *const c_char) -> *mut c_void {
-    let data = res_GetResource(res);
-    if !data.is_null() {
-        res_DetachResource(res);
+/// `handle` is null or came from [`sound_bank_handle`] and was not detached or freed.
+pub unsafe fn free_sound_bank_handle(handle: *mut c_void) {
+    if !handle.is_null() {
+        // SAFETY: the caller supplies the one reference the loader released.
+        drop(unsafe { LoadedSoundBank::from_raw(handle) });
     }
-    data
+}
+
+/// Free a `MUSICRES` handle that was never detached.
+///
+/// # Safety
+/// `handle` is null or came from [`music_handle`] and was not detached or freed.
+pub unsafe fn free_music_handle(handle: *mut c_void) {
+    if !handle.is_null() {
+        // SAFETY: the caller supplies the one box the loader released.
+        destroy_music(*unsafe { Box::from_raw(handle.cast::<MusicRef>()) });
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     #[test]
     #[serial_test::serial]
@@ -83,25 +100,30 @@ mod tests {
     }
 
     #[test]
-    fn detached_music_releases_its_sample_reference_on_drop() {
-        let sample = Arc::new(parking_lot::Mutex::new(
+    fn music_handles_round_trip_and_release_their_sample_reference() {
+        let sample = std::sync::Arc::new(parking_lot::Mutex::new(
             super::super::types::SoundSample::new(),
         ));
-        // SAFETY: this fixture constructs the same allocator-owned Arc slot as the music loader.
-        let music = unsafe {
-            let slot = crate::memory::rust_hmalloc(std::mem::size_of::<*const c_void>())
-                .cast::<*const parking_lot::Mutex<super::super::types::SoundSample>>();
-            slot.write(Arc::into_raw(sample.clone()));
-            LoadedMusic(std::ptr::NonNull::new(slot.cast()).unwrap())
-        };
-        assert_eq!(Arc::strong_count(&sample), 2);
-        assert!(!music.as_raw().is_null());
+        let handle = Box::into_raw(Box::new(MusicRef(sample.clone()))).cast::<c_void>();
+        assert_eq!(std::sync::Arc::strong_count(&sample), 2);
+        // SAFETY: the handle was boxed above and is freed once.
+        unsafe { free_music_handle(handle) };
+        assert_eq!(std::sync::Arc::strong_count(&sample), 1);
+    }
+
+    #[test]
+    fn detached_music_releases_its_sample_reference_on_drop() {
+        let sample = std::sync::Arc::new(parking_lot::Mutex::new(
+            super::super::types::SoundSample::new(),
+        ));
+        let music = LoadedMusic(MusicRef(sample.clone()));
+        assert_eq!(std::sync::Arc::strong_count(&sample), 2);
         let playback = music.playback();
-        assert_eq!(Arc::strong_count(&sample), 3);
+        assert_eq!(std::sync::Arc::strong_count(&sample), 3);
         drop(music);
-        assert_eq!(Arc::strong_count(&sample), 2);
-        assert!(Arc::ptr_eq(&playback.0, &sample));
+        assert_eq!(std::sync::Arc::strong_count(&sample), 2);
+        assert!(std::sync::Arc::ptr_eq(&playback.0, &sample));
         drop(playback);
-        assert_eq!(Arc::strong_count(&sample), 1);
+        assert_eq!(std::sync::Arc::strong_count(&sample), 1);
     }
 }

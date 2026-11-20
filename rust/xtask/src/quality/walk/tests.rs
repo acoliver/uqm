@@ -720,11 +720,11 @@ fn inherited_allow_transfers_deduplicate_shared_lines_and_include_coverage() {
 fn anonymous_macro_identities_and_baseline_rekey_are_stable() {
     use super::super::baseline::Baseline;
     // A registered item macro, so the walker expands it with its own transcriber.
-    let macros = "macro_rules! accessor { ($name:ident) => { const _: () = { #[allow(clippy::identity_op)] fn check() { let _ = 1 + 0; } }; }; }";
-    let source = format!("{macros}\naccessor!(First);\naccessor!(Second);\n");
-    let lib = "mod mainloop { mod state_abi; }";
+    let macros = "macro_rules! callbacks { ($name:ident) => { const _: () = { #[allow(clippy::identity_op)] fn check() { let _ = 1 + 0; } }; }; }";
+    let source = format!("{macros}\ncallbacks!(First);\ncallbacks!(Second);\n");
+    let lib = "mod comm { mod live { mod comandr; } }";
     let base = fixture(
-        &[("src/lib.rs", lib), ("src/mainloop/state_abi.rs", &source)],
+        &[("src/lib.rs", lib), ("src/comm/live/comandr.rs", &source)],
         None,
         false,
     );
@@ -732,7 +732,7 @@ fn anonymous_macro_identities_and_baseline_rekey_are_stable() {
         &[
             ("src/lib.rs", lib),
             (
-                "src/mainloop/state_abi.rs",
+                "src/comm/live/comandr.rs",
                 &format!("struct Named;\n\n{source}"),
             ),
         ],

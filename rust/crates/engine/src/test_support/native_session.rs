@@ -5,12 +5,9 @@
 
 use crate::{
     graphics::sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
-    input::{
-        frames::{FLIGHT_KEYS, MENU_KEYS, TEMPLATES},
-        InputSession,
-    },
+    input::InputSession,
     input_port::sdl_input,
-    io::{handles, uio_bridge as uio},
+    io::{install, uninstall, Dir, Placement, Vfs},
 };
 use std::{ffi::CString, path::Path, ptr};
 
@@ -85,79 +82,34 @@ impl Drop for Graphics {
 }
 
 /// A directory mounted as the content directory, and optionally the config
-/// directory, with the previous handles restored on drop.
+/// directory, with the previous process file system restored on drop.
 pub struct ContentMount {
-    repository: *mut uio::uio_Repository,
-    content: *mut uio::uio_DirHandle,
-    config: Option<*mut uio::uio_DirHandle>,
-    previous_content: *mut crate::io::ffi::uio_DirHandle,
-    previous_config: *mut crate::io::ffi::uio_DirHandle,
+    vfs: Vfs,
+    content: Dir,
+    previous: Option<Vfs>,
 }
 
 impl ContentMount {
     /// Mount `directory` at `/` and make it the content directory.
     pub fn new(directory: &Path) -> Self {
-        let path = cstring(
-            directory
-                .to_str()
-                .unwrap_or_else(|| panic!("fixture path is UTF-8")),
-            "fixture path",
-        );
-        // SAFETY: the serialized fixture owns the repository and mounts until drop.
-        unsafe {
-            uio::uio_init();
-            let repository = uio::uio_openRepository(0);
-            assert!(!uio::uio_mountDir(
-                repository,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut()
-            )
-            .is_null());
-            let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-            let previous_content = handles::contentDir;
-            handles::contentDir = content.cast();
-            Self {
-                repository,
-                content,
-                config: None,
-                previous_content,
-                previous_config: handles::configDir,
-            }
+        let vfs = Vfs::new();
+        vfs.mount_dir("/", directory, Placement::Top, false);
+        let content = vfs.open_dir(Path::new("/"));
+        vfs.set_content_dir(content.clone());
+        let previous = install(vfs.clone());
+        Self {
+            vfs,
+            content,
+            previous,
         }
     }
 
     /// Also mount `directory` at `/config` and make it the config directory.
-    pub fn with_config(mut self, directory: &Path) -> Self {
-        let path = cstring(
-            directory
-                .to_str()
-                .unwrap_or_else(|| panic!("fixture path is UTF-8")),
-            "fixture path",
-        );
-        // SAFETY: the mount shares this guard's repository and is closed with it.
-        unsafe {
-            assert!(!uio::uio_mountDir(
-                self.repository,
-                c"/config".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                4,
-                ptr::null_mut()
-            )
-            .is_null());
-            let config = uio::uio_openDir(self.repository, c"/config".as_ptr(), 0);
-            handles::configDir = config.cast();
-            self.config = Some(config);
-        }
+    pub fn with_config(self, directory: &Path) -> Self {
+        self.vfs
+            .mount_dir("/config", directory, Placement::Top, false);
+        self.vfs
+            .set_config_dir(self.vfs.open_dir(Path::new("/config")));
         self
     }
 
@@ -173,8 +125,8 @@ impl ContentMount {
         let index = cstring(index, "index name");
         // SAFETY: the content directory stays mounted for the guard's life.
         unsafe {
-            crate::resource::ffi_bridge::LoadResourceIndex(
-                self.content.cast(),
+            crate::resource::ffi_bridge::load_resource_index(
+                &self.content,
                 index.as_ptr(),
                 ptr::null(),
             );
@@ -184,16 +136,13 @@ impl ContentMount {
 
 impl Drop for ContentMount {
     fn drop(&mut self) {
-        // SAFETY: all callbacks have returned and no directory lease escapes the fixture.
-        unsafe {
-            handles::contentDir = self.previous_content;
-            handles::configDir = self.previous_config;
-            uio::uio_closeDir(self.content);
-            if let Some(config) = self.config {
-                uio::uio_closeDir(config);
+        match self.previous.take() {
+            Some(previous) => {
+                install(previous);
             }
-            uio::uio_closeRepository(self.repository);
-            uio::uio_unInit();
+            None => {
+                uninstall();
+            }
         }
     }
 }
@@ -203,17 +152,8 @@ pub struct NativeInput(InputSession);
 
 impl NativeInput {
     pub fn bind(input: &InputSession) -> Self {
-        let state = input.immediate_ptr();
-        // SAFETY: the retained input owns both stable vectors until the guard unbinds them.
-        unsafe {
-            sdl_input::tfb_set_input_vectors(
-                ptr::addr_of_mut!((*state).menu).cast(),
-                MENU_KEYS as i32,
-                ptr::addr_of_mut!((*state).key).cast(),
-                TEMPLATES as i32,
-                FLIGHT_KEYS as i32,
-            );
-            assert_eq!(sdl_input::TFB_InitInput(0, 0), 0);
+        if let Err(error) = sdl_input::init_input(input.controls()) {
+            panic!("native input did not start: {error}");
         }
         Self(input.clone())
     }
@@ -221,51 +161,40 @@ impl NativeInput {
 
 impl Drop for NativeInput {
     fn drop(&mut self) {
-        sdl_input::TFB_UninitInput();
-        // SAFETY: callbacks have returned, so nothing reads the vectors being detached.
-        unsafe { sdl_input::tfb_set_input_vectors(ptr::null_mut(), 0, ptr::null_mut(), 0, 0) };
+        sdl_input::uninit_input();
         self.0.clear_menu_state();
     }
 }
 
 /// Deliver a key-down for ASCII `key` to the initialized native provider.
 pub fn key_down(key: u8) {
-    // SAFETY: an all-zero SDL_Event is valid, and the fields set make it a key-down.
-    unsafe {
-        let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-        event.type_ = 0x300;
-        event.key.state = 1;
-        event.key.keysym.sym = i32::from(key);
-        event.key.keysym.scancode = sdl2_sys::SDL_Scancode::SDL_SCANCODE_W;
-        sdl_input::process_input_event(&event);
-    }
+    sdl_input::process_input_event(&sdl2::event::Event::KeyDown {
+        timestamp: 0,
+        window_id: 0,
+        keycode: sdl2::keyboard::Keycode::from_i32(i32::from(key)),
+        scancode: Some(sdl2::keyboard::Scancode::W),
+        keymod: sdl2::keyboard::Mod::empty(),
+        repeat: false,
+    });
 }
 
-/// Deliver one SDL text-input event carrying `text` (at most 31 bytes).
+/// Deliver one SDL text-input event carrying `text`.
 pub fn text_input(text: &str) {
-    assert!(text.len() < 32);
-    // SAFETY: an all-zero SDL_Event is valid; the text is NUL terminated by the zeroed tail.
-    unsafe {
-        let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-        event.type_ = 0x303;
-        for (slot, byte) in event.text.text.iter_mut().zip(text.bytes()) {
-            *slot = byte as std::ffi::c_char;
-        }
-        sdl_input::process_input_event(&event);
-    }
+    sdl_input::process_input_event(&sdl2::event::Event::TextInput {
+        timestamp: 0,
+        window_id: 0,
+        text: text.to_owned(),
+    });
 }
 
 /// Reload `index` from whatever directory is currently the content directory.
 pub fn reload_content_index(index: &str) {
     let index = cstring(index, "index name");
+    let content = crate::io::content_dir().unwrap_or_else(|| panic!("no content directory"));
     // SAFETY: the serialized fixture keeps a content mount live while it reloads.
     unsafe {
-        crate::resource::ffi_bridge::LoadResourceIndex(
-            handles::contentDir.cast(),
-            index.as_ptr(),
-            ptr::null(),
-        );
-    }
+        crate::resource::ffi_bridge::load_resource_index(&content, index.as_ptr(), ptr::null())
+    };
 }
 
 /// Drop one entry from the live resource map.

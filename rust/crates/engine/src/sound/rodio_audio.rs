@@ -9,15 +9,17 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
 
 use crate::bridge_log::rust_bridge_log_msg;
+use crate::host::clock::{Clock, ReplayClock};
+use crate::host::AudioPort;
 
 /// Commands sent to the audio thread
-pub(super) enum AudioCommand {
+pub enum AudioCommand {
     /// Play WAV data: (data, category, looping) -> handle via response channel
     PlayWav(Vec<u8>, SoundCategory, bool, Sender<u32>),
     /// Play OGG data
@@ -50,18 +52,98 @@ pub(super) enum AudioCommand {
     Shutdown,
 }
 
-/// Global sender to audio thread
-static AUDIO_SENDER: Mutex<Option<Sender<AudioCommand>>> = Mutex::new(None);
-#[derive(Default)]
-struct AudioWorker {
-    thread: Option<JoinHandle<()>>,
-    replay: Option<super::replay_audio::ReplayAudio>,
+/// The rodio device: a command channel into the audio thread that owns the output stream.
+pub struct RodioAudio {
+    sender: Mutex<Option<Sender<AudioCommand>>>,
+    thread: Mutex<Option<JoinHandle<()>>>,
 }
 
-static AUDIO_THREAD: Mutex<AudioWorker> = Mutex::new(AudioWorker {
-    thread: None,
-    replay: None,
-});
+/// The process's OS audio device.
+pub static RODIO: RodioAudio = RodioAudio {
+    sender: Mutex::new(None),
+    thread: Mutex::new(None),
+};
+
+impl AudioPort for RodioAudio {
+    fn start(&self) -> bool {
+        rust_bridge_log_msg("RUST_AUDIO_INIT: starting rodio audio system");
+        let mut sender = self.sender.lock().unwrap();
+        if sender.is_some() {
+            rust_bridge_log_msg("RUST_AUDIO_INIT: already initialized");
+            return true;
+        }
+        let (tx, rx) = mpsc::channel();
+        *sender = Some(tx);
+        *self.thread.lock().unwrap() = Some(thread::spawn(move || audio_thread_main(rx)));
+        drop(sender);
+        // Give the thread a moment to initialize
+        thread::sleep(std::time::Duration::from_millis(50));
+        rust_bridge_log_msg("RUST_AUDIO_INIT: success");
+        true
+    }
+
+    fn send(&self, command: AudioCommand) -> bool {
+        self.sender
+            .lock()
+            .map(|sender| {
+                sender
+                    .as_ref()
+                    .is_some_and(|sender| sender.send(command).is_ok())
+            })
+            .unwrap_or(false)
+    }
+
+    fn shutdown(&self) {
+        self.send(AudioCommand::Shutdown);
+        // Dropping the sender also ends a thread that is waiting for commands.
+        *self.sender.lock().unwrap() = None;
+        if let Some(handle) = self.thread.lock().unwrap().take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+/// Replay stand-in: sounds are bookkeeping on the replay clock, no device is opened.
+pub struct ReplayAudioPort {
+    audio: Mutex<Option<super::replay_audio::ReplayAudio>>,
+    clock: Arc<ReplayClock>,
+}
+
+impl ReplayAudioPort {
+    pub fn new(clock: Arc<ReplayClock>) -> Self {
+        Self {
+            audio: Mutex::new(None),
+            clock,
+        }
+    }
+}
+
+impl AudioPort for ReplayAudioPort {
+    fn start(&self) -> bool {
+        self.audio
+            .lock()
+            .expect("audio worker poisoned")
+            .get_or_insert_with(super::replay_audio::ReplayAudio::default);
+        true
+    }
+
+    #[track_caller]
+    fn send(&self, command: AudioCommand) -> bool {
+        let mut audio = self.audio.lock().expect("audio worker poisoned");
+        let Some(audio) = audio.as_mut() else {
+            return false;
+        };
+        audio.command(
+            command,
+            self.clock.now_ticks(std::panic::Location::caller()),
+        );
+        true
+    }
+
+    fn shutdown(&self) {
+        *self.audio.lock().expect("audio worker poisoned") = None;
+    }
+}
 
 /// Handle counter for sources
 static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
@@ -338,21 +420,9 @@ fn play_raw(
 // FFI Functions
 // =============================================================================
 
+#[track_caller]
 fn send_command(cmd: AudioCommand) -> bool {
-    if crate::time::source::is_replay() {
-        let mut worker = AUDIO_THREAD.lock().expect("audio worker poisoned");
-        if let Some(replay) = &mut worker.replay {
-            replay.command(cmd, crate::time::source::now_ticks());
-            return true;
-        }
-        return false;
-    }
-    if let Ok(guard) = AUDIO_SENDER.lock() {
-        if let Some(ref sender) = *guard {
-            return sender.send(cmd).is_ok();
-        }
-    }
-    false
+    crate::host::platform().audio().send(cmd)
 }
 
 /// Initialize the audio system
@@ -360,50 +430,7 @@ fn send_command(cmd: AudioCommand) -> bool {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe extern "C" fn rust_audio_init() -> i32 {
-    if crate::time::source::is_replay() {
-        AUDIO_THREAD
-            .lock()
-            .expect("audio worker poisoned")
-            .replay
-            .get_or_insert_with(super::replay_audio::ReplayAudio::default);
-        return 1;
-    }
-    rust_bridge_log_msg("RUST_AUDIO_INIT: starting rodio audio system");
-
-    // Check if already running
-    {
-        let guard = AUDIO_SENDER.lock().unwrap();
-        if guard.is_some() {
-            rust_bridge_log_msg("RUST_AUDIO_INIT: already initialized");
-            return 1;
-        }
-    }
-
-    // Create channel
-    let (tx, rx) = mpsc::channel();
-
-    // Store sender
-    {
-        let mut guard = AUDIO_SENDER.lock().unwrap();
-        *guard = Some(tx);
-    }
-
-    // Spawn audio thread
-    let handle = thread::spawn(move || {
-        audio_thread_main(rx);
-    });
-
-    // Store thread handle
-    {
-        let mut guard = AUDIO_THREAD.lock().unwrap();
-        guard.thread = Some(handle);
-    }
-
-    // Give the thread a moment to initialize
-    std::thread::sleep(std::time::Duration::from_millis(50));
-
-    rust_bridge_log_msg("RUST_AUDIO_INIT: success");
-    1
+    i32::from(crate::host::platform().audio().start())
 }
 
 /// Shutdown the audio system
@@ -412,24 +439,7 @@ pub unsafe extern "C" fn rust_audio_init() -> i32 {
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe extern "C" fn rust_audio_uninit() {
     rust_bridge_log_msg("RUST_AUDIO_UNINIT");
-
-    // Send shutdown command
-    send_command(AudioCommand::Shutdown);
-    AUDIO_THREAD.lock().expect("audio worker poisoned").replay = None;
-
-    // Clear sender (this will also cause the thread to exit if it's waiting)
-    {
-        let mut guard = AUDIO_SENDER.lock().unwrap();
-        *guard = None;
-    }
-
-    // Wait for thread to finish
-    {
-        let mut guard = AUDIO_THREAD.lock().unwrap();
-        if let Some(handle) = guard.thread.take() {
-            let _ = handle.join();
-        }
-    }
+    crate::host::platform().audio().shutdown();
 }
 
 /// Play a WAV sound from raw bytes
@@ -744,11 +754,11 @@ mod command_export_tests {
         fn start(is_playing: bool) -> Self {
             let exclusive = EXPORT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
             assert!(
-                AUDIO_SENDER.lock().unwrap().is_none(),
+                RODIO.sender.lock().unwrap().is_none(),
                 "no other test may leave an audio thread running"
             );
             let (tx, rx) = mpsc::channel();
-            *AUDIO_SENDER.lock().unwrap() = Some(tx);
+            *RODIO.sender.lock().unwrap() = Some(tx);
             let seen = Arc::new(Mutex::new(Vec::new()));
             let log = Arc::clone(&seen);
             let thread = thread::spawn(move || {
@@ -790,7 +800,7 @@ mod command_export_tests {
                     }
                 }
             });
-            AUDIO_THREAD.lock().unwrap().thread = Some(thread);
+            *RODIO.thread.lock().unwrap() = Some(thread);
             Self {
                 seen,
                 _exclusive: exclusive,
@@ -836,7 +846,7 @@ mod command_export_tests {
     #[test]
     fn plays_report_no_handle_when_the_audio_thread_is_not_running() {
         let _exclusive = EXPORT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        assert!(AUDIO_SENDER.lock().unwrap().is_none());
+        assert!(RODIO.sender.lock().unwrap().is_none());
         let bytes = [1u8, 2, 3];
 
         assert_eq!(unsafe { rust_audio_play_wav(bytes.as_ptr(), 3, 0, 0) }, 0);
@@ -984,7 +994,7 @@ mod command_export_tests {
             *recorder.seen.lock().unwrap(),
             [Seen::IsPlaying(1), Seen::Shutdown]
         );
-        assert!(AUDIO_SENDER.lock().unwrap().is_none());
-        assert!(AUDIO_THREAD.lock().unwrap().thread.is_none());
+        assert!(RODIO.sender.lock().unwrap().is_none());
+        assert!(RODIO.thread.lock().unwrap().is_none());
     }
 }

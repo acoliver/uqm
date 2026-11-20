@@ -23,10 +23,8 @@ pub(crate) mod live {
         input.reset_repeat(crate::time::counter_abi::GetTimeCounter());
     }
 
-    /// # Safety
-    /// The initialized input runtime is retained on the game thread during nested UI calls.
-    pub unsafe fn UpdateInputState(cx: &mut Cx<'_>, input: &InputSession) {
-        if crate::graphics::sdl::lifecycle_abi::GameActive == 0 {
+    pub fn UpdateInputState(cx: &mut Cx<'_>, input: &InputSession) {
+        if !crate::graphics::sdl::lifecycle_abi::game_active() {
             crate::ui::util::sleep_game(cx);
         }
         if input.paused() {
@@ -36,7 +34,7 @@ pub(crate) mod live {
             ConfirmExit(cx, input);
         }
         let before_frame = input.immediate();
-        crate::input::sdl_input::BeginInputFrame();
+        crate::input::sdl_input::begin_input_frame();
         let after_frame = input.immediate();
         let now = crate::time::counter_abi::GetTimeCounter();
         input.advance(before_frame, after_frame, now);
@@ -70,10 +68,8 @@ pub(crate) mod live {
         );
     }
 
-    /// # Safety
-    /// The provider's initialized input vectors borrow this runtime's live buffer.
-    pub unsafe fn FlushInput(input: &InputControls) {
-        crate::input::sdl_input::TFB_ResetControls();
+    pub fn FlushInput(input: &InputControls) {
+        crate::input::sdl_input::reset_controls();
         input.clear_menu_state();
     }
 
@@ -97,16 +93,12 @@ pub(crate) mod live {
         }) | (u16::from(state.menu[KEY_MENU_BACKSPACE as usize] != 0) << 9)
     }
 
-    /// # Safety
-    /// Input, including the nested pause/exit UI, is initialized on the game thread.
-    pub unsafe fn AnyButtonPress(cx: &mut Cx<'_>, input: &InputSession, _special: u32) -> u32 {
+    pub fn AnyButtonPress(cx: &mut Cx<'_>, input: &InputSession, _special: u32) -> u32 {
         UpdateInputState(cx, input);
         u32::from(input.current().any_button_pressed())
     }
 
-    /// # Safety
-    /// The underlying confirmation UI retains its resources and this input owner.
-    pub unsafe fn ConfirmExit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
+    pub fn ConfirmExit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
         let old = input.repeat_config();
         input.set_default_menu_repeat(crate::time::counter_abi::GetTimeCounter());
         let result = crate::ui::confirm::do_confirm_exit(cx, input);

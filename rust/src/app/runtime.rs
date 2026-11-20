@@ -4,32 +4,18 @@ use crate::engine::observe::{CheckpointView, Io, Observer};
 use crate::mainloop::state_machine::{self, ActivityDecision, BreakAction};
 use crate::mainloop::types::{activity_flags, ActivityValue};
 use crate::mainloop::MainLoopError;
-use std::ffi::{c_char, c_int, CString};
 use std::sync::Arc;
 
 /// Run initialization, the campaign loop and subsystem teardown on the game thread.
 pub fn run(
     application: &mut Application,
-    arguments: &[CString],
+    arguments: &[String],
     parsed: &crate::mainloop::options::ParsedOptions,
-) -> c_int {
-    let mut argv: Vec<*mut c_char> = arguments
-        .iter()
-        .map(|arg| arg.as_ptr().cast_mut())
-        .collect();
-    argv.push(std::ptr::null_mut());
+) -> i32 {
     let runtime = application.game.kernel.input_runtime();
     let observer = application.observer().cloned();
-    // SAFETY: argv remains live on the game thread throughout initialization.
-    let initialized = unsafe {
-        crate::mainloop::startup::initialize(
-            runtime.input(),
-            parsed,
-            (argv.len() - 1) as c_int,
-            argv.as_mut_ptr(),
-            observer,
-        )
-    };
+    let initialized =
+        crate::mainloop::startup::initialize(runtime.input(), parsed, arguments, observer);
     if initialized != 0 {
         return initialized.max(0);
     }
@@ -57,18 +43,8 @@ fn run_game(
         &mut game.kernel,
         crate::math::random,
     );
-    // SAFETY: startup initialized the audio options before the game kernel is loaded.
-    unsafe {
-        crate::sound::audio_init::initAudio(
-            crate::sound::volume_globals::snddriver,
-            crate::sound::volume_globals::soundflags,
-        );
-    };
-    // SAFETY: the application retains both owners; argc zero permits a null argv.
-    if unsafe {
-        crate::game_init::kernel_abi::LoadKernel(cx.kernel, cx.world, 0, std::ptr::null_mut())
-    } == 0
-    {
+    crate::sound::audio_init::init_audio();
+    if crate::game_init::kernel_abi::load_kernel(cx.kernel, cx.world) == 0 {
         return Err(MainLoopError::LoadKernelFailed);
     }
     cx.world.set_activity(0);
@@ -77,8 +53,7 @@ fn run_game(
     let mut io = Io {
         observer: input_observer.as_mut(),
     };
-    // SAFETY: the kernel and native input runtime are initialized on their owner thread.
-    unsafe { crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(&mut cx, &mut io) };
+    crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(&mut cx, &mut io);
     while {
         let mut menu = crate::mainloop::restart_menu::restart_ops::RestartMenu::default();
         let mut host = RestartServices;
@@ -89,12 +64,9 @@ fn run_game(
     } {
         run_campaign(&mut cx, &mut io, observer.as_ref());
     }
-    // SAFETY: all campaign modes and their borrowed resources have returned.
-    unsafe {
-        crate::game_init::cleanup::uninit_game_kernel(&mut cx);
-        crate::ships::master_native::engine::free(cx.world, cx.kernel);
-        crate::game_init::cleanup::free_kernel(cx.kernel);
-    }
+    crate::game_init::cleanup::uninit_game_kernel(&mut cx);
+    crate::ships::master_native::engine::free(cx.world, cx.kernel);
+    crate::game_init::cleanup::free_kernel(cx.kernel);
     crate::log_abi::log_showBox(false, false);
     Ok(())
 }
@@ -103,28 +75,15 @@ struct RestartServices;
 
 impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        use crate::engine::io::{handles, uio_owned::Directory};
-        // SAFETY: application startup retains these two directories for the native melee session.
-        let (config, teams) = unsafe {
-            (
-                Directory::retain(
-                    std::ptr::NonNull::new(handles::configDir)
-                        .unwrap_or_else(|| panic!("config directory")),
-                ),
-                Directory::retain(
-                    std::ptr::NonNull::new(handles::meleeDir)
-                        .unwrap_or_else(|| panic!("melee directory")),
-                ),
-            )
-        };
+        let config = crate::engine::io::config_dir().unwrap_or_else(|| panic!("config directory"));
+        let teams = crate::engine::io::melee_dir().unwrap_or_else(|| panic!("melee directory"));
         crate::supermelee::native::menu::live::melee(cx, io, config, teams);
     }
     fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool) {
         crate::front_end::credits::credits(cx, io, victory);
     }
     fn free_game_data(&mut self, cx: &mut Cx<'_>) {
-        // SAFETY: the restart policy requests cleanup only after the active campaign has stopped.
-        unsafe { crate::game_init::cleanup::free_game_data(cx) };
+        crate::game_init::cleanup::free_game_data(cx);
     }
 }
 
@@ -243,13 +202,10 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
                 5
             };
             crate::time::clock_bridge::rust_clock_set_rate(cx.world, rate);
-            // SAFETY: the application retains both owners and the observer through the mode.
-            unsafe {
-                if decision == ActivityDecision::ExploreSolarSystem {
-                    crate::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io);
-                } else {
-                    crate::mainloop::lifecycle_abi::battle_with_frame_callback(cx, io);
-                }
+            if decision == ActivityDecision::ExploreSolarSystem {
+                crate::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io);
+            } else {
+                crate::mainloop::lifecycle_abi::battle_with_frame_callback(cx, io);
             }
         }
     }

@@ -159,11 +159,11 @@ mod tests {
             assert!(status.success());
             return Ok(());
         }
-        crate::time::source::install(true);
-        crate::time::source::advance_to(42);
+        uqm_engine::host::install(true);
+        uqm_engine::host::advance_to(42);
         assert_eq!(update_timestamp(0), 50);
         assert_eq!(update_timestamp(1_000_000), 50);
-        crate::time::source::advance_to(84);
+        uqm_engine::host::advance_to(84);
         assert_eq!(update_timestamp(1_000_000), 100);
         Ok(())
     }

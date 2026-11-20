@@ -11,19 +11,16 @@ use std::ptr::null_mut;
 
 use crate::collections::hash_table::{string_add, string_new};
 use crate::host::{FileStream, Files};
-use crate::io::uio_owned::directory;
 use crate::log_abi::{log_message, LOG_WARNING};
 use crate::memory::{rust_hfree, rust_hmalloc};
 use crate::resource::ffi_bridge::{
-    res_CloseResFile, res_OpenResFile, GetResourceData, LengthResFile,
+    open_res_file, res_CloseResFile, GetResourceData, LengthResFile,
 };
 use crate::resource::ffi_types::ResourceData;
 use crate::strings::string_table::{
     AllocStringTable, StringTable, StringTableEntry, HAS_NAMEINDEX, HAS_SOUND_CLIPS, HAS_TIMESTAMP,
 };
 use std::path::Path;
-
-use crate::io::handles::contentDir;
 
 const MAX_STRINGS: usize = 2048;
 const LOG_INFO: i32 = 4;
@@ -351,7 +348,10 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
     let (phrases, clip_dir, ts_path) = split_conversation_path(paths);
 
     let phrases_c = CString::new(phrases).expect("path has no NUL");
-    let fp = res_OpenResFile(contentDir.cast(), phrases_c.as_ptr(), c"rb".as_ptr());
+    let content = crate::io::content_dir();
+    let fp = content.as_ref().map_or(null_mut(), |content| {
+        open_res_file(content, phrases_c.as_ptr(), c"rb".as_ptr())
+    });
     if fp.is_null() {
         log_message(
             LOG_WARNING,
@@ -403,10 +403,7 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
 
     let timestamp_src = ts_path.and_then(|ts| {
         let ts = std::str::from_utf8(ts).ok()?;
-        directory(contentDir.cast())
-            .ok()?
-            .open_read(Path::new(ts))
-            .ok()
+        content?.open_read(Path::new(ts)).ok()
     });
     let clip_dir = clip_dir.map(<[u8]>::to_vec);
 

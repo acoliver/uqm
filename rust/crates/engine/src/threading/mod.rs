@@ -29,7 +29,6 @@ pub mod descriptor;
 pub mod pacing;
 #[cfg(target_os = "macos")]
 pub mod qos;
-pub mod task_abi;
 
 #[cfg(test)]
 mod ffi_tests;
@@ -41,6 +40,24 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
 use std::thread::{self, JoinHandle, ThreadId};
 use std::time::Duration;
 
+/// Declare the calling thread the game thread, which owns SDL dispatch.
+pub fn init_game_thread() {
+    // SAFETY: called once on the game thread before any worker is spawned.
+    unsafe { legacy_abi::InitThreadSystem() };
+}
+
+/// Retire the thread system once every worker has stopped.
+pub fn uninit_game_thread() {
+    // SAFETY: all workers have stopped before final subsystem teardown.
+    unsafe { legacy_abi::UnInitThreadSystem() };
+}
+
+/// Let pending window-system events run: the game thread's cooperative yield.
+pub fn yield_task() {
+    // SAFETY: only the game thread owns SDL dispatch and the draw queue.
+    unsafe { legacy_abi::TaskSwitch() };
+}
+
 pub fn yield_game_thread() {
     assert_eq!(
         *legacy_abi::MAIN_THREAD
@@ -49,8 +66,7 @@ pub fn yield_game_thread() {
         Some(thread::current().id()),
         "event polling requires the initialized game thread"
     );
-    // SAFETY: the checked thread owns SDL dispatch and the initialized task system.
-    unsafe { legacy_abi::TaskSwitch() };
+    yield_task();
 }
 
 /// Error type for threading operations
@@ -684,16 +700,6 @@ pub fn uninit_thread_system() {
 /// Check if the threading system is initialized
 pub fn is_thread_system_initialized() -> bool {
     THREAD_SYSTEM_INITIALIZED.load(Ordering::SeqCst)
-}
-
-/// Intentional no-op: lifecycle processing is C-owned.
-///
-/// The C adapter (`rust_thrcommon.c`) owns the `pendingDeath` array and
-/// `ProcessThreadLifecycles` loop. The Rust subsystem does not replicate
-/// this bookkeeping because thread creation/destruction is managed at the
-/// C adapter layer via `StartThread_Core` / `FinishThread`.
-pub fn process_thread_lifecycles() {
-    // no-op by design — see doc comment
 }
 
 /// Yield execution to other threads

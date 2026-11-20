@@ -36,7 +36,7 @@ impl AutomationObserver {
     }
 
     pub(super) fn write_action_phase(&self, inner: &mut CoordInner) {
-        if !crate::time::source::is_replay() {
+        if !crate::engine::host::is_replay() {
             return;
         }
         let index = inner.sched_state.step_index;
@@ -62,7 +62,7 @@ impl AutomationObserver {
     pub(super) fn create_parity(
         output: &std::path::Path,
     ) -> std::io::Result<Option<Mutex<super::super::parity::Journal>>> {
-        if !crate::time::source::is_replay() || std::env::var_os("UQM_PARITY").is_none() {
+        if !crate::engine::host::is_replay() || std::env::var_os("UQM_PARITY").is_none() {
             return Ok(None);
         }
         let journal = super::super::parity::Journal::create(output)?;

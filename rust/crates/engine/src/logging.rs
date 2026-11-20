@@ -45,10 +45,7 @@ impl LogLevel {
 }
 
 /// Add a log entry by calling the C log_add function via FFI
-///
-/// # Safety
-/// This function calls into C code via FFI
-pub unsafe fn log_add(level: LogLevel, message: &str) {
+pub fn log_add(level: LogLevel, message: &str) {
     // Convert the Rust string to a C string
     let _c_msg = match CString::new(message) {
         Ok(s) => s,
@@ -81,9 +78,7 @@ macro_rules! log_fatal {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            unsafe {
-                $crate::logging::log_add($crate::logging::LogLevel::User, &msg)
-            }
+            $crate::logging::log_add($crate::logging::LogLevel::User, &msg)
         }
     };
 }
@@ -94,9 +89,7 @@ macro_rules! log_error {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            unsafe {
-                $crate::logging::log_add($crate::logging::LogLevel::Error, &msg)
-            }
+            $crate::logging::log_add($crate::logging::LogLevel::Error, &msg)
         }
     };
 }
@@ -107,9 +100,7 @@ macro_rules! log_warning {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            unsafe {
-                $crate::logging::log_add($crate::logging::LogLevel::Warning, &msg)
-            }
+            $crate::logging::log_add($crate::logging::LogLevel::Warning, &msg)
         }
     };
 }
@@ -120,9 +111,7 @@ macro_rules! log_info {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            unsafe {
-                $crate::logging::log_add($crate::logging::LogLevel::Info, &msg)
-            }
+            $crate::logging::log_add($crate::logging::LogLevel::Info, &msg)
         }
     };
 }
@@ -133,9 +122,7 @@ macro_rules! log_debug {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            unsafe {
-                $crate::logging::log_add($crate::logging::LogLevel::Debug, &msg)
-            }
+            $crate::logging::log_add($crate::logging::LogLevel::Debug, &msg)
         }
     };
 }
@@ -175,9 +162,7 @@ mod tests {
 
     #[test]
     fn test_log_add() {
-        unsafe {
-            log_add(LogLevel::Info, "Test message");
-        }
+        log_add(LogLevel::Info, "Test message");
     }
 
     #[test]

@@ -2,9 +2,8 @@
 //!
 //! Reads the same loaded `menu.<name>.N` resource strings as
 //! `register_menu_controls` in `sc2/src/libs/input/sdl/input.c`, parses each
-//! alternate through the production gesture parser
-//! ([`rust_vcontrol_parse_gesture`]), and selects the first keyboard
-//! (`VCONTROL_KEY`) binding.
+//! alternate through the production gesture parser ([`Gesture::parse`]), and
+//! selects the first keyboard binding.
 //!
 //! This must be called from an initialized child (after the resource system
 //! is initialized and the `menu.*` index is loaded). The caller never
@@ -12,11 +11,9 @@
 //!
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P00
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
-use super::ffi::{
-    rust_vcontrol_parse_gesture, GestureUnion, VCONTROL_GESTURE, VCONTROL_KEY, VCONTROL_NONE,
-};
+use super::gesture::Gesture;
 use crate::resource::ffi_bridge::{res_GetString, res_IsString};
 
 /// The historical accessor formatted resource keys into a 40-byte buffer
@@ -27,7 +24,7 @@ const RESOURCE_KEY_MAX_BYTES: usize = 38;
 
 /// Result of a menu binding query.
 ///
-/// * `found` — a `VCONTROL_KEY` binding was found
+/// * `found` — a keyboard binding was found
 /// * `key_code` — the SDL keycode of the binding (valid only if `found`)
 /// * `binding_id` — stable identifier for the binding (1-based alternate index)
 /// * `num_alternates` — total alternates found for this menu control
@@ -44,7 +41,7 @@ pub struct MenuBindingResult {
 /// Iterates `menu.<name>.1`, `menu.<name>.2`, ... exactly as
 /// `register_menu_controls`, stops at the first missing resource string,
 /// parses each existing string with the production gesture parser, counts
-/// every existing alternate, and selects the first `VCONTROL_KEY` gesture.
+/// every existing alternate, and selects the first keyboard gesture.
 ///
 /// MUST be called from an initialized child after the resource system is
 /// initialized and the `menu.*` index is loaded.
@@ -66,27 +63,17 @@ pub fn query_menu_binding(menu_name: &str) -> MenuBindingResult {
         }
 
         // SAFETY: res_GetString never returns null and the returned pointer
-        // stays valid until the resource entry is modified or removed.
-        let spec = unsafe { res_GetString(key.as_ptr()) };
-
-        // The gesture starts from a known NONE state so an unparseable spec
-        // is reported as VCONTROL_NONE rather than stale data.
-        let mut gesture = VCONTROL_GESTURE {
-            gesture_type: VCONTROL_NONE,
-            gesture: GestureUnion { data: [0, 0, 0] },
-        };
-        // SAFETY: gesture is a valid, aligned out-pointer and spec is a
-        // valid NUL-terminated C string.
-        unsafe { rust_vcontrol_parse_gesture(&mut gesture, spec) };
+        // stays valid until the resource entry is modified or removed; the
+        // text is copied here.
+        let spec = unsafe { CStr::from_ptr(res_GetString(key.as_ptr())) }.to_string_lossy();
+        let gesture = Gesture::parse(&spec);
 
         result.num_alternates += 1;
 
-        if !result.found && gesture.gesture_type == VCONTROL_KEY {
+        if let (false, Some(Gesture::Key(key_code))) = (result.found, gesture) {
             result.found = true;
             result.binding_id = index;
-            // SAFETY: gesture_type is VCONTROL_KEY, so the key field of the
-            // union is the active variant and reading it is defined.
-            result.key_code = unsafe { gesture.gesture.key };
+            result.key_code = key_code;
         }
 
         index += 1;

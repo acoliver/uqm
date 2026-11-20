@@ -4,8 +4,7 @@
 //! Audio control — initialization, volume management, source lifecycle,
 //! and global playback queries.
 //!
-//! Provides `init_sound`/`uninit_sound` for system lifecycle, per-category
-//! volume control (SFX, speech), source stop/clean operations, and
+//! Provides per-category volume control (SFX, speech), source stop/clean operations, and
 //! `sound_playing`/`wait_for_sound_end` for synchronization.
 
 use std::thread;
@@ -59,16 +58,6 @@ static VOLUME: std::sync::LazyLock<Mutex<VolumeState>> =
 // =============================================================================
 // Initialization (spec §3.5)
 // =============================================================================
-
-/// Initialize the sound system.
-pub fn init_sound() -> AudioResult<()> {
-    Ok(())
-}
-
-/// Uninitialize the sound system.
-pub fn uninit_sound() {
-    // Cleanup handled by Rust Drop semantics on program exit
-}
 
 // =============================================================================
 // Source Management
@@ -193,7 +182,7 @@ pub fn wait_for_sound_end(channel: Option<usize>) {
             break;
         }
 
-        if crate::time::source::is_replay() {
+        if crate::host::is_replay() {
             crate::threading::pacing::linked::replay_sleep_for(840 / 100);
         } else {
             thread::sleep(Duration::from_millis(10));
@@ -211,13 +200,6 @@ mod tests {
     use crate::sound::test_support::ENGINE_TEST_LOCK;
 
     // --- P16 TDD ---
-
-    #[test]
-
-    fn test_init_sound_ok() {
-        let result = init_sound();
-        assert!(result.is_ok());
-    }
 
     #[test]
 

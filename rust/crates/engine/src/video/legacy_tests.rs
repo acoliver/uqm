@@ -14,8 +14,8 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         assert!(status.success());
         return;
     }
-    crate::time::source::install(true);
-    let directory = crate::sound::decoder_vtable_tests::Directory::new();
+    crate::host::install(true);
+    let directory = crate::io::fixture::TempMount::new().as_content();
     let source = std::path::Path::new(env!("UQM_RUST_ROOT")).join("../sc2/content/addons/3dovideo");
     let ships = "addons/3dovideo/ships";
     std::fs::create_dir_all(directory.path_of(ships)).unwrap();
@@ -44,12 +44,11 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         crate::graphics::sdl::lifecycle_abi::SDL_Screen = screen.cast();
         crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND =
             ptr::addr_of_mut!(crate::graphics::sdl::lifecycle_abi::RUST_BACKEND);
-        crate::io::handles::contentDir = directory.handle();
         assert_eq!(crate::sound::rodio_audio::rust_audio_init(), 1);
         assert_eq!(super::super::control::InitVideoPlayer(0), 1);
         InstallVideoResType();
-        crate::resource::ffi_bridge::LoadResourceIndex(
-            directory.handle().cast(),
+        crate::resource::ffi_bridge::load_resource_index(
+            &directory.dir(),
             c"3dovideo.rmp".as_ptr(),
             ptr::null(),
         );
@@ -73,7 +72,6 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         assert!(super::super::control::VidPlaying().is_null());
         super::super::control::UninitVideoPlayer();
         crate::sound::rodio_audio::rust_audio_uninit();
-        crate::io::handles::contentDir = ptr::null_mut();
         crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND = ptr::null_mut();
         crate::graphics::sdl::lifecycle_abi::SDL_Screen = ptr::null_mut();
         sdl2_sys::SDL_FreeSurface(screen);

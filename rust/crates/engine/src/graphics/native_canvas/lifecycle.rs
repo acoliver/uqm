@@ -227,12 +227,8 @@ pub unsafe extern "C" fn TFB_DrawCanvas_New_RotationTarget(
 }
 
 /// # Safety
-/// Directory and file name must be valid UIO inputs.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_DrawCanvas_LoadFromFile(
-    dir: *mut c_void,
-    file_name: *const c_char,
-) -> TFB_Canvas {
+/// `file_name` must be NUL-terminated.
+pub unsafe fn load_canvas_from_file(dir: &crate::io::Dir, file_name: *const c_char) -> TFB_Canvas {
     let mut surf = sdluio_load_image(dir, file_name);
     if surf.is_null() {
         return std::ptr::null_mut();

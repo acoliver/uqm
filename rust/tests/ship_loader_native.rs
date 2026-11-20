@@ -7,10 +7,9 @@ mod battle;
 use battle::Battle;
 use std::{
     ffi::CString,
-    ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use uqm_rust::{io::uio_bridge, resource::ffi_bridge, ships::native::abi::*};
+use uqm_rust::{resource::ffi_bridge, ships::native::abi::*};
 
 unsafe extern "C" {
     fn log_init(max: i32);
@@ -62,31 +61,15 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         }
         index.push_str("test.invalid.code = SHIP:255\n");
         std::fs::write(fixture.path().join("ships.rmp"), &index).unwrap();
-        let path = CString::new(fixture.path().to_str().unwrap()).unwrap();
         unsafe {
             log_init(100);
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
             crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
             crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
-            uio_bridge::uio_init();
-            let repository = uio_bridge::uio_openRepository(0);
-            let mount = uio_bridge::uio_mountDir(
-                repository,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut(),
-            );
-            assert!(!mount.is_null());
-            let dir = uio_bridge::uio_openDir(repository, c"/".as_ptr(), 0);
-            assert!(!dir.is_null());
+            let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
             ffi_bridge::InitResourceSystem();
-            ffi_bridge::LoadResourceIndex(dir.cast(), c"ships.rmp".as_ptr(), ptr::null());
+            mount.load_index("ships.rmp");
             let keys = [
                 "arilou",
                 "chmmr",
@@ -225,9 +208,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             assert!(decoy_frames.frame(0).is_some());
             drop(decoy);
             ffi_bridge::UninitResourceSystem();
-            assert_eq!(uio_bridge::uio_closeDir(dir), 0);
-            uio_bridge::uio_closeRepository(repository);
-            uio_bridge::uio_unInit();
+            drop(mount);
         }
     })
 }

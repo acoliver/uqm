@@ -83,10 +83,8 @@ fn test_zero_size_normalization_via_exported_abi() {
 
 #[test]
 fn test_lifecycle_smoke_via_exported_abi() {
-    unsafe {
-        assert!(rust_mem_init(), "rust_mem_init() should return true");
-        assert!(rust_mem_uninit(), "rust_mem_uninit() should return true");
-    }
+    assert!(rust_mem_init(), "rust_mem_init() should return true");
+    assert!(rust_mem_uninit(), "rust_mem_uninit() should return true");
 }
 
 #[test]

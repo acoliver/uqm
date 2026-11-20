@@ -75,7 +75,6 @@ impl InputRuntime for MenuDriver {
 fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    uqm_rust::callback::ffi::Alarm_init();
     // SAFETY: this serialized test owns the graphics runtime, contexts and drawable until teardown.
     unsafe {
         assert_eq!(
@@ -157,5 +156,5 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
         drop(drawable);
         TFB_UninitGraphics();
     }
-    uqm_rust::callback::ffi::Alarm_uninit();
+    uqm_rust::engine::host::dispatch().clear();
 }

@@ -12,7 +12,10 @@ unsafe fn load(
     if !_cur_resfile_name.is_null() {
         return ptr::null_mut();
     }
-    let fp = res_OpenResFile(contentDir.cast(), path, c"rb".as_ptr());
+    let Some(content) = crate::io::content_dir() else {
+        return ptr::null_mut();
+    };
+    let fp = open_res_file(&content, path, c"rb".as_ptr());
     if fp.is_null() {
         return ptr::null_mut();
     }

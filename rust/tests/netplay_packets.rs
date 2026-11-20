@@ -348,10 +348,7 @@ fn scripted(state: u32, reads: Vec<Vec<u8>>) -> (NetplaySession, Rc<RefCell<Scri
     }
     (session, script)
 }
-fn init_callbacks() {
-    uqm_rust::callback::ffi::Callback_init();
-    uqm_rust::callback::ffi::Alarm_init();
-}
+fn init_callbacks() {}
 #[test]
 #[serial_test::serial]
 fn battle_input_treats_a_removed_peer_as_a_disconnect() {

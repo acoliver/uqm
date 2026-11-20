@@ -1,18 +1,17 @@
-//! C FFI bindings for DukVid decoder vtable and the pure Rust video player.
+//! The pure Rust video player and the clip entry points the game calls.
 
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_int, c_void, CString};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::io::ffi::uio_DirHandle;
+use crate::io::Dir;
+use crate::sound::decoder::Decoder;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::rodio_audio::{self, SoundCategory};
 
-use super::decoder::DukVideoDecoder;
 use super::player::VideoPlayer;
 use super::scaler::VideoScaler;
-use super::{VideoError, VideoFrame, DUCK_FPS};
 
 pub use crate::graphics::ffi::SDL_Surface;
 
@@ -100,9 +99,8 @@ pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
 
 // ============================================================================
 
-unsafe fn read_video_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
-    let files = crate::io::uio_owned::directory(dir).ok()?;
-    super::files::read(&files, filename)
+fn read_video_file(dir: &Dir, filename: &str) -> Option<Vec<u8>> {
+    super::files::read(dir, filename)
 }
 
 fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
@@ -110,439 +108,18 @@ fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
 }
 
 // ============================================================================
-// DukVid decoder vtable (kept for C decoder integration)
+// Clip source
 // ============================================================================
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-#[allow(
-    non_snake_case,
-    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub struct TFB_PixelFormat {
-    pub BitsPerPixel: u32,
-    pub BytesPerPixel: u32,
-    pub Rmask: u32,
-    pub Gmask: u32,
-    pub Bmask: u32,
-    pub Amask: u32,
-    pub Rshift: u32,
-    pub Gshift: u32,
-    pub Bshift: u32,
-    pub Ashift: u32,
-    pub Rloss: u32,
-    pub Gloss: u32,
-    pub Bloss: u32,
-    pub Aloss: u32,
-}
-
-#[repr(C)]
-#[allow(
-    non_snake_case,
-    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub struct TFB_VideoCallbacks {
-    pub BeginFrame: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder)>,
-    pub EndFrame: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder)>,
-    pub GetCanvasLine: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder, u32) -> *mut c_void>,
-    pub GetTicks: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder) -> u32>,
-    pub SetTimer: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder, u32) -> bool>,
-}
-
-#[repr(C)]
-pub struct TFB_VideoDecoder {
-    pub funcs: *const TFB_VideoDecoderFuncs,
-    pub format: *const TFB_PixelFormat,
+/// What a clip knows about its video file: where to read it and its geometry.
+pub struct ClipSource {
     pub w: u32,
     pub h: u32,
     pub length: f32,
-    pub frame_count: u32,
-    pub interframe_wait: u32,
     pub audio_synced: bool,
-    pub callbacks: TFB_VideoCallbacks,
-    pub looping: bool,
-    pub data: *mut c_void,
-    pub error: i32,
-    pub pos: f32,
-    pub cur_frame: u32,
-    pub dir: *mut uio_DirHandle,
-    pub filename: *mut c_char,
+    pub dir: Dir,
+    pub filename: CString,
 }
-
-#[repr(C)]
-#[allow(
-    non_snake_case,
-    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub struct TFB_VideoDecoderFuncs {
-    pub GetName: extern "C" fn() -> *const c_char,
-    pub InitModule: extern "C" fn(flags: c_int) -> bool,
-    pub TermModule: extern "C" fn(),
-    pub GetStructSize: extern "C" fn() -> u32,
-    pub GetError: extern "C" fn(*mut TFB_VideoDecoder) -> c_int,
-    pub Init: extern "C" fn(*mut TFB_VideoDecoder, *mut TFB_PixelFormat) -> bool,
-    pub Term: extern "C" fn(*mut TFB_VideoDecoder),
-    pub Open: extern "C" fn(*mut TFB_VideoDecoder, *mut uio_DirHandle, *const c_char) -> bool,
-    pub Close: extern "C" fn(*mut TFB_VideoDecoder),
-    pub DecodeNext: extern "C" fn(*mut TFB_VideoDecoder) -> c_int,
-    pub SeekFrame: extern "C" fn(*mut TFB_VideoDecoder, u32) -> u32,
-    pub SeekTime: extern "C" fn(*mut TFB_VideoDecoder, f32) -> f32,
-    pub GetFrame: extern "C" fn(*mut TFB_VideoDecoder) -> u32,
-    pub GetTime: extern "C" fn(*mut TFB_VideoDecoder) -> f32,
-}
-
-#[repr(C)]
-pub struct TFB_RustDukVideoDecoder {
-    pub base: TFB_VideoDecoder,
-    pub rust_decoder: Option<Box<DukVideoDecoder>>,
-    pub scaler: Option<Box<VideoScaler>>,
-    pub last_error: i32,
-}
-
-fn with_decoder_record<R>(
-    decoder: *mut TFB_VideoDecoder,
-    format: Option<*const TFB_PixelFormat>,
-    apply: impl FnOnce(&mut TFB_RustDukVideoDecoder, Option<&TFB_PixelFormat>) -> R,
-) -> Option<R> {
-    // SAFETY: only the serialized vtable calls this boundary. Its registry retains a
-    // zero-initialized, GetStructSize-sized record and the optional Init format.
-    // Zero is the documented None representation of each Option<Box<_>> payload.
-    let (record, format) = unsafe {
-        (
-            decoder.cast::<TFB_RustDukVideoDecoder>().as_mut()?,
-            format.and_then(|format| format.as_ref()),
-        )
-    };
-    Some(apply(record, format))
-}
-
-static RUST_DUKV_FORMAT: Mutex<Option<TFB_PixelFormat>> = Mutex::new(None);
-static RUST_DUKV_NAME: &[u8] = b"Rust DukVid\0";
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_GetName() -> *const c_char {
-    RUST_DUKV_NAME.as_ptr() as *const c_char
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_InitModule(_flags: c_int) -> bool {
-    true
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_TermModule() {
-    if let Ok(mut guard) = RUST_DUKV_FORMAT.lock() {
-        *guard = None;
-    }
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_GetStructSize() -> u32 {
-    std::mem::size_of::<TFB_RustDukVideoDecoder>() as u32
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_GetError(decoder: *mut TFB_VideoDecoder) -> c_int {
-    with_decoder_record(decoder, None, |record, _| record.last_error).unwrap_or(-1)
-}
-
-extern "C" fn rust_dukv_init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_PixelFormat) -> bool {
-    with_decoder_record(decoder, Some(fmt), |record, format| {
-        record.rust_decoder = None;
-        record.scaler = None;
-        record.last_error = 0;
-        if let Some(format) = format {
-            record.base.format = fmt;
-            if let Ok(mut guard) = RUST_DUKV_FORMAT.lock() {
-                *guard = Some(*format);
-            }
-        }
-        true
-    })
-    .unwrap_or(false)
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI"
-)]
-extern "C" fn rust_dukv_Term(decoder: *mut TFB_VideoDecoder) {
-    with_decoder_record(decoder, None, |record, _| {
-        record.rust_decoder = None;
-        record.scaler = None;
-    });
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_Open(
-    decoder: *mut TFB_VideoDecoder,
-    dir: *mut uio_DirHandle,
-    filename: *const c_char,
-) -> bool {
-    if decoder.is_null() || filename.is_null() {
-        return false;
-    }
-
-    // SAFETY: the registered vtable receives its initialized record, a terminated filename,
-    // and a directory that the caller retains through this admission.
-    let (rust_dec, filename, files) = unsafe {
-        (
-            &mut *decoder.cast::<TFB_RustDukVideoDecoder>(),
-            CStr::from_ptr(filename),
-            crate::io::uio_owned::directory(dir),
-        )
-    };
-    let loaded = files
-        .map_err(|_| -1)
-        .and_then(|files| super::files::open(&files, filename));
-    let duk = match loaded {
-        Ok(duk) => duk,
-        Err(error) => {
-            rust_dec.last_error = error;
-            return false;
-        }
-    };
-    let (width, height) = (duk.width(), duk.height());
-    let base = &mut rust_dec.base;
-    base.w = width;
-    base.h = height;
-    base.frame_count = duk.frame_count();
-    base.length = duk.duration();
-    base.interframe_wait = (1000.0 / DUCK_FPS) as u32;
-    base.audio_synced = false;
-    base.pos = 0.0;
-    base.cur_frame = 0;
-    base.error = 0;
-    base.dir = dir;
-    rust_dec.rust_decoder = Some(Box::new(duk));
-    let scale = calculate_video_scale(width, height);
-    if scale > 1 {
-        rust_dec.scaler = Some(Box::new(VideoScaler::new(
-            width,
-            height,
-            width * scale,
-            height * scale,
-        )));
-    }
-    true
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_Close(decoder: *mut TFB_VideoDecoder) {
-    rust_dukv_Term(decoder);
-}
-
-unsafe fn render_frame_to_canvas(
-    decoder: *mut TFB_VideoDecoder,
-    frame: &VideoFrame,
-    fmt: &TFB_PixelFormat,
-    get_canvas_line: unsafe extern "C" fn(*mut TFB_VideoDecoder, u32) -> *mut c_void,
-) {
-    let w = frame.width as usize;
-    let h = frame.height as usize;
-
-    match fmt.BytesPerPixel {
-        2 => {
-            for y in 0..h {
-                let dst = get_canvas_line(decoder, y as u32) as *mut u16;
-                if dst.is_null() {
-                    continue;
-                }
-                for x in 0..w {
-                    let pixel = frame.data[y * w + x];
-                    let r = pixel & 0xFF;
-                    let g = (pixel >> 8) & 0xFF;
-                    let b = (pixel >> 16) & 0xFF;
-                    let out = ((r >> fmt.Rloss) << fmt.Rshift)
-                        | ((g >> fmt.Gloss) << fmt.Gshift)
-                        | ((b >> fmt.Bloss) << fmt.Bshift);
-                    *dst.add(x) = out as u16;
-                }
-            }
-        }
-        4 => {
-            for y in 0..h {
-                let dst = get_canvas_line(decoder, y as u32) as *mut u32;
-                if dst.is_null() {
-                    continue;
-                }
-                for x in 0..w {
-                    let pixel = frame.data[y * w + x];
-                    let r = pixel & 0xFF;
-                    let g = (pixel >> 8) & 0xFF;
-                    let b = (pixel >> 16) & 0xFF;
-                    let a = (pixel >> 24) & 0xFF;
-                    let out = ((r >> fmt.Rloss) << fmt.Rshift)
-                        | ((g >> fmt.Gloss) << fmt.Gshift)
-                        | ((b >> fmt.Bloss) << fmt.Bshift)
-                        | ((a >> fmt.Aloss) << fmt.Ashift);
-                    *dst.add(x) = out;
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
-    if decoder.is_null() {
-        return -1;
-    }
-
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        let Some(duk) = (*rust_dec).rust_decoder.as_deref_mut() else {
-            return -1;
-        };
-        let cur_frame = (*decoder).cur_frame;
-
-        if cur_frame >= (*decoder).frame_count {
-            if (*decoder).looping {
-                (*decoder).cur_frame = 0;
-            } else {
-                return 0;
-            }
-        }
-
-        match duk.decode_frame((*decoder).cur_frame) {
-            Ok(frame) => {
-                if let Some(begin_frame) = (*decoder).callbacks.BeginFrame {
-                    begin_frame(decoder);
-                }
-
-                if let Some(get_canvas_line) = (*decoder).callbacks.GetCanvasLine {
-                    let fmt = &*(*decoder).format;
-                    if let Some(scaler) = (*rust_dec).scaler.as_deref_mut() {
-                        if let Some(scaled_pixels) = scaler.scale(&frame.data) {
-                            let (dst_w, dst_h) = scaler.dst_dimensions();
-                            let scaled_frame = VideoFrame {
-                                width: dst_w,
-                                height: dst_h,
-                                data: scaled_pixels,
-                                timestamp: frame.timestamp,
-                            };
-                            render_frame_to_canvas(decoder, &scaled_frame, fmt, get_canvas_line);
-                        } else {
-                            render_frame_to_canvas(decoder, &frame, fmt, get_canvas_line);
-                        }
-                    } else {
-                        render_frame_to_canvas(decoder, &frame, fmt, get_canvas_line);
-                    }
-                }
-
-                if let Some(end_frame) = (*decoder).callbacks.EndFrame {
-                    end_frame(decoder);
-                }
-
-                (*decoder).pos = (*decoder).cur_frame as f32 / DUCK_FPS;
-                (*decoder).cur_frame += 1;
-
-                if let Some(set_timer) = (*decoder).callbacks.SetTimer {
-                    set_timer(decoder, (*decoder).interframe_wait);
-                }
-
-                1
-            }
-            Err(VideoError::Eof) => 0,
-            Err(_) => {
-                (*rust_dec).last_error = -1;
-                -1
-            }
-        }
-    }
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_SeekFrame(decoder: *mut TFB_VideoDecoder, frame: u32) -> u32 {
-    with_decoder_record(decoder, None, |record, _| {
-        let frame_count = record.base.frame_count;
-        let target = if frame >= frame_count {
-            frame_count.saturating_sub(1)
-        } else {
-            frame
-        };
-        record.base.cur_frame = target;
-        record.base.pos = target as f32 / DUCK_FPS;
-        target
-    })
-    .unwrap_or(0)
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_SeekTime(decoder: *mut TFB_VideoDecoder, time: f32) -> f32 {
-    if decoder.is_null() {
-        return 0.0;
-    }
-    {
-        let target_frame = (time * DUCK_FPS) as u32;
-        let actual_frame = rust_dukv_SeekFrame(decoder, target_frame);
-        actual_frame as f32 / DUCK_FPS
-    }
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
-    with_decoder_record(decoder, None, |record, _| record.base.cur_frame).unwrap_or(0)
-}
-
-#[allow(
-    non_snake_case,
-    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-extern "C" fn rust_dukv_GetTime(decoder: *mut TFB_VideoDecoder) -> f32 {
-    with_decoder_record(decoder, None, |record, _| record.base.pos).unwrap_or(0.0)
-}
-
-pub static RUST_DUKV_DECODER_VTBL: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs {
-    GetName: rust_dukv_GetName,
-    InitModule: rust_dukv_InitModule,
-    TermModule: rust_dukv_TermModule,
-    GetStructSize: rust_dukv_GetStructSize,
-    GetError: rust_dukv_GetError,
-    Init: rust_dukv_init,
-    Term: rust_dukv_Term,
-    Open: rust_dukv_Open,
-    Close: rust_dukv_Close,
-    DecodeNext: rust_dukv_DecodeNext,
-    SeekFrame: rust_dukv_SeekFrame,
-    SeekTime: rust_dukv_SeekTime,
-    GetFrame: rust_dukv_GetFrame,
-    GetTime: rust_dukv_GetTime,
-};
 
 // ============================================================================
 // Pure Rust player: simple C API
@@ -550,56 +127,8 @@ pub static RUST_DUKV_DECODER_VTBL: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs
 
 static PLAYER: Mutex<Option<VideoPlayer>> = Mutex::new(None);
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_play_video(
-    dir: *mut uio_DirHandle,
-    filename: *const c_char,
-    x: i32,
-    y: i32,
-    looping: bool,
-) -> bool {
-    if filename.is_null() {
-        rust_bridge_log_msg("RUST_VIDEO: rust_play_video called with null filename");
-        return false;
-    }
-
-    let filename_str = match CStr::from_ptr(filename).to_str() {
-        Ok(s) => s,
-        Err(_) => {
-            rust_bridge_log_msg("RUST_VIDEO: rust_play_video filename is not valid UTF-8");
-            return false;
-        }
-    };
-
-    let basename = filename_str.trim_end_matches(".duk");
-
-    let duk_file = format!("{}.duk", basename);
-    let frm_file = format!("{}.frm", basename);
-    let hdr_file = format!("{}.hdr", basename);
-    let tbl_file = format!("{}.tbl", basename);
-
-    let duk_data = match read_video_file(dir, &duk_file) {
-        Some(d) => d,
-        None => return false,
-    };
-    let frm_data = match read_video_file(dir, &frm_file) {
-        Some(d) => d,
-        None => return false,
-    };
-    let hdr_data = match read_video_file(dir, &hdr_file) {
-        Some(d) => d,
-        None => return false,
-    };
-    let tbl_data = match read_video_file(dir, &tbl_file) {
-        Some(d) => d,
-        None => return false,
-    };
-
-    let decoder = match DukVideoDecoder::open_from_data(&hdr_data, &tbl_data, &frm_data, &duk_data)
-    {
+pub fn rust_play_video(dir: &Dir, filename: &str, x: i32, y: i32, looping: bool) -> bool {
+    let decoder = match super::files::open(dir, filename) {
         Ok(d) => d,
         Err(e) => {
             rust_bridge_log_msg(&format!("RUST_VIDEO: decoder init failed: {:?}", e));
@@ -623,7 +152,7 @@ pub unsafe extern "C" fn rust_play_video(
 
     rust_bridge_log_msg(&format!(
         "RUST_VIDEO: play {} ({}x{}), scale={}, dst=({}, {}), looping={}",
-        filename_str, src_w, src_h, scale, x, y, looping
+        filename, src_w, src_h, scale, x, y, looping
     ));
 
     player.play();
@@ -635,21 +164,13 @@ pub unsafe extern "C" fn rust_play_video(
     true
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_stop_video() {
+pub fn rust_stop_video() {
     if let Ok(mut guard) = PLAYER.lock() {
         *guard = None;
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_video_playing() -> bool {
+pub fn rust_video_playing() -> bool {
     if let Ok(guard) = PLAYER.lock() {
         if let Some(ref p) = *guard {
             return p.playing();
@@ -838,140 +359,13 @@ pub unsafe extern "C" fn rust_present_video_to_window(
     true
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_video_position() -> u32 {
+pub fn rust_get_video_position() -> u32 {
     if let Ok(guard) = PLAYER.lock() {
         if let Some(ref p) = *guard {
             return p.position_ms();
         }
     }
     0
-}
-
-/// Enhanced video player that uses direct window presentation
-///
-/// This function creates a VideoPlayer that scales with Lanczos to the actual
-/// window size and presents directly to the window, bypassing the 320x240 surface
-/// and completely avoiding xBRZ/hq2x scaling which would corrupt the video.
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_play_video_direct_window(
-    dir: *mut uio_DirHandle,
-    filename: *const c_char,
-    window_width: u32,
-    window_height: u32,
-    looping: bool,
-) -> bool {
-    if filename.is_null() {
-        rust_bridge_log_msg("RUST_VIDEO: rust_play_video_direct_window called with null filename");
-        return false;
-    }
-
-    let filename_str = match CStr::from_ptr(filename).to_str() {
-        Ok(s) => s,
-        Err(_) => {
-            rust_bridge_log_msg(
-                "RUST_VIDEO: rust_play_video_direct_window filename is not valid UTF-8",
-            );
-            return false;
-        }
-    };
-
-    rust_bridge_log_msg(&format!(
-        "RUST_VIDEO: Direct window play {} (window {}x{}), looping={} - bypassing xBRZ/hq2x completely",
-        filename_str,
-        window_width,
-        window_height,
-        looping
-    ));
-
-    if crate::graphics::ffi::with_gfx_state(|_, _, _| {}).is_none() {
-        rust_bridge_log_msg(
-            "RUST_VIDEO: Direct window path unavailable (Rust gfx not initialized)",
-        );
-        return false;
-    }
-
-    let basename = filename_str.trim_end_matches(".duk");
-
-    let duk_file = format!("{}.duk", basename);
-    let frm_file = format!("{}.frm", basename);
-    let hdr_file = format!("{}.hdr", basename);
-    let tbl_file = format!("{}.tbl", basename);
-
-    let duk_data = match read_video_file(dir, &duk_file) {
-        Some(d) => d,
-        None => return false,
-    };
-    let frm_data = match read_video_file(dir, &frm_file) {
-        Some(d) => d,
-        None => return false,
-    };
-    let hdr_data = match read_video_file(dir, &hdr_file) {
-        Some(d) => d,
-        None => return false,
-    };
-    let tbl_data = match read_video_file(dir, &tbl_file) {
-        Some(d) => d,
-        None => return false,
-    };
-
-    let decoder = match DukVideoDecoder::open_from_data(&hdr_data, &tbl_data, &frm_data, &duk_data)
-    {
-        Ok(d) => d,
-        Err(e) => {
-            rust_bridge_log_msg(&format!("RUST_VIDEO: decoder init failed: {:?}", e));
-            return false;
-        }
-    };
-
-    let src_w = decoder.width();
-    let src_h = decoder.height();
-
-    // Pick the best xBRZ factor: largest that doesn't exceed window dimensions.
-    // xBRZ supports 2-6. For 280×200 → 1280×960: 4× gives 1120×800, SDL
-    // bilinear stretches the remaining ~14% — same pipeline as 2D graphics.
-    let xbrz_factor = (2..=6usize)
-        .rev()
-        .find(|&f| {
-            (src_w as usize * f) <= window_width as usize
-                && (src_h as usize * f) <= window_height as usize
-        })
-        .unwrap_or(2);
-
-    rust_bridge_log_msg(&format!(
-        "RUST_VIDEO: Source video {}x{}, xBRZ {}x → {}x{}, window {}x{}",
-        src_w,
-        src_h,
-        xbrz_factor,
-        src_w as usize * xbrz_factor,
-        src_h as usize * xbrz_factor,
-        window_width,
-        window_height
-    ));
-
-    let mut player = VideoPlayer::new(decoder);
-    player.set_position(0, 0);
-    player.set_loop(looping);
-    player.set_xbrz_factor(xbrz_factor);
-    player.set_direct_window_mode(true);
-
-    player.play();
-
-    if let Ok(mut guard) = PLAYER.lock() {
-        *guard = Some(player);
-    }
-
-    rust_bridge_log_msg(&format!(
-        "RUST_VIDEO: Direct window player initialized with xBRZ {}x scaling",
-        xbrz_factor
-    ));
-    true
 }
 
 // ============================================================================
@@ -992,7 +386,7 @@ pub struct CRect {
 /// `VIDEO_REF` is a pointer to this struct.
 #[repr(C)]
 pub struct TFB_VideoClip {
-    pub decoder: *mut TFB_VideoDecoder,
+    pub decoder: *mut ClipSource,
     pub length: f32,
     pub w: u32,
     pub h: u32,
@@ -1006,7 +400,6 @@ pub struct TFB_VideoClip {
     pub own_audio: bool,
     pub loop_frame: u32,
     pub loop_to: u32,
-    pub guard: *mut c_void, // Mutex
     pub want_frame: u32,
     pub lag_cnt: i32,
     pub data: *mut c_void,
@@ -1050,14 +443,8 @@ pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, x: u32, y: u32)
     }
     let dec = &*clip.decoder;
 
-    if dec.filename.is_null() {
+    let Ok(filename_str) = dec.filename.to_str() else {
         return false;
-    }
-
-    let filename_cstr = CStr::from_ptr(dec.filename);
-    let filename_str = match filename_cstr.to_str() {
-        Ok(s) => s,
-        Err(_) => return false,
     };
 
     rust_bridge_log_msg(&format!("RUST_VIDEO: TFB_PlayVideo {}", filename_str));
@@ -1065,8 +452,8 @@ pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, x: u32, y: u32)
     // Like vidplayer.c, retain movie pixels on TFB_SCREEN_MAIN. Input, pacing
     // and expose swaps must composite the movie, not the cleared game surface.
     if !rust_play_video(
-        dec.dir,
-        dec.filename,
+        &dec.dir,
+        filename_str,
         x as i32,
         y as i32,
         clip.loop_frame != VID_NO_LOOP,
@@ -1083,8 +470,8 @@ pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, x: u32, y: u32)
     let duk_file = format!("{}.duk", basename);
     let frm_file = format!("{}.frm", basename);
 
-    let duk_data = read_video_file(dec.dir, &duk_file);
-    let frm_data = read_video_file(dec.dir, &frm_file);
+    let duk_data = read_video_file(&dec.dir, &duk_file);
+    let frm_data = read_video_file(&dec.dir, &frm_file);
 
     if let (Some(duk_bytes), Some(frm_bytes)) = (duk_data, frm_data) {
         let mut audio_dec = DukAudDecoder::new();

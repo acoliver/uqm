@@ -3,20 +3,19 @@ use super::*;
 use crate::host::FileStream;
 use std::io::{Read, Seek, SeekFrom, Write};
 pub(super) unsafe fn stream_open(
-    dir: *mut c_void,
+    dir: &Dir,
     path: *const c_char,
     mode: *const c_char,
 ) -> *mut c_void {
-    // SAFETY: the resource ABI supplies a live directory and terminated path/mode strings.
+    // SAFETY: the resource ABI supplies terminated path/mode strings.
     let result = unsafe {
         (|| {
-            let files = directory(dir.cast())?;
             let name = CStr::from_ptr(path).to_string_lossy();
             let mode = CStr::from_ptr(mode).to_bytes();
             let file = if mode.contains(&b'w') {
-                files.open_write(Path::new(name.as_ref()))?
+                dir.open_write(Path::new(name.as_ref()))?
             } else if mode.contains(&b'r') {
-                files.open_read(Path::new(name.as_ref()))?
+                dir.open_read(Path::new(name.as_ref()))?
             } else {
                 return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
             };

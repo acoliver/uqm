@@ -47,10 +47,8 @@ pub use bridge_log::rust_bridge_log_msg;
 pub use cli::Cli;
 pub use comm::Comm;
 pub use config::Options;
-pub use input::{VControl, VCONTROL};
+pub use input::VControl;
 pub use logging::LogLevel;
-pub use sound::rust_ova_DecoderVtbl;
-pub use sound::rust_wav_DecoderVtbl;
 
 pub use uqm_modes::navigation;
 

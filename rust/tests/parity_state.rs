@@ -114,7 +114,7 @@ fn exercise_live_callers(directory: &Path) {
     // SAFETY: this process exclusively owns the published fixture pools.
     unsafe { clear_queues() };
     fighters_without_journal(directory);
-    uqm_rust::time::source::install(true);
+    uqm_rust::engine::host::install(true);
     std::env::set_var("UQM_PARITY", "1");
     let document = parse_script(
         br#"{"version":2,"name":"state-test","seed":42,"fixture":"state-test","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":30},"steps":[{"action":"finish"}]}"#,

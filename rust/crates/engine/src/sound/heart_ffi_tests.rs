@@ -1,19 +1,18 @@
-//! The audio-heart C exports driven the way the C game code drives them:
-//! sound samples created and tagged through opaque pointers, streams started
-//! on mixer sources, C callback tables invoked, and the channel, music and
-//! control calls that sit on top.
+//! The audio-heart facade driven the way the game modes drive it: samples
+//! created and tagged, streams started on mixer sources, stream callbacks
+//! invoked, and the channel, music and control calls that sit on top.
 //!
 //! Streams live in process-wide statics, so every test takes
 //! `ENGINE_TEST_LOCK` and brings the stream engine up and down itself.
 
-use std::ffi::{c_int, c_uint, c_void, CString};
-use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
-use super::decoder::SoundDecoder;
+use parking_lot::Mutex;
+
 use super::heart_ffi::*;
 use super::test_support::{ScriptedDecoder, ENGINE_TEST_LOCK};
-use super::types::{SoundPosition, MUSIC_SOURCE};
+use super::types::{SoundPosition, SoundSample, StreamCallbacks, MUSIC_SOURCE};
 use super::{stream, trackplayer};
 
 const SOURCE: u32 = MUSIC_SOURCE as u32;
@@ -53,54 +52,56 @@ fn chunks(count: usize) -> Vec<Vec<u8>> {
     (0..count).map(|i| vec![i as u8 + 1; 400]).collect()
 }
 
-/// The raw decoder handle `TFB_CreateSoundSample` expects: a boxed trait
-/// object behind a thin pointer.
-fn decoder_handle(count: usize) -> *mut c_void {
-    let decoder: Box<dyn SoundDecoder> = Box::new(ScriptedDecoder::new(chunks(count)));
-    Box::into_raw(Box::new(decoder)) as *mut c_void
+fn sample(
+    count: usize,
+    buffers: u32,
+    callbacks: Option<Box<dyn StreamCallbacks + Send>>,
+) -> Arc<Mutex<SoundSample>> {
+    let decoder = Box::new(ScriptedDecoder::new(chunks(count)));
+    Arc::new(Mutex::new(
+        stream::create_sound_sample(Some(decoder), buffers, callbacks).unwrap(),
+    ))
 }
 
-fn sample(count: usize, buffers: c_uint, callbacks: *mut c_void) -> *mut c_void {
-    unsafe { TFB_CreateSoundSample(decoder_handle(count), buffers, callbacks) }
+/// Start the stream; a callback that refuses leaves it stopped, which the tests observe.
+fn play(sample: &Arc<Mutex<SoundSample>>) {
+    let _ = stream::play_stream(sample.clone(), SOURCE as usize, false, false, true);
 }
 
-static STARTS: AtomicU32 = AtomicU32::new(0);
-static ENDS: AtomicU32 = AtomicU32::new(0);
-static QUEUED: AtomicU32 = AtomicU32::new(0);
-static REFUSE_START: AtomicU32 = AtomicU32::new(0);
-
-unsafe extern "C" fn on_start(_sample: *mut c_void) -> c_int {
-    STARTS.fetch_add(1, Ordering::SeqCst);
-    (REFUSE_START.load(Ordering::SeqCst) == 0) as c_int
+/// What the stream engine told the callbacks.
+#[derive(Default)]
+struct Counters {
+    starts: AtomicU32,
+    queued: AtomicU32,
 }
 
-unsafe extern "C" fn on_end_chunk(_sample: *mut c_void, _buffer: c_uint) -> c_int {
-    0
+struct Observer {
+    counters: Arc<Counters>,
+    refuse_start: bool,
 }
 
-unsafe extern "C" fn on_end_stream(_sample: *mut c_void) {
-    ENDS.fetch_add(1, Ordering::SeqCst);
+impl StreamCallbacks for Observer {
+    fn on_start_stream(&mut self, _sample: &mut SoundSample) -> bool {
+        self.counters.starts.fetch_add(1, Ordering::SeqCst);
+        !self.refuse_start
+    }
+    fn on_end_chunk(&mut self, _sample: &mut SoundSample, _buffer: usize) -> bool {
+        false
+    }
+    fn on_queue_buffer(&mut self, _sample: &mut SoundSample, _buffer: usize) {
+        self.counters.queued.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
-unsafe extern "C" fn on_queue(_sample: *mut c_void, _buffer: c_uint) {
-    QUEUED.fetch_add(1, Ordering::SeqCst);
-}
-
-fn reset_counters(refuse: bool) {
-    STARTS.store(0, Ordering::SeqCst);
-    ENDS.store(0, Ordering::SeqCst);
-    QUEUED.store(0, Ordering::SeqCst);
-    REFUSE_START.store(refuse as u32, Ordering::SeqCst);
-}
-
-fn callbacks_table() -> Box<CTfbSoundCallbacks> {
-    Box::new(CTfbSoundCallbacks {
-        on_start_stream: Some(on_start),
-        on_end_chunk: Some(on_end_chunk),
-        on_end_stream: Some(on_end_stream),
-        on_tagged_buffer: None,
-        on_queue_buffer: Some(on_queue),
-    })
+fn observer(refuse_start: bool) -> (Arc<Counters>, Box<dyn StreamCallbacks + Send>) {
+    let counters = Arc::new(Counters::default());
+    (
+        counters.clone(),
+        Box::new(Observer {
+            counters,
+            refuse_start,
+        }),
+    )
 }
 
 #[test]
@@ -116,113 +117,90 @@ fn the_stream_engine_starts_once_and_can_be_restarted() {
 }
 
 #[test]
-fn a_sound_sample_carries_opaque_user_data_and_is_destroyed_once() {
+fn a_sound_sample_carries_user_data_and_reports_its_decoder() {
     let _engine = Engine::start();
-    let sample = sample(2, 3, ptr::null_mut());
-    assert!(!sample.is_null());
-    unsafe {
-        assert!(
-            TFB_GetSoundSampleData(sample).is_null(),
-            "nothing stored yet"
-        );
-        let marker = 0x1234usize as *mut c_void;
-        TFB_SetSoundSampleData(sample, marker);
-        assert_eq!(TFB_GetSoundSampleData(sample), marker);
-        assert!(!TFB_GetSoundSampleDecoder(sample).is_null());
-        TFB_DestroySoundSample(sample);
-    }
-}
-
-#[test]
-fn sample_calls_with_no_sample_do_nothing() {
-    let _engine = Engine::start();
-    unsafe {
-        TFB_DestroySoundSample(ptr::null_mut());
-        TFB_SetSoundSampleData(ptr::null_mut(), ptr::dangling_mut::<c_void>());
-        assert!(TFB_GetSoundSampleData(ptr::null_mut()).is_null());
-        TFB_SetSoundSampleCallbacks(ptr::null_mut(), ptr::null_mut());
-        assert!(TFB_GetSoundSampleDecoder(ptr::null_mut()).is_null());
-        assert!(TFB_FindTaggedBuffer(ptr::null_mut(), 0).is_null());
-        assert_eq!(TFB_TagBuffer(ptr::null_mut(), 0, 7), 0);
-        TFB_ClearBufferTag(ptr::null_mut());
-        PlayStream(ptr::null_mut(), SOURCE, false, false, true);
-        assert_eq!(playing_stream(SOURCE), 0);
-    }
+    let sample = sample(2, 3, None);
+    let mut sample = sample.lock();
+    assert!(
+        stream::get_sound_sample_data(&sample).is_none(),
+        "nothing stored yet"
+    );
+    stream::set_sound_sample_data(&mut sample, Box::new(0x1234usize));
+    let stored = stream::get_sound_sample_data(&sample).unwrap();
+    assert_eq!(stored.downcast_ref::<usize>(), Some(&0x1234));
+    assert!(stream::get_sound_sample_decoder(&sample).is_some());
+    stream::destroy_sound_sample(&mut sample).unwrap();
 }
 
 #[test]
 fn a_sample_without_a_decoder_has_none_to_report() {
     let _engine = Engine::start();
-    unsafe {
-        let sample = TFB_CreateSoundSample(ptr::null_mut(), 2, ptr::null_mut());
-        assert!(!sample.is_null());
-        assert!(TFB_GetSoundSampleDecoder(sample).is_null());
-        TFB_DestroySoundSample(sample);
-    }
+    let mut sample = stream::create_sound_sample(None, 2, None).unwrap();
+    assert!(stream::get_sound_sample_decoder(&sample).is_none());
+    stream::destroy_sound_sample(&mut sample).unwrap();
 }
 
 #[test]
 fn buffers_are_tagged_found_and_untagged_up_to_the_sample_capacity() {
     let _engine = Engine::start();
-    let sample = sample(1, 2, ptr::null_mut());
-    unsafe {
-        assert!(TFB_FindTaggedBuffer(sample, 5).is_null());
-        assert_eq!(TFB_TagBuffer(sample, 5, 42), 1);
-        assert_eq!(TFB_TagBuffer(sample, 6, 43), 1);
-        assert_eq!(
-            TFB_TagBuffer(sample, 7, 44),
-            0,
-            "a two-buffer sample has two tag slots"
-        );
-        assert!(!TFB_FindTaggedBuffer(sample, 5).is_null());
-        assert!(!TFB_FindTaggedBuffer(sample, 6).is_null());
-        assert!(TFB_FindTaggedBuffer(sample, 7).is_null());
-        assert!(
-            TFB_FindTaggedBuffer(sample, 0).is_null(),
-            "handle zero is never a tag"
-        );
+    let sample = sample(1, 2, None);
+    let mut sample = sample.lock();
+    assert!(stream::find_tagged_buffer(&sample, 5).is_none());
+    assert!(stream::tag_buffer(&mut sample, 5, 42));
+    assert!(stream::tag_buffer(&mut sample, 6, 43));
+    assert!(
+        !stream::tag_buffer(&mut sample, 7, 44),
+        "a two-buffer sample has two tag slots"
+    );
+    assert!(stream::find_tagged_buffer(&sample, 5).is_some());
+    assert!(stream::find_tagged_buffer(&sample, 6).is_some());
+    assert!(stream::find_tagged_buffer(&sample, 7).is_none());
+    assert!(
+        stream::find_tagged_buffer(&sample, 0).is_none(),
+        "handle zero is never a tag"
+    );
 
-        TFB_ClearBufferTag(TFB_FindTaggedBuffer(sample, 5));
-        assert!(TFB_FindTaggedBuffer(sample, 5).is_null());
-        assert_eq!(
-            TFB_TagBuffer(sample, 7, 44),
-            1,
-            "the cleared slot is reused"
-        );
-        TFB_DestroySoundSample(sample);
-    }
+    let tag = sample
+        .buffer_tags
+        .iter_mut()
+        .flatten()
+        .find(|tag| tag.buf_handle == 5)
+        .unwrap();
+    stream::clear_buffer_tag(tag);
+    assert!(stream::find_tagged_buffer(&sample, 5).is_none());
+    assert!(
+        stream::tag_buffer(&mut sample, 7, 44),
+        "the cleared slot is reused"
+    );
+    stream::destroy_sound_sample(&mut sample).unwrap();
 }
 
 #[test]
 fn a_started_stream_plays_until_stopped() {
     let _engine = Engine::start();
-    let sample = sample(6, 4, ptr::null_mut());
-    unsafe {
-        assert_eq!(playing_stream(SOURCE), 0);
-        PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(playing_stream(SOURCE), 1);
-        stop_stream(SOURCE);
-        assert_eq!(playing_stream(SOURCE), 0);
-        TFB_DestroySoundSample(sample);
-    }
+    let sample = sample(6, 4, None);
+    assert_eq!(playing_stream(SOURCE), 0);
+    play(&sample);
+    assert_eq!(playing_stream(SOURCE), 1);
+    stop_stream(SOURCE);
+    assert_eq!(playing_stream(SOURCE), 0);
+    stream::destroy_sound_sample(&mut sample.lock()).unwrap();
 }
 
 #[test]
 fn pausing_halts_a_stream_and_resuming_restarts_it() {
     let _engine = Engine::start();
-    let sample = sample(6, 4, ptr::null_mut());
-    unsafe {
-        PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(playing_stream(SOURCE), 1);
-        pause_stream(SOURCE);
-        assert_eq!(playing_stream(SOURCE), 0, "paused");
-        resume_stream(SOURCE);
-        assert_eq!(playing_stream(SOURCE), 1);
-        seek_stream(SOURCE, 0);
-        assert_eq!(playing_stream(SOURCE), 1);
-        stop_stream(SOURCE);
-        TFB_DestroySoundSample(sample);
-    }
+    let sample = sample(6, 4, None);
+    play(&sample);
+    assert_eq!(playing_stream(SOURCE), 1);
+    pause_stream(SOURCE);
+    assert_eq!(playing_stream(SOURCE), 0, "paused");
+    resume_stream(SOURCE);
+    assert_eq!(playing_stream(SOURCE), 1);
+    seek_stream(SOURCE, 0);
+    assert_eq!(playing_stream(SOURCE), 1);
+    stop_stream(SOURCE);
+    stream::destroy_sound_sample(&mut sample.lock()).unwrap();
 }
 
 #[test]
@@ -237,74 +215,63 @@ fn stream_controls_on_an_unknown_source_are_ignored() {
 }
 
 #[test]
-fn the_c_callbacks_are_told_when_a_stream_starts_and_queues_buffers() {
+fn the_callbacks_are_told_when_a_stream_starts_and_queues_buffers() {
     let _engine = Engine::start();
-    reset_counters(false);
-    let mut table = callbacks_table();
-    let table_ptr = &mut *table as *mut CTfbSoundCallbacks as *mut c_void;
-    let sample = sample(3, 4, table_ptr);
-    unsafe {
-        PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(STARTS.load(Ordering::SeqCst), 1);
-        assert_eq!(playing_stream(SOURCE), 1);
-        assert!(
-            QUEUED.load(Ordering::SeqCst) >= 1,
-            "prefilled buffers are announced"
-        );
-        stop_stream(SOURCE);
-        TFB_DestroySoundSample(sample);
-    }
+    let (counters, callbacks) = observer(false);
+    let sample = sample(3, 4, Some(callbacks));
+    play(&sample);
+    assert_eq!(counters.starts.load(Ordering::SeqCst), 1);
+    assert_eq!(playing_stream(SOURCE), 1);
+    assert!(
+        counters.queued.load(Ordering::SeqCst) >= 1,
+        "prefilled buffers are announced"
+    );
+    stop_stream(SOURCE);
+    stream::destroy_sound_sample(&mut sample.lock()).unwrap();
 }
 
 #[test]
-fn a_c_callback_can_refuse_to_start_a_stream() {
+fn a_callback_can_refuse_to_start_a_stream() {
     let _engine = Engine::start();
-    reset_counters(true);
-    let mut table = callbacks_table();
-    let table_ptr = &mut *table as *mut CTfbSoundCallbacks as *mut c_void;
-    let sample = sample(3, 4, table_ptr);
-    unsafe {
-        PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(STARTS.load(Ordering::SeqCst), 1);
-        assert_eq!(playing_stream(SOURCE), 0, "refused");
-        TFB_DestroySoundSample(sample);
-    }
+    let (counters, callbacks) = observer(true);
+    let sample = sample(3, 4, Some(callbacks));
+    play(&sample);
+    assert_eq!(counters.starts.load(Ordering::SeqCst), 1);
+    assert_eq!(playing_stream(SOURCE), 0, "refused");
+    stream::destroy_sound_sample(&mut sample.lock()).unwrap();
 }
 
 #[test]
 fn callbacks_can_be_replaced_after_the_sample_exists() {
     let _engine = Engine::start();
-    reset_counters(false);
-    let mut table = callbacks_table();
-    let table_ptr = &mut *table as *mut CTfbSoundCallbacks as *mut c_void;
-    let sample = sample(3, 4, ptr::null_mut());
-    unsafe {
-        TFB_SetSoundSampleCallbacks(sample, table_ptr);
-        PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(STARTS.load(Ordering::SeqCst), 1);
-        stop_stream(SOURCE);
-        TFB_SetSoundSampleCallbacks(sample, ptr::null_mut());
-        PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(STARTS.load(Ordering::SeqCst), 1, "no callbacks any more");
-        stop_stream(SOURCE);
-        TFB_DestroySoundSample(sample);
-    }
+    let (counters, callbacks) = observer(false);
+    let sample = sample(3, 4, None);
+    stream::set_sound_sample_callbacks(&mut sample.lock(), Some(callbacks));
+    play(&sample);
+    assert_eq!(counters.starts.load(Ordering::SeqCst), 1);
+    stop_stream(SOURCE);
+    stream::set_sound_sample_callbacks(&mut sample.lock(), None);
+    play(&sample);
+    assert_eq!(
+        counters.starts.load(Ordering::SeqCst),
+        1,
+        "no callbacks any more"
+    );
+    stop_stream(SOURCE);
+    stream::destroy_sound_sample(&mut sample.lock()).unwrap();
 }
 
 #[test]
 fn the_oscilloscope_reads_nothing_without_arguments_or_a_stream() {
     let _engine = Engine::start();
     let mut data = vec![0u8; 64];
-    unsafe {
-        assert_eq!(GraphForegroundStream(ptr::null_mut(), 64, 32, 0), 0);
-        assert_eq!(GraphForegroundStream(data.as_mut_ptr(), 0, 32, 0), 0);
-        assert_eq!(GraphForegroundStream(data.as_mut_ptr(), 64, -1, 0), 0);
-        assert_eq!(
-            GraphForegroundStream(data.as_mut_ptr(), 64, 32, 0),
-            0,
-            "no foreground stream"
-        );
-    }
+    assert_eq!(stream::graph_foreground_stream(&mut data, 0, 32, false), 0);
+    assert_eq!(stream::graph_foreground_stream(&mut data, 64, 0, false), 0);
+    assert_eq!(
+        stream::graph_foreground_stream(&mut data, 64, 32, false),
+        0,
+        "no foreground stream"
+    );
 }
 
 #[test]
@@ -355,57 +322,21 @@ fn fading_music_with_no_time_sets_the_volume_straight_away() {
 }
 
 #[test]
-fn music_calls_without_music_do_nothing() {
+fn speech_stop_without_speech_does_nothing() {
     let _engine = Engine::start();
-    let sentinel = usize::MAX as *mut c_void;
-    unsafe {
-        PLRPlaySong(ptr::null_mut(), 0, 1);
-        PLRPlaySong(sentinel, 0, 1);
-        PLRStop(ptr::null_mut());
-        PLRStop(sentinel);
-        assert_eq!(PLRPlaying(ptr::null_mut()), 0);
-        assert_eq!(PLRPlaying(sentinel), 0);
-        PLRSeek(ptr::null_mut(), 5);
-        PLRSeek(sentinel, 5);
-        PLRPause(ptr::null_mut());
-        PLRResume(ptr::null_mut());
-        snd_PlaySpeech(ptr::null_mut());
-        snd_PlaySpeech(sentinel);
-        snd_stop_speech();
-    }
+    snd_stop_speech();
 }
 
 #[test]
-fn channel_calls_ignore_missing_sounds_and_idle_channels() {
+fn channel_calls_ignore_idle_channels() {
     let _engine = Engine::start();
-    let pos = SoundPosition {
-        positional: false,
-        x: 0,
-        y: 0,
-    };
-    unsafe {
-        play_channel(0, ptr::null_mut(), pos, 0, 1);
-        assert_eq!(channel_playing(0), 0);
-        stop_channel(0, 1);
-        set_channel_volume(0, 100, 1);
-    }
-}
-
-#[test]
-fn channel_playback_has_a_typed_rust_signature() {
-    let _: unsafe fn(
-        u32,
-        *mut crate::strings::string_table::StringTableEntry,
-        SoundPosition,
-        usize,
-        u8,
-    ) = play_channel;
+    assert_eq!(channel_playing(0), 0);
+    stop_channel(0, 1);
+    set_channel_volume(0, 100, 1);
 }
 
 #[test]
 fn channel_playback_retains_the_full_object_address_on_the_selected_channel() {
-    use crate::strings::string_table::StringTableEntry;
-
     let _engine = Engine::start();
     let mut sample = stream::create_sound_sample(None, 1, None).unwrap();
     super::mixer::buffer::mixer_buffer_data(
@@ -417,24 +348,9 @@ fn channel_playback_retains_the_full_object_address_on_the_selected_channel() {
         super::mixer::MixerFormat::Stereo16,
     )
     .unwrap();
-    let mut sample_ptr = ptr::from_mut(&mut sample);
-    let mut entry = StringTableEntry {
-        data: ptr::from_mut(&mut sample_ptr).cast(),
-        length: std::mem::size_of_val(&sample_ptr) as i32,
-        index: 0,
-        parent: ptr::null_mut(),
-    };
     let object = usize::MAX - 0xABCD;
     set_positional_object(2, 42);
-    unsafe {
-        play_channel(
-            1,
-            &mut entry,
-            SoundPosition::non_positional(),
-            object,
-            u8::MAX,
-        );
-    }
+    super::sfx::play_sample(1, &sample, SoundPosition::non_positional(), object, 255).unwrap();
     assert_eq!(channel_playing(1), 1);
     assert_eq!(get_positional_object(1), object);
     assert_eq!(get_positional_object(2), 42);
@@ -459,13 +375,6 @@ fn finished_channel_cleanup_uses_the_mixer_stopped_state() {
     super::mixer::source::mixer_source_stop(handle).unwrap();
     super::sfx::check_finished_channels();
     assert!(stream::with_source(1, |source| source.sample.is_none()).unwrap());
-}
-
-#[test]
-fn positional_audio_has_typed_rust_signatures() {
-    let _: fn(u32) -> usize = get_positional_object;
-    let _: fn(u32, usize) = set_positional_object;
-    let _: fn(u32, SoundPosition) = update_sound_position;
 }
 
 #[test]
@@ -526,20 +435,18 @@ fn positional_update_changes_the_selected_mixer_source() {
 #[test]
 fn stopping_all_sound_stops_effect_sources() {
     let _engine = Engine::start();
-    let sample = sample(6, 4, ptr::null_mut());
-    unsafe {
-        set_sfx_volume(0.5);
-        set_speech_volume(0.25);
-        PlayStream(sample, 0, false, false, true);
-        assert_eq!(playing_stream(0), 1);
-        stop_sound();
-        assert_eq!(
-            playing_stream(0),
-            0,
-            "stopping all sound stops effect sources"
-        );
-        TFB_DestroySoundSample(sample);
-    }
+    let sample = sample(6, 4, None);
+    set_sfx_volume(0.5);
+    set_speech_volume(0.25);
+    stream::play_stream(sample.clone(), 0, false, false, true).unwrap();
+    assert_eq!(playing_stream(0), 1);
+    stop_sound();
+    assert_eq!(
+        playing_stream(0),
+        0,
+        "stopping all sound stops effect sources"
+    );
+    stream::destroy_sound_sample(&mut sample.lock()).unwrap();
 }
 
 #[test]
@@ -563,65 +470,9 @@ fn the_track_player_exports_are_quiet_with_no_track() {
 #[test]
 fn loading_files_that_are_not_there_gives_nothing() {
     let _engine = Engine::start();
-    let missing = CString::new("no/such/bank.snd").unwrap();
-    let bad = [0xffu8, 0xfe, 0];
-    unsafe {
-        assert!(LoadSoundFile(ptr::null()).is_null());
-        assert!(LoadSoundFile(bad.as_ptr() as *const _).is_null());
-        assert!(LoadSoundFile(missing.as_ptr()).is_null());
-        assert!(LoadMusicFile(ptr::null()).is_null());
-        assert!(LoadMusicFile(missing.as_ptr()).is_null());
-        DestroySound(ptr::null_mut());
-        DestroyMusic(ptr::null_mut());
-    }
-}
-
-#[test]
-fn speech_controls_have_safe_rust_signatures() {
-    let _: fn() = play_track;
-    let _: fn() = stop_track;
-    let _: fn() = jump_track;
-    let _: fn() = pause_track;
-    let _: fn() = resume_track;
-    let _: fn() -> u16 = playing_track;
-    let _: fn() = fast_reverse_smooth;
-    let _: fn() = fast_forward_smooth;
-    let _: fn() = fast_reverse_page;
-    let _: fn() = fast_forward_page;
-    let _: fn(c_int) -> c_int = get_track_position;
-    let _: fn() -> Option<trackplayer::SubtitleSnapshot> = trackplayer::subtitle_snapshot;
-    let _: fn() -> Vec<trackplayer::SubtitleSnapshot> = trackplayer::subtitle_history;
-    let _: Option<unsafe fn()> = None::<super::types::PhraseCallback>;
-}
-
-#[test]
-fn audio_controls_have_safe_rust_signatures() {
-    let _: fn() -> c_int = init_stream_decoder;
-    let _: fn() = uninit_stream_decoder;
-    let _: fn(source: u32) = stop_stream;
-    let _: fn(source: u32) = pause_stream;
-    let _: fn(source: u32) = resume_stream;
-    let _: fn(source: u32, pos: u32) = seek_stream;
-    let _: fn(source: u32) -> u8 = playing_stream;
-    let _: fn(how_long: i32, end_volume: c_int) -> bool = set_music_stream_fade;
-    let _: fn() = snd_stop_speech;
-    let _: fn(volume: c_int) = set_music_volume;
-    let _: fn(end_vol: u8, how_long: i16) -> u32 = fade_music;
-    let _: fn(channel: c_uint, priority: c_int) = stop_channel;
-    let _: fn(channel: c_uint) -> c_int = channel_playing;
-    let _: fn(channel: c_uint, volume: c_int, priority: c_int) = set_channel_volume;
-    let _: fn() = uninit_sound;
-    let _: fn() = stop_sound;
-    let _: fn() -> c_int = sound_playing;
-    let _: fn(channel: u16) = wait_for_sound_end;
-    let _: fn(volume: f32) = set_sfx_volume;
-    let _: fn(volume: f32) = set_speech_volume;
-}
-
-#[test]
-fn audio_destruction_has_unit_returning_rust_signatures() {
-    let _: unsafe fn(*mut c_void) = DestroyMusic;
-    let _: unsafe fn(*mut c_void) = DestroySound;
+    assert!(load_sound_bank("no/such/bank.snd").is_none());
+    assert!(load_music("no/such/music.ogg").is_none());
+    assert!(load_music("noextension").is_none());
 }
 
 #[test]
@@ -629,18 +480,9 @@ fn music_destruction_releases_the_sample_and_its_mixer_buffers() {
     let _engine = Engine::start();
     let sample = stream::create_sound_sample(None, 1, None).unwrap();
     let buffer = sample.buffers[0];
-    let sample = std::sync::Arc::new(parking_lot::Mutex::new(sample));
-    let weak = std::sync::Arc::downgrade(&sample);
-    unsafe {
-        let handle = crate::memory::rust_hmalloc(std::mem::size_of::<
-            *const parking_lot::Mutex<super::types::SoundSample>,
-        >());
-        assert!(!handle.is_null());
-        handle
-            .cast::<*const parking_lot::Mutex<super::types::SoundSample>>()
-            .write(std::sync::Arc::into_raw(sample));
-        DestroyMusic(handle);
-    }
+    let sample = Arc::new(Mutex::new(sample));
+    let weak = Arc::downgrade(&sample);
+    destroy_music(super::types::MusicRef(sample));
     assert!(weak.upgrade().is_none());
     assert!(!super::mixer::buffer::mixer_is_buffer(buffer));
 }

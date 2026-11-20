@@ -6,7 +6,7 @@ use crate::engine::{
 };
 use std::ffi::CStr;
 use uqm_engine::input_port::sdl_input::{
-    EnterCharacterMode, ExitCharacterMode, GetLastCharacter, GetNextCharacter,
+    enter_character_mode, exit_character_mode, last_character, next_character,
 };
 
 pub struct TextEntryView<'a> {
@@ -295,9 +295,9 @@ impl<'a> Editor<'a> {
         let pressed = |key| pulse.menu[key as usize] != 0;
         self.save();
         let mut changed = false;
-        let mut code = GetNextCharacter();
+        let mut code = next_character();
         if code == 0 && pressed(KEY_MENU_ANY) {
-            code = GetLastCharacter();
+            code = last_character();
         }
         while code != 0 {
             self.joystick = false;
@@ -310,7 +310,7 @@ impl<'a> Editor<'a> {
                     }
                 }
             }
-            code = GetNextCharacter();
+            code = next_character();
         }
         changed |= self.cursor_keys(&pulse);
         if [
@@ -366,11 +366,11 @@ pub fn edit_text(
     }
     let mut editor = Editor::new(buffer, capacity, cursor);
     let alphabet = Alphabet::load();
-    EnterCharacterMode();
+    enter_character_mode();
     cx.run_input(io, true, |cx, io| {
         editor.frame(cx, io, input, &alphabet, callbacks)
     });
-    ExitCharacterMode();
+    exit_character_mode();
     editor.success()
 }
 

@@ -3,8 +3,13 @@ use std::ffi::CString;
 use std::io::Write;
 use std::ptr;
 use uqm_rust::graphics::{gfxload, native_abi as abi};
-use uqm_rust::io::uio_bridge as uio;
-use uqm_rust::mainloop::dir_prep::{contentDir, repository};
+
+fn content_dir() -> uqm_rust::io::Dir {
+    let Some(dir) = uqm_rust::io::content_dir() else {
+        panic!("no content directory installed");
+    };
+    dir
+}
 
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
@@ -24,11 +29,7 @@ fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8>
 unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
     abi::_cur_resfile_name = path.as_ptr();
     let fp = if zipped {
-        uqm_rust::resource::ffi_bridge::res_OpenResFile(
-            contentDir.cast(),
-            path.as_ptr(),
-            c"rb".as_ptr(),
-        )
+        uqm_rust::resource::ffi_bridge::open_res_file(&content_dir(), path.as_ptr(), c"rb".as_ptr())
     } else {
         usize::MAX as *mut std::ffi::c_void
     };
@@ -90,8 +91,8 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
             .unwrap_or(path.to_bytes()),
     )
     .unwrap();
-    let fp = uqm_rust::resource::ffi_bridge::res_OpenResFile(
-        contentDir.cast(),
+    let fp = uqm_rust::resource::ffi_bridge::open_res_file(
+        &content_dir(),
         relative_path.as_ptr(),
         c"rb".as_ptr(),
     );
@@ -219,28 +220,8 @@ sprite.png -1 0 0 0
         archive.write_all(bytes).unwrap();
     }
     archive.finish().unwrap();
-    let host = CString::new(temp.path().to_str().unwrap()).unwrap();
     unsafe {
-        uio::uio_init();
-        let repo = uio::uio_openRepository(0);
-        let mount = uio::uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            6,
-            ptr::null_mut(),
-        );
-        assert!(!mount.is_null());
-        let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-        assert!(!dir.is_null());
-        let saved_dir = contentDir;
-        let saved_repo = repository;
-        contentDir = dir.cast();
-        repository = repo.cast();
+        let mount = uqm_engine::test_support::native_session::ContentMount::new(temp.path());
         check_font(c"font", false, &alpha);
         check_font(c"font.zip", true, &alpha);
         abi::_cur_resfile_name = c"busy".as_ptr();
@@ -257,10 +238,6 @@ sprite.png -1 0 0 0
         assert!(ptr::addr_of!(abi::_cur_resfile_name).read().is_null());
         check_animation(c"frames.ani");
         check_animation(c"/animation/packed.ani");
-        contentDir = saved_dir;
-        repository = saved_repo;
-        uio::uio_closeDir(dir);
-        uio::uio_closeRepository(repo);
-        uio::uio_unInit();
+        drop(mount);
     }
 }
