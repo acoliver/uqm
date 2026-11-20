@@ -4,10 +4,11 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, NativeFrameSet as NativeFrames, Object};
+use uqm_rust::engine::battle::flags::{CHANGING, DISAPPEARING, NONSOLID};
 use uqm_rust::engine::battle::{ElementHook, ElementId};
 use uqm_rust::engine::world::queues::IpGroup;
+use uqm_rust::graphics::geometry::Point;
 use uqm_rust::navigation::interplanetary;
-use uqm_rust::ships::native::abi::*;
 
 fn transition_hook() -> ElementHook {
     ElementHook::Native(uqm_rust::navigation::hyper_encounters::transition)
@@ -104,10 +105,10 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             let old_velocity = crate::battle_context::with(|cx| cx.world.data.game.velocity);
             crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.frame = frames.frame(0));
             crate::battle_context::with(|cx| {
-                cx.world.data.game.ship_stamp.origin = POINT { x: 80, y: 60 }
+                cx.world.data.game.ship_stamp.origin = Point { x: 80, y: 60 }
             });
             crate::battle_context::with(|cx| {
-                cx.world.data.game.ip_location = POINT { x: 100, y: 200 }
+                cx.world.data.game.ip_location = Point { x: 100, y: 200 }
             });
             let mut velocity = old_velocity;
             velocity.set_components(20, -30);
@@ -158,7 +159,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             });
             solar.sys.sun.radius = 128 << 6;
             solar.sys.sun.num_planets = 1;
-            solar.sys.planets[0].image.origin = POINT { x: 80, y: 60 };
+            solar.sys.planets[0].image.origin = Point { x: 80, y: 60 };
             solar.sys.planets[0].num_planets = 1;
             solar.enter_inner(0);
             solar.select_body(uqm_rust::engine::world::generation::Body::Moon {
@@ -179,7 +180,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 group.in_system = 1;
                 group.dest_loc = 1;
                 group.task = IpGroup::ON_STATION | IpGroup::IGNORE_FLAGSHIP;
-                group.loc = POINT { x: 300, y: 400 };
+                group.loc = Point { x: 300, y: 400 };
                 group.melee_icon = frames.frame(0);
                 queue.put(id);
                 (id, queue.raw(id).cast::<IpGroup>())
@@ -188,7 +189,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             crate::battle_context::with(|cx| cx.kernel.stars_in_space = frames.frame(0));
             crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.frame = frames.frame(0));
             crate::battle_context::with(|cx| {
-                cx.world.data.game.ip_location = POINT { x: 100, y: 200 }
+                cx.world.data.game.ip_location = Point { x: 100, y: 200 }
             });
             crate::battle_context::with(|cx| {
                 solar.refresh_frame(cx);

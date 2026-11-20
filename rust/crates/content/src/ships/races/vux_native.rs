@@ -5,10 +5,21 @@ pub mod engine {
     ) -> crate::engine::battle::RaceDesc {
         crate::engine::battle::vux_template::descriptor(&VUX)
     }
-    use crate::engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, LEFT, MOVEMENT_STATE_AVOID,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL,
     };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, PLAYER_SHIP,
+    };
+    use crate::engine::battle::CollisionHook;
+    use crate::engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
+    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    const MODIFY_IMAGE: u32 = 1;
 
     pub static VUX: Race = Race {
         descriptor: build_descriptor,
@@ -26,7 +37,7 @@ pub mod engine {
         let mut face = original;
         let delta = cx.track_ship(e, &mut face);
         if delta > 0 {
-            face = (i32::from(original) + i32::from(delta)) as COUNT;
+            face = (i32::from(original) + i32::from(delta)) as u16;
             cx.element_mut(e).velocity.set_vector(25, face);
         }
         let frame = cx.advance_frame(cx.element(e).next.image.frame.view());
@@ -37,9 +48,9 @@ pub mod engine {
     pub fn limpet_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        _pa: &mut POINT,
+        _pa: &mut Point,
         b: ElementId,
-        _pb: &mut POINT,
+        _pb: &mut Point,
     ) {
         if cx.element(b).flags & PLAYER_SHIP as u16 != 0 {
             let other = cx.owner(b);
@@ -63,9 +74,9 @@ pub mod engine {
             drop(d);
             let ss = cx.owner(a);
             cx.process_ship_sound(ss, 2, b);
-            let index = cx.random() as COUNT;
+            let index = cx.random() as u16;
             let frame = cx.absolute_frame(cx.ship_frame(ss, 1), index);
-            cx.silhouette_frame(b, frame, MODIFY_IMAGE as BYTE);
+            cx.silhouette_frame(b, frame, MODIFY_IMAGE as u8);
         }
         cx.element_mut(a).set_hit_points(0);
         cx.element_mut(a).set_life_span(0);
@@ -77,7 +88,7 @@ pub mod engine {
         let mut block = crate::engine::battle::views::Missile {
             frames: cx.ship_frame_set(ss, 2),
             // The original expression adds HALF_CIRCLE directly to the facing.
-            face: (i32::from(cx.ship_state(ss).facing) + HALF_CIRCLE as i32) as COUNT,
+            face: (i32::from(cx.ship_state(ss).facing) + HALF_CIRCLE as i32) as u16,
             index: 0,
             sender: cx.element(e).player,
             flags: IGNORE_SIMILAR as u16,
@@ -107,7 +118,7 @@ pub mod engine {
         let mut block = crate::engine::battle::views::Laser {
             face,
             origin: origin.next.location,
-            end: POINT {
+            end: Point {
                 x: cosine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
                 y: sine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
             },
@@ -177,12 +188,10 @@ pub mod engine {
                 loop {
                     cx.element_mut(e).current.location.x =
                         (i32::from(cx.element(other).current.location.x) - (ENTRY >> 1)
-                            + i32::from(cx.random() as COUNT) % ENTRY)
-                            as COORD;
+                            + i32::from(cx.random() as u16) % ENTRY) as i16;
                     cx.element_mut(e).current.location.y =
                         (i32::from(cx.element(other).current.location.y) - (ENTRY >> 1)
-                            + i32::from(cx.random() as COUNT) % ENTRY)
-                            as COORD;
+                            + i32::from(cx.random() as u16) % ENTRY) as i16;
                     let dx = cx
                         .element(other)
                         .current
@@ -210,14 +219,14 @@ pub mod engine {
                         x - width
                     } else {
                         x
-                    }) as COUNT as COORD;
+                    }) as u16 as i16;
                     cx.element_mut(e).current.location.y = (if y < 0 {
                         y + height
                     } else if y >= height {
                         y - height
                     } else {
                         y
-                    }) as COUNT as COORD;
+                    }) as u16 as i16;
                     if !cx.gravity(e) && !cx.matter_conflict(e) {
                         break;
                     }

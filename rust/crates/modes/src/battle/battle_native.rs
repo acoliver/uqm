@@ -1,7 +1,6 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
 use crate::battle::context_access::ContextOps;
-use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
 const BATTLE_RIGHT: u8 = 1 << 1;
@@ -42,14 +41,14 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
     }
     let mut state = 0;
     if input & BATTLE_LEFT != 0 {
-        state |= abi::LEFT as u8;
+        state |= crate::engine::battle::ai_constants::LEFT as u8;
     } else if input & BATTLE_RIGHT != 0 {
-        state |= abi::RIGHT as u8;
+        state |= crate::engine::battle::ai_constants::RIGHT as u8;
     }
     for (battle, ship) in [
-        (BATTLE_THRUST, abi::THRUST),
-        (BATTLE_WEAPON, abi::WEAPON),
-        (BATTLE_SPECIAL, abi::SPECIAL),
+        (BATTLE_THRUST, crate::engine::battle::ai_constants::THRUST),
+        (BATTLE_WEAPON, crate::engine::battle::ai_constants::WEAPON),
+        (BATTLE_SPECIAL, crate::engine::battle::ai_constants::SPECIAL),
     ] {
         if input & battle != 0 {
             state |= ship as u8;
@@ -60,8 +59,8 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
 
 fn run_away_allowed(world: &crate::engine::World) -> bool {
     use crate::engine::StoryKey;
-    (world.activity() as u8 == abi::IN_ENCOUNTER as u8
-        || world.activity() as u8 == abi::IN_LAST_BATTLE as u8)
+    (world.activity() as u8 == crate::engine::world::activity::activity_kinds::IN_ENCOUNTER as u8
+        || world.activity() as u8 == crate::engine::battle::flags::IN_LAST_BATTLE as u8)
         && world.story_state(StoryKey::STARBASE_AVAILABLE) != 0
         && world.story_state(StoryKey::BOMB_CARRIER) == 0
 }
@@ -120,9 +119,28 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::netplay::CrcState as crc_State;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
-    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::battle::ai_constants::MAX_SHIP_MASS;
+    use crate::engine::battle::flags::{
+        APPEARING, FINITE_LIFE, NORMAL_LIFE, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+        STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::net::NetState;
+
+    use crate::engine::battle::ElementHook;
+    use crate::engine::battle::STAMP_PRIMITIVE;
+    use crate::engine::time::counter_abi::get_time_counter;
+    use crate::engine::time::counter_abi::ONE_SECOND;
+    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, IN_BATTLE};
+    use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Extent;
+    use crate::graphics::geometry::Point;
+    use crate::graphics::geometry::Rect;
+    use crate::sound::heart_ffi::stop_sound;
     use crate::supermelee::netplay::crc::{crc_finish, crc_init};
-    use abi::*;
+    use crate::supermelee::netplay::{ResetReason, CHECKSUM_INTERVAL};
+    const SIS_ORG_X: u32 = 7;
+    const SIS_ORG_Y: u32 = 10;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;
 
@@ -153,7 +171,7 @@ pub(crate) mod engine {
     ) {
         let e = cx.ship_element(ship);
         let state = cx.element(e);
-        if cx.primitive_style(e).kind == gfx_object_STAMP_PRIM as u8
+        if cx.primitive_style(e).kind == STAMP_PRIMITIVE
             && state.life == NORMAL_LIFE as u16
             && state.flags & FINITE_LIFE as u16 == 0
             && state.mass != (MAX_SHIP_MASS * 10) as u8
@@ -169,7 +187,7 @@ pub(crate) mod engine {
             cx.element_mut(e).velocity = crate::battle::velocity::VelocityDesc::default();
             cx.ship_state_mut(ship).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
             cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
-            cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive_style_mut(e).kind = STAMPFILL_PRIMITIVE;
             cx.ship_state_mut(ship).input = 0;
             {
                 io.observer
@@ -236,9 +254,8 @@ pub(crate) mod engine {
             }
         }
         crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| net.flush(driver));
-        if cx.world.activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
-            cx.world
-                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+        if cx.world.activity() & (CHECK_LOAD | CHECK_ABORT) != 0 {
+            cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
         }
     }
 
@@ -280,7 +297,7 @@ pub(crate) mod engine {
     ) -> bool {
         cx.kernel.input_controls().set_menu_sounds(0, 0);
         let frame = net.frame();
-        if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
+        if net.peer_count() > 0 && frame.is_multiple_of(CHECKSUM_INTERVAL as u32) {
             let mut state = crc_State::new();
             crc_init(&mut state);
             crate::supermelee::netplay::checksum::crc_process_game_state(cx, &mut state);
@@ -297,25 +314,24 @@ pub(crate) mod engine {
         if net.peer_count() > 0 {
             let delay = net.input_delay();
             if frame as usize >= delay
-                && (frame as usize - delay).is_multiple_of(NETPLAY_CHECKSUM_INTERVAL as usize)
-                && cx.world.activity() & CHECK_ABORT as u16 == 0
+                && (frame as usize - delay).is_multiple_of(CHECKSUM_INTERVAL)
+                && cx.world.activity() & CHECK_ABORT == 0
                 && !net.verify_checksum((frame as usize - delay) as u32)
             {
-                cx.world
-                    .set_activity(cx.world.activity() | CHECK_ABORT as u16);
+                cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
                 crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
-                    net.reset(NetplayResetReason_ResetReason_syncLoss, driver)
+                    net.reset(ResetReason::SyncLoss as u32, driver)
                 });
             }
         }
         let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
         let (width, height) = cx.screen_dimensions();
-        let rect = RECT {
-            corner: POINT {
+        let rect = Rect {
+            corner: Point {
                 x: SIS_ORG_X as i16,
                 y: SIS_ORG_Y as i16,
             },
-            extent: EXTENT {
+            extent: Extent {
                 width: (width - 78) as i16,
                 height: (height - 13) as i16,
             },
@@ -333,8 +349,8 @@ pub(crate) mod engine {
                 context.transition(Some(rect));
             }
         });
-        if cx.world.activity() & IN_BATTLE as u16 == 0
-            || cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
+        if cx.world.activity() & IN_BATTLE == 0
+            || cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
         {
             return false;
         }
@@ -344,10 +360,10 @@ pub(crate) mod engine {
                 cx.kernel
                     .input_runtime()
                     .sleep_until(cx, session.next_time.wrapping_add(interval));
-                session.next_time = GetTimeCounter();
+                session.next_time = get_time_counter();
             }
         }
-        if cx.world.activity() & IN_BATTLE as u16 == 0 {
+        if cx.world.activity() & IN_BATTLE == 0 {
             return false;
         }
         complete_observed_frame(cx, io);
@@ -364,7 +380,7 @@ pub(crate) mod engine {
         advance_observation(cx, io);
     }
 
-    fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
+    fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: i16) -> u32 {
         let controls = cx.kernel.player_control;
         if count == 1 {
             return crate::battle::ship_native::engine::next_star_ship(cx, None, 0);
@@ -380,7 +396,7 @@ pub(crate) mod engine {
         if stop_audio {
             stop_ditty(cx.kernel);
             crate::ui::settings::stop_battle_music();
-            StopSound();
+            stop_sound();
         }
         cx.finish_battle();
     }
@@ -391,7 +407,7 @@ pub(crate) mod engine {
         seed_value: impl FnOnce(u32, u32) -> u32,
     ) {
         if activity != SUPER_MELEE as u8 {
-            crate::math::seed_random(seed_value(campaign_domain, GetTimeCounter()));
+            crate::math::seed_random(seed_value(campaign_domain, get_time_counter()));
         } else {
             let seed = seed_value(2, 0);
             if seed != 0 {
@@ -419,8 +435,7 @@ pub(crate) mod engine {
             cx.kernel.instant_victory = 0;
         }
         if count != 0 {
-            cx.world
-                .set_activity(cx.world.activity() | IN_BATTLE as u16);
+            cx.world.set_activity(cx.world.activity() | IN_BATTLE);
             cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
             reset_observation(io);
             if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
@@ -434,16 +449,14 @@ pub(crate) mod engine {
             net.begin();
             reset_winner(cx.kernel);
             if select_all_ships(cx, count) == 0 {
-                cx.world
-                    .set_activity(cx.world.activity() | CHECK_ABORT as u16);
+                cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
             } else {
                 battle_song(cx.kernel, cx.world, true);
                 net.init_end_frames();
                 if !crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
-                    net.negotiate(true, NetState_NetState_inBattle, driver)
+                    net.negotiate(true, NetState::InBattle, driver)
                 }) {
-                    cx.world
-                        .set_activity(cx.world.activity() | CHECK_ABORT as u16);
+                    cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
                 } else {
                     session.first_time = cx.world.in_hqspace();
                     cx.run_input(io, false, |cx, io| {
@@ -452,12 +465,11 @@ pub(crate) mod engine {
                 }
             }
             if cx.world.activity() as u8 == SUPER_MELEE as u8 {
-                if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+                if cx.world.activity() & CHECK_ABORT != 0 {
                     crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
-                        net.wait_reset(NetState_NetState_inSetup, driver)
+                        net.wait_reset(NetState::InSetup, driver)
                     });
-                    cx.world
-                        .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
+                    cx.world.set_activity(cx.world.activity() & !CHECK_ABORT);
                 } else {
                     let runtime = cx.kernel.input_runtime();
                     crate::supermelee::native::battle_picker::live::melee_game_over(
@@ -617,21 +629,16 @@ mod tests {
     }
 
     #[test]
-    fn c_boolean_and_input_widths_are_distinct() {
-        assert_eq!(std::mem::size_of::<abi::BOOLEAN>(), 4);
-        assert_eq!(std::mem::size_of::<bool>(), 1);
-        assert_eq!(std::mem::size_of::<abi::BATTLE_INPUT_STATE>(), 1);
-        assert_eq!(std::mem::size_of::<abi::COUNT>(), 2);
-        assert_eq!(std::mem::size_of::<abi::SIZE>(), 2);
-    }
-
-    #[test]
     fn retreat_permission_uses_the_supplied_world_and_low_activity_byte() {
         use crate::engine::{StoryKey, World};
         let mut world = World::new();
         world.story = Some(crate::state::game_state::StoryState::new());
         for activity in 0..=4 {
-            for flags in [0, abi::IN_BATTLE as u16, abi::CHECK_ABORT as u16] {
+            for flags in [
+                0,
+                crate::engine::world::activity::activity_flags::IN_BATTLE,
+                crate::engine::world::activity::activity_flags::CHECK_ABORT,
+            ] {
                 world.set_activity(activity | flags);
                 for starbase in 0..=1 {
                     world.set_story_state(StoryKey::STARBASE_AVAILABLE, starbase);
@@ -639,8 +646,9 @@ mod tests {
                         world.set_story_state(StoryKey::BOMB_CARRIER, bomb);
                         assert_eq!(
                             run_away_allowed(&world),
-                            (activity == abi::IN_ENCOUNTER as u16
-                                || activity == abi::IN_LAST_BATTLE as u16)
+                            (activity
+                                == crate::engine::world::activity::activity_kinds::IN_ENCOUNTER
+                                || activity == crate::engine::battle::flags::IN_LAST_BATTLE as u16)
                                 && starbase != 0
                                 && bomb == 0,
                         );
@@ -655,18 +663,18 @@ mod tests {
         for input in 0u8..=255 {
             let mut expected = 0;
             if input & 1 != 0 {
-                expected |= abi::LEFT as u8;
+                expected |= crate::engine::battle::ai_constants::LEFT as u8;
             } else if input & 2 != 0 {
-                expected |= abi::RIGHT as u8;
+                expected |= crate::engine::battle::ai_constants::RIGHT as u8;
             }
             if input & 4 != 0 {
-                expected |= abi::THRUST as u8;
+                expected |= crate::engine::battle::ai_constants::THRUST as u8;
             }
             if input & 8 != 0 {
-                expected |= abi::WEAPON as u8;
+                expected |= crate::engine::battle::ai_constants::WEAPON as u8;
             }
             if input & 16 != 0 {
-                expected |= abi::SPECIAL as u8;
+                expected |= crate::engine::battle::ai_constants::SPECIAL as u8;
             }
             assert_eq!(ship_input(input, 1), expected);
             assert_eq!(ship_input(input, u16::MAX), expected);
@@ -696,7 +704,10 @@ mod tests {
         let both = BATTLE_LEFT | BATTLE_RIGHT | BATTLE_THRUST | BATTLE_WEAPON | BATTLE_SPECIAL;
         assert_eq!(
             ship_input(both, 1),
-            (abi::LEFT | abi::THRUST | abi::WEAPON | abi::SPECIAL) as u8
+            (crate::engine::battle::ai_constants::LEFT
+                | crate::engine::battle::ai_constants::THRUST
+                | crate::engine::battle::ai_constants::WEAPON
+                | crate::engine::battle::ai_constants::SPECIAL) as u8
         );
         assert_eq!(ship_input(both, 0), 0);
     }

@@ -6,37 +6,19 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| {
-        s.handle(
-            Handler::CombatIsInevitable,
-            i32::try_from(r).expect("invalid response"),
-        )
+        s.handle(Handler::CombatIsInevitable, i32::from(r))
     });
 }
-fn zombies(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::Zombies,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn zombies(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::Zombies, i32::from(r)));
 }
-fn normal_umgah(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NormalUmgah,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn normal_umgah(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NormalUmgah, i32::from(r)));
 }
-fn umgah_reward(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::UmgahReward,
-            i32::try_from(r).expect("invalid response"),
-        )
-    });
+fn umgah_reward(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::UmgahReward, i32::from(r)));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

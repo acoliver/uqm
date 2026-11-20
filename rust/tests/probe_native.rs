@@ -9,7 +9,8 @@ mod battle_context;
 #[test]
 fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
     battle_context::run(|_| unsafe {
-        let d = battle::descriptor(uqm_rust::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID);
+        let d =
+            battle::descriptor(uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID);
         let info = d.ship_info;
         assert_eq!((info.ship_flags, info.ship_cost), (0, 0));
         assert_eq!((info.crew_level, info.max_crew), (1, 1));
@@ -75,8 +76,8 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
         assert!(d.ship_data.ship_sounds.is_none());
         assert_eq!(
             (
-                d.cyborg_control.ManeuverabilityIndex,
-                d.cyborg_control.WeaponRange
+                d.cyborg_control.maneuverability_index,
+                d.cyborg_control.weapon_range
             ),
             (0, 0)
         );

@@ -266,15 +266,16 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
 #[test]
 #[serial_test::serial]
 fn raw_abi_image_and_state_copies_keep_the_source_identity() {
-    use crate::ships::native::abi::{state, state__bindgen_ty_1, POINT};
+    use crate::engine::battle::record::{ElementImage, ElementVisual};
+    use crate::graphics::geometry::Point;
     observation::enable();
     observation::drain();
     let directory = crate::automation::parity_state::test_directory();
     let mut journal =
         Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
-    let mut current = state {
-        location: POINT { x: 7, y: 9 },
-        image: state__bindgen_ty_1 {
+    let mut current = ElementVisual {
+        location: Point { x: 7, y: 9 },
+        image: ElementImage {
             frame: crate::engine::battle::frames::FrameSelection::ABSENT,
             frames: crate::engine::battle::views::Frames::ABSENT,
         },
@@ -369,7 +370,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     image!(frame; source.current.image.frame, observed_frame(pointer));
     image!(set; source.current.image.frames, observed_set(&views));
     image!(copy; source.next, source.current);
-    image!(frame; source.IntersectControl.IntersectStamp.frame, pointer);
+    image!(frame; source.intersect_control.IntersectStamp.frame, pointer);
     observation::record(Event::Allocate(std::ptr::from_ref(&cloned) as usize));
     image!(copy; cloned, source);
     journal.drain_events(&[]);
@@ -388,7 +389,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     journal.write_element_frame(
         &generation,
         "intersect.frame",
-        (cloned.IntersectControl.IntersectStamp.frame).bits(),
+        (cloned.intersect_control.IntersectStamp.frame).bits(),
         &mut observed,
         "intersect",
     );

@@ -361,8 +361,8 @@ impl OrderedCommitInner {
                         return Ok(());
                     }
                     let next = state.next_to_publish;
-                    if state.pending.contains_key(&next) {
-                        break state.pending.remove(&next).unwrap();
+                    if let Some(entry) = state.pending.remove(&next) {
+                        break entry;
                     }
                     if state.pending.is_empty() {
                         return Ok(());

@@ -31,7 +31,7 @@ fn pc_value(g: &Graphics, x: i16, y: i16, label: i32, value: String) {
     let title = g.game_string(486 + label);
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
     text(g, x, y, Align::Left, title.clone());
-    let string = CString::new(title).unwrap();
+    let string = CString::new(title).unwrap_or_else(|_| panic!("a game string has no NUL byte"));
     let measured = drawing::selected_font()
         .unwrap_or_else(|| panic!("scan label font is not selected"))
         .measure(

@@ -5,7 +5,8 @@
 //! `gfxlib.h` builds them: `BUILD_COLOR` returns its RGB argument and drops
 //! the legacy palette index, and `MAKE_RGB15` always yields alpha 255.
 
-use crate::ships::native::abi::{Color, CIRCLE_SHIFT, FACING_SHIFT};
+use crate::graphics::geometry::Color;
+use crate::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT};
 
 /// `ANGLE_TO_FACING`: rounds an angle to the nearest of sixteen facings.
 const fn angle_to_facing(angle: i32) -> i32 {
@@ -71,7 +72,19 @@ pub mod engine {
         WeaponSpawn, World,
     };
 
-    use crate::ships::native::abi::*;
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
+        MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{CHANGING, DISAPPEARING, NONSOLID, STAMPFILL_PRIMITIVE};
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::CollisionHook;
+    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::ONE_SHIFT;
+    use crate::math::velocity::VELOCITY_SHIFT;
 
     // Core characteristics
     const MAX_CREW: u16 = 22;
@@ -130,8 +143,8 @@ pub mod engine {
         d.resources.icons = Some(c"ship.ilwrath.icons");
         d.resources.melee_icon = Some(c"ship.ilwrath.meleeicons");
         d.fleet_strength = 1410 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet_location = POINT { x: 48, y: 1700 };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.fleet_location = Point { x: 48, y: 1700 };
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -163,8 +176,8 @@ pub mod engine {
 
     fn object_cloaked(cx: &Cx<'_>, e: ElementId) -> bool {
         let prim = cx.primitive_style(e);
-        prim.kind >= gfx_object_NUM_PRIMS as u8
-            || (prim.kind == gfx_object_STAMPFILL_PRIM as u8 && same_color(prim.color, BLACK_COLOR))
+        prim.kind >= EMPTY_PRIMITIVE
+            || (prim.kind == STAMPFILL_PRIMITIVE && same_color(prim.color, BLACK_COLOR))
     }
 
     pub fn flame_preprocess(cx: &mut Cx<'_>, flame: ElementId) {
@@ -185,9 +198,9 @@ pub mod engine {
     pub fn flame_collision(
         cx: &mut Cx<'_>,
         flame: ElementId,
-        flame_point: &mut POINT,
+        flame_point: &mut Point,
         other: ElementId,
-        other_point: &mut POINT,
+        other_point: &mut Point,
     ) {
         cx.weapon_collision(flame, flame_point, other, other_point);
         cx.element_mut(flame).flags &= !(DISAPPEARING as u16);
@@ -250,18 +263,18 @@ pub mod engine {
         let missile = cx.missile(&mut block);
         if let Some(flame) = missile {
             let (vx, vy) = origin.velocity.get_current_components();
-            let dx = vx as SIZE;
-            let dy = vy as SIZE;
+            let dx = vx as i16;
+            let dy = vy as i16;
             cx.element_mut(flame)
                 .velocity
                 .delta_components(i32::from(dx), i32::from(dy));
             // VELOCITY_TO_WORLD (v) is `(v) >> VELOCITY_SHIFT` on a promoted int.
             cx.element_mut(flame).current.location.x =
                 (i32::from(cx.element(flame).current.location.x)
-                    - (i32::from(dx) >> VELOCITY_SHIFT)) as COORD;
+                    - (i32::from(dx) >> VELOCITY_SHIFT)) as i16;
             cx.element_mut(flame).current.location.y =
                 (i32::from(cx.element(flame).current.location.y)
-                    - (i32::from(dy) >> VELOCITY_SHIFT)) as COORD;
+                    - (i32::from(dy) >> VELOCITY_SHIFT)) as i16;
 
             cx.element_mut(flame).collide = Some(CollisionHook::Native(flame_collision));
             cx.element_mut(flame).turn = 0;
@@ -280,18 +293,18 @@ pub mod engine {
                 .unwrap_or_else(|| panic!("tracked Ilwrath target"));
             let mut v = cx.element(target).velocity;
             let (x, y) = v.get_next_components(LOOK_AHEAD);
-            let mut dx0 = x as SIZE;
-            let mut dy0 = y as SIZE;
+            let mut dx0 = x as i16;
+            let mut dy0 = y as i16;
             v = cx.element(ship).velocity;
             let (x, y) = v.get_next_components(LOOK_AHEAD);
-            let dx1 = x as SIZE;
-            let dy1 = y as SIZE;
+            let dx1 = x as i16;
+            let dy1 = y as i16;
             dx0 = ((i32::from(cx.element(target).current.location.x) + i32::from(dx0))
                 - (i32::from(cx.element(ship).current.location.x) + i32::from(dx1)))
-                as SIZE;
+                as i16;
             dy0 = ((i32::from(cx.element(target).current.location.y) + i32::from(dy0))
                 - (i32::from(cx.element(ship).current.location.y) + i32::from(dy1)))
-                as SIZE;
+                as i16;
 
             cx.ship_state_mut(ss).facing =
                 normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx0, dy0))));
@@ -316,9 +329,9 @@ pub mod engine {
     pub fn ilwrath_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         // Local copy: clearing SPECIAL below must not touch cur_status_flags.
-        let mut status_flags: STATUS_FLAGS = cx.ship_state(ss).status;
+        let mut status_flags: u16 = cx.ship_state(ss).status;
         let prim = cx.primitive_style(ship);
-        if prim.kind == gfx_object_STAMPFILL_PRIM as u8 {
+        if prim.kind == STAMPFILL_PRIMITIVE {
             let color = prim.color;
             let weapon_discharge = (status_flags & WEAPON as u16 != 0)
                 && cx.race_stats(ss).ship_info.energy_level >= WEAPON_ENERGY_COST;
@@ -327,7 +340,7 @@ pub mod engine {
                     && ((status_flags & SPECIAL as u16 != 0) || !same_color(color, BLACK_COLOR)))
             {
                 if same_color(color, WHITE_COLOR) {
-                    cx.primitive_style_mut(ship).kind = gfx_object_STAMP_PRIM as u8;
+                    cx.primitive_style_mut(ship).kind = STAMP_PRIMITIVE;
                 } else if let Some(next) = decloak_step(color) {
                     cx.primitive_style_mut(ship).color = next;
                 } else {
@@ -362,11 +375,11 @@ pub mod engine {
 
         if (status_flags & SPECIAL as u16 != 0)
             && cx.ship_state(ss).special_counter == 0
-            && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
+            && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as i16))
         {
             cx.observe_special(ss, special_hook);
             cx.primitive_style_mut(ship).color = WHITE_COLOR;
-            cx.primitive_style_mut(ship).kind = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive_style_mut(ship).kind = STAMPFILL_PRIMITIVE;
 
             // CLOAKING_ON
             cx.process_ship_sound(ss, 1, ship);
@@ -421,8 +434,8 @@ mod tests {
 
     #[test]
     fn precedence_of_the_original_input_mask_clears_only_left() {
-        let mask = (!(crate::ships::native::abi::LEFT as i32)
-            | crate::ships::native::abi::RIGHT as i32) as u8;
+        let mask = (!(crate::engine::battle::ai_constants::LEFT as i32)
+            | crate::engine::battle::ai_constants::RIGHT as i32) as u8;
         assert_eq!(mask, 0xFE);
     }
 

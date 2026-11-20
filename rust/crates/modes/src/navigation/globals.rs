@@ -1,7 +1,7 @@
 //! Ownership and lifecycle of the live navigation world, ported from globdata.c.
 
 use super::groups::{init_group_info, uninit_group_info};
-use crate::engine::battle::record::{FLEET_STUFF, SHIP_INFO};
+use crate::engine::battle::record::{FleetRecord, ShipInfoRecord};
 use crate::engine::world::activity::activity_flags::START_INTERPLANETARY;
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
@@ -35,7 +35,7 @@ fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
     1
 }
 
-fn fleet_template(info: &SHIP_INFO, fleet: &FLEET_STUFF) -> FleetTemplate {
+fn fleet_template(info: &ShipInfoRecord, fleet: &FleetRecord) -> FleetTemplate {
     FleetTemplate {
         crew_level: info.crew_level,
         max_crew: info.max_crew,

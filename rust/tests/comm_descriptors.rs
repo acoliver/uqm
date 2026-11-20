@@ -119,7 +119,7 @@ fn all_descriptor_factories_initialize_without_loaded_resources() {
 fn respond(
     comm: &mut Comm,
     cx: &mut Cx<'_>,
-    path: &[u32],
+    path: &[u16],
 ) -> Result<(), Box<dyn std::error::Error>> {
     for &reference in path {
         let callback = comm
@@ -253,7 +253,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                         comm.set_conversation_phrases(Some(phrases.into()));
                         intro(&mut comm, &mut cx);
                         // References below are the actual scripts' offered phrase indices.
-                        let path: &[u32] = match (conversation, variant) {
+                        let path: &[u16] = match (conversation, variant) {
                             (2, 1) => &[234],                                   // HAVE_MINERALS
                             (5, _) => &[58, 66, 70], // IMPORTANT_DUTY, PROCREATING_WILDLY, FEMALES
                             (6, 0) => &[4, 29, 31, 37, 43, 47, 56, 48, 59, 61], // Fwiffo recruitment

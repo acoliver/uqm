@@ -3,9 +3,16 @@
 use crate::engine::battle::observation::samatra as observation;
 
 use super::{Events, Snapshot};
+use crate::engine::battle::flags::{
+    DISAPPEARING, FINITE_LIFE, IN_LAST_BATTLE, NONSOLID, PLAYER_SHIP, RPG_PLAYER_NUM,
+    STAMPFILL_PRIMITIVE,
+};
+use crate::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use crate::engine::world::activity::activity_flags::IN_BATTLE;
+use crate::math::battle_types::ONE_SHIFT;
 use crate::{
     engine::battle::{Cx, ElementId, RaceState, ShipId},
-    ships::{native::abi::*, races::samatra::engine},
+    ships::races::samatra::engine,
 };
 
 pub fn observe(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
@@ -38,7 +45,7 @@ fn snapshot(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
         let e = cx.element(id);
         if e.flags & PLAYER_SHIP as u16 != 0 {
             let owner = cx.owner(id);
-            if e.player == RPG_PLAYER_NUM as SIZE {
+            if e.player == RPG_PLAYER_NUM as i16 {
                 project_player(cx, id, owner, &mut result);
             } else if let RaceState::SaMatra(state) = cx.race_stats(owner).state {
                 boss = true;
@@ -76,11 +83,11 @@ fn snapshot(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
                 solid: e.flags & NONSOLID as u16 == 0,
                 x: i32::from(e.current.location.x),
                 y: i32::from(e.current.location.y),
-                velocity: (i32::from(vx as SIZE), i32::from(vy as SIZE)),
+                velocity: (i32::from(vx as i16), i32::from(vy as i16)),
             });
         }
         if e.collide.map(|f| f.address()) == Some(engine::gate_collision as *const () as usize) {
-            result.gate_open = cx.primitive_style(id).kind == gfx_object_STAMPFILL_PRIM as u8;
+            result.gate_open = cx.primitive_style(id).kind == STAMPFILL_PRIMITIVE;
             result.gate = (
                 i32::from(e.current.location.x),
                 i32::from(e.current.location.y),
@@ -88,7 +95,7 @@ fn snapshot(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
         }
         current = cx.elements().succ(id);
     }
-    let active = activity & (0xff | IN_BATTLE as u16) == IN_LAST_BATTLE as u16 | IN_BATTLE as u16;
+    let active = activity & (0xff | IN_BATTLE) == IN_LAST_BATTLE as u16 | IN_BATTLE;
     (
         events,
         (active && boss && events.generation != 0).then_some(result),
@@ -102,7 +109,7 @@ fn project_player(cx: &Cx<'_>, id: ElementId, owner: ShipId, result: &mut Snapsh
     result.selected_species = Some(species);
     result.bomb_carrier = species == SPECIES_ID_SIS_SHIP_ID
         && cx.story_state(crate::engine::battle::StoryKey::BOMB_CARRIER) != 0;
-    result.velocity = (i32::from(vx as SIZE), i32::from(vy as SIZE));
+    result.velocity = (i32::from(vx as i16), i32::from(vy as i16));
     result.player = Some(crate::engine::battle::observation::ShipState {
         x: i32::from(e.current.location.x),
         y: i32::from(e.current.location.y),

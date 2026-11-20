@@ -5,11 +5,7 @@ use std::fmt;
 use super::races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
 
 /// Animation flags (mirrors C ANIMATION_DESC AnimFlags bits).
-#[allow(
-    non_snake_case,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub mod AnimFlags {
+pub mod anim_flags {
     pub const RANDOM_ANIM: u32 = 1 << 0;
     pub const CIRCULAR_ANIM: u32 = 1 << 1;
     pub const YOYO_ANIM: u32 = 1 << 2;
@@ -65,11 +61,7 @@ impl From<u32> for TextValign {
 }
 
 /// Alien song flags (LDAS_FLAGS).
-#[allow(
-    non_snake_case,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub mod AlienSongFlags {
+pub mod alien_song_flags {
     pub const NONE: u32 = 0;
     pub const USE_ALTERNATE: u32 = 1 << 0;
 }
@@ -278,11 +270,7 @@ impl CommData {
 }
 
 /// Ambient sound flags
-#[allow(
-    non_snake_case,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub mod AmbientFlags {
+pub mod ambient_flags {
     pub const NONE: u32 = 0;
     pub const WAIT_TALKING: u32 = 1 << 0;
     pub const WAIT_TRACK: u32 = 1 << 1;
@@ -377,9 +365,9 @@ mod tests {
 
     #[test]
     fn test_ambient_flags() {
-        assert_eq!(AmbientFlags::NONE, 0);
-        assert_eq!(AmbientFlags::WAIT_TALKING, 1);
-        assert_eq!(AmbientFlags::WAIT_TRACK, 2);
+        assert_eq!(ambient_flags::NONE, 0);
+        assert_eq!(ambient_flags::WAIT_TALKING, 1);
+        assert_eq!(ambient_flags::WAIT_TRACK, 2);
     }
 
     #[test]

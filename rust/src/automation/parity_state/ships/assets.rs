@@ -5,7 +5,9 @@ use super::super::{
 };
 use crate::{
     automation::parity::Journal,
-    ships::native::abi::{DATA_STUFF, FRAME, RESOURCE, SHIP_INFO},
+    engine::battle::record::{DataRecord, ShipInfoRecord},
+    graphics::drawable::FrameId,
+    resource::ResourceKey,
 };
 use std::ffi::CStr;
 
@@ -21,7 +23,7 @@ pub(super) struct Assets<'a> {
 impl<'a> Assets<'a> {
     /// # Safety
     /// The descriptor's keys and loaded resources are immutable and live for `'a`.
-    pub(super) unsafe fn borrow(info: &'a SHIP_INFO, data: &'a DATA_STUFF) -> Self {
+    pub(super) unsafe fn borrow(info: &'a ShipInfoRecord, data: &'a DataRecord) -> Self {
         let keys = resource_keys(info, data)
             .into_iter()
             .map(|(name, key)| {
@@ -100,7 +102,7 @@ impl<'a> Assets<'a> {
     }
 }
 
-fn resource_keys(info: &SHIP_INFO, data: &DATA_STUFF) -> [(&'static str, RESOURCE); 15] {
+fn resource_keys(info: &ShipInfoRecord, data: &DataRecord) -> [(&'static str, ResourceKey); 15] {
     let captain = &data.captain_control;
     [
         ("race.strings.resource", info.race_strings_rsc),
@@ -121,7 +123,7 @@ fn resource_keys(info: &SHIP_INFO, data: &DATA_STUFF) -> [(&'static str, RESOURC
     ]
 }
 
-fn frame_handles(info: &SHIP_INFO, data: &DATA_STUFF) -> [(&'static str, FRAME); 16] {
+fn frame_handles(info: &ShipInfoRecord, data: &DataRecord) -> [(&'static str, FrameId); 16] {
     let captain = &data.captain_control;
     [
         ("race.icons", info.icons),

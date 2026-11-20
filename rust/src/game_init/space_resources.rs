@@ -1,18 +1,20 @@
 //! Space animation ownership, ported from init.c (GPL-2.0-or-later).
 
 fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
-    kernel.ships_initialized || activity as u8 == crate::ships::native::abi::IN_ENCOUNTER as u8
+    kernel.ships_initialized
+        || activity as u8 == crate::engine::world::activity::activity_kinds::IN_ENCOUNTER as u8
 }
 
 pub(crate) mod live {
+    use crate::engine::battle::flags::{IN_LAST_BATTLE, RPG_PLAYER_NUM};
+    use crate::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
     use crate::graphics::{context::ContextLease, drawable::ContextFrame};
-    use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID};
 
     fn remaining_battle_crew(cx: &crate::engine::battle::Cx<'_>) -> u16 {
         let mut crew = 0u16;
         let mut next = cx.elements().head();
         while let Some(id) = next {
-            if cx.element(id).flags & crate::ships::native::abi::CREW_OBJECT as u16 != 0 {
+            if cx.element(id).flags & crate::engine::battle::flags::CREW_OBJECT as u16 != 0 {
                 crew = crew.wrapping_add(1);
             }
             next = cx.elements().succ(id);
@@ -31,7 +33,7 @@ pub(crate) mod live {
     )> {
         use crate::engine::battle::Parent;
         let element = cx.element(id);
-        if element.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0
+        if element.flags & crate::engine::battle::flags::PLAYER_SHIP as u16 == 0
             && !element
                 .death
                 .is_some_and(|callback| callback.address() == replacement.address())
@@ -47,7 +49,8 @@ pub(crate) mod live {
     }
 
     pub fn uninit_ships(cx: &mut crate::engine::battle::Cx<'_>) {
-        use crate::ships::native::abi::*;
+        use crate::engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
+        use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
         if !super::ship_teardown_needed(cx.kernel, cx.world.activity()) {
             return;
         }
@@ -65,9 +68,9 @@ pub(crate) mod live {
                 descriptor.unload(cx.world, true);
             }
         }
-        let activity = cx.world.activity() & !(IN_BATTLE as u16);
+        let activity = cx.world.activity() & !IN_BATTLE;
         cx.world.set_activity(activity);
-        if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT as u16 == 0 {
+        if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT == 0 {
             write_back_surviving_ship_crew(cx, ships);
         }
         for side in 0..2 {
@@ -275,7 +278,7 @@ pub use live::*;
 mod tests {
     use super::*;
     use crate::engine::battle::record::recover_ship_crew;
-    use crate::ships::native::abi::RaceDescriptor;
+    use crate::engine::battle::record::RaceDescriptor;
 
     #[test]
     fn teardown_guard_belongs_to_the_kernel_and_preserves_encounter_recovery() {

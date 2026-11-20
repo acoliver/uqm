@@ -14,7 +14,7 @@ pub unsafe fn rust_hmalloc(size: usize) -> *mut c_void {
         // Return a non-null pointer for zero-size allocation
         let ptr = libc::malloc(1);
         if ptr.is_null() {
-            log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
+            log_add(LogLevel::FATAL, "HMalloc() FATAL: out of memory.");
             std::process::abort();
         }
         return ptr;
@@ -22,7 +22,7 @@ pub unsafe fn rust_hmalloc(size: usize) -> *mut c_void {
 
     let ptr = libc::malloc(size);
     if ptr.is_null() {
-        log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
+        log_add(LogLevel::FATAL, "HMalloc() FATAL: out of memory.");
         std::process::abort();
     }
     ptr
@@ -54,7 +54,7 @@ pub unsafe fn rust_hcalloc(size: usize) -> *mut c_void {
         // Return a non-null pointer for zero-size allocation
         let ptr = libc::malloc(1);
         if ptr.is_null() {
-            log_add(LogLevel::Fatal, "HCalloc() FATAL: out of memory.");
+            log_add(LogLevel::FATAL, "HCalloc() FATAL: out of memory.");
             std::process::abort();
         }
         libc::memset(ptr, 0, 1);
@@ -63,7 +63,7 @@ pub unsafe fn rust_hcalloc(size: usize) -> *mut c_void {
 
     let ptr = libc::malloc(size);
     if ptr.is_null() {
-        log_add(LogLevel::Fatal, "HCalloc() FATAL: out of memory.");
+        log_add(LogLevel::FATAL, "HCalloc() FATAL: out of memory.");
         std::process::abort();
     }
     libc::memset(ptr, 0, size);
@@ -87,7 +87,7 @@ pub unsafe fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
         }
         let new_ptr = libc::malloc(1);
         if new_ptr.is_null() {
-            log_add(LogLevel::Fatal, "HRealloc() FATAL: out of memory.");
+            log_add(LogLevel::FATAL, "HRealloc() FATAL: out of memory.");
             std::process::abort();
         }
         return new_ptr;
@@ -95,7 +95,7 @@ pub unsafe fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 
     let new_ptr = libc::realloc(ptr, size);
     if new_ptr.is_null() {
-        log_add(LogLevel::Fatal, "HRealloc() FATAL: out of memory.");
+        log_add(LogLevel::FATAL, "HRealloc() FATAL: out of memory.");
         std::process::abort();
     }
     new_ptr

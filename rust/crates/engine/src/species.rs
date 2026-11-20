@@ -62,3 +62,38 @@ pub mod ship {
     /// `SAMATRA_SHIP = URQUAN_DRONE_SHIP` (races.h).
     pub const SAMATRA_SHIP: u8 = URQUAN_DRONE_SHIP;
 }
+
+/// Species identifiers of the live race descriptors.
+pub mod species_id {
+    pub const SPECIES_ID_NO_ID: u32 = 0;
+    pub const SPECIES_ID_ARILOU_ID: u32 = 1;
+    pub const SPECIES_ID_CHMMR_ID: u32 = 2;
+    pub const SPECIES_ID_EARTHLING_ID: u32 = 3;
+    pub const SPECIES_ID_ORZ_ID: u32 = 4;
+    pub const SPECIES_ID_PKUNK_ID: u32 = 5;
+    pub const SPECIES_ID_SHOFIXTI_ID: u32 = 6;
+    pub const SPECIES_ID_SPATHI_ID: u32 = 7;
+    pub const SPECIES_ID_SUPOX_ID: u32 = 8;
+    pub const SPECIES_ID_THRADDASH_ID: u32 = 9;
+    pub const SPECIES_ID_UTWIG_ID: u32 = 10;
+    pub const SPECIES_ID_VUX_ID: u32 = 11;
+    pub const SPECIES_ID_YEHAT_ID: u32 = 12;
+    pub const SPECIES_ID_MELNORME_ID: u32 = 13;
+    pub const SPECIES_ID_DRUUGE_ID: u32 = 14;
+    pub const SPECIES_ID_ILWRATH_ID: u32 = 15;
+    pub const SPECIES_ID_MYCON_ID: u32 = 16;
+    pub const SPECIES_ID_SLYLANDRO_ID: u32 = 17;
+    pub const SPECIES_ID_UMGAH_ID: u32 = 18;
+    pub const SPECIES_ID_UR_QUAN_ID: u32 = 19;
+    pub const SPECIES_ID_ZOQFOTPIK_ID: u32 = 20;
+    pub const SPECIES_ID_SYREEN_ID: u32 = 21;
+    pub const SPECIES_ID_KOHR_AH_ID: u32 = 22;
+    pub const SPECIES_ID_ANDROSYNTH_ID: u32 = 23;
+    pub const SPECIES_ID_CHENJESU_ID: u32 = 24;
+    pub const SPECIES_ID_MMRNMHRM_ID: u32 = 25;
+    pub const SPECIES_ID_LAST_MELEE_ID: u32 = 25;
+    pub const SPECIES_ID_SIS_SHIP_ID: u32 = 26;
+    pub const SPECIES_ID_SA_MATRA_ID: u32 = 27;
+    pub const SPECIES_ID_UR_QUAN_PROBE_ID: u32 = 28;
+    pub const SPECIES_ID_NUM_SPECIES_ID: u32 = 29;
+}

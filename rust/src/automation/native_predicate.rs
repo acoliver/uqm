@@ -714,7 +714,7 @@ pub(super) mod tests {
                     ships: [
                         Some(BattleShip {
                             identity: [3, 7],
-                            species: crate::ships::native::abi::SPECIES_ID_PKUNK_ID,
+                            species: crate::engine::species::species_id::SPECIES_ID_PKUNK_ID,
                             position: [0; 2],
                             velocity: [0; 2],
                             facing: 0,

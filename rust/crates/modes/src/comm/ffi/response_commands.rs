@@ -1,13 +1,13 @@
 //! Response mutations and their ordered observer notifications.
 
 use crate::comm::Comm;
-use std::ffi::{c_int, c_uint, CStr};
+use std::ffi::{c_int, CStr};
 
 /// Add a response option, rejecting absent or non-UTF-8 resource text.
 /// `func` receives `response_ref` when the response is selected.
 pub fn do_response_phrase(
     comm: &mut Comm,
-    response_ref: c_uint,
+    response_ref: u16,
     text: Option<&CStr>,
     func: Option<crate::comm::response::ResponseFunc>,
 ) -> c_int {
@@ -115,7 +115,7 @@ mod tests {
     fn selected_callback_releases_state_and_publishes_its_result_to_the_observer() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        fn callback(comm: &mut Comm, _cx: &mut Cx<'_>, reference: u32) {
+        fn callback(comm: &mut Comm, _cx: &mut Cx<'_>, reference: u16) {
             assert_eq!(reference, 17);
             let state = comm;
             assert_eq!(state.responses().count(), 0);

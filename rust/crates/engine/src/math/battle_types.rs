@@ -22,6 +22,10 @@ pub const ONE_SHIFT: u32 = 2;
 pub const SCALED_ONE: i32 = 1 << ONE_SHIFT; // 4
 pub const MAX_REDUCTION: u32 = 3;
 pub const MAX_VIS_REDUCTION: u32 = 2;
+pub const REDUCTION_SHIFT: u32 = 1;
+pub const ZOOM_SHIFT: u32 = 8;
+pub const MAX_ZOOM_OUT: u32 = 1024;
+pub const BACKGROUND_SHIFT: u32 = 3;
 
 // Battle space dimensions (logical coordinates)
 // LOG_SPACE_WIDTH = DISPLAY_TO_WORLD(SPACE_WIDTH) << MAX_REDUCTION
@@ -156,7 +160,7 @@ pub fn shortest_path_delta(from: i32, to: i32, size: i32) -> i32 {
 
 // Quarter-circle sine table (16 entries for 0-90 degrees)
 // Scaled by 16384 (1 << 14) to match C FLT_ADJUST
-const SIN_SHIFT: u32 = 14;
+pub const SIN_SHIFT: u32 = 14;
 /// Full 64-entry sine table from C trans.c (lines 23-89)
 /// UQM angle system: 0=North(-Y), 16=East(+X), 32=South(+Y), 48=West(-X)
 pub const SINE_TABLE: [i32; 64] = [

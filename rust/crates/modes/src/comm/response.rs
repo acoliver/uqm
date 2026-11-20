@@ -4,13 +4,13 @@
 
 use crate::comm::Comm;
 /// Dialogue callback receiving the selected response reference.
-pub type ResponseFunc = fn(&mut Comm, &mut crate::engine::battle::Cx<'_>, u32);
+pub type ResponseFunc = fn(&mut Comm, &mut crate::engine::battle::Cx<'_>, u16);
 
 /// A response option in a conversation
 #[derive(Clone)]
 pub struct ResponseEntry {
     /// Reference ID for this response
-    pub response_ref: u32,
+    pub response_ref: u16,
     /// Display text for the response
     pub response_text: String,
     /// Callback function — receives response_ref when selected (RS-REQ-011)
@@ -29,7 +29,7 @@ impl std::fmt::Debug for ResponseEntry {
 
 impl ResponseEntry {
     /// Create a new response entry
-    pub fn new(response_ref: u32, text: &str, func: Option<ResponseFunc>) -> Self {
+    pub fn new(response_ref: u16, text: &str, func: Option<ResponseFunc>) -> Self {
         Self {
             response_ref,
             response_text: text.to_string(),
@@ -38,7 +38,7 @@ impl ResponseEntry {
     }
 
     /// Create a response with no callback
-    pub fn text_only(response_ref: u32, text: &str) -> Self {
+    pub fn text_only(response_ref: u16, text: &str) -> Self {
         Self::new(response_ref, text, None)
     }
 }
@@ -86,7 +86,7 @@ impl ResponseSystem {
     /// Add a response with all parameters
     pub fn do_response_phrase(
         &mut self,
-        response_ref: u32,
+        response_ref: u16,
         text: &str,
         func: Option<ResponseFunc>,
     ) -> bool {
@@ -109,14 +109,14 @@ impl ResponseSystem {
     pub fn offered_index(
         &self,
         phrase: &str,
-        name: impl Fn(u32) -> Option<String>,
+        name: impl Fn(u16) -> Option<String>,
     ) -> Result<usize, String> {
         self.choices(name).index(phrase)
     }
 
     pub fn choices(
         &self,
-        name: impl Fn(u32) -> Option<String>,
+        name: impl Fn(u16) -> Option<String>,
     ) -> crate::engine::observe::ResponseChoices {
         crate::engine::observe::ResponseChoices(
             self.responses
@@ -217,7 +217,7 @@ impl ResponseSystem {
         &self,
         comm: &mut Comm,
         cx: &mut crate::engine::battle::Cx<'_>,
-    ) -> Option<u32> {
+    ) -> Option<u16> {
         let response = self.get_selected()?;
         let func = response.response_func?;
 
@@ -232,7 +232,7 @@ impl ResponseSystem {
 mod tests {
     use super::*;
 
-    fn test_callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _ref: u32) {}
+    fn test_callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _ref: u16) {}
 
     #[test]
     fn test_response_entry_new() {
@@ -273,7 +273,7 @@ mod tests {
         let mut sys = ResponseSystem::new();
 
         for i in 0..MAX_RESPONSES {
-            assert!(sys.add_response(ResponseEntry::text_only(i as u32, "Option")));
+            assert!(sys.add_response(ResponseEntry::text_only(i as u16, "Option")));
         }
 
         // Should fail at max
@@ -365,13 +365,13 @@ mod tests {
         assert!(sys.get(1).unwrap().response_func.is_some());
     }
 
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static CALLBACK_ARG: AtomicU32 = AtomicU32::new(0);
+    use std::sync::atomic::{AtomicU16, Ordering};
+    static CALLBACK_ARG: AtomicU16 = AtomicU16::new(0);
 
     fn recording_callback(
         _comm: &mut Comm,
         _cx: &mut crate::engine::battle::Cx<'_>,
-        response_ref: u32,
+        response_ref: u16,
     ) {
         CALLBACK_ARG.store(response_ref, Ordering::SeqCst);
     }
@@ -417,8 +417,8 @@ mod tests {
 #[cfg(test)]
 mod phrase_selection_tests {
     use super::*;
-    fn callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
-    fn name(reference: u32) -> Option<String> {
+    fn callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
+    fn name(reference: u16) -> Option<String> {
         match reference {
             55 => Some("we_will_transfer_now".into()),
             56 => Some("what_will_you_give_us".into()),

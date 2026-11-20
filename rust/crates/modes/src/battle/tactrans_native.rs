@@ -1,7 +1,6 @@
 //! Ship death, replacement, warp transitions, and battle-end synchronization.
 
 use crate::battle::context_access::ContextOps;
-use crate::ships::native::abi;
 
 pub const fn minimum_ditty_frames(ticks_per_second: u32) -> u16 {
     (ticks_per_second * 3 / (ticks_per_second / 24)) as u16
@@ -39,9 +38,9 @@ pub const fn explosion_step(tick: u8) -> ExplosionStep {
 
 fn explosion_position_random(random: u32) -> (u16, u16) {
     let angle = (random >> 16) as u8 as u16;
-    let mut distance = ((random as u8 % 8) as u16) << abi::ONE_SHIFT;
+    let mut distance = ((random as u8 % 8) as u16) << crate::math::battle_types::ONE_SHIFT;
     if ((random >> 8) as u8) < (256 / 3) as u8 {
-        distance += 8 << abi::ONE_SHIFT;
+        distance += 8 << crate::math::battle_types::ONE_SHIFT;
     }
     (angle, distance)
 }
@@ -49,7 +48,8 @@ fn explosion_position_random(random: u32) -> (u16, u16) {
 fn explosion_velocity_random(random: u32) -> (u16, u16) {
     (
         random as u8 as u16,
-        (((random >> 8) as u8 % 5) as u16) << (abi::ONE_SHIFT + abi::VELOCITY_SHIFT),
+        (((random >> 8) as u8 % 5) as u16)
+            << (crate::math::battle_types::ONE_SHIFT + crate::math::velocity::VELOCITY_SHIFT),
     )
 }
 
@@ -129,15 +129,36 @@ pub mod engine {
     use crate::battle::battle_native::engine::battle_song;
     use crate::battle::battle_native::engine::rgb15;
     use crate::battle::encount_native::fleet_is_infinite;
-    use crate::battle::ship_native::engine::animation_preprocess;
-    use crate::battle::ship_native::engine::ship_postprocess;
-    use crate::battle::ship_native::engine::ship_preprocess;
-    use crate::battle::status_native::engine::PostProcessStatus;
+    use crate::engine::battle::ai_constants::{
+        LEFT, MAX_SHIP_MASS, PLAY_VICTORY_DITTY, RIGHT, SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, HYPERJUMP_LIFE,
+        NEUTRAL_PLAYER_NUM, NONSOLID, NORMAL_LIFE, NUM_EXPLOSION_FRAMES, PLAYER_SHIP,
+        STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::net::NetState;
+
     use crate::engine::battle::views::SharedFrames;
-    use crate::engine::battle::world_elements::crew_preprocess;
+    use crate::engine::battle::ElementHook;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
+    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::species::species_id::SPECIES_ID_NO_ID;
+    use crate::engine::time::counter_abi::ONE_SECOND;
+    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE};
+    use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
     use crate::ships::native::{cosine, facing_to_angle, sine};
-    use abi::*;
+    use crate::ui::settings::GAME_SOUND_PRIORITY;
+
+    use crate::engine::battle::world_elements::crew_preprocess;
+
+    use crate::battle::ship_native::engine::animation_preprocess;
+
+    use crate::battle::status_native::engine::post_process_status;
+
+    use crate::battle::ship_native::engine::ship_preprocess;
+
+    use crate::battle::ship_native::engine::ship_postprocess;
 
     fn same_callback(a: Option<crate::engine::battle::ElementHook>, b: ElementFn) -> bool {
         a.map(|f| f.address()) == Some(b as usize)
@@ -216,7 +237,7 @@ pub mod engine {
                 if cx.element(e).flags & CREW_OBJECT as u16 == 0
                     || !same_callback(cx.element(e).pre, crew_preprocess)
                 {
-                    cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as u8;
+                    cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
                     cx.element_mut(e).set_life_span(0);
                     cx.element_mut(e).flags = (NONSOLID | DISAPPEARING | FINITE_LIFE) as u16;
                     cx.element_mut(e).pre = None;
@@ -245,7 +266,7 @@ pub mod engine {
         cx.set_parent(dead, Some(dead_ship));
     }
 
-    fn set_min_ship_life_span(cx: &mut Cx<'_>, ship: ElementId, life: COUNT) {
+    fn set_min_ship_life_span(cx: &mut Cx<'_>, ship: ElementId, life: u16) {
         let state = cx.element(ship);
         if same_callback(state.death, new_ship) {
             assert_ne!(state.flags & FINITE_LIFE as u16, 0);
@@ -292,7 +313,7 @@ pub mod engine {
     pub fn new_ship_with_picker(
         cx: &mut Cx<'_>,
         dead: ElementId,
-        pick: impl FnOnce(&mut Cx<'_>, crate::engine::battle::ShipId, COUNT) -> BOOLEAN,
+        pick: impl FnOnce(&mut Cx<'_>, crate::engine::battle::ShipId, u16) -> u32,
     ) {
         let net = cx.b.net.clone();
         let ship = cx.owner(dead);
@@ -322,34 +343,30 @@ pub mod engine {
         }
         if net
             .as_ref()
-            .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle))
+            .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState::InterBattle))
         {
-            cx.world
-                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+            cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
             return;
         }
-        if fleet_is_infinite(cx.world, cx.ship_state(ship).player as COUNT) == 0 {
+        if fleet_is_infinite(cx.world, cx.ship_state(ship).player as u16) == 0 {
             crate::battle::encount_native::engine::update_ship_frag_crew(cx, ship);
             cx.set_ship_species(ship, SPECIES_ID_NO_ID);
         }
-        if pick(cx, ship, cx.ship_state(ship).player as COUNT) != 0 {
+        if pick(cx, ship, cx.ship_state(ship).player as u16) != 0 {
             if net
                 .as_ref()
-                .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle))
+                .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState::InBattle))
             {
-                cx.world
-                    .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+                cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
                 return;
             }
             if restart {
                 battle_song(cx.kernel, cx.world, true);
             }
         } else if cx.b.counters.contains(&0) {
-            cx.world
-                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+            cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
         } else {
-            cx.world
-                .set_activity(cx.world.activity() | CHECK_ABORT as u16);
+            cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
         }
     }
 
@@ -361,7 +378,7 @@ pub mod engine {
             cx.element_mut(ship).pre = None;
         }
         if step.hide_primitive {
-            cx.primitive_style_mut(ship).kind = gfx_object_NUM_PRIMS as u8;
+            cx.primitive_style_mut(ship).kind = EMPTY_PRIMITIVE;
             cx.element_mut(ship).flags |= CHANGING as u16;
         }
         for _ in 0..step.fragments {
@@ -372,7 +389,7 @@ pub mod engine {
             cx.element_mut(e).player = NEUTRAL_PLAYER_NUM as i16;
             cx.element_mut(e).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             cx.element_mut(e).set_life_span(9);
-            cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
             let array = cx.shared_frame_set(SharedFrames::Explosion);
             cx.set_frames(e, false, array);
             let frame = cx.shared_frame_selection(SharedFrames::Explosion);
@@ -436,7 +453,7 @@ pub mod engine {
         cx.element_mut(ship).flags &= !(DISAPPEARING as u16);
         cx.element_mut(ship).flags |= (FINITE_LIFE | NONSOLID) as u16;
         cx.element_mut(ship).pre = Some(ElementHook::Native(explosion_preprocess));
-        cx.element_mut(ship).post = Some(ElementHook::Native(PostProcessStatus));
+        cx.element_mut(ship).post = Some(ElementHook::Native(post_process_status));
         cx.element_mut(ship).death = Some(ElementHook::Native(cleanup_dead_ship));
         cx.set_target(ship, None);
         if play_sound {
@@ -444,7 +461,7 @@ pub mod engine {
                 crate::engine::battle::views::BattleSoundBank::Game,
                 1,
                 ship,
-                (GAME_SOUND_PRIORITY + 1) as u8,
+                GAME_SOUND_PRIORITY + 1,
             );
         }
     }
@@ -477,7 +494,7 @@ pub mod engine {
                 cx.element_mut(e).set_life_span(HYPERJUMP_LIFE as u16);
                 cx.element_mut(e).pre = Some(ElementHook::Native(ship_transition));
                 cx.element_mut(e).post = None;
-                cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as u8;
+                cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
                 cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
             } else if cx.element(e).life_span() < HYPERJUMP_LIFE as u16 {
                 if cx.element(e).life_span() == NORMAL_LIFE as u16
@@ -489,7 +506,7 @@ pub mod engine {
                     );
                     cx.set_frame(e, false, frame.clone());
                     cx.set_frame(e, true, frame);
-                    cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+                    cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
                     cx.init_intersect(e);
                     let frame = cx.equivalent_frame(
                         cx.element_frame_set_first(e, true),
@@ -516,7 +533,7 @@ pub mod engine {
             cx.element_mut(image).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             cx.element_mut(image).set_thrust_wait(1);
             cx.element_mut(image).set_life_span(1);
-            cx.primitive_style_mut(image).kind = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive_style_mut(image).kind = STAMPFILL_PRIMITIVE;
             cx.primitive_style_mut(image).color = rgb15(31, 21, 0);
             cx.element_mut(image).color_cycle = 0;
             let current_image = cx.element(e).current.image;
@@ -569,7 +586,7 @@ pub mod engine {
                 cx.element_mut(e).set_life_span((HYPERJUMP_LIFE + 1) as u16);
                 cx.element_mut(e).pre = Some(ElementHook::Native(ship_transition));
                 cx.element_mut(e).post = None;
-                cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as u8;
+                cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE;
                 cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
             }
         }

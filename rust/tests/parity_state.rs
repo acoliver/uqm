@@ -3,6 +3,9 @@
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+const CANNON_WEAPON: u32 = 11;
+const GUN_WEAPON: u32 = 9;
+const TRACKING_SYSTEM: u32 = 12;
 
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
 use uqm_rust::automation::battle_fight::BattleSnapshot;
@@ -15,8 +18,19 @@ use uqm_rust::battle::netplay::CrcState;
 use uqm_rust::collections::observation;
 use uqm_rust::collections::observation::Event;
 use uqm_rust::engine::battle::frames::FrameArray;
+use uqm_rust::engine::battle::record::CaptainRecord;
+use uqm_rust::engine::battle::record::CharacteristicRecord;
+use uqm_rust::engine::battle::record::RaceDescriptor;
+use uqm_rust::engine::battle::record::ShipRecord;
 use uqm_rust::engine::battle::views::FrameSelection;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::species::species_id::SPECIES_ID_ANDROSYNTH_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_PKUNK_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_UMGAH_ID;
+use uqm_rust::engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_rust::graphics::geometry::Point;
 
 #[path = "parity_state/graph.rs"]
 mod graph;
@@ -197,7 +211,7 @@ fn descriptor_fields(observer: &AutomationObserver, directory: &Path) {
     let descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
-    ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
+    ship.species_id = SPECIES_ID_EARTHLING_ID;
     let mut descriptor = install_descriptor(&mut ship, descriptor);
     // SAFETY: stack records outlive the synchronous snapshots, and the queues are idle.
     unsafe {
@@ -256,9 +270,9 @@ fn update_descriptor(descriptor: &mut RaceDescriptor, ship: &mut ShipRecord) {
     descriptor.ship_info.max_energy = 29;
     descriptor.ship_info.ship_flags = 123;
     descriptor.fleet.strength = 31;
-    descriptor.fleet.known_loc = POINT { x: -7, y: 9 };
-    descriptor.cyborg_control.ManeuverabilityIndex = 13;
-    descriptor.cyborg_control.WeaponRange = 53;
+    descriptor.fleet.known_loc = Point { x: -7, y: 9 };
+    descriptor.cyborg_control.maneuverability_index = 13;
+    descriptor.cyborg_control.weapon_range = 53;
     descriptor.characteristics = sample_characteristics();
     ship.captains_name_index = 7;
     ship.crew_level = 11;
@@ -275,8 +289,8 @@ fn update_descriptor(descriptor: &mut RaceDescriptor, ship: &mut ShipRecord) {
     ship.control = 16;
 }
 
-fn sample_characteristics() -> CHARACTERISTIC_STUFF {
-    CHARACTERISTIC_STUFF {
+fn sample_characteristics() -> CharacteristicRecord {
+    CharacteristicRecord {
         max_thrust: 1,
         thrust_increment: 2,
         energy_regeneration: 3,
@@ -332,8 +346,8 @@ unsafe fn install_ship(ship: &mut ShipRecord) {
     }
     observation::record(Event::Spawn {
         address: ptr::from_mut(ship) as usize,
-        side: ship.playerNr,
-        species: ship.SpeciesID,
+        side: ship.player_nr,
+        species: ship.species_id,
     });
 }
 
@@ -429,9 +443,9 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
         clear_queues();
         let mut ship = battle::PoolShip::new(0);
         let mut descriptor = install_descriptor(&mut ship, descriptor);
-        ship.SpeciesID = SPECIES_ID_UMGAH_ID;
+        ship.species_id = SPECIES_ID_UMGAH_ID;
         install_ship(&mut ship);
-        ship.SpeciesID = SPECIES_ID_UMGAH_ID;
+        ship.species_id = SPECIES_ID_UMGAH_ID;
         {
             let descriptor = &mut descriptor;
             descriptor.race_state = uqm_rust::engine::battle::RaceState::Umgah {
@@ -440,7 +454,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
         }
         let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
-        ship.SpeciesID = SPECIES_ID_ANDROSYNTH_ID;
+        ship.species_id = SPECIES_ID_ANDROSYNTH_ID;
         ship.descriptor
             .as_deref_mut()
             .unwrap_or_else(|| panic!("installed descriptor"))
@@ -451,7 +465,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
         };
         let (fields, _) = snapshot(observer, directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
-        ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
+        ship.species_id = SPECIES_ID_MMRNMHRM_ID;
         let mut mmrnmhrm = Box::new(
             crate::battle_context::with(|cx| {
                 uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_MMRNMHRM_ID)
@@ -479,7 +493,7 @@ fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
         .unwrap_or_else(|| panic!("collision callback is absent from the registry"))
         .0;
     // SAFETY: this exact registered callback is collision, whose native function
-    // signature matches the returned ELEMENT/POINT collision function pointer.
+    // signature matches the returned ELEMENT/Point collision function pointer.
     unsafe { std::mem::transmute(address) }
 }
 
@@ -495,9 +509,9 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        cx.world.set_activity(SUPER_MELEE as u16);
+        cx.world.set_activity(SUPER_MELEE);
     });
-    ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
+    ship.species_id = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
     let descriptor = {
         crate::battle_context::with(|cx| {
@@ -609,7 +623,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.weapon = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.special = FrameArray::retain([view.view(); 3]);
-    descriptor.ship_data.captain_control = CAPTAIN_STUFF {
+    descriptor.ship_data.captain_control = CaptainRecord {
         captain_rsc: c"test.captain".as_ptr(),
         background: frame_pointer,
         turn: frame_pointer,
@@ -622,7 +636,7 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     descriptor.ship_data.ship_sounds = strings;
     descriptor.ship_data.victory_ditty = &mut music;
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
-    ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
+    ship.species_id = SPECIES_ID_EARTHLING_ID;
     install_descriptor(&mut ship, descriptor);
     ship.set_picker_resources(
         uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
@@ -698,7 +712,7 @@ fn asset_expectations(fields: &Fields) {
 fn reused_owner_and_group_identities(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
-    ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
+    ship.species_id = SPECIES_ID_EARTHLING_ID;
     // SAFETY: the idle queue borrows this stack ship only until clear_queues below.
     unsafe {
         install_ship(&mut ship);
@@ -709,7 +723,7 @@ fn reused_owner_and_group_identities(observer: &AutomationObserver, directory: &
         parent: ptr::from_mut(&mut *ship) as usize,
         callback,
     });
-    ship.SpeciesID = SPECIES_ID_UMGAH_ID;
+    ship.species_id = SPECIES_ID_UMGAH_ID;
     observation::record(Event::Spawn {
         address: ptr::from_mut(&mut *ship) as usize,
         side: 0,
@@ -759,7 +773,7 @@ fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) 
     let view = FrameSelection::retain(first);
     descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     let mut element = graph::ElementRecord::new();
-    ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
+    ship.species_id = SPECIES_ID_EARTHLING_ID;
     let descriptor = install_descriptor(&mut ship, descriptor);
     element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     // SAFETY: the stack graph stays live through all snapshots and is detached below.

@@ -7,53 +7,23 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExitConversation, r));
 }
-fn zoq_fot_intro(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ZoqFotIntro,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn zoq_fot_intro(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ZoqFotIntro, r));
 }
-fn form_alliance(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::FormAlliance,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn form_alliance(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::FormAlliance, r));
 }
-fn aquaint_zoq_fot(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AquaintZoqFot,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn aquaint_zoq_fot(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AquaintZoqFot, r));
 }
-fn zoq_fot_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ZoqFotInfo,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn zoq_fot_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ZoqFotInfo, r));
 }
-fn zoq_fot_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ZoqFotHome,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn zoq_fot_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ZoqFotHome, r));
 }
 
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {

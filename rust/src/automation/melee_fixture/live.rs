@@ -4,11 +4,14 @@ use super::*;
 use crate::battle::context_access::fixture::FixtureOps;
 use crate::battle::context_access::fixture::{Element, Phoenix, Ship};
 use crate::battle::element::ElementFlags;
+use crate::engine::battle::ai_constants::{SPECIAL, WEAPON};
 use crate::engine::battle::views::{FrameSelection, Frames};
 use crate::engine::battle::Cx;
 use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
+use crate::engine::world::activity::activity_flags::IN_BATTLE;
+use crate::engine::world::activity::activity_kinds::IN_INTERPLANETARY;
 use crate::graphics::geometry::Point;
-use crate::ships::native::abi::*;
+use crate::math::battle_types::ONE_SHIFT;
 use std::mem;
 
 #[path = "combat.rs"]
@@ -219,7 +222,7 @@ impl Battle {
     }
 
     fn start(&mut self, world: &mut World, species: [u32; 2]) -> Result<(), String> {
-        if world.activity & IN_BATTLE as u16 == 0 {
+        if world.activity & IN_BATTLE == 0 {
             return Err("parity melee fixture requires a running production battle".into());
         }
         [self.a, self.b] = world.fighters()?.map(Some);
@@ -438,7 +441,7 @@ mod tests {
         };
         let Admission::Complete(Some(proof)) = admit(
             Operation::Fixture(FixtureName::StarContact),
-            IN_INTERPLANETARY as u16,
+            IN_INTERPLANETARY,
             position,
             vec![],
         )

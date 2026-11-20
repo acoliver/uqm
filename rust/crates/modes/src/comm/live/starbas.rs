@@ -14,109 +14,44 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     comm.race_scratch.starbas = Some(session);
 }
 
-fn bye_bye(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ByeBye,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn bye_bye(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ByeBye, r));
 }
-fn alliance_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AllianceInfo,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn alliance_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AllianceInfo, r));
 }
-fn hierarchy_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::HierarchyInfo,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn hierarchy_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::HierarchyInfo, r));
 }
-fn alien_races(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AlienRaces,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn alien_races(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AlienRaces, r));
 }
-fn war_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::WarInfo,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn war_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::WarInfo, r));
 }
-fn ancient_history(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AncientHistory,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn ancient_history(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AncientHistory, r));
 }
-fn tell_history(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::TellHistory,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn tell_history(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::TellHistory, r));
 }
-fn defeat_urquan(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::DefeatUrquan,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn defeat_urquan(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::DefeatUrquan, r));
 }
-fn tell_mission(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::TellMission,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn tell_mission(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::TellMission, r));
 }
-fn tell_star_base(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::TellStarBase,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn tell_star_base(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::TellStarBase, r));
 }
-fn need_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NeedInfo,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn need_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NeedInfo, r));
 }
-fn normal_starbase(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NormalStarbase,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn normal_starbase(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NormalStarbase, r));
 }
-fn sell_minerals(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::SellMinerals,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn sell_minerals(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::SellMinerals, r));
 }
 pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {
@@ -236,7 +171,7 @@ mod api {
                 crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 3)
             }
             fn now(&mut self) -> u32 {
-                crate::engine::time::counter_abi::GetTimeCounter()
+                crate::engine::time::counter_abi::get_time_counter()
             }
             fn sleep(&mut self, ticks: u32) {
                 let runtime = self.cx.borrow().kernel.input_runtime();

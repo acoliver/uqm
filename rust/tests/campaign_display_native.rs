@@ -175,7 +175,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         game.kernel
             .configuration
             .update_preferences(|preferences| preferences.menu = 2);
-        let menu_text_count = uqm_rust::ships::native::abi::MAINMENU_STRING_BASE as usize
+        let menu_text_count = uqm_rust::starbase::ids::MAINMENU_STRING_BASE as usize
             + usize::from(uqm_rust::ui::menu_state::PM_ENCOUNTER_GAME_MENU)
             + 1;
         game.kernel
@@ -215,7 +215,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
 fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
     use uqm_rust::{
         engine::StoryKey,
-        ships::native::abi::{MONTHS_STRING_BASE, STATUS_STRING_BASE},
+        starbase::ids::{MONTHS_STRING_BASE, STATUS_STRING_BASE},
         strings::owned_table::LoadedTextTable,
         ui::sis::{format_date, status_message_text},
     };
@@ -282,14 +282,14 @@ fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
 #[forbid(unsafe_code)]
 fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
     use uqm_rust::{
+        engine::battle::flags::IN_LAST_BATTLE,
+        engine::world::activity::activity_kinds::{IN_ENCOUNTER, IN_INTERPLANETARY},
+        engine::world::IN_HYPERSPACE,
         engine::{
             world::{CStarDesc, StarId, CATALOG_LEN},
             StoryKey,
         },
-        ships::native::abi::{
-            IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE, NAVIGATION_STRING_BASE,
-        },
-        starbase::ids::STAR_NUMBER_BASE,
+        starbase::ids::{NAVIGATION_STRING_BASE, STAR_NUMBER_BASE},
         strings::owned_table::LoadedTextTable,
         ui::sis::default_message_text,
     };
@@ -312,8 +312,8 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
     game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
     game.world.set_catalog(std::borrow::Cow::Owned(catalog));
     game.world.current_star = Some(StarId(0));
-    for activity in [IN_INTERPLANETARY, IN_LAST_BATTLE] {
-        game.world.set_activity(activity as u16);
+    for activity in [IN_INTERPLANETARY, IN_LAST_BATTLE as u16] {
+        game.world.set_activity(activity);
         assert_eq!(
             default_message_text(&game.kernel, &game.world),
             c"Alpha Centauri".to_owned()
@@ -329,7 +329,7 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
         default_message_text(&game.kernel, &game.world),
         c"Quasispace".to_owned()
     );
-    game.world.set_activity(IN_ENCOUNTER as u16);
+    game.world.set_activity(IN_ENCOUNTER);
     assert_eq!(
         default_message_text(&game.kernel, &game.world),
         c"".to_owned()

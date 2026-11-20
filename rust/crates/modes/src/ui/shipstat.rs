@@ -1,6 +1,6 @@
 use crate::battle::status_native::draw_battle_crew_amount as draw_crew;
 use crate::engine::battle::link_queue::PickShip;
-use crate::engine::battle::record::SHIP_INFO;
+use crate::engine::battle::record::ShipInfoRecord;
 use crate::engine::Kernel;
 use crate::graphics::{
     geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
@@ -176,7 +176,7 @@ impl StatusGraphics {
 
     pub fn draw(
         &self,
-        ship: &mut SHIP_INFO,
+        ship: &mut ShipInfoRecord,
         portrait: &crate::graphics::drawable::ContextFrame,
         y: i16,
         clip: Option<Rect>,
@@ -302,7 +302,7 @@ pub fn update_statistics(
     numeric_crew: bool,
     pc_menu: bool,
     font: Option<&crate::graphics::font::FontLease>,
-    ship: &mut SHIP_INFO,
+    ship: &mut ShipInfoRecord,
     y_offs: i16,
     deltas: (i16, i16),
 ) {
@@ -340,7 +340,7 @@ pub fn update_statistics(
 
 fn draw_crew_delta(
     draw: &mut impl FnMut(Color, Option<Rect>),
-    ship: &mut SHIP_INFO,
+    ship: &mut ShipInfoRecord,
     y_offs: i16,
     crew_delta: i16,
 ) {
@@ -392,7 +392,7 @@ fn draw_crew_delta(
 
 fn draw_energy_delta(
     draw: &mut impl FnMut(Color, Option<Rect>),
-    ship: &mut SHIP_INFO,
+    ship: &mut ShipInfoRecord,
     y_offs: i16,
     mut energy_delta: i16,
 ) {
@@ -437,7 +437,7 @@ fn draw_energy_delta(
 
 fn draw_crew_marker(
     draw: &mut impl FnMut(Color, Option<Rect>),
-    ship: &SHIP_INFO,
+    ship: &ShipInfoRecord,
     new_level: u16,
     y: i16,
 ) {

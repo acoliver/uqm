@@ -104,11 +104,7 @@ mod production {
                 (
                     entry.scan,
                     entry.node,
-                    surface
-                        .world
-                        .get(entry.entity)
-                        .expect("generated surface entity")
-                        .position,
+                    surface.entity(entry.entity).position,
                 )
             })
             .collect();

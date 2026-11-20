@@ -110,7 +110,7 @@ pub(crate) mod runtime {
             }
             Ok::<_, &str>((text, indices))
         })()
-        .expect("invalid number speech");
+        .unwrap_or_else(|error| panic!("invalid number speech: {error}"));
         if speech.is_some() {
             assert!(indices.len() < crate::sound::trackplayer::MAX_MULTI_TRACKS);
             let tracks: Vec<_> = indices

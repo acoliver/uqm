@@ -8,7 +8,7 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     f(&mut Dialogue { api: &mut api });
 }
 
-fn combat(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
+fn combat(comm: &mut Comm, cx: &mut Cx<'_>, response: u16) {
     run(comm, cx, |dialogue| {
         dialogue.handle(Handler::Combat, response as i32)
     });

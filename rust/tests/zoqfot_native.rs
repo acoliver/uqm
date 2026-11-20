@@ -5,7 +5,22 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, cosine, sine};
+use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::ai_constants::WEAPON;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::species::species_id::SPECIES_ID_ZOQFOTPIK_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::ONE_SHIFT;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::VelocityDesc;
+use uqm_rust::math::velocity::VELOCITY_SHIFT;
+use uqm_rust::ships::native::{cosine, sine};
 #[test]
 fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
     battle_context::run(|_| {
@@ -30,7 +45,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                 ),
                 (3761, 5333)
             );
-            assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 400);
+            assert_eq!(ship.descriptor_mut().cyborg_control.weapon_range, 400);
             let h = with_rng(19, 0, || {
                 ship.weapon(1)
                     .into_iter()
@@ -44,14 +59,14 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
             let e = battle::element(h);
             assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));
             assert_eq!(velocity(&(*e).velocity), toward(16 << ONE_SHIFT << 1, 0));
-            TFB_SeedRandom(19);
-            let angle = ((TFB_Random() as COUNT) % 3).wrapping_sub(1);
+            seed_random(19);
+            let angle = ((random() as u16) % 3).wrapping_sub(1);
             with_rng(19, 1, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
             assert_eq!(((*e).next.image.frame.raw()).index(), 1);
             assert_eq!((*e).turn, 2);
-            let mut v: VELOCITY_DESC = mem::zeroed();
+            let mut v: VelocityDesc = mem::zeroed();
             let speed = (15 << ONE_SHIFT) << 1 << VELOCITY_SHIFT;
             (v).set_components(
                 i32::from(cosine(i32::from(angle), speed)),
@@ -116,8 +131,8 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
             let tongue = battle::element(battle::tail());
-            let mut a = POINT { x: 100, y: 100 };
-            let mut b = POINT { x: 110, y: 100 };
+            let mut a = Point { x: 100, y: 100 };
+            let mut b = Point { x: 110, y: 100 };
             with_rng(7, 0, || {
                 hooks::invoke_collision_pointer(
                     (*tongue).collision_func.unwrap(),
@@ -173,15 +188,15 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
             let enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
-            (*enemy.ptr()).next.location = POINT { x: 4000, y: 3900 };
+            (*enemy.ptr()).next.location = Point { x: 4000, y: 3900 };
             ship.descriptor_mut().ship_info.energy_level = 0;
             for (turn, face, tongue) in [(4, 0, true), (4, 1, false), (5, 0, false)] {
-                let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                concerns[ENEMY_SHIP_INDEX as usize] = EVALUATE_DESC {
-                    ObjectPtr: enemy.ptr(),
+                let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                concerns[ENEMY_SHIP_INDEX as usize] = EvaluateRecord {
+                    object_ptr: enemy.ptr(),
                     facing: 0,
                     which_turn: turn,
-                    MoveState: MOVEMENT_STATE_ENTICE,
+                    move_state: MOVEMENT_STATE_ENTICE,
                 };
                 ship.ship_mut().ship_facing = face;
                 ship.ship_mut().ship_input_state = WEAPON as u8;
@@ -195,7 +210,7 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
                 assert_eq!(ship.ship_mut().ship_input_state & WEAPON as u8, 0);
                 assert_eq!(ship.ship_mut().weapon_counter, 0);
                 assert_eq!(
-                    concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                    concerns[ENEMY_SHIP_INDEX as usize].move_state,
                     if turn <= 4 {
                         MOVEMENT_STATE_PURSUE
                     } else {

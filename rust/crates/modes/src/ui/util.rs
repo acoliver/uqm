@@ -10,7 +10,7 @@ use crate::graphics::{
 };
 use crate::sound::heart_ffi::{pause_track, playing_track, resume_track};
 use uqm_engine::graphics::{state::game_active, state::quit_posted};
-use uqm_engine::time::counter_abi::{GetTimeCounter, ONE_SECOND};
+use uqm_engine::time::counter_abi::{get_time_counter, ONE_SECOND};
 
 pub(crate) fn box_rectangles(
     rect: Rect,
@@ -114,7 +114,7 @@ pub fn draw_starcon_box(
 }
 
 pub fn seed_random_numbers() -> u32 {
-    let now = GetTimeCounter();
+    let now = get_time_counter();
     crate::math::seed_random(now);
     now
 }
@@ -177,7 +177,7 @@ fn wait_until(cx: &mut Cx<'_>, io: &mut Io<'_>, released: bool, timeout: u32, re
     runtime.update(cx);
     let mut pressed = input.current().any_button_pressed();
     while pressed == released
-        && (timeout == u32::MAX || GetTimeCounter() < timeout)
+        && (timeout == u32::MAX || get_time_counter() < timeout)
         && cx.world.activity() & 0x4000 == 0
         && !quit_posted()
     {
@@ -219,7 +219,7 @@ pub fn wait_for_any_button(
     let timeout = if duration == u32::MAX {
         duration
     } else {
-        duration.wrapping_add(GetTimeCounter())
+        duration.wrapping_add(get_time_counter())
     };
     wait_for_any_button_until(cx, io, new_button, timeout, reset)
 }
@@ -232,7 +232,7 @@ pub fn wait_for_no_input(cx: &mut Cx<'_>, io: &mut Io<'_>, duration: u32, reset:
     let timeout = if duration == u32::MAX {
         duration
     } else {
-        duration.wrapping_add(GetTimeCounter())
+        duration.wrapping_add(get_time_counter())
     };
     wait_for_no_input_until(cx, io, timeout, reset)
 }

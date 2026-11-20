@@ -1,6 +1,19 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
 pub mod engine {
-    use crate::ships::native::{abi::*, angle_to_facing, normalize_facing, wrap_delta};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE,
+        MAX_ENERGY_SIZE, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, CREW_OBJECT, DISAPPEARING, NONSOLID, PLAYER_SHIP, POST_PROCESS,
+        PRE_PROCESS,
+    };
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{FULL_CIRCLE, ONE_SHIFT};
+    use crate::math::velocity::VelocityDesc;
+    use crate::ships::native::{angle_to_facing, normalize_facing, wrap_delta};
 
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
@@ -14,7 +27,7 @@ pub mod engine {
         d.resources.icons = Some(c"ship.kohrah.icons");
         d.resources.melee_icon = Some(c"ship.kohrah.meleeicons");
         d.fleet_strength = (2666 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet_location = POINT { x: 6000, y: 6250 };
+        d.fleet_location = Point { x: 6000, y: 6250 };
         d.characteristics.max_thrust = 30;
         d.characteristics.thrust_increment = 6;
         d.characteristics.energy_regeneration = 1;
@@ -99,7 +112,7 @@ pub mod engine {
         } else {
             let mut facing = 0;
             if cx.target(e).is_none() && cx.track_ship(e, &mut facing) < 0 {
-                cx.element_mut(e).velocity = VELOCITY_DESC::new();
+                cx.element_mut(e).velocity = VelocityDesc::new();
             } else {
                 let target = cx.target(e).unwrap_or_else(|| panic!("tracked target"));
                 let mut dx = wrap_delta(
@@ -133,7 +146,7 @@ pub mod engine {
                         + (i32::from(dy as u16) * i32::from(dy)) as u32
                         >= 224 * 224
                 {
-                    cx.element_mut(e).velocity = VELOCITY_DESC::new();
+                    cx.element_mut(e).velocity = VelocityDesc::new();
                 } else {
                     cx.element_mut(e).thrust = 4;
                     cx.element_mut(e)
@@ -147,7 +160,7 @@ pub mod engine {
 
     pub fn decelerate_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let (x, y) = cx.element(e).velocity.get_current_components();
-        let (mut dx, mut dy) = (x as SIZE, y as SIZE);
+        let (mut dx, mut dy) = (x as i16, y as i16);
         dx /= 2;
         dy /= 2;
         cx.element_mut(e)
@@ -169,9 +182,9 @@ pub mod engine {
     pub fn buzzsaw_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         cx.weapon_collision(a, pa, b, pb);
         if cx.element(a).flags & DISAPPEARING as u16 != 0 {
@@ -328,9 +341,9 @@ pub mod engine {
     pub fn gas_cloud_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         cx.element_mut(a).mass = if cx.element(b).flags & PLAYER_SHIP as u16 != 0 {
             3
@@ -353,12 +366,12 @@ pub mod engine {
             speed: 16,
             hit_points: 100,
             damage: 3,
-            life: (i32::from(cx.frame_count(cx.ship_frame(ss, 2))) * 3 - 1) as COUNT,
+            life: (i32::from(cx.frame_count(cx.ship_frame(ss, 2))) * 3 - 1) as u16,
             preprocess: Some(gas_cloud_preprocess),
             blast_offs: 2,
         };
         let (x, y) = cx.element(e).velocity.get_current_components();
-        let (dx, dy) = (x as SIZE, y as SIZE);
+        let (dx, dy) = (x as i16, y as i16);
         while i32::from(block.face) < angle_to_facing(FULL_CIRCLE as i32) {
             let h = cx.missile(&mut block);
             if let Some(gas) = h {
@@ -371,15 +384,14 @@ pub mod engine {
                     .delta_components(i32::from(dx), i32::from(dy));
                 cx.put(gas);
             }
-            block.face =
-                (i32::from(block.face) + angle_to_facing(FULL_CIRCLE as i32) / 16) as COUNT;
+            block.face = (i32::from(block.face) + angle_to_facing(FULL_CIRCLE as i32) / 16) as u16;
         }
     }
     pub fn black_urquan_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0
-            && cx.delta_energy(e, -((MAX_ENERGY_SIZE / 2) as SIZE))
+            && cx.delta_energy(e, -((MAX_ENERGY_SIZE / 2) as i16))
         {
             spawn_gas_cloud(cx, e);
             cx.process_ship_sound(ss, 1, e);

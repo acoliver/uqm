@@ -159,7 +159,7 @@ fn encode_group(group: &IP_GROUP) -> [u8; 16] {
 }
 
 fn sine(angle: u32, magnitude: i32) -> i32 {
-    (crate::math::sinetab[(angle & 63) as usize] as i32 * magnitude) >> 14
+    (crate::math::SINE_TABLE[(angle & 63) as usize] as i32 * magnitude) >> 14
 }
 fn cosine(angle: u32, magnitude: i32) -> i32 {
     sine(angle + 16, magnitude)

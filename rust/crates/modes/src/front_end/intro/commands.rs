@@ -44,7 +44,7 @@ fn command(
             return timed(cx, state, opcode, source)
         }
         b"RESYNC" => {
-            state.start_time = GetTimeCounter();
+            state.start_time = get_time_counter();
             state.last_sync_time = state.start_time;
         }
         b"FONT" | b"TEXT" | b"TFI" | b"TFO" => text_command(cx, state, opcode, source),
@@ -121,7 +121,7 @@ fn timed(
                 state.movie_frame = from;
                 state.movie_end_frame = to;
                 state.interframe_delay = ONE_SECOND as i32 / fps;
-                state.time_out = GetTimeCounter();
+                state.time_out = get_time_counter();
                 state.time_out_on_skip = true;
                 return Some(Step::Input(true));
             }
@@ -148,7 +148,7 @@ fn timed(
     }
     let ticks = (value? * ONE_SECOND as i32 / 1000) as u32;
     state.time_out = match opcode {
-        b"WAIT" => GetTimeCounter().wrapping_add(ticks),
+        b"WAIT" => get_time_counter().wrapping_add(ticks),
         b"SYNC" => {
             state.last_sync_time = state.start_time.wrapping_add(ticks);
             state.last_sync_time

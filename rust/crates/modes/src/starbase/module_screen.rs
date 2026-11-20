@@ -163,16 +163,21 @@ fn apply_transaction<P: Platform + ?Sized>(
     }
 
     let expected = match transaction.change {
-        Change::Install { price, .. } => before
-            .res_units
-            .checked_sub(price)
-            .expect("the purchase check guarantees the balance covers the price"),
+        Change::Install { price, .. } => {
+            before
+                .res_units
+                .checked_sub(price)
+                .ok_or(FuelError::InsufficientResUnits {
+                    balance: before.res_units,
+                    price,
+                })?
+        }
         Change::Remove { refund, .. } => before
             .res_units
             .checked_add(refund)
             .ok_or(FuelError::ResUnitsOverflow)?,
     };
-    platform.redraw_ship_status(ResUnitsUpdate::Change(transaction.res_units_delta()));
+    platform.redraw_ship_status(ResUnitsUpdate::Change(transaction.res_units_delta()?));
     let after = platform.sis()?;
     if after.res_units != expected {
         return Err(StarbaseError::ResUnitsMismatch {

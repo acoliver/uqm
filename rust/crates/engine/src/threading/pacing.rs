@@ -171,7 +171,7 @@ impl GameThreadPacer {
         Self { _context: context }
     }
     pub fn now(&self) -> u32 {
-        crate::time::counter_abi::GetTimeCounter()
+        crate::time::counter_abi::get_time_counter()
     }
     pub fn sleep_for(&mut self, duration: u32) {
         crate::graphics::state::require_initialized("pacing");
@@ -203,7 +203,7 @@ pub mod linked {
     #[cfg(target_os = "macos")]
     static SLEEP_TIMER: OnceLock<CriticalTimer> = OnceLock::new();
 
-    use crate::time::counter_abi::GetTimeCounter;
+    use crate::time::counter_abi::get_time_counter;
 
     struct GameThread {
         stats: MutexGuard<'static, PacingStats>,
@@ -213,7 +213,7 @@ pub mod linked {
         fn enter() -> Self {
             CLOCK_ORIGIN.get_or_init(Instant::now);
             GameThread {
-                stats: STATS.lock().expect("pacing stats lock poisoned"),
+                stats: crate::sync::lock(&STATS),
             }
         }
     }
@@ -229,7 +229,7 @@ pub mod linked {
         }
 
         fn now_ticks(&self) -> u32 {
-            GetTimeCounter()
+            get_time_counter()
         }
 
         fn async_wait_ms(&self) -> u32 {
@@ -239,9 +239,13 @@ pub mod linked {
         fn sleep_ms(&mut self, ms: u32) {
             #[cfg(target_os = "macos")]
             SLEEP_TIMER
-                .get_or_init(|| CriticalTimer::new().expect("create pacing critical timer queue"))
+                .get_or_init(|| {
+                    CriticalTimer::new().unwrap_or_else(|error| {
+                        panic!("create pacing critical timer queue: {error}")
+                    })
+                })
                 .sleep(std::time::Duration::from_millis(u64::from(ms)))
-                .expect("wait on pacing critical timer");
+                .unwrap_or_else(|error| panic!("wait on pacing critical timer: {error}"));
             #[cfg(not(target_os = "macos"))]
             hibernate_thread(Duration::from_millis(u64::from(ms)));
         }
@@ -269,7 +273,7 @@ pub mod linked {
     }
 
     pub(crate) fn replay_sleep_for(duration: u32) {
-        replay_sleep(GetTimeCounter().saturating_add(duration));
+        replay_sleep(get_time_counter().saturating_add(duration));
     }
 
     /// Sleep for `sleep_time` game time units after servicing the display.

@@ -21,8 +21,19 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
 
 pub mod engine {
     use super::{in_defense_range, nuke_speed, use_defense, MISSILE_LIFE};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, POINT_DEFENSE,
+        RIGHT, SEEKING_WEAPON, SPECIAL, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::ElementHook;
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::ships::native::abi::*;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::ONE_SHIFT;
 
     const TRACK_WAIT: u8 = 3;
     const SPECIAL_ENERGY_COST: u8 = 4;
@@ -56,8 +67,8 @@ pub mod engine {
                 sounds: Some(c"ship.earthling.sounds"),
                 ..Default::default()
             },
-            fleet_location: POINT { x: 1752, y: 1450 },
-            characteristics: CHARACTERISTIC_STUFF {
+            fleet_location: Point { x: 1752, y: 1450 },
+            characteristics: CharacteristicRecord {
                 max_thrust: 24,
                 thrust_increment: 3,
                 energy_regeneration: 1,
@@ -175,7 +186,7 @@ pub mod engine {
             }
             let laser = crate::engine::battle::views::Laser {
                 origin: cx.element(ship).next.location,
-                end: POINT {
+                end: Point {
                     x: dx as i16,
                     y: dy as i16,
                 },

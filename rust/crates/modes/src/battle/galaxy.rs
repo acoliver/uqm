@@ -1,10 +1,11 @@
 //! Three live parallax star planes, with the original sort and wrap order.
 
-use crate::ships::native::abi::{Color, POINT};
+use crate::graphics::geometry::Color;
+use crate::graphics::geometry::Point;
 
 pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;
 
-fn projected_coords(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) -> (i32, i32) {
+fn projected_coords(point: Point, dx: i16, dy: i16, reduction: u16, step: bool) -> (i32, i32) {
     let x = i32::from(point.x) - i32::from(dx);
     let y = i32::from(point.y) - i32::from(dy);
     if step {
@@ -17,9 +18,9 @@ fn projected_coords(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) 
     }
 }
 
-fn project(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) -> POINT {
+fn project(point: Point, dx: i16, dy: i16, reduction: u16, step: bool) -> Point {
     let (x, y) = projected_coords(point, dx, dy, reduction, step);
-    POINT {
+    Point {
         x: x as i16,
         y: y as i16,
     }
@@ -173,8 +174,13 @@ impl StarPlaneOps for STAR_BLOCK {
 
 pub(crate) mod engine {
     use super::*;
+    use crate::engine::battle::flags::POINT_PRIMITIVE;
     use crate::engine::battle::Cx;
-    use crate::ships::native::abi::*;
+
+    use crate::engine::battle::STAMP_PRIMITIVE;
+    use crate::math::battle_types::{
+        BACKGROUND_SHIFT, MAX_REDUCTION, MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ONE_SHIFT, ZOOM_SHIFT,
+    };
 
     const COUNTS: [usize; 3] = [30, 60, 90];
 
@@ -189,13 +195,13 @@ pub(crate) mod engine {
                 if p == 30 || p == 90 {
                     factor += 1;
                 }
-                let point = POINT {
+                let point = Point {
                     x: ((cx.random() as u16 as i32 % (screen_width - 64)) as i16)
                         .wrapping_shl(factor),
                     y: ((cx.random() as u16 as i32 % screen_height) as i16).wrapping_shl(factor),
                 };
                 cx.kernel.star_planes[plane].points[index] = point;
-                cx.kernel.star_planes[plane].displayed[index] = POINT { x: 0, y: 0 };
+                cx.kernel.star_planes[plane].displayed[index] = Point { x: 0, y: 0 };
                 let tint = if p < 90 {
                     color(11, 11, 31)
                 } else if cx.world.activity() as u8 != 3 {
@@ -211,10 +217,10 @@ pub(crate) mod engine {
                 };
                 let primitive = cx.display_primitive(p as u16);
                 primitive.kind = if p < 90 {
-                    gfx_object_STAMP_PRIM
+                    STAMP_PRIMITIVE
                 } else {
-                    gfx_object_POINT_PRIM
-                } as u8;
+                    POINT_PRIMITIVE
+                };
                 primitive.color = tint;
                 if p < 90 {
                     primitive.set_frame(stars.clone());
@@ -247,19 +253,19 @@ pub(crate) mod engine {
             let types = if step {
                 if reduction > 0 {
                     frames[0] = frames[1].clone();
-                    [gfx_object_STAMP_PRIM, gfx_object_POINT_PRIM]
+                    [STAMP_PRIMITIVE, POINT_PRIMITIVE]
                 } else {
-                    [gfx_object_STAMP_PRIM; 2]
+                    [STAMP_PRIMITIVE; 2]
                 }
             } else if reduction > 1 << ZOOM_SHIFT {
-                [gfx_object_POINT_PRIM; 2]
+                [POINT_PRIMITIVE; 2]
             } else {
-                [gfx_object_STAMP_PRIM, gfx_object_POINT_PRIM]
+                [STAMP_PRIMITIVE, POINT_PRIMITIVE]
             };
             let mut p = 0;
             for plane in 0..2 {
                 for index in 0..COUNTS[plane] {
-                    cx.display_primitive(p as u16).kind = types[plane] as u8;
+                    cx.display_primitive(p as u16).kind = types[plane];
                     cx.display_primitive(p as u16)
                         .set_frame(frames[plane].clone());
                     cx.kernel.star_planes[plane].frames[index] = frames[plane].clone();
@@ -366,7 +372,7 @@ pub use engine::{init_galaxy, move_galaxy};
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn block(points: &[POINT]) -> STAR_BLOCK {
+    fn block(points: &[Point]) -> STAR_BLOCK {
         let mut plane = STAR_BLOCK::new(points.len());
         plane.points.copy_from_slice(points);
         plane
@@ -375,9 +381,9 @@ mod tests {
     #[test]
     fn sort_preserves_the_original_equal_y_swap_order() {
         let mut points = [
-            POINT { x: 0, y: 5 },
-            POINT { x: 1, y: 5 },
-            POINT { x: 2, y: 1 },
+            Point { x: 0, y: 5 },
+            Point { x: 1, y: 5 },
+            Point { x: 2, y: 1 },
         ];
         {
             let mut plane = block(&points);
@@ -390,9 +396,9 @@ mod tests {
     #[test]
     fn vertical_wrap_rotates_the_sorted_start_both_directions() {
         let mut points = [
-            POINT { x: 0, y: 1 },
-            POINT { x: 1, y: 4 },
-            POINT { x: 2, y: 9 },
+            Point { x: 0, y: 1 },
+            Point { x: 1, y: 4 },
+            Point { x: 2, y: 9 },
         ];
         let mut block = block(&points);
         {
@@ -416,10 +422,10 @@ mod tests {
         for plane in 0..3 {
             let height = 10 << plane;
             let mut points = [
-                POINT { x: 0, y: 0 },
-                POINT { x: 1, y: 2 },
-                POINT { x: 2, y: 5 },
-                POINT { x: 3, y: 9 },
+                Point { x: 0, y: 0 },
+                Point { x: 1, y: 2 },
+                Point { x: 2, y: 5 },
+                Point { x: 3, y: 9 },
             ];
             let mut expected = points;
             let mut block = block(&points);
@@ -440,7 +446,7 @@ mod tests {
 
     #[test]
     fn projection_preserves_shift_vs_signed_division_rounding() {
-        let p = POINT { x: -1, y: 15 };
+        let p = Point { x: -1, y: 15 };
         let step = project(p, 0, 0, 2, true);
         let smooth = project(p, 0, 0, 1024, false);
         assert_eq!((step.x, step.y), (-1, 3));

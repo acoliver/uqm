@@ -1,9 +1,8 @@
 //! Chmmr callbacks for the live engine, ported from `ships/chmmr/chmmr.c`.
 
 fn tractor_shadow_flags() -> u16 {
-    use crate::ships::native::abi::{
-        CHANGING, FINITE_LIFE, IGNORE_SIMILAR, NONSOLID, POST_PROCESS,
-    };
+    use crate::engine::battle::ai_constants::IGNORE_SIMILAR;
+    use crate::engine::battle::flags::{CHANGING, FINITE_LIFE, NONSOLID, POST_PROCESS};
     // POST_PROCESS shadows skip preprocessing. Their first projection must not
     // reuse the previous occupant's primitive frame, even at zero velocity.
     (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS | CHANGING) as u16
@@ -13,7 +12,7 @@ fn tractor_shadow_flags() -> u16 {
 mod tests {
     #[test]
     fn stationary_new_tractor_shadow_projects_a_fresh_primitive() {
-        use crate::ships::native::abi::{APPEARING, CHANGING, POST_PROCESS};
+        use crate::engine::battle::flags::{APPEARING, CHANGING, POST_PROCESS};
         let flags = super::tractor_shadow_flags();
         assert_ne!(
             flags & POST_PROCESS as u16,
@@ -26,10 +25,26 @@ mod tests {
 }
 
 pub mod engine {
-    use crate::engine::battle::hooks::animation_preprocess;
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
+    use crate::engine::battle::ai_constants::IGNORE_SIMILAR;
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, FIRES_FORE, IMMEDIATE_WEAPON, MAX_CREW_SIZE, MAX_ENERGY_SIZE,
+        MAX_SHIP_MASS, POINT_DEFENSE, SEEKING_SPECIAL, SPECIAL, WEAPON,
     };
+    use crate::engine::battle::flags::{APPEARING, CHANGING, FINITE_LIFE, NONSOLID};
+    use crate::engine::battle::flags::{
+        COLLISION, DISAPPEARING, HYPERJUMP_LIFE, NEUTRAL_PLAYER_NUM, NORMAL_LIFE,
+        SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::hooks::animation_preprocess;
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::LINE_PRIMITIVE;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_angle, sine};
 
     use crate::engine::battle::views::Laser;
     use crate::engine::battle::{
@@ -69,7 +84,7 @@ pub mod engine {
         d.resources.strings = Some(c"ship.chmmr.text");
         d.resources.icons = Some(c"ship.chmmr.icons");
         d.resources.melee_icon = Some(c"ship.chmmr.meleeicons");
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.characteristics = CharacteristicRecord {
             max_thrust: 35,
             thrust_increment: 7,
             energy_regeneration: 1,
@@ -131,9 +146,9 @@ pub mod engine {
                         cx.element_mut(spot).thrust = 0;
                         cx.element_mut(spot).life = 9;
                         let angle = i32::from(crate::math::arctan(dx, dy));
-                        let magnitude = (i32::from(cx.random() as COUNT)
-                            % (i32::from(crate::math::square_root(dist as DWORD)) + 1 - minimum)
-                            + minimum) as COUNT;
+                        let magnitude = (i32::from(cx.random() as u16)
+                            % (i32::from(crate::math::square_root(dist as u32)) + 1 - minimum)
+                            + minimum) as u16;
                         cx.element_mut(spot).current.location.x = cx
                             .element(ship)
                             .current
@@ -149,12 +164,12 @@ pub mod engine {
                         cx.set_frames(spot, false, cx.ship_frame_set(ss, 1));
                         let frame = cx.absolute_frame(
                             cx.ship_frame(ss, 1),
-                            (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
+                            (angle_to_facing(FULL_CIRCLE as i32) << 1) as u16,
                         );
                         cx.set_frame(spot, false, frame);
                         cx.element_mut(spot).pre = Some(ElementHook::Native(animation_preprocess));
                         cx.set_parent(spot, Some(ss));
-                        cx.primitive_style_mut(spot).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                        cx.primitive_style_mut(spot).kind = STAMP_PRIMITIVE as u8;
                         cx.put(spot);
                     }
                 }
@@ -170,13 +185,13 @@ pub mod engine {
         let face = cx.ship_state(ss).facing;
         let rect = cx.frame_rect(cx.absolute_frame(cx.ship_frame(ss, 1), face).view());
         let block = Laser {
-            origin: POINT {
+            origin: Point {
                 x: ((i32::from(origin.next.location.x) & !((1 << ONE_SHIFT) - 1))
-                    + (i32::from(rect.corner.x) << ONE_SHIFT)) as COORD,
+                    + (i32::from(rect.corner.x) << ONE_SHIFT)) as i16,
                 y: ((i32::from(origin.next.location.y) & !((1 << ONE_SHIFT) - 1))
-                    + (i32::from(rect.corner.y) << ONE_SHIFT)) as COORD,
+                    + (i32::from(rect.corner.y) << ONE_SHIFT)) as i16,
             },
-            end: POINT {
+            end: Point {
                 x: cosine(facing_to_angle(i32::from(face)), LASER_RANGE),
                 y: sine(facing_to_angle(i32::from(face)), LASER_RANGE),
             },
@@ -240,7 +255,7 @@ pub mod engine {
             if last != ship
                 && cx.element(last).player == cx.element(ship).player
                 && cx.element(last).flags & APPEARING as u16 != 0
-                && cx.primitive_style(last).kind == gfx_object_LINE_PRIM as GRAPHICS_PRIM
+                && cx.primitive_style(last).kind == LINE_PRIMITIVE as u8
                 && cx.ship_state(ss).special_counter & 1 == 0
             {
                 if let Some(flash) = cx.alloc_element() {
@@ -254,11 +269,11 @@ pub mod engine {
                     let frame = cx.absolute_frame(
                         cx.ship_frame(ss, 1),
                         (cx.ship_state(ss).facing as i32 + angle_to_facing(FULL_CIRCLE as i32))
-                            as COUNT,
+                            as u16,
                     );
                     cx.set_frame(flash, false, frame);
                     cx.set_parent(flash, Some(ss));
-                    cx.primitive_style_mut(flash).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                    cx.primitive_style_mut(flash).kind = STAMP_PRIMITIVE as u8;
                     cx.put(flash);
                 }
             }
@@ -267,7 +282,7 @@ pub mod engine {
             cx.observe_special(ss, special_hook);
             // C plays the sound at the old target before TrackShip selects one.
             cx.process_ship_sound(ss, 1, cx.target(ship));
-            let mut facing: COUNT = 0;
+            let mut facing: u16 = 0;
             if cx.track_ship(ship, &mut facing) >= 0 {
                 let target = cx
                     .target(ship)
@@ -278,27 +293,27 @@ pub mod engine {
                     let dx = (i32::from(cx.element(ship).next.location.x)
                         + i32::from(cosine(a, LASER_RANGE / 3 + (CHMMR_OFFSET << ONE_SHIFT)))
                         - i32::from(cx.element(target).next.location.x))
-                        as SIZE;
+                        as i16;
                     let dy = (i32::from(cx.element(ship).next.location.y)
                         + i32::from(sine(a, LASER_RANGE / 3 + (CHMMR_OFFSET << ONE_SHIFT)))
                         - i32::from(cx.element(target).next.location.y))
-                        as SIZE;
+                        as i16;
                     let angle = i32::from(crate::math::arctan(dx, dy));
                     let magnitude =
-                        ((12 << VELOCITY_SHIFT) / i32::from(cx.element(target).mass)) as COUNT;
+                        ((12 << VELOCITY_SHIFT) / i32::from(cx.element(target).mass)) as u16;
                     cx.element_mut(target).velocity.delta_components(
-                        i32::from((cosine(angle, i32::from(magnitude))) as SIZE),
-                        i32::from((sine(angle, i32::from(magnitude))) as SIZE),
+                        i32::from((cosine(angle, i32::from(magnitude))) as i16),
+                        i32::from((sine(angle, i32::from(magnitude))) as i16),
                     );
                     let (vx, vy) = cx.element(target).velocity.get_current_components();
-                    let (vx, vy) = (vx as SIZE, vy as SIZE);
+                    let (vx, vy) = (vx as i16, vy as i16);
                     let enemy_ss = cx.owner(target);
                     let speed =
-                        (i64::from(vx) * i64::from(vx) + i64::from(vy) * i64::from(vy)) as DWORD;
+                        (i64::from(vx) * i64::from(vx) + i64::from(vy) * i64::from(vy)) as u32;
                     let max_velocity =
                         (i32::from(cx.race_stats(enemy_ss).characteristics.max_thrust)
-                            << VELOCITY_SHIFT) as SIZE;
-                    let max_speed = (i64::from(max_velocity) * i64::from(max_velocity)) as DWORD;
+                            << VELOCITY_SHIFT) as i16;
+                    let max_speed = (i64::from(max_velocity) * i64::from(max_velocity)) as u32;
                     cx.ship_state_mut(enemy_ss).status &=
                         !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
                     if speed > max_speed {
@@ -333,9 +348,8 @@ pub mod engine {
                             cx.set_parent(shadow, Some(enemy_ss));
                             cx.element_mut(shadow)
                                 .velocity
-                                .set_components(i32::from((vx) as SIZE), i32::from((vy) as SIZE));
-                            cx.primitive_style_mut(shadow).kind =
-                                gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
+                                .set_components(i32::from(vx), i32::from(vy));
+                            cx.primitive_style_mut(shadow).kind = STAMPFILL_PRIMITIVE as u8;
                             cx.primitive_style_mut(shadow).color = color(0, 0, colors[i]);
                             cx.insert_before(shadow, cx.elements().head());
                         }
@@ -362,10 +376,10 @@ pub mod engine {
             cx.race_stats_mut(ss).ship_info.ship_flags |= POINT_DEFENSE as u16;
             let mut dx = (i32::from(cx.element(ship).next.location.x)
                 + i32::from(cosine(i32::from(cx.element(e).turn), SATELLITE_OFFSET))
-                - i32::from(cx.element(e).current.location.x)) as SIZE;
+                - i32::from(cx.element(e).current.location.x)) as i16;
             let mut dy = (i32::from(cx.element(ship).next.location.y)
                 + i32::from(sine(i32::from(cx.element(e).turn), SATELLITE_OFFSET))
-                - i32::from(cx.element(e).current.location.y)) as SIZE;
+                - i32::from(cx.element(e).current.location.y)) as i16;
             let (width, height) = cx.screen_dimensions();
             let width = (width - 64) << (ONE_SHIFT + 3);
             let height = height << (ONE_SHIFT + 3);
@@ -373,29 +387,29 @@ pub mod engine {
             dx = if i32::from(dx).abs() <= width >> 1 {
                 dx
             } else if dx < 0 {
-                (width + i32::from(dx)) as SIZE
+                (width + i32::from(dx)) as i16
             } else {
-                (i32::from(dx) - width) as SIZE
+                (i32::from(dx) - width) as i16
             };
             dy = if i32::from(dy).abs() <= height >> 1 {
                 dy
             } else if dy < 0 {
-                (height + i32::from(dy)) as SIZE
+                (height + i32::from(dy)) as i16
             } else {
-                (i32::from(dy) - height) as SIZE
+                (i32::from(dy) - height) as i16
             };
             if i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)
                 <= i64::from(20 << ONE_SHIFT).pow(2)
             {
                 cx.element_mut(e).velocity.set_components(
-                    i32::from(((i32::from(dx) << VELOCITY_SHIFT) as SIZE) as SIZE),
-                    i32::from(((i32::from(dy) << VELOCITY_SHIFT) as SIZE) as SIZE),
+                    i32::from(((i32::from(dx) << VELOCITY_SHIFT) as i16) as i16),
+                    i32::from(((i32::from(dy) << VELOCITY_SHIFT) as i16) as i16),
                 );
             } else {
                 let angle = i32::from(crate::math::arctan(dx, dy));
                 cx.element_mut(e).velocity.set_components(
-                    i32::from((cosine(angle, (20 << ONE_SHIFT) << VELOCITY_SHIFT)) as SIZE),
-                    i32::from((sine(angle, (20 << ONE_SHIFT) << VELOCITY_SHIFT)) as SIZE),
+                    i32::from((cosine(angle, (20 << ONE_SHIFT) << VELOCITY_SHIFT)) as i16),
+                    i32::from((sine(angle, (20 << ONE_SHIFT) << VELOCITY_SHIFT)) as i16),
                 );
             }
         }
@@ -440,10 +454,10 @@ pub mod engine {
                 if dy < 0 {
                     dy = dy.wrapping_neg();
                 }
-                let x = (dx >> ONE_SHIFT) as UWORD;
-                let y = (dy >> ONE_SHIFT) as UWORD;
+                let x = (dx >> ONE_SHIFT) as u16;
+                let y = (dy >> ONE_SHIFT) as u16;
                 if x <= DEFENSE_RANGE && y <= DEFENSE_RANGE {
-                    let dist = (u32::from(x) * u32::from(x) + u32::from(y) * u32::from(y)) as UWORD;
+                    let dist = (u32::from(x) * u32::from(x) + u32::from(y) * u32::from(y)) as u16;
                     let hp = cx.element(object).hits;
                     if dist <= DEFENSE_RANGE * DEFENSE_RANGE
                         && (hp < u16::from(weakest)
@@ -460,7 +474,7 @@ pub mod engine {
         if let Some(object) = best {
             let beam = cx.spawn_laser(Laser {
                 origin: cx.element(satellite).next.location,
-                end: POINT {
+                end: Point {
                     x: cx
                         .element(object)
                         .next
@@ -509,9 +523,9 @@ pub mod engine {
     pub fn satellite_collision(
         _: &mut Cx<'_>,
         _: ElementId,
-        _: &mut POINT,
+        _: &mut Point,
         _: ElementId,
-        _: &mut POINT,
+        _: &mut Point,
     ) {
     }
 
@@ -539,7 +553,7 @@ pub mod engine {
                     cx.element_mut(satellite).player = cx.element(ship).player;
                     cx.element_mut(satellite).flags =
                         (IGNORE_SIMILAR | APPEARING | FINITE_LIFE) as u16;
-                    cx.element_mut(satellite).life = (NORMAL_LIFE + 1) as COUNT;
+                    cx.element_mut(satellite).life = (NORMAL_LIFE + 1) as u16;
                     cx.element_mut(satellite).hits = 10;
                     cx.element_mut(satellite).mass = 10;
                     let angle = (i * FULL_CIRCLE as i32 + 1) / 3;
@@ -557,7 +571,7 @@ pub mod engine {
                         .y
                         .wrapping_add(sine(angle, SATELLITE_OFFSET));
                     cx.set_frames(satellite, false, cx.ship_frame_set(ss, 2));
-                    let index = cx.random() as COUNT & 7;
+                    let index = cx.random() as u16 & 7;
                     let frame = cx.absolute_frame(cx.ship_frame(ss, 2), index);
                     cx.set_frame(satellite, false, frame);
                     cx.element_mut(satellite).pre = Some(ElementHook::Native(satellite_preprocess));
@@ -567,7 +581,7 @@ pub mod engine {
                     cx.element_mut(satellite).collide =
                         Some(CollisionHook::Native(satellite_collision));
                     cx.set_parent(satellite, Some(ss));
-                    cx.primitive_style_mut(satellite).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                    cx.primitive_style_mut(satellite).kind = STAMP_PRIMITIVE as u8;
                     cx.put(satellite);
                 }
             }
@@ -580,10 +594,10 @@ pub mod engine {
             cx.element_mut(satellite).player = cx.element(e).player;
             cx.element_mut(satellite).flags =
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16;
-            cx.element_mut(satellite).life = (HYPERJUMP_LIFE + 1) as COUNT;
+            cx.element_mut(satellite).life = (HYPERJUMP_LIFE + 1) as u16;
             cx.element_mut(satellite).death = Some(ElementHook::Native(spawn_satellites));
             cx.set_parent(satellite, Some(ss));
-            cx.primitive_style_mut(satellite).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            cx.primitive_style_mut(satellite).kind = EMPTY_PRIMITIVE as u8;
             cx.put(satellite);
         }
         cx.set_preprocess(ss, Selection::Disabled);

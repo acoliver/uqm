@@ -4,7 +4,9 @@ use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
 pub(super) use crate::battle::context_access::observe::CustomData as RaceData;
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
-use crate::ships::native::abi::*;
+use crate::engine::species::species_id::{
+    SPECIES_ID_ANDROSYNTH_ID, SPECIES_ID_PKUNK_ID, SPECIES_ID_SIS_SHIP_ID,
+};
 pub(super) fn write_custom(
     custom: &RaceData<'_>,
     fields: &mut Fields,
@@ -132,12 +134,13 @@ fn missile_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::battle::record::CharacteristicRecord;
     #[test]
     fn saved_transform_characteristics_are_individual_fields() {
         let directory = super::super::test_directory();
         let journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create custom state test journal: {error}"));
-        let saved = CHARACTERISTIC_STUFF {
+        let saved = CharacteristicRecord {
             max_thrust: 71,
             thrust_increment: 3,
             energy_regeneration: 1,

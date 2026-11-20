@@ -275,11 +275,12 @@ impl<P: Platform + ?Sized> Drop for OutfitAssets<'_, P> {
 impl<P: Platform + ?Sized> OutfitAssets<'_, P> {
     /// The art the module chooser draws from. The Outfit screen loads all of
     /// it before any frame can open the chooser.
-    fn chooser_art(&self) -> ChooserArt {
-        ChooserArt {
-            menu_frame: self.menu_frame.expect("the Outfit art is loaded"),
-            module_frame: self.module_frame.expect("the Outfit art is loaded"),
-        }
+    fn chooser_art(&self) -> Result<ChooserArt, StarbaseError> {
+        let art = |frame: Option<FrameId>| frame.ok_or(StarbaseError::NotLoaded("the Outfit art"));
+        Ok(ChooserArt {
+            menu_frame: art(self.menu_frame)?,
+            module_frame: art(self.module_frame)?,
+        })
     }
 }
 
@@ -359,8 +360,8 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
         let art = self
             .assets
             .as_ref()
-            .expect("the Outfit art is loaded")
-            .chooser_art();
+            .ok_or(StarbaseError::NotLoaded("the Outfit art"))?
+            .chooser_art()?;
         match chooser_frame(self.platform, art, chooser)? {
             ChooserOutcome::Stay(chooser) => self.chooser = Some(chooser),
             ChooserOutcome::BackToOutfit => {}
@@ -405,11 +406,11 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
             music: None,
         };
         assets.menu_frame = Some(p.load_graphic(MODULES_PMAP_ANIM)?);
-        assets.music = Some(p.load_music(OUTFIT_MUSIC)?);
+        let music = p.load_music(OUTFIT_MUSIC)?;
+        assets.music = Some(music);
         let module_frame = p.load_graphic(SISMODS_MASK_PMAP_ANIM)?;
         assets.module_frame = Some(module_frame);
         let background = p.load_graphic(OUTFIT_PMAP_ANIM)?;
-        let music = assets.music.expect("music was just loaded");
 
         p.set_transition_source_none();
         p.batch();

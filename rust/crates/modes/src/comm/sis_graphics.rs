@@ -77,14 +77,14 @@ impl Comm {
         self.display
             .resources
             .as_ref()
-            .expect("conversation resources were not admitted")
+            .unwrap_or_else(|| panic!("conversation resources were not admitted"))
     }
 
     pub(crate) fn conversation_display(&self) -> &ConversationDisplay {
         self.conversation_resources()
             .display
             .as_ref()
-            .expect("conversation display was not admitted")
+            .unwrap_or_else(|| panic!("conversation display was not admitted"))
     }
 }
 

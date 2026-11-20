@@ -80,9 +80,9 @@ const HOOK_SAMPLE: u16 = 0x7e57;
 fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_not_update() {
     battle_context::run(|input| {
         uqm_rust::graphics::state::init_headless(Default::default());
-        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
+        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
         input.set_menu_sounds(32, 64);
-        uqm_rust::mainloop::input_abi::SetInputCallback(
+        uqm_rust::mainloop::input_abi::set_input_callback(
             input,
             Some(uqm_rust::engine::input::InputFrameHook::new(record_hook)),
         );
@@ -130,7 +130,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
             })
         });
         assert_eq!(*events.borrow(), ["before"]);
-        uqm_rust::mainloop::input_abi::SetInputCallback(input, None);
+        uqm_rust::mainloop::input_abi::set_input_callback(input, None);
         uqm_rust::graphics::state::uninit_headless();
     });
 }
@@ -167,7 +167,7 @@ impl uqm_rust::engine::input::Frame for AdmittedFrame {
 fn mode_owned_frame_admission_keeps_the_native_observer_order() {
     battle_context::run(|input| {
         uqm_rust::graphics::state::init_headless(Default::default());
-        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
+        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
             events: events.clone(),

@@ -1,6 +1,8 @@
 //! Combat setup and proof decisions over the currently borrowed production records.
 
 use super::*;
+use crate::engine::species::species_id::SPECIES_ID_SHOFIXTI_ID;
+use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
 
 pub(super) fn mutual_loss(
     run: &mut Battle,
@@ -8,7 +10,7 @@ pub(super) fn mutual_loss(
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
         0 => {
-            if world.activity != (SUPER_MELEE | IN_BATTLE) as u16 || world.counters != [2, 2] {
+            if world.activity != (SUPER_MELEE | IN_BATTLE) || world.counters != [2, 2] {
                 return Err("mutual-loss fixture requires an active 2-vs-2 Super Melee".into());
             }
             [run.a, run.b] = world.fighters()?.map(Some);

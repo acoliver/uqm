@@ -10,7 +10,7 @@ pub mod velocity;
 /// then retain the original signed SIZE truncation.
 #[inline]
 pub fn sine(angle: i32, magnitude: i32) -> i16 {
-    ((i64::from(sinetab[(angle & 63) as usize]) * i64::from(magnitude)) >> 14) as i16
+    ((i64::from(SINE_TABLE[(angle & 63) as usize]) * i64::from(magnitude)) >> 14) as i16
 }
 
 #[inline]
@@ -267,12 +267,11 @@ pub fn square_root(value: u32) -> u16 {
 // Sine table + arctan — replaces C trans.c
 // ---------------------------------------------------------------------------
 
-/// C: `SIZE sinetab[]` — 64-entry sine lookup table.
+/// C: `SIZE SINE_TABLE[]` — 64-entry sine lookup table.
 /// Each entry is sin(angle) * 16384 (fixed-point, SIN_SHIFT=14).
 /// UQM angle system: 0=North(-Y), 16=East(+X), 32=South(+Y), 48=West(-X).
 /// Shared by the fixed-point trigonometry providers.
-#[allow(non_upper_case_globals)]
-pub static sinetab: [i16; 64] = [
+pub static SINE_TABLE: [i16; 64] = [
     -16384, -16305, -16069, -15679, -15137, -14449, -13623, -12665, -11585, -10394, -9102, -7723,
     -6270, -4756, -3197, -1608, 0, 1608, 3197, 4756, 6270, 7723, 9102, 10394, 11585, 12665, 13623,
     14449, 15137, 15679, 16069, 16305, 16384, 16305, 16069, 15679, 15137, 14449, 13623, 12665,

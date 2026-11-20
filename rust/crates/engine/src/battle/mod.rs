@@ -49,4 +49,5 @@ pub mod world_elements;
 
 /// Display primitive kinds (C: `gfx_object`).
 pub const STAMP_PRIMITIVE: u8 = 1;
+pub const LINE_PRIMITIVE: u8 = 3;
 pub const EMPTY_PRIMITIVE: u8 = 7;

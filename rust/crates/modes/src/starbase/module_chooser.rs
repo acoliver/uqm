@@ -11,6 +11,7 @@
 //! This module decides what a frame means and what the player sees next. The
 //! screen in [`super::module_screen`] carries the answer out.
 
+use super::fuel::FuelError;
 use super::gfx::{Point, Rect};
 use super::ids::{
     CHMMR_BOMB_INSTALLED, DRIVE_FLASH_SIZE, DRIVE_TOP, JET_FLASH_SIZE, JET_TOP, LANDER_FLASH_SIZE,
@@ -170,6 +171,8 @@ pub enum ModuleChooserError {
     ModuleSlots(#[from] ModuleSlotsError),
     #[error("module removal check: {0}")]
     SlotIndex(#[from] SlotIndexOutOfRange),
+    #[error("module number {number} is not a module")]
+    UnknownModule { number: u8 },
     #[error("no module in {first:?}..={last:?} can be offered for slot {slot}")]
     NothingToOffer {
         first: ModuleType,
@@ -336,15 +339,11 @@ impl Transaction {
     }
 
     /// RU added to the balance: a refund is positive, a price negative.
-    #[must_use]
-    pub fn res_units_delta(&self) -> i32 {
+    pub fn res_units_delta(&self) -> Result<i32, FuelError> {
+        let signed = |amount: u32| i32::try_from(amount).map_err(|_| FuelError::ResUnitsOverflow);
         match self.change {
-            Change::Install { price, .. } => {
-                -i32::try_from(price).expect("a module price is at most 255 * 50 RU")
-            }
-            Change::Remove { refund, .. } => {
-                i32::try_from(refund).expect("a module price is at most 255 * 50 RU")
-            }
+            Change::Install { price, .. } => signed(price).map(|price| -price),
+            Change::Remove { refund, .. } => signed(refund),
         }
     }
 }
@@ -595,11 +594,12 @@ impl ModuleChooser {
         pulses: MenuPulses,
         costs: &ModuleCosts,
     ) -> Result<ModuleType, ModuleChooserError> {
-        let (first, last) = if (offered as u8) < FIRST_PURCHASE_MODULE as u8 {
-            (offered as u8, offered as u8)
+        let (first_module, last_module) = if (offered as u8) < FIRST_PURCHASE_MODULE as u8 {
+            (offered, offered)
         } else {
-            (FIRST_PURCHASE_MODULE as u8, LAST_PURCHASE_MODULE as u8)
+            (FIRST_PURCHASE_MODULE, LAST_PURCHASE_MODULE)
         };
+        let (first, last) = (first_module as u8, last_module as u8);
         let backward = pulses.left || pulses.up;
         let mut candidate = offered as u8;
         for _ in first..=last {
@@ -615,7 +615,7 @@ impl ModuleChooser {
                 candidate + 1
             };
             let module = ModuleType::from_u8(candidate)
-                .expect("offered pieces stay within the module numbers");
+                .ok_or(ModuleChooserError::UnknownModule { number: candidate })?;
             let is_weapon =
                 (ModuleType::GunWeapon as u8..=ModuleType::CannonWeapon as u8).contains(&candidate);
             let forbidden_weapon = is_weapon && WEAPON_EXCLUDED_SLOTS.contains(&self.item);
@@ -624,8 +624,8 @@ impl ModuleChooser {
             }
         }
         Err(ModuleChooserError::NothingToOffer {
-            first: ModuleType::from_u8(first).expect("range starts at a module"),
-            last: ModuleType::from_u8(last).expect("range ends at a module"),
+            first: first_module,
+            last: last_module,
             slot: self.item,
         })
     }
@@ -794,7 +794,7 @@ mod tests {
         );
         assert_eq!(transaction.new_piece(), 23);
         assert_eq!(transaction.old_piece(), 0);
-        assert_eq!(transaction.res_units_delta(), 500);
+        assert_eq!(transaction.res_units_delta(), Ok(500));
     }
 
     #[test]
@@ -808,7 +808,7 @@ mod tests {
         };
         assert_eq!(install.new_piece(), ModuleType::FuelTank as u8);
         assert_eq!(install.old_piece(), 22);
-        assert_eq!(install.res_units_delta(), -500);
+        assert_eq!(install.res_units_delta(), Ok(-500));
         assert_eq!(install.shown(), Some(ModuleType::FuelTank));
 
         let remove = Transaction {
@@ -820,7 +820,7 @@ mod tests {
         };
         assert_eq!(remove.new_piece(), 20);
         assert_eq!(remove.old_piece(), ModuleType::FusionThruster as u8);
-        assert_eq!(remove.res_units_delta(), 500);
+        assert_eq!(remove.res_units_delta(), Ok(500));
         assert_eq!(remove.shown(), None);
     }
 

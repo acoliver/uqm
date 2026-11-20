@@ -1,7 +1,20 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
 pub mod engine {
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, MAX_SHIP_MASS, SPECIAL,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP,
+        STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::ElementHook;
+    use crate::engine::battle::EMPTY_PRIMITIVE;
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::ships::native::abi::*;
+    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+    use crate::graphics::geometry::Color;
+    use crate::math::battle_types::ONE_SHIFT;
+    use crate::math::velocity::VelocityDesc;
     const MAX_CREW: u16 = 6;
     const MAX_ENERGY: u8 = 4;
     const MAX_THRUST: u16 = 35;
@@ -61,7 +74,7 @@ pub mod engine {
                 victory: Some(c"ship.shofixti.ditty"),
                 sounds: Some(c"ship.shofixti.sounds"),
             },
-            characteristics: CHARACTERISTIC_STUFF {
+            characteristics: CharacteristicRecord {
                 max_thrust: MAX_THRUST,
                 thrust_increment: THRUST_INCREMENT,
                 energy_regeneration: 1,
@@ -75,7 +88,7 @@ pub mod engine {
                 ship_mass: 1,
             },
             intelligence: crate::engine::battle::views::Intelligence {
-                weapon_range: ((24 << ONE_SHIFT) * 10) as COUNT,
+                weapon_range: ((24 << ONE_SHIFT) * 10) as u16,
                 ..Default::default()
             },
             ..Default::default()
@@ -156,7 +169,7 @@ pub mod engine {
         let life = cx.element(e).life;
         if life > DESTRUCT_SWITCH {
             let mut primitive = cx.primitive_style_mut(e);
-            primitive.kind = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
+            primitive.kind = STAMPFILL_PRIMITIVE as u8;
             primitive.color = if life == DESTRUCT_SWITCH + 2 {
                 rgb15(31, 31, 10)
             } else {
@@ -178,7 +191,7 @@ pub mod engine {
                 }
             }
         } else {
-            cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE as u8;
             cx.element_mut(e).pre = None;
             if let Some(d) = cx.alloc_element() {
                 let ss = cx.owner(e);
@@ -186,9 +199,9 @@ pub mod engine {
                 cx.set_parent(d, Some(ss));
                 cx.element_mut(d).hits = 0;
                 cx.element_mut(d).mass = 0;
-                cx.element_mut(d).player = NEUTRAL_PLAYER_NUM as SIZE;
+                cx.element_mut(d).player = NEUTRAL_PLAYER_NUM as i16;
                 cx.element_mut(d).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-                cx.primitive_style_mut(d).kind = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
+                cx.primitive_style_mut(d).kind = STAMPFILL_PRIMITIVE as u8;
                 cx.primitive_style_mut(d).color = rgb15(31, 31, 31);
                 let frame = cx.ship_frame(ss, 2).to_owned();
                 cx.set_frames(d, false, cx.ship_frame_set(ss, 2));
@@ -198,7 +211,7 @@ pub mod engine {
                 cx.element_mut(d).pre = Some(ElementHook::Native(destruct_preprocess));
                 cx.element_mut(d).post = None;
                 cx.element_mut(d).death = None;
-                cx.element_mut(d).velocity = VELOCITY_DESC::default();
+                cx.element_mut(d).velocity = VelocityDesc::default();
             }
         }
     }
@@ -215,11 +228,9 @@ pub mod engine {
                     == Some(marine_collision as *const () as usize);
             if flags & (NONSOLID | DISAPPEARING) as u16 == 0 || marine {
                 let mut dx = (i32::from(object.next.location.x)
-                    - i32::from(cx.element(e).next.location.x))
-                    as SIZE;
+                    - i32::from(cx.element(e).next.location.x)) as i16;
                 let mut dy = (i32::from(object.next.location.y)
-                    - i32::from(cx.element(e).next.location.y))
-                    as SIZE;
+                    - i32::from(cx.element(e).next.location.y)) as i16;
                 if dx < 0 {
                     dx = dx.wrapping_neg();
                 }
@@ -228,22 +239,21 @@ pub mod engine {
                 }
                 dx >>= ONE_SHIFT;
                 dy >>= ONE_SHIFT;
-                let dist = (i32::from(dx) * i32::from(dx) + i32::from(dy) * i32::from(dy)) as DWORD;
+                let dist = (i32::from(dx) * i32::from(dx) + i32::from(dy) * i32::from(dy)) as u32;
                 if i32::from(dx) <= DESTRUCT_RANGE
                     && i32::from(dy) <= DESTRUCT_RANGE
-                    && dist <= (DESTRUCT_RANGE * DESTRUCT_RANGE) as DWORD
+                    && dist <= (DESTRUCT_RANGE * DESTRUCT_RANGE) as u32
                 {
                     let destruction = 1 + MAX_DESTRUCTION
                         * (DESTRUCT_RANGE - i32::from(crate::math::square_root(dist)))
                         / DESTRUCT_RANGE;
                     if flags & PLAYER_SHIP as u16 != 0 {
-                        if !cx.delta_crew(obj, -destruction as SIZE) {
+                        if !cx.delta_crew(obj, -destruction as i16) {
                             cx.element_mut(obj).life = 0;
                         }
                     } else if u32::from(object.mass) <= MAX_SHIP_MASS * 10 {
                         if destruction < i32::from(object.hits) {
-                            cx.element_mut(obj).hits =
-                                object.hits.wrapping_sub(destruction as COUNT);
+                            cx.element_mut(obj).hits = object.hits.wrapping_sub(destruction as u16);
                         } else {
                             cx.element_mut(obj).hits = 0;
                             cx.element_mut(obj).life = 0;
@@ -265,7 +275,7 @@ pub mod engine {
             cx.element_mut(d).death = Some(ElementHook::Native(self_destruct_kill_objects));
             cx.put(d);
         }
-        cx.delta_crew(e, -(i32::from(cx.element(e).hits)) as SIZE);
+        cx.delta_crew(e, -(i32::from(cx.element(e).hits)) as i16);
         cx.element_mut(e).flags |= NONSOLID as u16;
         cx.element_mut(e).life = 0;
         cx.element_mut(e).death = Some(ElementHook::Native(shofixti_destruct_death));

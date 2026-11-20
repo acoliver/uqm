@@ -104,10 +104,9 @@ fn expand_dollar_vars(input: &str) -> String {
         }
         // `i` only ever advances over ASCII delimiters or whole characters,
         // so it always sits on a char boundary and multi-byte text survives.
-        let ch = input[i..]
-            .chars()
-            .next()
-            .expect("index is inside the input");
+        let Some(ch) = input[i..].chars().next() else {
+            break;
+        };
         result.push(ch);
         i += ch.len_utf8();
     }

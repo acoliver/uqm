@@ -39,10 +39,10 @@ pub fn encode_save(save: &SaveFile) -> Result<Vec<u8>, EncodeError> {
     Ok(out)
 }
 
-pub fn encode_summary(summary: &Summary) -> Vec<u8> {
+pub fn encode_summary(summary: &Summary) -> Result<Vec<u8>, EncodeError> {
     let mut out = Vec::new();
-    chunk(&mut out, SUMMARY_TAG, summary_body(summary)).expect("summary fits a chunk");
-    out
+    chunk(&mut out, SUMMARY_TAG, summary_body(summary))?;
+    Ok(out)
 }
 
 fn put_u8(out: &mut Vec<u8>, v: u8) {

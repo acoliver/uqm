@@ -4,7 +4,9 @@ use super::{
     packet::Packet,
     session::{Selection, SessionCore},
 };
-use crate::engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolNoticeKind};
+use crate::engine::battle::net::{
+    BattleNet, NetState, ProtocolDriver, ProtocolNotice, ProtocolNoticeKind,
+};
 
 impl SessionCore {
     pub(crate) fn effect(&self, event: Event, driver: &mut dyn ProtocolDriver) {
@@ -108,13 +110,13 @@ impl BattleNet for SessionCore {
     fn reset(&self, reason: u32, driver: &mut dyn ProtocolDriver) {
         self.with_notices(driver, |emit| self.reset_connections(reason, emit));
     }
-    fn negotiate(&self, notify: bool, state: u32, driver: &mut dyn ProtocolDriver) -> bool {
+    fn negotiate(&self, notify: bool, state: NetState, driver: &mut dyn ProtocolDriver) -> bool {
         self.negotiate_ready_connections(notify, state, driver)
     }
-    fn set_state(&self, state: u32) {
+    fn set_state(&self, state: NetState) {
         self.set_state_connections(state);
     }
-    fn wait_reset(&self, state: u32, driver: &mut dyn ProtocolDriver) {
+    fn wait_reset(&self, state: NetState, driver: &mut dyn ProtocolDriver) {
         self.wait_reset_connections(state, driver);
     }
     fn init_end_frames(&self) {

@@ -3,7 +3,7 @@
 use crate::engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 use crate::engine::input::InputSession;
 use crate::ui::shipyard_layout::{
-    DMS_GetEscortShipRect, HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_HEIGHT,
+    escort_ship_rect, HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_HEIGHT,
     SHIP_WIN_WIDTH,
 };
 use crate::ui::sis::{highlight_rect, set_menu_flash};
@@ -37,7 +37,7 @@ pub(super) fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
 }
 
 pub(super) fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: u8) {
-    highlight_rect(cx.kernel, DMS_GetEscortShipRect(slot));
+    highlight_rect(cx.kernel, escort_ship_rect(slot));
 }
 
 pub(super) fn dms_flash_flag_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>) {

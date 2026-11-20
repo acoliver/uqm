@@ -67,14 +67,14 @@ pub static RODIO: RodioAudio = RodioAudio {
 impl AudioPort for RodioAudio {
     fn start(&self) -> bool {
         rust_bridge_log_msg("RUST_AUDIO_INIT: starting rodio audio system");
-        let mut sender = self.sender.lock().unwrap();
+        let mut sender = crate::sync::lock(&self.sender);
         if sender.is_some() {
             rust_bridge_log_msg("RUST_AUDIO_INIT: already initialized");
             return true;
         }
         let (tx, rx) = mpsc::channel();
         *sender = Some(tx);
-        *self.thread.lock().unwrap() = Some(thread::spawn(move || audio_thread_main(rx)));
+        *crate::sync::lock(&self.thread) = Some(thread::spawn(move || audio_thread_main(rx)));
         drop(sender);
         // Give the thread a moment to initialize
         thread::sleep(std::time::Duration::from_millis(50));
@@ -96,8 +96,8 @@ impl AudioPort for RodioAudio {
     fn shutdown(&self) {
         self.send(AudioCommand::Shutdown);
         // Dropping the sender also ends a thread that is waiting for commands.
-        *self.sender.lock().unwrap() = None;
-        if let Some(handle) = self.thread.lock().unwrap().take() {
+        *crate::sync::lock(&self.sender) = None;
+        if let Some(handle) = crate::sync::lock(&self.thread).take() {
             let _ = handle.join();
         }
     }
@@ -120,16 +120,14 @@ impl ReplayAudioPort {
 
 impl AudioPort for ReplayAudioPort {
     fn start(&self) -> bool {
-        self.audio
-            .lock()
-            .expect("audio worker poisoned")
+        crate::sync::lock(&self.audio)
             .get_or_insert_with(super::replay_audio::ReplayAudio::default);
         true
     }
 
     #[track_caller]
     fn send(&self, command: AudioCommand) -> bool {
-        let mut audio = self.audio.lock().expect("audio worker poisoned");
+        let mut audio = crate::sync::lock(&self.audio);
         let Some(audio) = audio.as_mut() else {
             return false;
         };
@@ -141,7 +139,7 @@ impl AudioPort for ReplayAudioPort {
     }
 
     fn shutdown(&self) {
-        *self.audio.lock().expect("audio worker poisoned") = None;
+        *crate::sync::lock(&self.audio) = None;
     }
 }
 

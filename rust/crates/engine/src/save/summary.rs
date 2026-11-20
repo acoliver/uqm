@@ -26,7 +26,7 @@ use super::super::battle::link_queue::LinkQueue;
 use super::super::world::queues::Fragment;
 use std::fmt;
 
-use super::super::battle::schema::GAME_STATE as CGameState;
+use super::super::battle::schema::GameRecord as CGameState;
 use super::super::world::story::GameStateOwnerError;
 use super::super::world::story::StoryState;
 use super::super::world::SisState as CSisState;
@@ -206,16 +206,6 @@ fn sis_state(sis: &CSisState) -> SisState {
     }
 }
 
-/// `strncpy (SaveName, name, SAVE_NAME_SIZE-1)`.
-fn save_name(name: &[u8]) -> SaveName {
-    let end = name
-        .iter()
-        .position(|&byte| byte == 0)
-        .unwrap_or(name.len())
-        .min(SaveName::MAX_BYTES);
-    SaveName::new(&name[..end]).expect("a name cut at the first NUL and 63 bytes is valid")
-}
-
 /// Port of the `strncpy` plus terminator that `utf8StringCopy` is, into a
 /// `PlanetName`-sized buffer.
 pub fn utf8_string_copy(source: &[u8]) -> [u8; SIS_NAME_SIZE] {
@@ -305,6 +295,6 @@ pub fn capture_summary(
         num_devices: devices.len() as u8,
         ship_list,
         device_list,
-        save_name: save_name(name),
+        save_name: SaveName::from_c_bytes(name),
     })
 }

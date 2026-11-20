@@ -11,15 +11,31 @@ use battle::{Battle, Ship};
 use std::ffi::CStr;
 use std::ptr;
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::{
+    ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, IMMEDIATE_WEAPON, LEFT,
+    MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SEEKING_SPECIAL, SEEKING_WEAPON, SPECIAL,
+    THRUST, WEAPON,
+};
+use uqm_rust::engine::battle::flags::{
+    APPEARING, CHANGING, CREW_OBJECT, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
+    SHIP_AT_MAX_SPEED,
+};
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::battle::LINE_PRIMITIVE;
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
+use uqm_rust::engine::species::species_id::SPECIES_ID_ARILOU_ID;
+use uqm_rust::graphics::drawable::FrameId;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
 
-fn index_of(frame: FRAME) -> u16 {
+fn index_of(frame: FrameId) -> u16 {
     frame.index()
 }
 
 unsafe fn prim_of(element: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     // SAFETY: the caller passes a live fixture element.
-    let index = unsafe { (*element).PrimIndex };
+    let index = unsafe { (*element).prim_index };
     crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 
@@ -28,20 +44,20 @@ struct Fleet<'a> {
 }
 
 impl<'a> Fleet<'a> {
-    unsafe fn new(battle: &'a Battle, player: SIZE) -> Self {
+    unsafe fn new(battle: &'a Battle, player: i16) -> Self {
         Self {
             fixture: Ship::bare(battle, SPECIES_ID_ARILOU_ID, player),
         }
     }
 
-    unsafe fn spawn_ship(&mut self, player: SIZE, x: COORD, y: COORD) -> *mut ElementRecord {
+    unsafe fn spawn_ship(&mut self, player: i16, x: i16, y: i16) -> *mut ElementRecord {
         let ship = self.fixture.ptr();
-        (*ship).playerNr = player;
+        (*ship).player_nr = player;
         (*ship).state_flags = PLAYER_SHIP as u16;
         (*ship).life = NORMAL_LIFE as u16;
-        (*ship).current.location = POINT { x, y };
-        (*ship).next.location = POINT { x, y };
-        (*prim_of(ship)).kind = gfx_object_STAMP_PRIM as u8;
+        (*ship).current.location = Point { x, y };
+        (*ship).next.location = Point { x, y };
+        (*prim_of(ship)).kind = STAMP_PRIMITIVE;
         self.fixture.queue();
         ship
     }
@@ -52,31 +68,31 @@ type Rgba = (u8, u8, u8, u8);
 const KEYS: u16 = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
 
 /// Draws `count` values from the engine generator after seeding it.
-unsafe fn draws(seed: DWORD, count: usize) -> Vec<DWORD> {
-    TFB_SeedRandom(seed);
-    (0..count).map(|_| TFB_Random()).collect()
+unsafe fn draws(seed: u32, count: usize) -> Vec<u32> {
+    seed_random(seed);
+    (0..count).map(|_| random()).collect()
 }
 
 /// First seed whose opening draws satisfy `accept`.
-unsafe fn seed_where(count: usize, accept: impl Fn(&[DWORD]) -> bool) -> DWORD {
+unsafe fn seed_where(count: usize, accept: impl Fn(&[u32]) -> bool) -> u32 {
     (1..1_000_000)
         .find(|&seed| accept(&draws(seed, count)))
         .expect("a suitable seed exists")
 }
 
 /// Seeds the generator, runs `action`, and reports how many draws it took.
-unsafe fn draws_consumed(seed: DWORD, action: impl FnOnce()) -> usize {
+unsafe fn draws_consumed(seed: u32, action: impl FnOnce()) -> usize {
     let sequence = draws(seed, 16);
-    TFB_SeedRandom(seed);
+    seed_random(seed);
     action();
-    let next = TFB_Random();
+    let next = random();
     sequence
         .iter()
         .position(|&value| value == next)
         .expect("generator advanced by fewer than sixteen draws")
 }
 
-unsafe fn velocity_of(element: *mut ElementRecord) -> (SIZE, SIZE) {
+unsafe fn velocity_of(element: *mut ElementRecord) -> (i16, i16) {
     let (velocity_x, velocity_y) = ((*element).velocity).get_current_components();
     let (dx, dy) = (velocity_x as i16, velocity_y as i16);
     (dx, dy)
@@ -153,8 +169,8 @@ fn skiff_descriptor_matches_the_c_template() {
             assert_eq!(CStr::from_ptr(data.ship_sounds_rsc), c"ship.arilou.sounds");
 
             // LASER_RANGE >> 1, with LASER_RANGE = DISPLAY_TO_WORLD (109).
-            assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
-            assert_eq!(desc.cyborg_control.WeaponRange, 218);
+            assert_eq!(desc.cyborg_control.maneuverability_index, 0);
+            assert_eq!(desc.cyborg_control.weapon_range, 218);
             assert_ne!(desc.callbacks()[1], 0);
             assert_ne!(desc.callbacks()[3], 0);
             assert_ne!(desc.callbacks()[4], 0);
@@ -182,7 +198,7 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
             let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
             let mut other = Fleet::new(&_battle, 1);
-            // Straight along +x: ARCTAN gives angle 16, facing 4, four facings
+            // Straight along +x: arctan gives angle 16, facing 4, four facings
             // from the ship's facing 0.
             other.spawn_ship(1, 2000, 1000);
             fleet.fixture.ship_mut().ship_facing = 0;
@@ -204,13 +220,13 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
             assert_eq!((*laser).hits, 1);
             assert_eq!((*laser).mass, 1);
             assert_eq!((*laser).thrust, 1);
-            assert_eq!((*laser).playerNr, 0);
+            assert_eq!((*laser).player_nr, 0);
             assert!((*laser).collision_func.is_some());
             assert!((*ship).target.is_none());
 
             // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x1F, 0x0A), 0x0E) on a line.
             let prim = prim_of(laser);
-            assert_eq!((*prim).kind, gfx_object_LINE_PRIM as u8);
+            assert_eq!((*prim).kind, LINE_PRIMITIVE);
             let color: Rgba = (
                 (*prim).color.r,
                 (*prim).color.g,
@@ -257,12 +273,12 @@ fn laser_aims_exactly_at_a_target_directly_behind() {
             fleet.fixture.ship_mut().ship_facing = 0;
 
             let seed = seed_where(1, |d| d[0] & 1 == 0);
-            TFB_SeedRandom(seed);
+            seed_random(seed);
             let laser = fire(&mut fleet, ship);
             assert_eq!(velocity_of(laser), (0, (109 - 9) * 4 * 32));
 
             let seed = seed_where(1, |d| d[0] & 1 == 1);
-            TFB_SeedRandom(seed);
+            seed_random(seed);
             let laser = fire(&mut fleet, ship);
             assert_eq!(velocity_of(laser), (0, (109 - 9) * 4 * 32));
         }
@@ -274,7 +290,7 @@ fn laser_aims_exactly_at_a_target_directly_behind() {
 unsafe fn think(
     fleet: &mut Fleet,
     ship: *mut ElementRecord,
-    concerns: &mut [EVALUATE_DESC; 4],
+    concerns: &mut [EvaluateRecord; 4],
     input: u8,
 ) -> u8 {
     fleet.fixture.ship_mut().ship_input_state = input;
@@ -291,18 +307,18 @@ unsafe fn think(
     fleet.fixture.ship_mut().ship_input_state
 }
 
-fn empty_concerns() -> [EVALUATE_DESC; 4] {
-    [EVALUATE_DESC {
-        ObjectPtr: ptr::null_mut(),
+fn empty_concerns() -> [EvaluateRecord; 4] {
+    [EvaluateRecord {
+        object_ptr: ptr::null_mut(),
         facing: 0,
         which_turn: 0,
-        MoveState: MOVEMENT_STATE_PURSUE,
+        move_state: MOVEMENT_STATE_PURSUE,
     }; 4]
 }
 
-fn threat_concerns(threat: *mut ElementRecord, which_turn: COUNT) -> [EVALUATE_DESC; 4] {
+fn threat_concerns(threat: *mut ElementRecord, which_turn: u16) -> [EvaluateRecord; 4] {
     let mut concerns = empty_concerns();
-    concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = threat;
+    concerns[ENEMY_WEAPON_INDEX as usize].object_ptr = threat;
     concerns[ENEMY_WEAPON_INDEX as usize].which_turn = which_turn;
     concerns
 }
@@ -319,7 +335,7 @@ fn intelligence_always_thrusts_and_entices_the_enemy() {
             let input = think(&mut fleet, ship, &mut concerns, 0);
             assert_eq!(input, THRUST as u8);
             assert_eq!(
-                concerns[ENEMY_SHIP_INDEX as usize].MoveState,
+                concerns[ENEMY_SHIP_INDEX as usize].move_state,
                 MOVEMENT_STATE_ENTICE
             );
             // A stale SPECIAL is dropped when the teleporter is ready.
@@ -678,7 +694,7 @@ unsafe fn start_teleport(skiff: &mut Skiff) {
     (*skiff.ship).state_flags &= !(CHANGING as u16);
 }
 
-unsafe fn set_life(ship: *mut ElementRecord, life: COUNT) {
+unsafe fn set_life(ship: *mut ElementRecord, life: u16) {
     (*ship).life = life;
 }
 
@@ -713,11 +729,11 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             // first draw places x and the second places y.
             let seed = seed_where(3, |d| {
                 // Draws whose high bits matter: the modulus is taken on the
-                // low sixteen bits (a COUNT) and 7680 does not divide 65536.
+                // low sixteen bits (a u16) and 7680 does not divide 65536.
                 d[0] > 0xFFFF && d[1] % 7680 != (d[1] as u16 as u32) % 7680
             });
             let sequence = draws(seed, 3);
-            TFB_SeedRandom(seed);
+            seed_random(seed);
             set_life(ship, 3);
             skiff.preprocess();
             // 320x240 screen: logical space is 256 * 32 by 240 * 32.
@@ -727,7 +743,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
                 ((*ship).next.location.x, (*ship).next.location.y),
                 (expect_x as i16, expect_y as i16)
             );
-            assert_eq!(TFB_Random(), sequence[2], "two draws, x before y");
+            assert_eq!(random(), sequence[2], "two draws, x before y");
             assert_eq!(index_of((*ship).next.image.frame.raw()), 2);
             assert_eq!((*ship).life, 3);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
@@ -744,8 +760,8 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             (*ship).state_flags &= !(CHANGING as u16);
 
             // Life 1 is NORMAL_LIFE: the teleport ends.
-            (*ship).current.location = POINT { x: -9, y: 13 };
-            (*ship).IntersectControl.EndPoint = POINT { x: 123, y: -456 };
+            (*ship).current.location = Point { x: -9, y: 13 };
+            (*ship).intersect_control.EndPoint = Point { x: 123, y: -456 };
             set_life(ship, 1);
             skiff.preprocess();
             let ship_array = skiff.ship_array();
@@ -765,9 +781,9 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
                 skiff.ship_frames.frame(6)
             );
             // InitIntersectStartPoint: WORLD_TO_DISPLAY is an arithmetic >> 2.
-            let origin = (*ship).IntersectControl.IntersectStamp.origin;
+            let origin = (*ship).intersect_control.IntersectStamp.origin;
             assert_eq!((origin.x, origin.y), (-3, 3));
-            let end = (*ship).IntersectControl.EndPoint;
+            let end = (*ship).intersect_control.EndPoint;
             assert_eq!((end.x, end.y), (123, -456));
         }
     })
@@ -795,7 +811,7 @@ fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
 
             let starship = skiff.fleet.fixture.ship_mut();
             assert_eq!(starship.weapon_counter, 5);
-            // BYTE counters wrap rather than saturate.
+            // u8 counters wrap rather than saturate.
             assert_eq!(starship.special_counter, 0);
             assert_eq!(starship.energy_counter, 10);
             assert_eq!((*ship).turn, 0);
@@ -831,12 +847,12 @@ fn init_intersect_start_preserves_endpoint_and_frame() {
     battle_context::run(|_| unsafe {
         let battle = Battle::new(4);
         let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
-        let frame = ship.element_mut().IntersectControl.IntersectStamp.frame;
-        ship.element_mut().current.location = POINT { x: -9, y: 13 };
-        ship.element_mut().next.location = POINT { x: 400, y: 800 };
-        ship.element_mut().IntersectControl.EndPoint = POINT { x: 123, y: -456 };
+        let frame = ship.element_mut().intersect_control.IntersectStamp.frame;
+        ship.element_mut().current.location = Point { x: -9, y: 13 };
+        ship.element_mut().next.location = Point { x: 400, y: 800 };
+        ship.element_mut().intersect_control.EndPoint = Point { x: 123, y: -456 };
         crate::battle_context::with(|cx| cx.init_intersect_start(ship.id));
-        let control = ship.element_mut().IntersectControl;
+        let control = ship.element_mut().intersect_control;
         assert_eq!(
             (
                 control.IntersectStamp.origin.x,

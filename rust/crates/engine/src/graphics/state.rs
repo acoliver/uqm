@@ -334,7 +334,7 @@ pub fn graphic_scale_mode() -> i32 {
 // ----- colour maps ---------------------------------------------------------
 
 fn now() -> u32 {
-    crate::time::counter_abi::GetTimeCounter()
+    crate::time::counter_abi::get_time_counter()
 }
 
 /// C: `InitColorMaps`.

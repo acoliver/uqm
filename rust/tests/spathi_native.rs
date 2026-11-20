@@ -7,11 +7,20 @@ mod battle_context;
 use battle::{Battle, FrameSet, Ship};
 use std::ffi::CStr;
 use std::{mem, ptr};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::{
+    DONT_CHASE, ENEMY_SHIP_INDEX, FIRES_AFT, FIRES_FORE, IGNORE_SIMILAR, SEEKING_SPECIAL, SPECIAL,
+};
+use uqm_rust::engine::battle::flags::{
+    APPEARING, CHANGING, FINITE_LIFE, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
+};
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::species::species_id::SPECIES_ID_SPATHI_ID;
+use uqm_rust::graphics::drawable::FrameId;
+use uqm_rust::graphics::geometry::Point;
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
-unsafe fn index_of(frame: FRAME) -> u16 {
+unsafe fn index_of(frame: FrameId) -> u16 {
     frame.index()
 }
 unsafe fn queue_tail() -> *mut std::ffi::c_void {
@@ -98,8 +107,8 @@ fn eluder_descriptor_matches_the_c_template() {
             assert_eq!(CStr::from_ptr(data.ship_sounds_rsc), c"ship.spathi.sounds");
 
             // MISSILE_SPEED * MISSILE_LIFE: the cyborg's weapon range.
-            assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
-            assert_eq!(desc.cyborg_control.WeaponRange, 1200);
+            assert_eq!(desc.cyborg_control.maneuverability_index, 0);
+            assert_eq!(desc.cyborg_control.weapon_range, 1200);
             assert!(desc.race.unwrap().intelligence.is_some());
             assert!(desc.race.unwrap().postprocess.is_some());
             assert!(desc.race.unwrap().init_weapon.is_some());
@@ -117,10 +126,10 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let missile_frames = FrameSet::new(16);
             fleet.descriptor_mut().ship_data.weapon = missile_frames.array();
-            fleet.ship_mut().playerNr = 0;
-            (*fleet.ptr()).playerNr = 0;
-            (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
-            (*fleet.ptr()).next.location = POINT { x: 400, y: 500 };
+            fleet.ship_mut().player_nr = 0;
+            (*fleet.ptr()).player_nr = 0;
+            (*fleet.ptr()).current.location = Point { x: 400, y: 500 };
+            (*fleet.ptr()).next.location = Point { x: 400, y: 500 };
             let ship = fleet.ptr();
             fleet.ship_mut().ship_facing = 4;
 
@@ -137,7 +146,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
             assert_eq!((*m).hits, 1);
             assert_eq!((*m).mass, 1);
             assert_eq!((*m).thrust, 1);
-            assert_eq!((*m).playerNr, 0);
+            assert_eq!((*m).player_nr, 0);
             assert_eq!(
                 (*m).state_flags,
                 (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -163,10 +172,10 @@ fn butt_leaves_the_tail_not_the_nose() {
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let butt_frames = FrameSet::new(16);
             fleet.descriptor_mut().ship_data.special = butt_frames.array();
-            fleet.ship_mut().playerNr = 0;
-            (*fleet.ptr()).playerNr = 0;
-            (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
-            (*fleet.ptr()).next.location = POINT { x: 400, y: 500 };
+            fleet.ship_mut().player_nr = 0;
+            (*fleet.ptr()).player_nr = 0;
+            (*fleet.ptr()).current.location = Point { x: 400, y: 500 };
+            (*fleet.ptr()).next.location = Point { x: 400, y: 500 };
             let ship = fleet.ptr();
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
             fleet.ship_mut().ship_facing = 4;
@@ -207,10 +216,10 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
         let butt_frames = FrameSet::new(16);
         fleet.descriptor_mut().ship_data.special = butt_frames.array();
-        fleet.ship_mut().playerNr = 0;
-        (*fleet.ptr()).playerNr = 0;
-        (*fleet.ptr()).current.location = POINT { x: 0, y: 0 };
-        (*fleet.ptr()).next.location = POINT { x: 0, y: 0 };
+        fleet.ship_mut().player_nr = 0;
+        (*fleet.ptr()).player_nr = 0;
+        (*fleet.ptr()).current.location = Point { x: 0, y: 0 };
+        (*fleet.ptr()).next.location = Point { x: 0, y: 0 };
         fleet.ship_mut().cur_status_flags = SPECIAL as u16;
         for (ship_facing, rear) in [(0, 8), (3, 11), (8, 0), (15, 7)] {
             fleet.ship_mut().ship_facing = ship_facing;
@@ -229,10 +238,10 @@ fn butt_needs_the_special_key_a_ready_counter_and_energy() {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            fleet.ship_mut().playerNr = 0;
-            (*fleet.ptr()).playerNr = 0;
-            (*fleet.ptr()).current.location = POINT { x: 0, y: 0 };
-            (*fleet.ptr()).next.location = POINT { x: 0, y: 0 };
+            fleet.ship_mut().player_nr = 0;
+            (*fleet.ptr()).player_nr = 0;
+            (*fleet.ptr()).current.location = Point { x: 0, y: 0 };
+            (*fleet.ptr()).next.location = Point { x: 0, y: 0 };
             let tail = queue_tail();
 
             // Key not held.
@@ -267,10 +276,10 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             let mut spathi = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let butt_frames = FrameSet::new(16);
             spathi.descriptor_mut().ship_data.special = butt_frames.array();
-            spathi.ship_mut().playerNr = 0;
-            (*spathi.ptr()).playerNr = 0;
-            (*spathi.ptr()).current.location = POINT { x: 400, y: 500 };
-            (*spathi.ptr()).next.location = POINT { x: 400, y: 500 };
+            spathi.ship_mut().player_nr = 0;
+            (*spathi.ptr()).player_nr = 0;
+            (*spathi.ptr()).current.location = Point { x: 400, y: 500 };
+            (*spathi.ptr()).next.location = Point { x: 400, y: 500 };
             spathi.ship_mut().cur_status_flags = SPECIAL as u16;
             spathi.ship_mut().ship_facing = 4;
             spathi.postprocess();
@@ -297,13 +306,13 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             let mut other = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
             let enemy_x = (*butt).current.location.x;
             let enemy_y = (*butt).current.location.y - 1000;
-            other.ship_mut().playerNr = 1;
-            (*other.ptr()).playerNr = 1;
-            (*other.ptr()).current.location = POINT {
+            other.ship_mut().player_nr = 1;
+            (*other.ptr()).player_nr = 1;
+            (*other.ptr()).current.location = Point {
                 x: enemy_x,
                 y: enemy_y,
             };
-            (*other.ptr()).next.location = POINT {
+            (*other.ptr()).next.location = Point {
                 x: enemy_x,
                 y: enemy_y,
             };
@@ -324,10 +333,10 @@ unsafe fn intelligence_sets_special(
     fleet: &mut Ship<'_>,
     ship: *mut ElementRecord,
     target: *mut ElementRecord,
-    which_turn: COUNT,
+    which_turn: u16,
 ) -> bool {
-    let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-    concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = target;
+    let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+    concerns[ENEMY_SHIP_INDEX as usize].object_ptr = target;
     concerns[ENEMY_SHIP_INDEX as usize].which_turn = which_turn;
     // A stale SPECIAL must always be cleared first.
     fleet.ship_mut().ship_input_state = SPECIAL as u8;
@@ -341,21 +350,21 @@ fn intelligence_fires_the_butt_only_at_targets_behind_the_ship() {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            fleet.ship_mut().playerNr = 0;
-            (*fleet.ptr()).playerNr = 0;
-            (*fleet.ptr()).current.location = POINT { x: 2000, y: 2000 };
-            (*fleet.ptr()).next.location = POINT { x: 2000, y: 2000 };
+            fleet.ship_mut().player_nr = 0;
+            (*fleet.ptr()).player_nr = 0;
+            (*fleet.ptr()).current.location = Point { x: 2000, y: 2000 };
+            (*fleet.ptr()).next.location = Point { x: 2000, y: 2000 };
             let ship = fleet.ptr();
             let mut other = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
-            other.ship_mut().playerNr = 1;
-            (*other.ptr()).playerNr = 1;
-            (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
-            (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
+            other.ship_mut().player_nr = 1;
+            (*other.ptr()).player_nr = 1;
+            (*other.ptr()).current.location = Point { x: 2000, y: 3000 };
+            (*other.ptr()).next.location = Point { x: 2000, y: 3000 };
             let behind = other.ptr();
             let ahead_fixture = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
-            (*ahead_fixture.ptr()).current.location = POINT { x: 2000, y: 1000 };
+            (*ahead_fixture.ptr()).current.location = Point { x: 2000, y: 1000 };
             (*ahead_fixture.ptr()).next.location = (*ahead_fixture.ptr()).current.location;
-            (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
+            (*other.ptr()).current.location = Point { x: 2000, y: 3000 };
             (*other.ptr()).next.location = (*other.ptr()).current.location;
             let ahead = ahead_fixture.ptr();
             fleet.ship_mut().ship_facing = 0;
@@ -382,16 +391,16 @@ fn intelligence_respects_counter_and_arrival_time() {
     battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-        fleet.ship_mut().playerNr = 0;
-        (*fleet.ptr()).playerNr = 0;
-        (*fleet.ptr()).current.location = POINT { x: 2000, y: 2000 };
-        (*fleet.ptr()).next.location = POINT { x: 2000, y: 2000 };
+        fleet.ship_mut().player_nr = 0;
+        (*fleet.ptr()).player_nr = 0;
+        (*fleet.ptr()).current.location = Point { x: 2000, y: 2000 };
+        (*fleet.ptr()).next.location = Point { x: 2000, y: 2000 };
         let ship = fleet.ptr();
         let mut other = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
-        other.ship_mut().playerNr = 1;
-        (*other.ptr()).playerNr = 1;
-        (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
-        (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
+        other.ship_mut().player_nr = 1;
+        (*other.ptr()).player_nr = 1;
+        (*other.ptr()).current.location = Point { x: 2000, y: 3000 };
+        (*other.ptr()).next.location = Point { x: 2000, y: 3000 };
         let behind = other.ptr();
         fleet.ship_mut().ship_facing = 0;
 
@@ -408,16 +417,16 @@ fn intelligence_beyond_eight_turns_needs_the_enemy_to_be_closing() {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            fleet.ship_mut().playerNr = 0;
-            (*fleet.ptr()).playerNr = 0;
-            (*fleet.ptr()).current.location = POINT { x: 2000, y: 2000 };
-            (*fleet.ptr()).next.location = POINT { x: 2000, y: 2000 };
+            fleet.ship_mut().player_nr = 0;
+            (*fleet.ptr()).player_nr = 0;
+            (*fleet.ptr()).current.location = Point { x: 2000, y: 2000 };
+            (*fleet.ptr()).next.location = Point { x: 2000, y: 2000 };
             let ship = fleet.ptr();
             let mut other = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
-            other.ship_mut().playerNr = 1;
-            (*other.ptr()).playerNr = 1;
-            (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
-            (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
+            other.ship_mut().player_nr = 1;
+            (*other.ptr()).player_nr = 1;
+            (*other.ptr()).current.location = Point { x: 2000, y: 3000 };
+            (*other.ptr()).next.location = Point { x: 2000, y: 3000 };
             let behind = other.ptr();
             fleet.ship_mut().ship_facing = 0;
 
@@ -439,16 +448,16 @@ fn intelligence_while_fast_or_in_gravity_needs_the_tail_along_travel() {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            fleet.ship_mut().playerNr = 0;
-            (*fleet.ptr()).playerNr = 0;
-            (*fleet.ptr()).current.location = POINT { x: 2000, y: 2000 };
-            (*fleet.ptr()).next.location = POINT { x: 2000, y: 2000 };
+            fleet.ship_mut().player_nr = 0;
+            (*fleet.ptr()).player_nr = 0;
+            (*fleet.ptr()).current.location = Point { x: 2000, y: 2000 };
+            (*fleet.ptr()).next.location = Point { x: 2000, y: 2000 };
             let ship = fleet.ptr();
             let mut other = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
-            other.ship_mut().playerNr = 1;
-            (*other.ptr()).playerNr = 1;
-            (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
-            (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
+            other.ship_mut().player_nr = 1;
+            (*other.ptr()).player_nr = 1;
+            (*other.ptr()).current.location = Point { x: 2000, y: 3000 };
+            (*other.ptr()).next.location = Point { x: 2000, y: 3000 };
             let behind = other.ptr();
             fleet.ship_mut().ship_facing = 0;
 

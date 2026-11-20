@@ -38,11 +38,11 @@ pub struct ShipObservation<'a> {
 }
 pub struct DescriptorObservation<'a> {
     pub address: usize,
-    pub info: &'a SHIP_INFO,
-    pub data: &'a DATA_STUFF,
-    pub fleet: &'a FLEET_STUFF,
-    pub characteristics: &'a CHARACTERISTIC_STUFF,
-    pub intel: &'a INTEL_STUFF,
+    pub info: &'a ShipInfoRecord,
+    pub data: &'a DataRecord,
+    pub fleet: &'a FleetRecord,
+    pub characteristics: &'a CharacteristicRecord,
+    pub intel: &'a IntelRecord,
     pub callbacks: [usize; 5],
     pub code_loaded: bool,
     pub custom: CustomData<'a>,
@@ -55,7 +55,7 @@ pub enum CustomData<'a> {
         saved: [Option<crate::engine::battle::ElementHook>; 3],
     },
     NativeUmgah(u16),
-    Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
+    Mmrnmhrm(&'a CharacteristicRecord),
     Sis(&'a crate::engine::battle::race::SisState),
 }
 impl<'a> CustomData<'a> {

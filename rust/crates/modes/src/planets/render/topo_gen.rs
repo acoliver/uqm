@@ -104,8 +104,11 @@ fn vertical_block(depth: &[i8], width: usize, x: i32, y: i32) -> ElevationBlock 
 pub fn generate_light_map(depth: &mut [i8], width: usize) {
     assert_eq!(depth.len(), width * MAP_HEIGHT);
     assert!(width > LMAP_MAX_DIST as usize && width <= i16::MAX as usize);
-    let min = i32::from(*depth.iter().min().expect("nonempty map"));
-    let max = i32::from(*depth.iter().max().expect("nonempty map"));
+    let (min, max) = depth
+        .iter()
+        .fold((i32::MAX, i32::MIN), |(min, max), &cell| {
+            (min.min(i32::from(cell)), max.max(i32::from(cell)))
+        });
     let med = (min + max) / 2;
     let spread = max - med;
     if spread == 0 {

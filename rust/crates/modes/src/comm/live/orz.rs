@@ -6,53 +6,23 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExitConversation, r));
 }
-fn taalo_world(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::TaaloWorld,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn taalo_world(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::TaaloWorld, r));
 }
-fn orz_allied(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::OrzAllied,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn orz_allied(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::OrzAllied, r));
 }
-fn offer_alliance(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::OfferAlliance,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn offer_alliance(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::OfferAlliance, r));
 }
-fn orz_neutral(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::OrzNeutral,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn orz_neutral(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::OrzNeutral, r));
 }
-fn orz_angry(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::OrzAngry,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn orz_angry(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::OrzAngry, r));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {

@@ -19,8 +19,7 @@ impl LogLevel {
     /// OOM handlers and other fatal-error paths should use this for clarity.
     /// @plan PLAN-20260224-MEM-SWAP.P03
     /// @requirement REQ-MEM-005
-    #[allow(dead_code, non_upper_case_globals)]
-    pub const Fatal: LogLevel = LogLevel::User;
+    pub const FATAL: LogLevel = LogLevel::User;
 
     /// Create a LogLevel from an integer
     #[allow(dead_code)]
@@ -185,7 +184,7 @@ mod tests {
     /// @requirement REQ-MEM-005
     #[test]
     fn test_fatal_alias() {
-        assert_eq!(LogLevel::Fatal, LogLevel::User);
-        assert_eq!(LogLevel::Fatal.as_i32(), 1);
+        assert_eq!(LogLevel::FATAL, LogLevel::User);
+        assert_eq!(LogLevel::FATAL.as_i32(), 1);
     }
 }

@@ -104,6 +104,10 @@ pub enum FuelError {
     ResUnitsOverflow,
     #[error("fuel overflow while rounding")]
     FuelOverflow,
+    #[error("{balance} RU do not cover a price of {price} RU")]
+    InsufficientResUnits { balance: u32, price: u32 },
+    #[error("fuel increment {incr} or its cost {cost} RU does not fit a gauge update")]
+    GaugeDeltaOverflow { incr: i64, cost: i64 },
 }
 
 /// What pressing `key` does with the given ship state.
@@ -143,10 +147,10 @@ pub fn change_fuel_quantity(
     // C integer division truncates toward zero, so a drain of less than one
     // whole unit refunds nothing.
     let cost = (incr / scale) * i64::from(fuel_cost);
-    Ok(FuelChange::Apply(GaugeDelta {
-        fuel: i16::try_from(incr).expect("increment is bounded by one bar"),
-        res_units: i32::try_from(-cost).expect("cost is bounded by one bar of RU"),
-    }))
+    match (i16::try_from(incr), i32::try_from(-cost)) {
+        (Ok(fuel), Ok(res_units)) => Ok(FuelChange::Apply(GaugeDelta { fuel, res_units })),
+        _ => Err(FuelError::GaugeDeltaOverflow { incr, cost }),
+    }
 }
 
 impl FuelRuState {
@@ -168,7 +172,7 @@ impl FuelRuState {
 
         Ok(Self {
             // The clamp above bounds the value by a u32 capacity.
-            fuel_on_board: u32::try_from(fuel).expect("clamped to a u32 capacity"),
+            fuel_on_board: u32::try_from(fuel).map_err(|_| FuelError::FuelOverflow)?,
             res_units,
         })
     }

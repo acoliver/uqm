@@ -81,6 +81,8 @@ pub const RADAR_WIDTH: i32 = STATUS_WIDTH - 8;
 pub const RADAR_HEIGHT: i32 = 53;
 pub const SHIP_NAME_WIDTH: i16 = (STATUS_WIDTH - 4) as i16;
 pub const SHIP_NAME_HEIGHT: i16 = 7;
+pub const SHIP_INFO_HEIGHT: i32 = 65;
+pub const TINY_TEXT_HEIGHT: i32 = 9;
 
 /// `RADAR_X` and `RADAR_Y` for the current screen size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

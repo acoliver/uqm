@@ -67,7 +67,7 @@ fn run_game(
     crate::game_init::cleanup::uninit_game_kernel(&mut cx);
     crate::ships::master_native::engine::free(cx.world, cx.kernel);
     crate::game_init::cleanup::free_kernel(cx.kernel);
-    crate::log_abi::log_showBox(false, false);
+    crate::log_abi::log_show_box(false, false);
     Ok(())
 }
 

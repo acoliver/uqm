@@ -576,16 +576,11 @@ fn clip_sample(fullsamp: f32, chansize: u32) -> i32 {
 ///
 /// This is used for timing purposes without actual audio output.
 pub fn mixer_mix_fake(stream: &mut [u8]) -> Result<(), MixerError> {
-    let state = MIXER_STATE.lock();
-
-    if state.is_none() {
-        return Err(MixerError::InvalidOperation);
-    }
-
-    let chansize = state.as_ref().unwrap().chansize;
-    let channels = state.as_ref().unwrap().channels;
-
-    drop(state);
+    let (chansize, channels) = {
+        let state = MIXER_STATE.lock();
+        let state = state.as_ref().ok_or(MixerError::InvalidOperation)?;
+        (state.chansize, state.channels)
+    };
 
     let mut stream_idx = 0;
     let mut left = true;

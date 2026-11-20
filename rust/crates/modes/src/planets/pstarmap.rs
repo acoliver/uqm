@@ -8,7 +8,7 @@ mod state;
 #[cfg(test)]
 use crate::engine::observe_port::starmap::signed_div_with_error;
 use crate::engine::observe_port::starmap::Projection;
-use crate::engine::time::counter_abi::GetTimeCounter;
+use crate::engine::time::counter_abi::get_time_counter;
 use crate::engine::world::{CStarDesc, NUM_SOLAR_SYSTEMS};
 use crate::engine::{
     battle::{link_queue::LinkId, Cx},
@@ -97,7 +97,7 @@ impl StarMap {
             )));
     }
     fn flash(&self, kernel: &mut Kernel) {
-        if let Some(color) = kernel.star_map_flash.advance(GetTimeCounter) {
+        if let Some(color) = kernel.star_map_flash.advance(get_time_counter) {
             let point = self.state.screen(self.universe);
             self.display.context.with_selected(|| {
                 self.display.context.draw_filled_stamp_preserving_color(
@@ -214,7 +214,7 @@ pub fn star_map(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u32 {
         map.draw_cursor(map.state.screen_cursor());
     });
     input.set_menu_sounds(0, 0);
-    input.configure_repeat(14, 105, 7, true, GetTimeCounter());
+    input.configure_repeat(14, 105, 7, true, get_time_counter());
     let previous = map.display.context.selected_context();
     runtime.run(cx, io, false, &mut map);
     io.observer.checkpoint(&CheckpointView::StarMap(None));
@@ -224,7 +224,7 @@ pub fn star_map(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u32 {
         ONE_SECOND / 2,
         ONE_SECOND / 12,
         false,
-        GetTimeCounter(),
+        get_time_counter(),
     );
     let dimensions = map.dimensions();
     crate::ui::sis::draw_hyper_coords(cx.kernel, dimensions.0, map.universe);

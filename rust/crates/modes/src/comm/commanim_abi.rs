@@ -221,7 +221,7 @@ fn frame_index(d: &AnimationDescriptor, from: u16, random: &mut impl FnMut() -> 
 pub(crate) mod runtime {
     use super::*;
     use crate::graphics::{geometry::Point, palette_cycle::PaletteCycle};
-    use uqm_engine::time::counter_abi::GetTimeCounter;
+    use uqm_engine::time::counter_abi::get_time_counter;
 
     const EMPTY_DESC: AnimationDescriptor = AnimationDescriptor {
         start_index: 0,
@@ -259,7 +259,7 @@ pub(crate) mod runtime {
     }
 
     pub fn init_comm_animations(comm: &mut Comm) {
-        initialize_at(comm, GetTimeCounter(), &mut random);
+        initialize_at(comm, get_time_counter(), &mut random);
     }
 
     pub(crate) fn initialize_at(comm: &mut Comm, now: u32, random: &mut impl FnMut() -> u32) {
@@ -283,7 +283,7 @@ pub(crate) mod runtime {
             PaletteCycle::step_transforms();
             return 0;
         }
-        let next_mask = advance_at(comm, GetTimeCounter(), &mut random);
+        let next_mask = advance_at(comm, get_time_counter(), &mut random);
         let context = comm.animation_context();
         context.with_batch(|| {
             if PaletteCycle::step_transforms() {

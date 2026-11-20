@@ -33,7 +33,7 @@ pub(super) struct PresentationState {
 
 impl PresentationState {
     pub fn new(table: LoadedTextTable, context: ContextLease, ending: bool) -> Self {
-        let now = GetTimeCounter();
+        let now = get_time_counter();
         Self {
             table,
             context,

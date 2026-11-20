@@ -7,53 +7,23 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn allied_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AlliedHome,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn allied_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AlliedHome, r));
 }
-fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::ExitConversation,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::ExitConversation, r));
 }
-fn before_kohr_ah(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::BeforeKohrAh,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn before_kohr_ah(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::BeforeKohrAh, r));
 }
-fn after_kohr_ah(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::AfterKohrAh,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn after_kohr_ah(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::AfterKohrAh, r));
 }
-fn neutral_utwig(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::NeutralUtwig,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn neutral_utwig(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::NeutralUtwig, r));
 }
-fn bomb_world(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::BombWorld,
-            u16::try_from(r).expect("response exceeds COUNT"),
-        )
-    });
+fn bomb_world(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::BombWorld, r));
 }
 
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {

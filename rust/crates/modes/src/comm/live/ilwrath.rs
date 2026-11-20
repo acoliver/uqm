@@ -6,53 +6,23 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::CombatIsInevitable,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::CombatIsInevitable, r));
 }
-fn ilwrath_gods(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::IlwrathGods,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn ilwrath_gods(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::IlwrathGods, r));
 }
-fn ilwrath_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::IlwrathInfo,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn ilwrath_info(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::IlwrathInfo, r));
 }
-fn ilwrath_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::IlwrathHome,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn ilwrath_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::IlwrathHome, r));
 }
-fn gods_order(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::GodsOrder,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn gods_order(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::GodsOrder, r));
 }
-fn gods_speak(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
-    run(comm, cx, |s| {
-        s.handle(
-            Handler::GodsSpeak,
-            u16::try_from(r).expect("response reference exceeds COUNT"),
-        )
-    });
+fn gods_speak(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
+    run(comm, cx, |s| s.handle(Handler::GodsSpeak, r));
 }
 pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {

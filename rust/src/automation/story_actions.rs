@@ -164,6 +164,10 @@ pub const ARTIFACT_FLAGS: &[(StoryKey, &str)] = &[
     (StoryKey::SYREEN_SHUTTLE_ON_SHIP, "SYREEN_SHUTTLE_ON_SHIP"),
 ];
 
+/// The shuttle is the last acquisition flag, and the only one the vault
+/// consumes.
+const SHUTTLE_FLAG: usize = ARTIFACT_FLAGS.len() - 1;
+
 #[derive(Debug, Clone)]
 pub struct EnergyObservation {
     pub report_active: bool,
@@ -211,10 +215,7 @@ impl EnergyTracker {
         if let Some(node) = self.target {
             // The vault stays on the surface. Recovery consumes its shuttle
             // instead of setting a scan retrieval bit.
-            let shuttle = ARTIFACT_FLAGS
-                .iter()
-                .position(|(key, _)| *key == StoryKey::SYREEN_SHUTTLE_ON_SHIP)
-                .expect("shuttle observation");
+            let shuttle = SHUTTLE_FLAG;
             if node == 0
                 && !self.vault_unlocked
                 && obs.vault_unlocked
@@ -405,10 +406,11 @@ mod tests {
     #[test]
     fn vault_recovery_requires_unlock_and_shuttle_consumption_on_the_same_trip() {
         let step = CollectEnergyNodeStep { max_ticks: 100 };
-        let shuttle = ARTIFACT_FLAGS
-            .iter()
-            .position(|(key, _)| *key == StoryKey::SYREEN_SHUTTLE_ON_SHIP)
-            .unwrap();
+        assert_eq!(
+            ARTIFACT_FLAGS[SHUTTLE_FLAG].0,
+            StoryKey::SYREEN_SHUTTLE_ON_SHIP
+        );
+        let shuttle = SHUTTLE_FLAG;
         let mut obs = energy();
         obs.flags[shuttle] = 1;
         let mut tracker = EnergyTracker::default();

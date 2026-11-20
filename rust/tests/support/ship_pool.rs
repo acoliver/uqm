@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
-use uqm_rust::{
-    engine::battle::link_queue::{LinkId, Starship},
-    ships::native::abi::{ShipRecord, SIZE},
+use uqm_rust::engine::battle::{
+    link_queue::{LinkId, Starship},
+    record::ShipRecord,
 };
 
 pub struct PoolShip {
@@ -23,7 +23,7 @@ impl PoolShip {
     }
     /// # Safety
     /// The caller exclusively retains the serialized fixture pools throughout this borrow.
-    pub unsafe fn new(player: SIZE) -> Self {
+    pub unsafe fn new(player: i16) -> Self {
         let side = player as usize;
         // SAFETY: the constructor's contract retains the serialized published fixture.
         let (pointer, link, ship_id) = {

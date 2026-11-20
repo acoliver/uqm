@@ -91,10 +91,11 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
         let comm = &mut **self.comm.borrow_mut();
 
-        let text = response_text(comm, phrase, fragments).expect("invalid dialogue response");
+        let text = response_text(comm, phrase, fragments)
+            .unwrap_or_else(|error| panic!("invalid dialogue response: {error}"));
         crate::comm::ffi::do_response_phrase(
             comm,
-            u32::from(phrase),
+            phrase,
             Some(&text),
             Some((self.callback)(handler)),
         );
@@ -219,7 +220,7 @@ mod tests {
     #[serial_test::serial]
     fn supplied_names_are_copied_into_responses_and_admitted_to_real_speech() {
         use crate::sound::trackplayer;
-        fn selected(comm: &mut Comm, _: &mut crate::engine::battle::Cx<'_>, reference: u32) {
+        fn selected(comm: &mut Comm, _: &mut crate::engine::battle::Cx<'_>, reference: u16) {
             comm.disable_phrase(reference as i32);
         }
         trackplayer::stop_track().unwrap();

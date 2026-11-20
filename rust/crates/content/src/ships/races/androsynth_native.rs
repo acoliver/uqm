@@ -1,9 +1,23 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
 pub mod engine {
+    use crate::engine::battle::ai_constants::{
+        CREW_OBJECT_INDEX, ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, LEFT,
+        MOVEMENT_STATE_AVOID, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SLOW_SHIP,
+        SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        CHANGING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID, SHIP_AT_MAX_SPEED,
+        SHIP_BEYOND_MAX_SPEED,
+    };
+
+    use crate::engine::battle::CollisionHook;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::ships::native::abi::*;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{
+        CIRCLE_SHIFT, FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT,
+    };
     // Core characteristics
     pub(crate) const MAX_ENERGY: u8 = 24;
     pub(crate) const ENERGY_REGENERATION: u8 = 1;
@@ -73,9 +87,9 @@ pub mod engine {
     pub fn blazer_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         let old_crew_level = cx.element(a).hit_points();
         let old_life = cx.element(a).life_span();
@@ -227,14 +241,14 @@ pub mod engine {
                     let (dx, dy) = concerns.subject.velocity.get_current_components();
                     let (other_dx, other_dy) = cx.element(target).velocity.get_current_components();
                     let travel =
-                        crate::math::arctan((dx - other_dx) as SIZE, (dy - other_dy) as SIZE);
+                        crate::math::arctan((dx - other_dx) as i16, (dy - other_dy) as i16);
                     let direction = crate::math::arctan(
                         (i32::from(cx.element(target).next.location.x)
                             - i32::from(concerns.subject.next.location.x))
-                            as SIZE,
+                            as i16,
                         (i32::from(cx.element(target).next.location.y)
                             - i32::from(concerns.subject.next.location.y))
-                            as SIZE,
+                            as i16,
                     );
                     if normalize_angle(i32::from(travel) - i32::from(direction) + OCTANT_ANGLE)
                         <= QUADRANT_ANGLE

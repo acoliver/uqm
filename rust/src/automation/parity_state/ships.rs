@@ -5,7 +5,9 @@ use super::{
     value, Fields,
 };
 use crate::automation::parity::Journal;
-use crate::ships::native::abi::*;
+use crate::engine::battle::record::{
+    CharacteristicRecord, FleetRecord, IntelRecord, ShipInfoRecord,
+};
 mod assets;
 
 pub(super) struct Ship<'a> {
@@ -141,10 +143,10 @@ impl ShipResources<'_> {
 struct Race<'a> {
     species: u32,
     address: usize,
-    info: &'a SHIP_INFO,
-    fleet: &'a FLEET_STUFF,
-    characteristics: &'a CHARACTERISTIC_STUFF,
-    intel: &'a INTEL_STUFF,
+    info: &'a ShipInfoRecord,
+    fleet: &'a FleetRecord,
+    characteristics: &'a CharacteristicRecord,
+    intel: &'a IntelRecord,
     assets: assets::Assets<'a>,
     custom: &'a RaceData<'a>,
     callbacks: [usize; 5],
@@ -175,9 +177,9 @@ impl<'a> Race<'a> {
             ("race.max_energy", i64::from(info.max_energy)),
             (
                 "cyborg.maneuverability",
-                i64::from(self.intel.ManeuverabilityIndex),
+                i64::from(self.intel.maneuverability_index),
             ),
-            ("cyborg.range", i64::from(self.intel.WeaponRange)),
+            ("cyborg.range", i64::from(self.intel.weapon_range)),
             ("fleet.strength", i64::from(self.fleet.strength)),
             ("fleet.x", i64::from(self.fleet.known_loc.x)),
             ("fleet.y", i64::from(self.fleet.known_loc.y)),
@@ -212,7 +214,7 @@ impl<'a> Race<'a> {
     }
 }
 
-pub(super) fn characteristics(fields: &mut Fields, prefix: &str, c: &CHARACTERISTIC_STUFF) {
+pub(super) fn characteristics(fields: &mut Fields, prefix: &str, c: &CharacteristicRecord) {
     for (name, number) in [
         ("max_thrust", c.max_thrust),
         ("thrust_increment", c.thrust_increment),
@@ -233,13 +235,15 @@ pub(super) fn characteristics(fields: &mut Fields, prefix: &str, c: &CHARACTERIS
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::battle::record::{RaceDescriptor, ShipRecord};
+    use crate::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
 
     #[test]
     fn checked_ship_pool_serializes_the_borrowed_ship() {
         // SAFETY: STARSHIP consists of integers, pointers and optional callbacks.
         let mut state: ShipRecord = unsafe { std::mem::zeroed() };
-        state.SpeciesID = SPECIES_ID_EARTHLING_ID;
-        state.playerNr = 1;
+        state.species_id = SPECIES_ID_EARTHLING_ID;
+        state.player_nr = 1;
         state.ship_facing = 31;
         state.crew_level = 17;
         let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1, 1);

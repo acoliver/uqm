@@ -411,8 +411,8 @@ fn read_star_state(
 ) -> Option<u32> {
     use crate::automation::input_ffi;
 
-    let target = super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
-    let observation = input_ffi::star_flight_observation(world, target, ui);
+    let observation =
+        input_ffi::star_flight_observation(world, super::star_flight::StarTarget::SOL, ui)?;
     match key {
         StateKey::StarCurrent => observation.current_star.map(u32::from),
         StateKey::StarmapCursorX => observation.cursor.and_then(|(x, _)| u32::try_from(x).ok()),

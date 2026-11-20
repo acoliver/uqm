@@ -124,7 +124,7 @@ fn real_death_and_unlink_services_use_only_the_supplied_owners() {
         let (_, a) = owner(cx, 0);
         let (_, b) = owner(cx, 1);
         cx.world
-            .set_activity(uqm_rust::ships::native::abi::IN_ENCOUNTER as u16);
+            .set_activity(uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER);
         cx.b.counters = [2, 3];
         cx.record_ship_death(a);
         assert_eq!(cx.b.counters, [1, 3]);

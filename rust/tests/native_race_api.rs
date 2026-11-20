@@ -5,8 +5,12 @@ mod battle_context;
 
 use battle::{Battle, Ship};
 use uqm_rust::collections::observation::{self, Event};
+use uqm_rust::engine::battle::flags::PLAYER_SHIP;
 use uqm_rust::engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_VUX_ID};
+use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_rust::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
+use uqm_rust::graphics::geometry::Point;
 
 #[test]
 fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
@@ -16,20 +20,19 @@ fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery
             crate::battle_context::with(|cx| {
                 let element = cx.alloc_element().unwrap();
                 cx.put(element);
-                cx.world.set_activity(SUPER_MELEE as u16);
+                cx.world.set_activity(SUPER_MELEE);
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.elements().head(), Some(element));
-                assert_eq!(cx.world.activity(), SUPER_MELEE as u16);
+                assert_eq!(cx.world.activity(), SUPER_MELEE);
                 uqm_rust::battle::sounds::engine::unlink(cx, element);
                 cx.dispose(element);
 
-                cx.world
-                    .set_activity(IN_ENCOUNTER as u16 | IN_BATTLE as u16);
+                cx.world.set_activity(IN_ENCOUNTER | IN_BATTLE);
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
-                assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
+                assert_eq!(cx.world.activity(), IN_ENCOUNTER);
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
-                assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
+                assert_eq!(cx.world.activity(), IN_ENCOUNTER);
                 assert!(cx.elements().head().is_none());
             });
         }
@@ -151,13 +154,13 @@ fn projected_autoaim_uses_both_positions_without_mutating_live_target() {
             let ship = Ship::new(&owner, SPECIES_ID_ARILOU_ID, 0);
             let enemy = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             crate::battle_context::with(|cx| {
-                cx.element_mut(enemy.id).current.location = POINT { x: 4000, y: 4300 };
-                cx.element_mut(enemy.id).next.location = POINT { x: 4000, y: 4300 };
+                cx.element_mut(enemy.id).current.location = Point { x: 4000, y: 4300 };
+                cx.element_mut(enemy.id).next.location = Point { x: 4000, y: 4300 };
                 cx.set_target(ship.id, Some(enemy.id));
                 let live = cx.element(ship.id);
                 let mut subject = cx.weapon_origin(ship.id);
-                subject.current.location = POINT { x: 3800, y: 4300 };
-                subject.next.location = POINT { x: 3800, y: 4300 };
+                subject.current.location = Point { x: 3800, y: 4300 };
+                subject.next.location = Point { x: 3800, y: 4300 };
                 let mut facing = 0;
                 assert_eq!(cx.track_subject(&mut subject, &mut facing), 4);
                 assert_eq!(facing, 1);

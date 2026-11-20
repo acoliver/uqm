@@ -7,13 +7,41 @@ pub mod engine {
         WeaponOrigin, WeaponSpawn, World,
     };
 
-    use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_AFT, FIRES_FORE, FIRES_LEFT, FIRES_RIGHT,
+        IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE, MAX_ENERGY_SIZE, MAX_SHIP_MASS, MEDIUM_SHIP,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, PLAYER_CAPTAIN, POINT_DEFENSE, RIGHT,
+        SPECIAL, THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
+        SHIP_AT_MAX_SPEED, STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::EMPTY_PRIMITIVE;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use crate::math::square_root;
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{angle_to_facing, normalize_facing};
+    const ANTIMISSILE_DEFENSE: u32 = 13;
+    const CANNON_WEAPON: u32 = 11;
+    const CREW_POD: u32 = 3;
+    const CREW_POD_CAPACITY: u32 = 50;
+    const DYNAMO_UNIT: u32 = 7;
+    const FUSION_THRUSTER: u32 = 1;
+    const GUN_WEAPON: u32 = 9;
+    const SHIVA_FURNACE: u32 = 8;
+    const TRACKING_SYSTEM: u32 = 12;
+    const TURNING_JETS: u32 = 2;
 
     fn template() -> RaceTemplate {
         let mut d = RaceTemplate::default();
         d.info.ship_cost = 16;
-        d.info.crew_level = MAX_CREW_SIZE as COUNT;
-        d.info.max_crew = MAX_CREW_SIZE as COUNT;
+        d.info.crew_level = MAX_CREW_SIZE as u16;
+        d.info.max_crew = MAX_CREW_SIZE as u16;
         d.info.energy_level = MAX_ENERGY_SIZE as u8;
         d.info.max_energy = MAX_ENERGY_SIZE as u8;
         d.resources.icons = Some(c"ship.flagship.icons");
@@ -62,8 +90,8 @@ pub mod engine {
             cx.element_mut(e).velocity = cx.flagship_velocity();
         }
         cx.ship_state_mut(ss).weapon_counter = cx.ship_state(ss).weapon_counter.wrapping_add(1);
-        let (mut udx, mut udy): (SIZE, SIZE) = (0, 0);
-        let (mut dx, mut dy): (SIZE, SIZE) = (0, 0);
+        let (mut udx, mut udy): (i16, i16) = (0, 0);
+        let (mut dx, mut dy): (i16, i16) = (0, 0);
         let mut accelerate = 0;
         let mut leave = cx.autopilot().x == -1
             || cx.autopilot().y == -1
@@ -99,13 +127,13 @@ pub mod engine {
                     }
                     if facing == cx.ship_state(ss).facing {
                         cx.element_mut(e).velocity =
-                            crate::engine::battle::record::VELOCITY_DESC::default();
+                            crate::engine::battle::record::VelocityDesc::default();
                     }
                 }
                 if !leave {
                     let (x, y) = cx.element(e).velocity.get_current_components();
-                    dx = x as SIZE;
-                    dy = y as SIZE;
+                    dx = x as i16;
+                    dy = y as i16;
                     if (config.fuel != 0 || cx.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1)
                         && facing == cx.ship_state(ss).facing
                     {
@@ -120,14 +148,14 @@ pub mod engine {
             }
         }
         if leave {
-            cx.set_autopilot(POINT { x: -1, y: -1 });
+            cx.set_autopilot(Point { x: -1, y: -1 });
             if cx.ship_state(ss).status & THRUST as u16 == 0
                 || (config.fuel == 0 && cx.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1)
             {
                 accelerate = -1;
                 let (x, y) = cx.element(e).velocity.get_current_components();
-                dx = x as SIZE;
-                dy = y as SIZE;
+                dx = x as i16;
+                dy = y as i16;
                 udx = dx.wrapping_shl(4);
                 udy = dy.wrapping_shl(4);
                 cx.ship_state_mut(ss).status &= !(THRUST as u16);
@@ -234,7 +262,7 @@ pub mod engine {
                         let b = Laser {
                             origin: cx.element(ship).next.location,
                             face: 0,
-                            end: POINT {
+                            end: Point {
                                 x: cx
                                     .element(o)
                                     .next
@@ -290,9 +318,9 @@ pub mod engine {
     pub fn blaster_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
-        p: &mut POINT,
+        p: &mut Point,
         o: ElementId,
-        q: &mut POINT,
+        q: &mut Point,
     ) {
         let h = cx.weapon_collision(e, p, o, q);
         if let Some(b) = h {
@@ -464,7 +492,7 @@ pub mod engine {
                     break;
                 }
                 flags <<= 1;
-                facing = facing.wrapping_add(QUADRANT as u16);
+                facing = facing.wrapping_add(QUADRANT);
             }
         }
     }
@@ -530,7 +558,7 @@ pub mod engine {
         let mut trackers: u16 = 0;
         for &m in slots.iter().rev() {
             match u32::from(m) {
-                CREW_POD => d.info.max_crew += CREW_POD_CAPACITY as COUNT,
+                CREW_POD => d.info.max_crew += CREW_POD_CAPACITY as u16,
                 TRACKING_SYSTEM => trackers += 1,
                 ANTIMISSILE_DEFENSE => d.characteristics.special_energy_cost += 1,
                 SHIVA_FURNACE => d.characteristics.energy_regeneration += 1,
@@ -599,7 +627,7 @@ pub mod engine {
                 d.characteristics.turn_wait -= 2;
             }
         }
-        if world.activity() & 255 == SUPER_MELEE as u16 {
+        if world.activity() & 255 == SUPER_MELEE {
             d.info.crew_level = d.info.max_crew;
         } else {
             d.info.max_crew += 1;
@@ -622,8 +650,8 @@ pub mod engine {
     }
     fn object_cloaked(cx: &Cx<'_>, e: ElementId) -> bool {
         let p = cx.primitive_style(e);
-        p.kind >= gfx_object_NUM_PRIMS as u8
-            || (p.kind == gfx_object_STAMPFILL_PRIM as u8
+        p.kind >= EMPTY_PRIMITIVE
+            || (p.kind == STAMPFILL_PRIMITIVE
                 && p.color.r == 0
                 && p.color.g == 0
                 && p.color.b == 0

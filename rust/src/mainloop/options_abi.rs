@@ -1,12 +1,11 @@
 //! Runtime options and resource-index loading, ported from options.c.
-#![allow(non_snake_case)]
 use crate::engine::host::Files;
 pub use crate::input::templates::input_templates;
 use crate::io::{Dir, Match};
 use std::{ffi::CString, path::Path};
 
 /// Load every `.rmp` resource index in `dir`; returns how many were loaded.
-pub fn loadIndices(dir: &Dir) -> usize {
+pub fn load_indices(dir: &Dir) -> usize {
     let indices = dir.list_matching(Path::new(""), "\\.[rR][mM][pP]$", Match::Regex);
     for name in &indices {
         log::debug!("Loading resource index '{name}'");
@@ -20,7 +19,7 @@ pub fn loadIndices(dir: &Dir) -> usize {
 }
 
 /// Load the resource indices of `addon` below the content directory's `addons` directory.
-pub fn loadAddon(content: &Dir, addon: &str) -> bool {
+pub fn load_addon(content: &Dir, addon: &str) -> bool {
     let addons = content.open_relative(Path::new("addons"));
     if addons.list(Path::new("")).is_err() {
         log::warn!("There's no 'addons' directory in the 'content' directory; '--addon' options are ignored.");
@@ -31,7 +30,7 @@ pub fn loadAddon(content: &Dir, addon: &str) -> bool {
         log::warn!("Addon '{addon}' not found");
         return false;
     }
-    let loaded = loadIndices(&dir);
+    let loaded = load_indices(&dir);
     if loaded == 0 {
         log::error!("No RMP index files were loaded for addon '{addon}'");
     }
@@ -39,17 +38,17 @@ pub fn loadAddon(content: &Dir, addon: &str) -> bool {
 }
 
 /// Load each named addon in order, stopping at the first that fails.
-pub fn prepareAddons(content: &Dir, addons: &[CString]) {
+pub fn prepare_addons(content: &Dir, addons: &[CString]) {
     for addon in addons {
         let name = addon.to_string_lossy();
         log::info!("Loading addon '{name}'");
-        if !loadAddon(content, &name) {
+        if !load_addon(content, &name) {
             break;
         }
     }
 }
 
-pub fn setGammaCorrection(gamma: f32) -> bool {
+pub fn set_gamma_correction(gamma: f32) -> bool {
     let set = crate::graphics::present::set_gamma(gamma);
     if set {
         log::info!("Gamma correction set to {gamma:.4}.");

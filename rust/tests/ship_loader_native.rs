@@ -1,4 +1,8 @@
 use uqm_rust::engine::battle::RaceDesc;
+use uqm_rust::engine::species::species_id::SPECIES_ID_ARILOU_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_NUM_SPECIES_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID;
+use uqm_rust::ships::DescriptorLoader;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -9,7 +13,6 @@ use std::{
     ffi::CString,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use uqm_rust::ships::native::abi::*;
 
 unsafe extern "C" {
     fn log_init(max: i32);

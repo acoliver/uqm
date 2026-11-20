@@ -5,17 +5,28 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::{
-    ships::native::abi::*,
-    state::game_state_keys::{get_game_state, set_game_state},
+use uqm_rust::engine::battle::ai_constants::{
+    ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, LEFT, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
+    POINT_DEFENSE, SPECIAL, THRUST, WEAPON,
 };
+use uqm_rust::engine::battle::flags::{
+    COLLISION, FINITE_LIFE, NONSOLID, RPG_PLAYER_NUM, SHIP_AT_MAX_SPEED,
+};
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_rust::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_rust::engine::world::IN_HYPERSPACE;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::ONE_SHIFT;
+use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
 unsafe fn modules() {
     crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
     crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
     crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
     crate::battle_context::with(|cx| cx.world.data.flagship.jet_slots = [255; 8]);
     crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted = 9);
-    crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as u16));
+    crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER));
     crate::battle_context::with(|cx| {
         set_game_state(cx.world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
     });
@@ -48,14 +59,14 @@ fn target(origin: *mut ElementRecord, dx: i16, dy: i16) -> PoolElement {
     unsafe {
         let mut fixture = PoolElement::new();
         let e = &raw mut *fixture;
-        (*e).playerNr = 1;
+        (*e).player_nr = 1;
         (*e).hits = 1;
         (*e).mass = 1;
-        (*e).next.location = POINT {
+        (*e).next.location = Point {
             x: (*origin).next.location.x.wrapping_add(dx << ONE_SHIFT),
             y: (*origin).next.location.y.wrapping_add(dy << ONE_SHIFT),
         };
-        (*prim(e)).kind = gfx_object_STAMP_PRIM as u8;
+        (*prim(e)).kind = STAMP_PRIMITIVE;
         battle::put(e.cast());
         fixture
     }
@@ -72,7 +83,7 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
             let mut ship = Ship::with_frames(
                 &_battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
@@ -161,7 +172,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             modules();
             crate::battle_context::with(|cx| cx.world.set_activity(IN_HYPERSPACE as u16));
             crate::battle_context::with(|cx| cx.world.data.flagship.fuel_on_board = 0);
-            crate::battle_context::with(|cx| cx.world.data.game.autopilot = POINT { x: -1, y: -1 });
+            crate::battle_context::with(|cx| cx.world.data.game.autopilot = Point { x: -1, y: -1 });
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
             assert!(ship.descriptor_mut().callbacks()[3] == 0);
@@ -212,7 +223,7 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
             crate::battle_context::with(|cx| cx.world.data.flagship.log_x = 0);
             crate::battle_context::with(|cx| cx.world.data.flagship.log_y = 0);
             crate::battle_context::with(|cx| {
-                cx.world.data.game.autopilot = POINT { x: 100, y: 9999 }
+                cx.world.data.game.autopilot = Point { x: 100, y: 9999 }
             });
             crate::battle_context::with(|cx| {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
@@ -253,7 +264,7 @@ fn point_defense_zaps_each_nearby_target_and_pays_energy_once() {
             let mut ship = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
@@ -267,7 +278,7 @@ fn point_defense_zaps_each_nearby_target_and_pays_energy_once() {
             let edge = target(origin, -100, 0);
             let beyond = target(origin, 101, 0);
             let mut cloaked = target(origin, 10, 0);
-            (*prim(&raw mut *cloaked)).kind = gfx_object_NUM_PRIMS as u8;
+            (*prim(&raw mut *cloaked)).kind = EMPTY_PRIMITIVE;
             let mut solid_not = target(origin, 0, 10);
             solid_not.state_flags = NONSOLID as u16;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
@@ -306,7 +317,7 @@ fn point_defense_fires_nothing_when_the_flagship_cannot_pay() {
             let mut ship = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
@@ -339,7 +350,7 @@ fn blasters_animate_retarget_and_spend_themselves_on_impact() {
             let mut ship = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
@@ -353,8 +364,8 @@ fn blasters_animate_retarget_and_spend_themselves_on_impact() {
                 assert_eq!((*element).turn, 16, "countdown to the next retarget");
                 call_element("ships::races::sis_native::blaster_preprocess", id(element));
                 assert_eq!((*element).turn, 17, "retarget restarts the countdown");
-                let mut at = POINT { x: 10, y: 10 };
-                let mut on = POINT { x: 10, y: 10 };
+                let mut at = Point { x: 10, y: 10 };
+                let mut on = Point { x: 10, y: 10 };
                 call_collision(
                     "ships::races::sis_native::blaster_collision",
                     id(element),
@@ -390,14 +401,14 @@ unsafe fn think(
     enemy: *mut ElementRecord,
     which_turn: (u16, u16),
     movement: u32,
-) -> [EVALUATE_DESC; 4] {
+) -> [EvaluateRecord; 4] {
     // SAFETY: the callers keep `threat`, `enemy` and the ship in the serialized battle.
     unsafe {
-        let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-        concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = threat;
+        let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+        concerns[ENEMY_WEAPON_INDEX as usize].object_ptr = threat;
         concerns[ENEMY_WEAPON_INDEX as usize].which_turn = which_turn.0;
-        concerns[ENEMY_WEAPON_INDEX as usize].MoveState = movement;
-        concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy;
+        concerns[ENEMY_WEAPON_INDEX as usize].move_state = movement;
+        concerns[ENEMY_SHIP_INDEX as usize].object_ptr = enemy;
         concerns[ENEMY_SHIP_INDEX as usize].which_turn = which_turn.1;
         ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
         concerns
@@ -415,7 +426,7 @@ fn ai_with_point_defense_fires_it_only_for_imminent_threats() {
             let mut ship = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
@@ -436,7 +447,7 @@ fn ai_with_point_defense_fires_it_only_for_imminent_threats() {
                     expected,
                     "{counter} {soon} {enemy_turn}"
                 );
-                assert!(concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr.is_null());
+                assert!(concerns[ENEMY_WEAPON_INDEX as usize].object_ptr.is_null());
             }
         }
     })
@@ -452,7 +463,7 @@ fn ai_without_point_defense_pursues_weapons_that_entice_it() {
             let mut ship = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
@@ -468,7 +479,7 @@ fn ai_without_point_defense_pursues_weapons_that_entice_it() {
                 MOVEMENT_STATE_ENTICE,
             );
             assert_eq!(
-                concerns[ENEMY_WEAPON_INDEX as usize].MoveState,
+                concerns[ENEMY_WEAPON_INDEX as usize].move_state,
                 MOVEMENT_STATE_PURSUE
             );
             missile.state_flags = FINITE_LIFE as u16;
@@ -481,7 +492,7 @@ fn ai_without_point_defense_pursues_weapons_that_entice_it() {
                 MOVEMENT_STATE_ENTICE,
             );
             assert_eq!(
-                concerns[ENEMY_WEAPON_INDEX as usize].MoveState,
+                concerns[ENEMY_WEAPON_INDEX as usize].move_state,
                 MOVEMENT_STATE_ENTICE
             );
             missile.mass = 4;
@@ -493,7 +504,7 @@ fn ai_without_point_defense_pursues_weapons_that_entice_it() {
                 MOVEMENT_STATE_ENTICE,
             );
             assert_eq!(
-                concerns[ENEMY_WEAPON_INDEX as usize].MoveState,
+                concerns[ENEMY_WEAPON_INDEX as usize].move_state,
                 MOVEMENT_STATE_PURSUE
             );
         }
@@ -515,15 +526,15 @@ fn ai_with_trackers_fires_blasters_that_bear_on_the_enemy() {
             let mut ship = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SIS_SHIP_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 32, 16],
                 [4, 4],
             );
             let mut enemy =
                 Ship::with_frames(&battle, SPECIES_ID_SIS_SHIP_ID, 1, [16, 32, 16], [4, 4]);
-            ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
+            ship.element_mut().current.location = Point { x: 4000, y: 4000 };
             for (enemy_y, expected) in [(3000, true), (5000, false)] {
-                enemy.element_mut().current.location = POINT {
+                enemy.element_mut().current.location = Point {
                     x: 4000,
                     y: enemy_y,
                 };
@@ -538,7 +549,7 @@ fn ai_with_trackers_fires_blasters_that_bear_on_the_enemy() {
             }
             ship.ship_mut().weapon_counter = 3;
             ship.ship_mut().ship_input_state = 0;
-            enemy.element_mut().current.location = POINT { x: 4000, y: 3000 };
+            enemy.element_mut().current.location = Point { x: 4000, y: 3000 };
             think(&mut ship, std::ptr::null_mut(), enemy.ptr(), (0, 10), 0);
             assert_eq!(ship.ship_mut().ship_input_state & WEAPON as u8, 0);
         }

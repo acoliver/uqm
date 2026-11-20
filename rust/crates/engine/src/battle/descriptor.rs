@@ -8,7 +8,7 @@ impl RaceDescriptor {
         loaded_victory: None,
         loaded_sounds: None,
         resources: crate::battle::template::RaceResources::EMPTY,
-        ship_info: SHIP_INFO {
+        ship_info: ShipInfoRecord {
             ship_flags: 0,
             ship_cost: 0,
             crew_level: 0,
@@ -22,12 +22,12 @@ impl RaceDescriptor {
             icons: crate::graphics::drawable::FrameId::NULL,
             melee_icon: crate::graphics::drawable::FrameId::NULL,
         },
-        fleet: FLEET_STUFF {
+        fleet: FleetRecord {
             strength: 0,
             known_loc: Point { x: 0, y: 0 },
         },
         __bindgen_padding_0: [0; 5],
-        characteristics: CHARACTERISTIC_STUFF {
+        characteristics: CharacteristicRecord {
             max_thrust: 0,
             thrust_increment: 0,
             energy_regeneration: 0,
@@ -40,11 +40,11 @@ impl RaceDescriptor {
             special_wait: 0,
             ship_mass: 0,
         },
-        ship_data: DATA_STUFF {
+        ship_data: DataRecord {
             ship_rsc: [std::ptr::null(); 3],
             weapon_rsc: [std::ptr::null(); 3],
             special_rsc: [std::ptr::null(); 3],
-            captain_control: CAPTAIN_STUFF {
+            captain_control: CaptainRecord {
                 captain_rsc: std::ptr::null(),
                 background: crate::graphics::drawable::FrameId::NULL,
                 turn: crate::graphics::drawable::FrameId::NULL,
@@ -60,9 +60,9 @@ impl RaceDescriptor {
             victory_ditty: std::ptr::null_mut(),
             ship_sounds: None,
         },
-        cyborg_control: INTEL_STUFF {
-            ManeuverabilityIndex: 0,
-            WeaponRange: 0,
+        cyborg_control: IntelRecord {
+            maneuverability_index: 0,
+            weapon_range: 0,
         },
         race: None,
         race_state: crate::battle::RaceState::None,

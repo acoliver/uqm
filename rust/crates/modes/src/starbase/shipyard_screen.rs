@@ -168,11 +168,11 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
         self.assets = None;
     }
 
-    fn module_frame(&self) -> FrameId {
+    fn module_frame(&self) -> Result<FrameId, StarbaseError> {
         self.assets
             .as_ref()
             .and_then(|assets| assets.module_frame)
-            .expect("the Shipyard art is loaded")
+            .ok_or(StarbaseError::NotLoaded("the Shipyard art"))
     }
 
     // --- do_shipyard ---------------------------------------------------
@@ -228,10 +228,10 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
         };
         let module_frame = p.load_graphic(SHIPYARD_PMAP_ANIM)?;
         assets.module_frame = Some(module_frame);
-        assets.color_map = Some(p.load_color_map(HANGAR_COLOR_TAB)?);
+        let color_map = p.load_color_map(HANGAR_COLOR_TAB)?;
+        assets.color_map = Some(color_map);
         let music = p.load_music(SHIPYARD_MUSIC)?;
         assets.music = Some(music);
-        let color_map = assets.color_map.expect("the colour map was just loaded");
 
         p.set_transition_source_none();
         p.batch();
@@ -287,7 +287,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
         let lines = self
             .power_lines
             .as_mut()
-            .expect("the power lines are set up");
+            .ok_or(StarbaseError::NotLoaded("the power lines"))?;
         if now >= lines.next_time || start {
             lines.next_time = now + ONE_SECOND / HANGAR_ANIM_RATE;
             p.apply_color_map(lines.color_map);
@@ -360,7 +360,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
             return Ok(());
         }
         let p = self.platform;
-        let module_frame = self.module_frame();
+        let module_frame = self.module_frame()?;
         let left_frame = p.inc_frame(module_frame);
         let right_frame = p.inc_frame(left_frame);
         let reach = match motion {
@@ -936,7 +936,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
             // The ship name, above the ship image.
             p.draw_stamp(Stamp {
                 origin,
-                frame: p.abs_frame(self.module_frame(), 3 + u16::from(race)),
+                frame: p.abs_frame(self.module_frame()?, 3 + u16::from(race)),
             });
             let baseline = Point {
                 x: origin.x + RADAR_WIDTH as i16 - 2,

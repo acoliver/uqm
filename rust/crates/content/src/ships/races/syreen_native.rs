@@ -4,7 +4,16 @@
 //! including C integer promotion and truncation, so battles replay identically.
 
 pub mod engine {
-    use crate::ships::native::abi::*;
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MAX_CREW_SIZE, SPECIAL,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::ElementHook;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::ONE_SHIFT;
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -52,8 +61,8 @@ pub mod engine {
         desc.resources.icons = Some(c"ship.syreen.icons");
         desc.resources.melee_icon = Some(c"ship.syreen.meleeicons");
         desc.fleet_strength = 0;
-        desc.fleet_location = POINT { x: 0, y: 0 };
-        desc.characteristics = CHARACTERISTIC_STUFF {
+        desc.fleet_location = Point { x: 0, y: 0 };
+        desc.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -149,13 +158,13 @@ pub mod engine {
             {
                 let mut dx = (i32::from(cx.element(object).next.location.x)
                     - i32::from(cx.element(source).next.location.x))
-                    as SIZE;
+                    as i16;
                 if dx < 0 {
                     dx = dx.wrapping_neg();
                 }
                 let mut dy = (i32::from(cx.element(object).next.location.y)
                     - i32::from(cx.element(source).next.location.y))
-                    as SIZE;
+                    as i16;
                 if dy < 0 {
                     dy = dy.wrapping_neg();
                 }
@@ -167,13 +176,13 @@ pub mod engine {
                     // (DWORD)((UWORD)dx * (UWORD)dx): the product is formed in
                     // `int` before it is widened.
                     let square =
-                        |d: SIZE| i32::from(d as u16).wrapping_mul(i32::from(d as u16)) as u32;
+                        |d: i16| i32::from(d as u16).wrapping_mul(i32::from(d as u16)) as u32;
                     let d_squared = square(dx).wrapping_add(square(dy));
                     if d_squared <= ABANDONER_RANGE_SQUARED {
                         let mut crew_loss = ((MAX_ABANDONERS
                             * (ABANDONER_RANGE - i32::from(crate::math::square_root(d_squared))))
                             / ABANDONER_RANGE
-                            + 1) as COUNT;
+                            + 1) as u16;
                         if crew_loss >= cx.element(object).hits {
                             crew_loss = cx.element(object).hits - 1;
                         }

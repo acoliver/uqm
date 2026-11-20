@@ -13,9 +13,28 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{
-    abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::FIRES_LEFT;
+use uqm_rust::engine::battle::ai_constants::FIRES_RIGHT;
+use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_rust::engine::battle::ai_constants::LEFT;
+use uqm_rust::engine::battle::ai_constants::RIGHT;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::ai_constants::THRUST;
+use uqm_rust::engine::battle::ai_constants::WEAPON;
+use uqm_rust::engine::battle::flags::{
+    APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
+    STAMPFILL_PRIMITIVE,
 };
+use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
+use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_rust::engine::species::species_id::SPECIES_ID_PKUNK_ID;
+use uqm_rust::graphics::geometry::Color;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
+use uqm_rust::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+use uqm_rust::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
 
 // races.h / intel.h flags that are macros with casts rather than constants.
 const STANDARD_RATING: u8 = 1 << 4;
@@ -36,7 +55,7 @@ impl Battle {
         Self::with_capacity(64)
     }
 
-    fn with_capacity(capacity: COUNT) -> Self {
+    fn with_capacity(capacity: u16) -> Self {
         Self {
             inner: shared::Battle::new(capacity),
         }
@@ -86,7 +105,7 @@ struct Ship<'a> {
 }
 
 impl<'a> Ship<'a> {
-    unsafe fn new(battle: &'a Battle, player: SIZE) -> Self {
+    unsafe fn new(battle: &'a Battle, player: i16) -> Self {
         let mut inner = shared::Ship::new(&battle.inner, SPECIES_ID_PKUNK_ID, player);
         let handle = inner.handle;
         let ship_frames = FrameSet::new(16);
@@ -99,9 +118,9 @@ impl<'a> Ship<'a> {
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
-        el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
-        el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
-        el.IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
+        el.intersect_control.IntersectStamp.frame = ship_frames.frame(0);
+        el.intersect_control.EndPoint = Point { x: 1000, y: 1000 };
+        el.intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
             handle,
@@ -110,14 +129,14 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> u16 {
         crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
             for (slot, weapon) in out.iter_mut().zip(&weapons) {
                 *slot = weapon.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast());
             }
-            weapons.len() as COUNT
+            weapons.len() as u16
         })
     }
     fn ptr(&self) -> *mut ElementRecord {
@@ -143,16 +162,16 @@ impl<'a> Ship<'a> {
             saved_death,
         }
     }
-    unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
+    unsafe fn intelligence(&mut self, concerns: &mut [EvaluateRecord; 4]) {
         let mut subject = self.inner.subject();
         // The AI operand is a value copy, not a member of the live queue.
         // Its phoenix predecessor may be disposed during intelligence.
         self.inner.intelligence_subject(&mut subject, concerns, 0);
     }
 
-    unsafe fn at(&mut self, x: COORD, y: COORD) {
-        (*self.ptr()).current.location = POINT { x, y };
-        (*self.ptr()).next.location = POINT { x, y };
+    unsafe fn at(&mut self, x: i16, y: i16) {
+        (*self.ptr()).current.location = Point { x, y };
+        (*self.ptr()).next.location = Point { x, y };
     }
 
     unsafe fn preprocess(&mut self) {
@@ -166,11 +185,11 @@ impl<'a> Ship<'a> {
     }
 
     /// The ship `new_pkunk` leaves behind: appearing with hTarget set.
-    unsafe fn reincarnating(&mut self, x: COORD, y: COORD, facing: COUNT) {
+    unsafe fn reincarnating(&mut self, x: i16, y: i16, facing: u16) {
         self.at(x, y);
         self.inner.ship_mut().ship_facing = facing;
         (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
-        (*self.ptr()).life = NORMAL_LIFE as COUNT;
+        (*self.ptr()).life = NORMAL_LIFE as u16;
         (*self.ptr()).target = Some(shared::id((self.handle).cast()));
     }
 
@@ -178,7 +197,7 @@ impl<'a> Ship<'a> {
     /// function explodes the ship) until the death function is `new_pkunk`.
     unsafe fn armed_new_pkunk(&mut self) -> uqm_rust::engine::battle::ElementHook {
         self.appearing();
-        TFB_SeedRandom(odd_seed());
+        seed_random(odd_seed());
         self.preprocess();
         let phoenix = shared::element(self.data().phoenix);
         self.inner.descriptor_mut().ship_info.crew_level = 0;
@@ -200,7 +219,7 @@ impl<'a> Ship<'a> {
 
 unsafe fn prim(el: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     // SAFETY: the caller passes a live fixture element.
-    let index = unsafe { (*el).PrimIndex };
+    let index = unsafe { (*el).prim_index };
     crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 
@@ -215,7 +234,7 @@ unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     result
 }
 
-fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
+fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
     [
         v.travel_angle.into(),
         v.vector.width.into(),
@@ -234,16 +253,16 @@ fn color_bytes(c: Color) -> [u8; 4] {
 }
 
 unsafe fn rolls(seed: u32, count: usize) -> Vec<u32> {
-    TFB_SeedRandom(seed);
-    (0..count).map(|_| TFB_Random()).collect()
+    seed_random(seed);
+    (0..count).map(|_| random()).collect()
 }
 
 /// Runs `run` from `seed` and checks it consumed exactly `draws` values.
 unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     let expected = rolls(seed, draws + 1)[draws];
-    TFB_SeedRandom(seed);
+    seed_random(seed);
     let result = run();
-    assert_eq!(TFB_Random(), expected, "RNG draws {draws}, seed {seed}");
+    assert_eq!(random(), expected, "RNG draws {draws}, seed {seed}");
     result
 }
 
@@ -261,12 +280,12 @@ unsafe fn even_seed() -> u32 {
     seed_with_first_roll(|r| r & 1 == 0)
 }
 
-/// `DISPLAY_ALIGN_X/Y` of one draw: COUNT modulus, COORD narrowing, pixel snap.
+/// `DISPLAY_ALIGN_X/Y` of one draw: u16 modulus, i16 narrowing, pixel snap.
 fn align(roll: u32, extent: i32) -> i32 {
     i32::from(((i32::from(roll as u16)) % extent) as i16) & !3
 }
 
-/// `WRAP_X (DISPLAY_ALIGN_X (TFB_Random ()))` spelled out the way the C
+/// `WRAP_X (DISPLAY_ALIGN_X (random ()))` spelled out the way the C
 /// preprocessor does: the value operand appears once per use, so each use is
 /// its own draw. Returns the coordinate and the index of the next unused roll.
 fn expanded_coord(rolls: &[u32], start: usize, extent: i32) -> (i16, usize) {
@@ -286,7 +305,7 @@ fn expanded_coord(rolls: &[u32], start: usize, extent: i32) -> (i16, usize) {
     (value as u16 as i16, next)
 }
 
-/// `WRAP_VAL` for a value without side effects, stored back into a COORD.
+/// `WRAP_VAL` for a value without side effects, stored back into a i16.
 fn wrap_coord(v: i32, extent: i32) -> i16 {
     (if v < 0 {
         v + extent
@@ -298,12 +317,12 @@ fn wrap_coord(v: i32, extent: i32) -> i16 {
 }
 
 /// Where the player-ship branch of `phoenix_transition` puts a trail image.
-unsafe fn trail_origin(from: POINT, facing: u16, life_span: u16) -> POINT {
+unsafe fn trail_origin(from: Point, facing: u16, life_span: u16) -> Point {
     let angle = facing_to_angle(i32::from(facing));
     let back = i32::from(life_span) - 1;
     let x = (i32::from(from.x) - i32::from(cosine(angle, 80)) * back) as i16;
     let y = (i32::from(from.y) - i32::from(sine(angle, 80)) * back) as i16;
-    POINT {
+    Point {
         x: wrap_coord(i32::from(x), SPACE_W),
         y: wrap_coord(i32::from(y), SPACE_H),
     }
@@ -328,20 +347,17 @@ fn block_is_zero(state: uqm_rust::engine::battle::RaceState) -> bool {
     )
 }
 
-unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: POINT, angle: u16) {
-    assert_eq!((*trail).playerNr, -1);
+unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: Point, angle: u16) {
+    assert_eq!((*trail).player_nr, -1);
     assert_eq!(
         (*trail).state_flags,
         (APPEARING | FINITE_LIFE | NONSOLID) as u16
     );
     assert_eq!((*trail).life, 1);
-    assert_eq!(
-        (*prim(trail)).kind,
-        gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
-    );
+    assert_eq!((*prim(trail)).kind, STAMPFILL_PRIMITIVE as u8);
     // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x15, 0x00), 0x7A)
     assert_eq!(color_bytes((*prim(trail)).color), [0xFF, 0xAD, 0x00, 0xFF]);
-    assert_eq!((*trail).colorCycleIndex, 0);
+    assert_eq!((*trail).color_cycle_index, 0);
     assert_eq!(
         (*trail).current.image.frame.raw(),
         (*ship.ptr()).current.image.frame.raw()
@@ -447,9 +463,9 @@ fn descriptor_matches_every_c_initializer_field() {
             );
             assert!(d.ship_data.victory_ditty.is_null());
             assert!(d.ship_data.ship_sounds.is_none());
-            assert_eq!(d.cyborg_control.ManeuverabilityIndex, 0);
+            assert_eq!(d.cyborg_control.maneuverability_index, 0);
             // CLOSE_RANGE_WEAPON + 1
-            assert_eq!(d.cyborg_control.WeaponRange, 201);
+            assert_eq!(d.cyborg_control.weapon_range, 201);
             assert!(d.callbacks()[4] != 0);
             assert!(d.callbacks()[1] != 0);
             assert!(d.callbacks()[2] != 0);
@@ -571,10 +587,10 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                             (*m).state_flags,
                             (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                         );
-                        assert_eq!((*m).playerNr, 1);
+                        assert_eq!((*m).player_nr, 1);
                         assert_eq!((*m).current.image.frame.raw(), ship.weapon_frames.frame(0));
                         assert_eq!((*m).current.image.frames, ship.inner.frame_set(1));
-                        assert_eq!((*prim(m)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                        assert_eq!((*prim(m)).kind, STAMP_PRIMITIVE as u8);
                         assert!((*m).collision_func.is_some());
                         assert!((*m).postprocess_func.is_none());
                         assert!((*m).death_func.is_none());
@@ -586,7 +602,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         let angle = facing_to_angle(i32::from(face));
                         let vx = cosine(angle, 96 << VELOCITY_SHIFT);
                         let vy = sine(angle, 96 << VELOCITY_SHIFT);
-                        let mut expected: VELOCITY_DESC = mem::zeroed();
+                        let mut expected: VelocityDesc = mem::zeroed();
                         (expected).set_components(i32::from(vx), i32::from(vy));
                         (expected).delta_components(i32::from(dx), i32::from(dy));
                         assert_eq!(
@@ -712,7 +728,7 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
             let phoenix = shared::element(all[0]);
             assert_eq!(all[1], ship.handle);
             assert_eq!(ship.data().phoenix, all[0]);
-            assert_eq!((*phoenix).playerNr, 1);
+            assert_eq!((*phoenix).player_nr, 1);
             assert_eq!(
                 (*phoenix).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
@@ -792,7 +808,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
 
                 let el = ship.ptr();
                 assert_eq!((*el).life, 12);
-                assert_eq!((*prim(el)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+                assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE as u8);
                 assert_eq!(
                     (*el).state_flags,
                     (PLAYER_SHIP | APPEARING | NONSOLID | FINITE_LIFE | CHANGING) as u16
@@ -815,7 +831,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
                     let trail_facing =
                         normalize_facing(i32::from(facing) + angle_to_facing(8 + 16 * k as i32));
                     let angle = facing_to_angle(i32::from(trail_facing)) as u16;
-                    let expected = trail_origin(POINT { x, y }, trail_facing, 12);
+                    let expected = trail_origin(Point { x, y }, trail_facing, 12);
                     check_trail(&mut ship, shared::element(h), expected, angle);
                 }
                 ship.drain();
@@ -838,7 +854,7 @@ fn reincarnation_trails_are_limited_by_free_elements() {
             for (k, &h) in all[1..].iter().enumerate() {
                 let trail_facing = normalize_facing(3 + angle_to_facing(8 + 16 * k as i32));
                 let angle = facing_to_angle(i32::from(trail_facing)) as u16;
-                let expected = trail_origin(POINT { x: 4000, y: 4000 }, trail_facing, 12);
+                let expected = trail_origin(Point { x: 4000, y: 4000 }, trail_facing, 12);
                 check_trail(&mut ship, shared::element(h), expected, angle);
             }
             // A trail that cannot allocate keeps its callback to retry next frame.
@@ -869,23 +885,23 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             ship.preprocess();
             assert_eq!(ship.inner.ship_mut().cur_status_flags, 0x3e0);
             assert!(ship.inner.descriptor_mut().callbacks()[1] != 0);
-            assert_eq!((*prim(el)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+            assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE as u8);
 
             // At NORMAL_LIFE the ship becomes solid again.
-            (*el).life = NORMAL_LIFE as COUNT;
+            (*el).life = NORMAL_LIFE as u16;
             (*el).current.image.frame = ship.ship_frames.selection(5);
             (*el).next.image.frame = ship.ship_frames.selection(9);
             (*el).next.image.frames = ship.inner.frame_set(0);
-            (*el).current.location = POINT { x: 400, y: -800 };
-            (*el).next.location = POINT { x: 1201, y: 77 };
+            (*el).current.location = Point { x: 400, y: -800 };
+            (*el).next.location = Point { x: 1201, y: 77 };
             (*el).velocity = mem::zeroed();
             uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 9, 6);
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
             assert_eq!(((*el).current.image.frame.raw()).index(), 5);
             assert_eq!(((*el).next.image.frame.raw()).index(), 5);
-            assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
-            let control = (*el).IntersectControl;
+            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE as u8);
+            let control = (*el).intersect_control;
             assert_eq!(
                 (
                     control.IntersectStamp.origin.x,
@@ -929,7 +945,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
                 assert!((*parent).preprocess_func.is_none(), "hop {hop}");
                 assert_eq!(queued().len(), before + 1);
                 let child = shared::element(*queued().last().unwrap());
-                let to = POINT {
+                let to = Point {
                     x: (i32::from(from.x) + i32::from(cosine(angle, 80))) as i16,
                     y: (i32::from(from.y) + i32::from(sine(angle, 80))) as i16,
                 };
@@ -978,7 +994,7 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
                 (*trail).state_flags &= !(CHANGING as u16);
                 (*trail).life = 0;
                 hooks::invoke_element_pointer(death, trail);
-                assert_eq!((*trail).colorCycleIndex as usize, index);
+                assert_eq!((*trail).color_cycle_index as usize, index);
                 assert_eq!((*trail).life, 1);
                 assert_eq!(
                     color_bytes((*prim(trail)).color),
@@ -994,7 +1010,7 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
             (*trail).state_flags &= !(CHANGING as u16);
             (*trail).life = 0;
             hooks::invoke_element_pointer(death, trail);
-            assert_eq!((*trail).colorCycleIndex, 12);
+            assert_eq!((*trail).color_cycle_index, 12);
             assert_eq!((*trail).life, 0);
             assert_ne!((*trail).state_flags & DISAPPEARING as u16, 0);
             assert_eq!((*trail).state_flags & CHANGING as u16, 0);
@@ -1194,7 +1210,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             (*el).life = 3;
             (*el).mass = 11;
             (*el).target = None;
-            (*prim(el)).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            (*prim(el)).kind = EMPTY_PRIMITIVE as u8;
 
             let seed = 777;
             let draws = rolls(seed, 7);
@@ -1270,7 +1286,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
             assert_eq!(((*el).current.image.frame.raw()).index(), facing);
-            assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE as u8);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
                 (*el).target,
@@ -1324,11 +1340,11 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             let planet_handle = planet.cast();
             (*planet).state_flags = 0;
             (*planet).mass = 200;
-            (*planet).current.location = POINT { x: x1, y: y1 };
+            (*planet).current.location = Point { x: x1, y: y1 };
             (*planet).next = (*planet).current.clone();
             (*planet).current.image.frames = ship.inner.frame_set(0);
             (*planet).current.image.frame = ship.ship_frames.selection(0);
-            (*prim(planet)).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            (*prim(planet)).kind = STAMP_PRIMITIVE as u8;
             shared::put(planet_handle);
 
             let el = ship.ptr();
@@ -1375,7 +1391,7 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
 
             // Taunting buys two energy (capped), arms the 16-frame cooldown and
             // goes through DeltaEnergy's bookkeeping.
-            TFB_SeedRandom(31);
+            seed_random(31);
             for (before, after) in [(5u8, 7u8), (11, 12), (0, 2)] {
                 ship.inner.descriptor_mut().characteristics.special_wait = 0;
                 ship.inner.descriptor_mut().ship_info.energy_level = before;
@@ -1415,11 +1431,11 @@ fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
             // Over several taunts the redraws follow the remembered last sound.
             let calls = 8;
             let replay = |seed: u32| {
-                TFB_SeedRandom(seed);
+                seed_random(seed);
                 let (mut last, mut draws) = (0, 0usize);
                 for _ in 0..calls {
                     loop {
-                        let next = pick(TFB_Random());
+                        let next = pick(random());
                         draws += 1;
                         if next != last {
                             last = next;
@@ -1433,11 +1449,11 @@ fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
                 .find(|&s| replay(s) > calls)
                 .expect("a seed that repeats a sound at least once");
             let draws = replay(seed);
-            TFB_SeedRandom(seed);
+            seed_random(seed);
             for _ in 0..calls {
                 taunt(&mut ship);
             }
-            assert_eq!(TFB_Random(), rolls(seed, draws + 1)[draws]);
+            assert_eq!(random(), rolls(seed, draws + 1)[draws]);
 
             // Whatever sound came first is "last" for the next taunt, so the same
             // opening draw is rejected until a different sound turns up...
@@ -1467,7 +1483,7 @@ fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
             let phoenix = ship.data().phoenix;
             assert!(!phoenix.is_null());
 
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
             ship.inner.descriptor_mut().ship_info.energy_level = 12;
 
             for control in [0u8, 1 << 1, GOOD_RATING, 1 << 6] {
@@ -1501,11 +1517,11 @@ fn ai_taunts_when_short_of_energy_and_throttles_on_the_low_byte_of_one_draw() {
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
 
-            // (BYTE) truncates before the comparison: a draw above 255 whose low
+            // (u8) truncates before the comparison: a draw above 255 whose low
             // byte is under 20 counts.
             let low = seed_with_first_roll(|r| r & 0xff < 20 && r > 0xff);
             let high = seed_with_first_roll(|r| r & 0xff >= 20);
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
             ship.inner.ship_mut().weapon_counter = 1;
             // (energy, special_counter, seed, draws, taunts)
             let cases = [
@@ -1543,7 +1559,7 @@ fn ai_finishes_with_the_shared_pass_after_deciding_on_the_taunt() {
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
 
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
             ship.inner.descriptor_mut().ship_info.energy_level = 4;
             ship.inner.ship_mut().special_counter = 0;
             // ship_intelligence clears WEAPON while the weapon counter is idle.

@@ -3,7 +3,7 @@
 //! oscilloscope state, and the encounter lifecycle.
 
 use std::ffi::{c_int, c_uint, CStr, CString};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU16, Ordering};
 
 use serial_test::serial;
 
@@ -14,16 +14,16 @@ use super::Comm;
 fn offer(
     comm: &mut Comm,
     text: &str,
-    reference: u32,
+    reference: u16,
     func: Option<crate::comm::response::ResponseFunc>,
 ) -> c_int {
     let text = CString::new(text).unwrap();
     do_response_phrase(comm, reference, Some(text.as_c_str()), func)
 }
 
-static CHOSEN: AtomicU32 = AtomicU32::new(0);
+static CHOSEN: AtomicU16 = AtomicU16::new(0);
 
-fn remember_choice(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, reference: u32) {
+fn remember_choice(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, reference: u16) {
     CHOSEN.store(reference, Ordering::SeqCst);
 }
 
@@ -589,7 +589,7 @@ fn the_conversation_summary_pages_through_what_was_said() {
 #[test]
 fn state_accessors_use_safe_rust_signatures() {
     let _: fn(&Comm) -> Option<&str> = Comm::current_subtitle;
-    let _: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> c_uint = rust_execute_response;
+    let _: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16 = rust_execute_response;
     let _: fn(&mut Comm) = rust_init_speech_graphics;
     let _: fn(&mut Comm) = rust_update_speech_graphics;
     let _: fn(&mut Comm) = rust_clear_subtitles;

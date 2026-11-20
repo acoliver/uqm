@@ -4,7 +4,7 @@ mod battle;
 mod battle_context;
 
 use uqm_rust::collections::observation::{self, Event};
-use uqm_rust::ships::native::abi::SPECIES_ID_EARTHLING_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
 
 #[test]
 fn projected_images_record_provenance_without_borrowing_stack_storage() {

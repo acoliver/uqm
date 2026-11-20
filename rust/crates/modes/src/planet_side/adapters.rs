@@ -336,7 +336,7 @@ mod tests {
         let context = crate::graphics::context::ContextLease::require(game.kernel.status_context);
         let mut clock =
             CffiPlanetSideClock(crate::threading::pacing::GameThreadPacer::new(context));
-        let before = crate::time::counter_abi::GetTimeCounter();
+        let before = crate::time::counter_abi::get_time_counter();
         assert!(clock.now().0 >= before);
         clock.sleep_until(Tick(before)).unwrap();
         assert!(clock.now().0 >= before);

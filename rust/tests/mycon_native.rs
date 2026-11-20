@@ -7,7 +7,9 @@ mod battle_context;
 use battle::*;
 
 use std::ffi::CStr;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
+use uqm_rust::engine::species::species_id::SPECIES_ID_MYCON_ID;
+use uqm_rust::graphics::geometry::Point;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
@@ -62,7 +64,7 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
             c"ship.mycon.graphics.plasma.small"
         );
         assert!(d.ship_data.special_rsc.iter().all(|r| r.is_null()));
-        assert_eq!(d.cyborg_control.WeaponRange, 3200);
+        assert_eq!(d.cyborg_control.weapon_range, 3200);
         assert!(d.callbacks()[4] != 0);
         assert!(d.callbacks()[2] != 0);
         assert!(d.callbacks()[3] != 0);
@@ -76,7 +78,7 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         let _battle = Battle::new(8);
         let mut fixture = Ship::bare(&_battle, SPECIES_ID_MYCON_ID, 0);
         let ship = fixture.ptr();
-        (*ship).next.location = POINT { x: 100, y: 200 };
+        (*ship).next.location = Point { x: 100, y: 200 };
         let slots = fixture.weapon(1);
         let handles: [*mut std::ffi::c_void; 1] = [fixture.weapon_record(slots[0]).cast()];
         assert!(!handles[0].is_null());

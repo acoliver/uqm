@@ -1,4 +1,5 @@
-use super::{abi::*, netconnection::NetConnection, packet::Packet, NetplaySession};
+use super::{netconnection::NetConnection, packet::Packet, NetplaySession};
+use crate::engine::battle::net::NetState;
 use crate::engine::battle::net::{
     ProtocolDriver, ProtocolNotice, ProtocolNoticeKind, ProtocolPoll,
 };
@@ -30,7 +31,7 @@ fn connected() -> (NetplaySession, LoopbackNet, Connection) {
     let session = NetplaySession::with_net(local);
     let mut conn = NetConnection::new(0, Default::default());
     conn.socket = Some(socket);
-    conn.state = NetState_NetState_selectShip;
+    conn.state = NetState::SelectShip;
     conn.flags.connected = true;
     conn.battle_active = true;
     *session.connections[0].borrow_mut() = Some(conn);
@@ -49,7 +50,7 @@ fn selection_notice_is_immediate_and_does_not_hold_the_connection() {
         assert_eq!(net.selected(0), Some(3));
         let mut conn = session.connection_mut(0).unwrap();
         assert_eq!(conn.packets_received, 1);
-        conn.state = NetState_NetState_interBattle;
+        conn.state = NetState::InterBattle;
         seen.push(notice);
     };
     let mut before_wait = || panic!("selection must not wait");
@@ -71,10 +72,7 @@ fn selection_notice_is_immediate_and_does_not_hold_the_connection() {
             kind: ProtocolNoticeKind::ShipSelected
         }]
     );
-    assert_eq!(
-        session.connection(0).unwrap().state,
-        NetState_NetState_interBattle
-    );
+    assert_eq!(session.connection(0).unwrap().state, NetState::InterBattle);
 }
 
 #[test]
@@ -127,12 +125,9 @@ fn ready_exchange_uses_the_supplied_wait_frame() {
     };
     assert!(session
         .battle_net()
-        .negotiate(true, NetState_NetState_interBattle, &mut driver));
+        .negotiate(true, NetState::InterBattle, &mut driver));
     assert_eq!(driver.waits, 1);
-    assert_eq!(
-        session.connection(0).unwrap().state,
-        NetState_NetState_interBattle
-    );
+    assert_eq!(session.connection(0).unwrap().state, NetState::InterBattle);
     assert_eq!(session.connection(0).unwrap().ready_generation, 1);
 }
 
@@ -155,10 +150,7 @@ fn reset_reports_a_failed_reply_before_the_reset_notice() {
     assert_eq!(
         seen,
         [
-            (
-                ProtocolNoticeKind::Closed,
-                Some(NetState_NetState_selectShip)
-            ),
+            (ProtocolNoticeKind::Closed, Some(NetState::SelectShip)),
             (
                 ProtocolNoticeKind::Reset {
                     reason: 1,

@@ -7,8 +7,22 @@ pub mod engine {
         World,
     };
 
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
+        MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, NONSOLID, PRE_PROCESS, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+        SHIP_IN_GRAVITY_WELL,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::VELOCITY_SHIFT;
     use crate::ships::native::{
-        abi::*, angle_to_facing, facing_to_angle, normalize_angle, normalize_facing,
+        angle_to_facing, facing_to_angle, normalize_angle, normalize_facing,
     };
 
     const MAX_CREW: u16 = 8;
@@ -45,8 +59,8 @@ pub mod engine {
         d.resources.icons = Some(c"ship.thraddash.icons");
         d.resources.melee_icon = Some(c"ship.thraddash.meleeicons");
         d.fleet_strength = 833 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet_location = POINT { x: 2535, y: 8358 };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.fleet_location = Point { x: 2535, y: 8358 };
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: 1,
@@ -82,11 +96,11 @@ pub mod engine {
     }
 
     pub fn flame_napalm_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        cx.element_mut(e).velocity = crate::engine::battle::record::VELOCITY_DESC::default();
+        cx.element_mut(e).velocity = crate::engine::battle::record::VelocityDesc::default();
         if cx.element(e).flags & NONSOLID as u16 != 0 {
             cx.element_mut(e).flags &= !(NONSOLID as u16);
             cx.element_mut(e).flags |= APPEARING as u16;
-            cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
             cx.init_intersect(e);
             let frame = cx.equivalent_frame(
                 cx.element_frame_set_first(e, true),
@@ -194,7 +208,7 @@ pub mod engine {
             cx.set_target(trail, None);
             cx.element_mut(trail).turn = NAPALM_DECAY_RATE;
             cx.element_mut(trail).flags |= NONSOLID as u16;
-            cx.primitive_style_mut(trail).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            cx.primitive_style_mut(trail).kind = EMPTY_PRIMITIVE as u8;
             cx.copy_visual_to_next(trail, cx.element(trail).current);
             cx.element_mut(trail).flags |= PRE_PROCESS as u16;
             cx.insert_before(trail, cx.elements().head());
@@ -203,11 +217,11 @@ pub mod engine {
     }
 
     fn entice_boost(
-        facing: COUNT,
+        facing: u16,
         input: u8,
-        origin: POINT,
+        origin: Point,
         opponent: crate::engine::battle::views::ElementState,
-        which_turn: COUNT,
+        which_turn: u16,
     ) -> bool {
         let dx = opponent.next.location.x.wrapping_sub(origin.x);
         let dy = opponent.next.location.y.wrapping_sub(origin.y);
@@ -231,8 +245,8 @@ pub mod engine {
         if let Some(target) = concerns.objects[enemy].object {
             let opponent = cx.element(target);
             let (vx, vy) = opponent.velocity.get_current_components();
-            let dx = vx as SIZE;
-            let dy = vy as SIZE;
+            let dx = vx as i16;
+            let dy = vy as i16;
             let stationary = (4 << ONE_SHIFT) << VELOCITY_SHIFT;
             let speed2 = i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy);
             concerns.objects[enemy].movement = if concerns.objects[enemy].which_turn > 8

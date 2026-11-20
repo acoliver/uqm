@@ -44,8 +44,8 @@ const _: () = {
     );
 };
 
-pub use crate::engine::battle::schema::GAME_STATE as CGameState;
-pub use crate::ships::native::abi::SIS_STATE as CSisState;
+pub use crate::engine::battle::schema::GameRecord as CGameState;
+pub use crate::engine::world::SisState as CSisState;
 
 /// Loaded resources and callbacks owned by one conversation mode.
 #[derive(Default)]

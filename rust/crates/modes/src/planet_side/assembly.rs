@@ -67,6 +67,17 @@ pub struct SurfaceAssembly {
     pub masks: SurfaceMasks,
 }
 
+impl SurfaceAssembly {
+    /// The entity behind a generated node. Assembly creates one entity per
+    /// node and only the effects of the node's own removal retire it.
+    #[must_use]
+    pub fn entity(&self, id: SurfaceEntityId) -> &SurfaceEntity {
+        self.world
+            .get(id)
+            .unwrap_or_else(|| panic!("surface entity {id:?} is missing from the world"))
+    }
+}
+
 /// Single-threaded shared ownership used by concrete graphics and interaction
 /// adapters during one synchronous PlanetSide session.
 pub type SharedSurface = Rc<RefCell<SurfaceAssembly>>;

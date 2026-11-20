@@ -21,7 +21,7 @@ pub fn resample_none(
     chansize: u32,
     _left: bool,
 ) -> (f32, u32) {
-    let data = buffer.data.as_ref().unwrap();
+    let data = buffer.bytes();
     let d0 = &data[pos as usize..];
 
     let sample = if chansize == 2 {
@@ -45,7 +45,7 @@ pub fn resample_nearest(
     chansize: u32,
     _left: bool,
 ) -> (f32, u32) {
-    let data = buffer.data.as_ref().unwrap();
+    let data = buffer.bytes();
     let d0 = &data[pos as usize..];
 
     let sample = if chansize == 2 {
@@ -72,7 +72,7 @@ pub fn resample_linear(
     chansize: u32,
     _left: bool,
 ) -> (f32, u32) {
-    let data = buffer.data.as_ref().unwrap();
+    let data = buffer.bytes();
 
     // Get current sample
     let d0 = &data[pos as usize..];
@@ -115,7 +115,7 @@ pub fn resample_cubic(
     chansize: u32,
     _left: bool,
 ) -> (f32, u32) {
-    let data = buffer.data.as_ref().unwrap();
+    let data = buffer.bytes();
 
     // Get four samples for cubic interpolation
     // s0 = previous, s1 = current, s2 = next, s3 = next+1

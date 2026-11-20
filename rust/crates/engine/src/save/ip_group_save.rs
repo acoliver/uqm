@@ -109,25 +109,16 @@ pub fn save_ip_groups(
     files: &mut StateFileManager,
     input: &SaveIpInput<'_>,
 ) -> Result<Vec<usize>, StateSectionError> {
-    let contents = |files: &StateFileManager, index: usize| -> Vec<u8> {
-        files
-            .get_file(index)
-            .expect("the three state files always exist")
-            .contents()
-            .to_vec()
-    };
+    let contents =
+        |files: &StateFileManager, index: usize| -> Vec<u8> { files.contents(index).to_vec() };
     let plan = plan_save_ip_groups(
         &contents(files, RANDGRPINFO_FILE),
         &contents(files, DEFGRPINFO_FILE),
         input,
     )?;
-    files
-        .replace_contents(RANDGRPINFO_FILE, &plan.random_groups)
-        .expect("the three state files always exist");
+    files.replace(RANDGRPINFO_FILE, &plan.random_groups);
     if let Some(defined) = &plan.defined_groups {
-        files
-            .replace_contents(DEFGRPINFO_FILE, defined)
-            .expect("the three state files always exist");
+        files.replace(DEFGRPINFO_FILE, defined);
     }
     Ok(plan.departed)
 }

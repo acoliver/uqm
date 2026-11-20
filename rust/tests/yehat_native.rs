@@ -8,7 +8,19 @@ mod special_hooks;
 use battle::*;
 use std::mem;
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_rust::engine::battle::ai_constants::SHIELD_DEFENSE;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::CREW_OBJECT;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::species::species_id::SPECIES_ID_YEHAT_ID;
+use uqm_rust::math::random;
+use uqm_rust::math::seed_random;
 #[test]
 fn descriptor_and_twin_missile_launch() {
     battle_context::run(|_| {
@@ -26,7 +38,7 @@ fn descriptor_and_twin_missile_launch() {
                 ),
                 (20, 10)
             );
-            assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 266);
+            assert_eq!(ship.descriptor_mut().cyborg_control.weapon_range, 266);
             assert_eq!(
                 (
                     ship.descriptor_mut().fleet.known_loc.x,
@@ -140,18 +152,18 @@ fn ai_doubles_nonfinite_crew_turns_halves_finite_turns_and_obeys_life_boundary()
                         for seed in 1..5 {
                             (*threat).state_flags =
                                 (CREW_OBJECT | if finite { FINITE_LIFE } else { 0 }) as u16;
-                            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                            concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
-                                ObjectPtr: threat,
+                            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                            concerns[ENEMY_WEAPON_INDEX as usize] = EvaluateRecord {
+                                object_ptr: threat,
                                 facing: 0,
                                 which_turn: turn,
-                                MoveState: MOVEMENT_STATE_ENTICE,
+                                move_state: MOVEMENT_STATE_ENTICE,
                             };
                             (*ship.ptr()).life = life;
                             ship.ship_mut().ship_input_state = 0;
                             let transformed = if finite { (turn >> 1).max(1) } else { turn * 2 };
-                            TFB_SeedRandom(seed);
-                            let shield = TFB_Random() & 3 != 0;
+                            seed_random(seed);
+                            let shield = random() & 3 != 0;
                             with_rng(seed, usize::from(life <= 2 && transformed <= 2), || {
                                 ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
                             });
@@ -159,7 +171,7 @@ fn ai_doubles_nonfinite_crew_turns_halves_finite_turns_and_obeys_life_boundary()
                                 concerns[ENEMY_WEAPON_INDEX as usize].which_turn,
                                 transformed
                             );
-                            assert!(!concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr.is_null());
+                            assert!(!concerns[ENEMY_WEAPON_INDEX as usize].object_ptr.is_null());
                             assert_eq!(
                                 ship.ship_mut().ship_input_state & SPECIAL as u8 != 0,
                                 life <= 2 && transformed <= 2 && shield

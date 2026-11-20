@@ -1,6 +1,7 @@
 //! Game and resource operations wired to the explicit battle context.
+use crate::engine::battle::flags::PLAYER_SHIP;
 use crate::engine::battle::{Cx, ElementId, ShipId};
-use crate::ships::native::abi::*;
+use crate::ui::settings::OPT_PC;
 
 mod status_native_access {
     use super::*;
@@ -44,7 +45,7 @@ mod status_native_access {
             crate::ui::shipstat::draw_crew_energy_labels(
                 &context,
                 &frames[0],
-                self.kernel.configuration.preferences().menu == OPT_PC as i32,
+                self.kernel.configuration.preferences().menu == OPT_PC,
                 y,
                 change,
             );
@@ -74,7 +75,7 @@ pub trait ContextOps {
     fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
-        state: u32,
+        state: crate::engine::battle::net::NetState,
     ) -> bool;
 
     fn draw_final_battle_captain(&mut self, ship: ShipId);
@@ -107,7 +108,7 @@ impl ContextOps for Cx<'_> {
     fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
-        state: u32,
+        state: crate::engine::battle::net::NetState,
     ) -> bool {
         let runtime = self.kernel.input_runtime();
         let mut observer = runtime.observer();

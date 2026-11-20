@@ -1,7 +1,19 @@
 //! Druuge callbacks registered with the live battle engine.
 
 pub mod engine {
-    use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_AFT, FIRES_FORE, FIRES_LEFT, FIRES_RIGHT,
+        IGNORE_SIMILAR, MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SPECIAL,
+        WEAPON,
+    };
+    use crate::engine::battle::flags::{PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED};
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::CollisionHook;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 14;
     const MAX_ENERGY: u8 = 32;
@@ -38,8 +50,8 @@ pub mod engine {
         desc.resources.icons = Some(c"ship.druuge.icons");
         desc.resources.melee_icon = Some(c"ship.druuge.meleeicons");
         desc.fleet_strength = (1400 / SPHERE_RADIUS_INCREMENT * 2) as u16;
-        desc.fleet_location = POINT { x: 9500, y: 2792 };
-        desc.characteristics = CHARACTERISTIC_STUFF {
+        desc.fleet_location = Point { x: 9500, y: 2792 };
+        desc.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -108,9 +120,9 @@ pub mod engine {
     pub fn cannon_collision(
         cx: &mut Cx<'_>,
         cannon: ElementId,
-        point0: &mut POINT,
+        point0: &mut Point,
         other: ElementId,
-        point1: &mut POINT,
+        point1: &mut Point,
     ) {
         cx.weapon_collision(cannon, point0, other, point1);
         let collision_mass = i32::from(cx.element(other).mass) + 1;
@@ -124,19 +136,19 @@ pub mod engine {
                 cx.frame_number(cx.element(cannon).next.image.frame.view()),
             ));
             cx.element_mut(other).velocity.delta_components(
-                i32::from(cosine(angle, RECOIL_VELOCITY) as SIZE),
-                i32::from(sine(angle, RECOIL_VELOCITY) as SIZE),
+                i32::from(cosine(angle, RECOIL_VELOCITY) as i16),
+                i32::from(sine(angle, RECOIL_VELOCITY) as i16),
             );
             let (x, y) = cx.element(other).velocity.get_current_components();
-            let (dx, dy) = (x as SIZE, y as SIZE);
+            let (dx, dy) = (x as i16, y as i16);
             let x = i64::from(dx);
             let y = i64::from(dy);
             let limit = i64::from(MAX_RECOIL_VELOCITY);
             if x * x + y * y > limit * limit {
                 let a = crate::math::arctan(dx, dy);
                 cx.element_mut(other).velocity.set_components(
-                    i32::from(cosine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
-                    i32::from(sine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
+                    i32::from(cosine(i32::from(a), MAX_RECOIL_VELOCITY) as i16),
+                    i32::from(sine(i32::from(a), MAX_RECOIL_VELOCITY) as i16),
                 );
             }
         }
@@ -201,19 +213,19 @@ pub mod engine {
         cx.ship_state_mut(ss).status &= !(SHIP_AT_MAX_SPEED as u16);
         let angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32;
         cx.element_mut(ship).velocity.delta_components(
-            i32::from(cosine(angle, RECOIL_VELOCITY) as SIZE),
-            i32::from(sine(angle, RECOIL_VELOCITY) as SIZE),
+            i32::from(cosine(angle, RECOIL_VELOCITY) as i16),
+            i32::from(sine(angle, RECOIL_VELOCITY) as i16),
         );
         let (x, y) = cx.element(ship).velocity.get_current_components();
-        let (dx, dy) = (x as SIZE, y as SIZE);
+        let (dx, dy) = (x as i16, y as i16);
         let x = i64::from(dx);
         let y = i64::from(dy);
         let limit = i64::from(MAX_RECOIL_VELOCITY);
         if x * x + y * y > limit * limit {
             let a = crate::math::arctan(dx, dy);
             cx.element_mut(ship).velocity.set_components(
-                i32::from(cosine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
-                i32::from(sine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
+                i32::from(cosine(i32::from(a), MAX_RECOIL_VELOCITY) as i16),
+                i32::from(sine(i32::from(a), MAX_RECOIL_VELOCITY) as i16),
             );
         }
     }

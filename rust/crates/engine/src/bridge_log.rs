@@ -37,7 +37,7 @@ pub fn rust_bridge_init() -> libc::c_int {
             }
 
             // Store the file handle in the global mutex
-            let mut guard = LOG_FILE.lock().unwrap();
+            let mut guard = crate::sync::lock(&LOG_FILE);
             *guard = Some(file);
 
             0
@@ -57,7 +57,7 @@ pub fn rust_bridge_init() -> libc::c_int {
 /// This is a convenience function for Rust code to write to the log file
 /// without going through the C FFI.
 pub fn rust_bridge_log_msg(message: &str) {
-    let mut guard = LOG_FILE.lock().unwrap();
+    let mut guard = crate::sync::lock(&LOG_FILE);
     if let Some(ref mut file) = *guard {
         let _ = writeln!(file, "{}", message);
         let _ = file.flush();

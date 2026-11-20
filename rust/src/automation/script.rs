@@ -1668,10 +1668,10 @@ const SPLASH_POLL_TICKS: u64 = ONE_SECOND as u64 / 40;
 /// `WaitForAnyButtonUntil` (`util.c:222-249`) calls
 /// `input_ffi::nested_input` once per loop pass,
 /// which is one admitted input callback, and `AnyButtonPress` before the loop
-/// services nothing. The loop runs while `GetTimeCounter () < timeOut`, and
+/// services nothing. The loop runs while `get_time_counter () < timeOut`, and
 /// pass `k` starts no earlier than `k * SPLASH_POLL_TICKS` after `timeOut` was
 /// computed because each pass sleeps at least that long (`SleepThread` sleeps
-/// 25 ms, which `SDLWrapper_GetTimeCounter` converts to exactly 21 units). Pass
+/// 25 ms, which `SDLWrapper_get_time_counter` converts to exactly 21 units). Pass
 /// `k` therefore runs only if `k * 21 < 2520`, which allows passes 0 to 119.
 const SPLASH_SERVICED_CALLBACKS: u64 = SPLASH_WAIT_TICKS.div_ceil(SPLASH_POLL_TICKS);
 

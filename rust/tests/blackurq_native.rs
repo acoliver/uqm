@@ -5,7 +5,25 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_rust::engine::battle::ai_constants::SPECIAL;
+use uqm_rust::engine::battle::ai_constants::WEAPON;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::CHANGING;
+use uqm_rust::engine::battle::flags::CREW_OBJECT;
+use uqm_rust::engine::battle::flags::DISAPPEARING;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::flags::PLAYER_SHIP;
+use uqm_rust::engine::battle::flags::POST_PROCESS;
+use uqm_rust::engine::battle::flags::PRE_PROCESS;
+use uqm_rust::engine::battle::record::ElementRecord;
+use uqm_rust::engine::battle::record::EvaluateRecord;
+use uqm_rust::engine::species::species_id::SPECIES_ID_KOHR_AH_ID;
+use uqm_rust::graphics::geometry::Point;
+use uqm_rust::math::battle_types::ONE_SHIFT;
+use uqm_rust::math::velocity::VelocityDesc;
 
 #[test]
 fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
@@ -28,7 +46,7 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
                 ),
                 (6000, 6250)
             );
-            assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 200);
+            assert_eq!(ship.descriptor_mut().cyborg_control.weapon_range, 200);
             ship.ship_mut().ship_facing = 4;
             let h = with_rng(9, 0, || ship.weapon(1))[0];
             let saw = ship.weapon_record(h);
@@ -72,7 +90,7 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             let saw = ship.weapon_record(h);
             let h = saw.cast();
             battle::put(h);
-            (*saw).next.location = POINT { x: 1235, y: 2347 };
+            (*saw).next.location = Point { x: 1235, y: 2347 };
             hooks::invoke_element_pointer((*saw).postprocess_func.unwrap(), saw);
             let all = queued();
             assert_eq!(all.len(), 3);
@@ -86,8 +104,8 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             );
             assert_eq!(
                 (
-                    (*copy).IntersectControl.EndPoint.x,
-                    (*copy).IntersectControl.EndPoint.y
+                    (*copy).intersect_control.EndPoint.x,
+                    (*copy).intersect_control.EndPoint.y
                 ),
                 (1235 >> ONE_SHIFT, 2347 >> ONE_SHIFT)
             );
@@ -126,8 +144,8 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 let e = battle::element(h);
                 assert_eq!(((*e).life, (*e).hits, (*e).mass), (47, 100, 3));
                 assert_eq!((*e).turn, 1);
-                let mut expected: VELOCITY_DESC = mem::zeroed();
-                uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 16, face as COUNT);
+                let mut expected: VelocityDesc = mem::zeroed();
+                uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 16, face as u16);
                 expected.delta_components(41, -21);
                 assert_eq!(velocity(&(*e).velocity), velocity(&expected));
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
@@ -151,9 +169,9 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             let h = saw.cast();
             let mut target_fixture = Object::new(&_battle);
             let target = target_fixture.element_mut() as *mut ElementRecord;
-            (*target).playerNr = 1;
+            (*target).player_nr = 1;
             (*target).life = 2;
-            let mut p = POINT { x: 100, y: 200 };
+            let mut p = Point { x: 100, y: 200 };
             hooks::invoke_collision_pointer(
                 (*saw).collision_func.unwrap(),
                 saw,
@@ -204,18 +222,18 @@ fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
             let threat = threat_fixture.element_mut() as *mut ElementRecord;
             (*threat).state_flags = CREW_OBJECT as u16;
             for (turn, pursue) in [(8, true), (9, false)] {
-                let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
-                    ObjectPtr: threat,
+                let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+                concerns[ENEMY_WEAPON_INDEX as usize] = EvaluateRecord {
+                    object_ptr: threat,
                     facing: 0,
                     which_turn: turn,
-                    MoveState: MOVEMENT_STATE_ENTICE,
+                    move_state: MOVEMENT_STATE_ENTICE,
                 };
                 with_rng(4, 0, || {
                     ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
                 });
                 assert_eq!(
-                    concerns[ENEMY_WEAPON_INDEX as usize].MoveState,
+                    concerns[ENEMY_WEAPON_INDEX as usize].move_state,
                     if pursue {
                         MOVEMENT_STATE_PURSUE
                     } else {
@@ -227,7 +245,7 @@ fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
                     pursue
                 );
             }
-            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
+            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
             with_rng(4, 0, || {
                 ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
             });

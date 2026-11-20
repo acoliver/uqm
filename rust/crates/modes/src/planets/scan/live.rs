@@ -45,7 +45,7 @@ use crate::planets::sphere::live::draw_default_planet_sphere;
 use crate::planets::sphere::live::draw_planet;
 use crate::ui::settings::play_menu_sound;
 use crate::ui::util::wait_for_any_button_until;
-use uqm_engine::time::counter_abi::GetTimeCounter;
+use uqm_engine::time::counter_abi::get_time_counter;
 
 impl ScanState {
     pub(crate) fn draw_surface(&self, tint_y: i32, color: CColor) {
@@ -171,7 +171,7 @@ fn flash_location(
     scan: &ScanState,
     animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
 ) {
-    let now = GetTimeCounter();
+    let now = get_time_counter();
     let position = scan.cursor.borrow().rect.corner;
     let Some(shade) = animation.cursor_shade((position.x, position.y), now) else {
         return;
@@ -335,7 +335,7 @@ fn pick_input(
     animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
     state: &mut PickState,
 ) -> u32 {
-    let time_in = GetTimeCounter();
+    let time_in = get_time_counter();
     let pulse = input.pulsed();
     if cx.world.activity() & CHECK_ABORT != 0 || pulse.menu[KEY_MENU_CANCEL as usize] != 0 {
         state.success = false;
@@ -444,7 +444,7 @@ fn prepare_pick_side(
             g.game_string(435 + 5),
             f32::from(fuel) / 100.0
         ))
-        .unwrap()
+        .unwrap_or_else(|_| panic!("a fuel message has no NUL byte"))
     };
     crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
     {
@@ -560,7 +560,7 @@ fn scan_planet(
             drawing::batch();
             scan_state.draw_surface(0, black());
             drawing::unbatch();
-            (GetTimeCounter(), color(TINT_COLORS[usize::from(scan)]))
+            (get_time_counter(), color(TINT_COLORS[usize::from(scan)]))
         };
         let mut line = 0;
         while line < 84 {

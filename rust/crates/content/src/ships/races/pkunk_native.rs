@@ -7,46 +7,60 @@
 //! those arguments.
 
 pub mod engine {
+    use crate::engine::battle::ai_constants::{
+        FIRES_FORE, FIRES_LEFT, FIRES_RIGHT, IGNORE_SIMILAR, LEFT, MAX_SHIP_MASS, RIGHT, SPECIAL,
+        THRUST, WEAPON,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, NORMAL_LIFE,
+        PLAYER_SHIP, STAMPFILL_PRIMITIVE,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::ElementHook;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, RaceState, Selection, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
-    };
+    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{FULL_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
     // Core characteristics
-    const MAX_CREW: COUNT = 8;
-    const MAX_ENERGY: BYTE = 12;
-    const ENERGY_REGENERATION: BYTE = 0;
-    const ENERGY_WAIT: BYTE = 0;
-    const MAX_THRUST: COUNT = 64;
-    const THRUST_INCREMENT: COUNT = 16;
-    const THRUST_WAIT: BYTE = 0;
-    const TURN_WAIT: BYTE = 0;
-    const SHIP_MASS: BYTE = 1;
+    const MAX_CREW: u16 = 8;
+    const MAX_ENERGY: u8 = 12;
+    const ENERGY_REGENERATION: u8 = 0;
+    const ENERGY_WAIT: u8 = 0;
+    const MAX_THRUST: u16 = 64;
+    const THRUST_INCREMENT: u16 = 16;
+    const THRUST_WAIT: u8 = 0;
+    const TURN_WAIT: u8 = 0;
+    const SHIP_MASS: u8 = 1;
 
     // Triple Miniguns
-    const WEAPON_ENERGY_COST: BYTE = 1;
-    const WEAPON_WAIT: BYTE = 0;
-    const PKUNK_OFFSET: SIZE = 15;
-    const MISSILE_OFFSET: SIZE = 1;
-    const MISSILE_SPEED: SIZE = 24 << ONE_SHIFT;
-    const MISSILE_LIFE: COUNT = 5;
-    const MISSILE_HITS: SIZE = 1;
-    const MISSILE_DAMAGE: SIZE = 1;
+    const WEAPON_ENERGY_COST: u8 = 1;
+    const WEAPON_WAIT: u8 = 0;
+    const PKUNK_OFFSET: i16 = 15;
+    const MISSILE_OFFSET: i16 = 1;
+    const MISSILE_SPEED: i16 = 24 << ONE_SHIFT;
+    const MISSILE_LIFE: u16 = 5;
+    const MISSILE_HITS: i16 = 1;
+    const MISSILE_DAMAGE: i16 = 1;
 
     // Taunt
-    const SPECIAL_ENERGY_COST: BYTE = 2;
-    const SPECIAL_WAIT: BYTE = 16;
+    const SPECIAL_ENERGY_COST: u8 = 2;
+    const SPECIAL_WAIT: u8 = 16;
 
     // Respawn
-    const PHOENIX_LIFE: COUNT = 12;
-    const TRANSITION_LIFE: COUNT = 1;
+    const PHOENIX_LIFE: u16 = 12;
+    const TRANSITION_LIFE: u16 = 1;
     const TRANSITION_SPEED: i32 = 20 << ONE_SHIFT;
     const START_PHOENIX_COLOR: Color = rgb15(0x1F, 0x15, 0x00);
 
     // `intel.h`: DISPLAY_TO_WORLD (50), and the control rating this ship tests.
     const CLOSE_RANGE_WEAPON: i32 = 50 << ONE_SHIFT;
-    const STANDARD_RATING: BYTE = 1 << 4;
+    const STANDARD_RATING: u8 = 1 << 4;
     // `races.h`
     const PLAY_VICTORY_DITTY: u16 = 1 << 9;
     // `units.h`
@@ -54,8 +68,8 @@ pub mod engine {
     const MAX_REDUCTION: u32 = 3;
 
     /// `CC5TO8`, promoted to `int` and truncated to `BYTE` on assignment.
-    const fn cc5to8(c: u32) -> BYTE {
-        ((c << 3) | (c >> 2)) as BYTE
+    const fn cc5to8(c: u32) -> u8 {
+        ((c << 3) | (c >> 2)) as u8
     }
 
     /// `MAKE_RGB15` / `MAKE_RGB15_INIT`. `BUILD_COLOR (col, c256)` is `col`:
@@ -87,7 +101,7 @@ pub mod engine {
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         let d = crate::engine::battle::template::RaceTemplate {
             info: crate::engine::battle::views::Info {
-                ship_flags: (FIRES_FORE | FIRES_LEFT | FIRES_RIGHT) as UWORD,
+                ship_flags: (FIRES_FORE | FIRES_LEFT | FIRES_RIGHT) as u16,
                 ship_cost: 20,
                 crew_level: MAX_CREW,
                 max_crew: MAX_CREW,
@@ -113,9 +127,9 @@ pub mod engine {
                 sounds: Some(c"ship.pkunk.sounds"),
                 ..Default::default()
             },
-            fleet_strength: (666 / SPHERE_RADIUS_INCREMENT * 2) as COUNT,
-            fleet_location: POINT { x: 502, y: 401 },
-            characteristics: CHARACTERISTIC_STUFF {
+            fleet_strength: (666 / SPHERE_RADIUS_INCREMENT * 2) as u16,
+            fleet_location: Point { x: 502, y: 401 },
+            characteristics: CharacteristicRecord {
                 max_thrust: MAX_THRUST,
                 thrust_increment: THRUST_INCREMENT,
                 energy_regeneration: ENERGY_REGENERATION,
@@ -129,7 +143,7 @@ pub mod engine {
                 ship_mass: SHIP_MASS,
             },
             intelligence: crate::engine::battle::views::Intelligence {
-                weapon_range: (CLOSE_RANGE_WEAPON + 1) as COUNT,
+                weapon_range: (CLOSE_RANGE_WEAPON + 1) as u16,
                 ..Default::default()
             },
             state: RaceState::Pkunk {
@@ -154,21 +168,21 @@ pub mod engine {
     };
 
     fn display_align(random: u32, log_extent: i32) -> i32 {
-        let reduced = i32::from(random as COUNT) % log_extent;
-        i32::from(reduced as COORD) & !((1 << ONE_SHIFT) - 1)
+        let reduced = i32::from(random as u16) % log_extent;
+        i32::from(reduced as i16) & !((1 << ONE_SHIFT) - 1)
     }
 
-    fn wrap_val(v: i32, w: i32) -> COUNT {
+    fn wrap_val(v: i32, w: i32) -> u16 {
         (if v < 0 {
             v + w
         } else if v >= w {
             v - w
         } else {
             v
-        }) as COUNT
+        }) as u16
     }
 
-    fn random_space_coord(cx: &mut Cx<'_>, extent: i32) -> COORD {
+    fn random_space_coord(cx: &mut Cx<'_>, extent: i32) -> i16 {
         let mut draw = || display_align(cx.random(), extent);
         let wrapped = if draw() < 0 {
             draw() + extent
@@ -177,7 +191,7 @@ pub mod engine {
         } else {
             draw()
         };
-        wrapped as COUNT as COORD
+        wrapped as u16 as i16
     }
 
     fn logical_dimensions(cx: &Cx<'_>) -> (i32, i32) {
@@ -194,7 +208,7 @@ pub mod engine {
         } else {
             let frame = cx.advance_frame(cx.element(e).current.image.frame.view());
             cx.set_frame(e, true, frame);
-            cx.element_mut(e).flags |= CHANGING as ELEMENT_FLAGS;
+            cx.element_mut(e).flags |= CHANGING as u16;
             cx.element_mut(e).turn = cx.element(e).thrust;
         }
     }
@@ -211,7 +225,7 @@ pub mod engine {
             face: 0,
             index: 0,
             sender: origin.player,
-            flags: IGNORE_SIMILAR as ELEMENT_FLAGS,
+            flags: IGNORE_SIMILAR as u16,
             pixoffs: PKUNK_OFFSET,
             speed: MISSILE_SPEED,
             hit_points: MISSILE_HITS,
@@ -232,16 +246,16 @@ pub mod engine {
             missiles.push(missile);
             if let Some(missile) = missile {
                 let (dx, dy) = origin.velocity.get_current_components();
-                let (dx, dy) = (dx as SIZE, dy as SIZE);
+                let (dx, dy) = (dx as i16, dy as i16);
                 cx.element_mut(missile)
                     .velocity
-                    .delta_components(i32::from(dx as SIZE), i32::from(dy as SIZE));
+                    .delta_components(i32::from(dx), i32::from(dy));
                 cx.element_mut(missile).current.location.x =
                     (i32::from(cx.element(missile).current.location.x)
-                        - (i32::from(dx) >> VELOCITY_SHIFT)) as COORD;
+                        - (i32::from(dx) >> VELOCITY_SHIFT)) as i16;
                 cx.element_mut(missile).current.location.y =
                     (i32::from(cx.element(missile).current.location.y)
-                        - (i32::from(dy) >> VELOCITY_SHIFT)) as COORD;
+                        - (i32::from(dy) >> VELOCITY_SHIFT)) as i16;
                 cx.element_mut(missile).pre = Some(ElementHook::Native(animate));
             }
         }
@@ -271,11 +285,11 @@ pub mod engine {
         }
         let info = cx.race_stats(ss).ship_info;
         if info.energy_level < info.max_energy
-            && (cx.ship_state(ss).special_counter == 0 || (cx.random() as BYTE) < 20)
+            && (cx.ship_state(ss).special_counter == 0 || (cx.random() as u8) < 20)
         {
-            cx.ship_state_mut(ss).input |= SPECIAL as BYTE;
+            cx.ship_state_mut(ss).input |= SPECIAL as u8;
         } else {
-            cx.ship_state_mut(ss).input &= !(SPECIAL as BYTE);
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
         }
         cx.ship_intelligence(ss, concerns);
     }
@@ -293,7 +307,7 @@ pub mod engine {
         };
         {
             let mut state = cx.element_mut(e);
-            state.flags = (APPEARING | PLAYER_SHIP | IGNORE_SIMILAR) as ELEMENT_FLAGS;
+            state.flags = (APPEARING | PLAYER_SHIP | IGNORE_SIMILAR) as u16;
             state.mass = SHIP_MASS;
             state.pre = saved_pre;
             state.post = saved_post;
@@ -324,13 +338,13 @@ pub mod engine {
             state.hits = 0;
             state.turn = 0;
             state.thrust = 0;
-            state.life = NORMAL_LIFE as COUNT;
+            state.life = NORMAL_LIFE as u16;
         }
         cx.ship_state_mut(ss).facing = normalize_facing(cx.random() as i32);
         cx.set_frames(e, false, cx.ship_frame_set(ss, 0));
         let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
         cx.set_frame(e, false, frame.clone());
-        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+        cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
         let (width, height) = logical_dimensions(cx);
         loop {
             cx.element_mut(e).current.location.x = random_space_coord(cx, width);
@@ -352,13 +366,13 @@ pub mod engine {
     pub fn intercept_pkunk_death(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if cx.race_stats(ss).ship_info.crew_level != 0 {
-            cx.element_mut(e).flags &= !(DISAPPEARING as ELEMENT_FLAGS);
+            cx.element_mut(e).flags &= !(DISAPPEARING as u16);
             cx.element_mut(e).life = 1;
             return;
         }
         let ship = cx.ship_element(ss);
         if i32::from(cx.element(ship).mass) < MAX_SHIP_MASS as i32 * 10 {
-            cx.element_mut(ship).mass = (MAX_SHIP_MASS + 1) as BYTE;
+            cx.element_mut(ship).mass = (MAX_SHIP_MASS + 1) as u8;
             let RaceState::Pkunk { phoenix, .. } = cx.race_stats(ss).state else {
                 panic!("Pkunk state missing");
             };
@@ -379,56 +393,56 @@ pub mod engine {
         if index != PHOENIX_TRAIL_COLORS.len() {
             cx.element_mut(e).life = TRANSITION_LIFE;
             cx.primitive_style_mut(e).color = PHOENIX_TRAIL_COLORS[index];
-            cx.element_mut(e).flags &= !(DISAPPEARING as ELEMENT_FLAGS);
-            cx.element_mut(e).flags |= CHANGING as ELEMENT_FLAGS;
+            cx.element_mut(e).flags &= !(DISAPPEARING as u16);
+            cx.element_mut(e).flags |= CHANGING as u16;
         }
     }
 
     pub fn phoenix_transition(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let ship = cx.ship_element(ss);
-        if cx.element(ship).flags & NONSOLID as ELEMENT_FLAGS == 0 {
+        if cx.element(ship).flags & NONSOLID as u16 == 0 {
             cx.element_mut(e).pre = None;
         } else if let Some(image) = cx.alloc_element() {
             cx.put(image);
-            cx.element_mut(image).player = NEUTRAL_PLAYER_NUM as SIZE;
-            cx.element_mut(image).flags = (APPEARING | FINITE_LIFE | NONSOLID) as ELEMENT_FLAGS;
+            cx.element_mut(image).player = NEUTRAL_PLAYER_NUM as i16;
+            cx.element_mut(image).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             cx.element_mut(image).life = TRANSITION_LIFE;
-            cx.primitive_style_mut(image).kind = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
+            cx.primitive_style_mut(image).kind = STAMPFILL_PRIMITIVE as u8;
             cx.primitive_style_mut(image).color = START_PHOENIX_COLOR;
             cx.element_mut(image).color_cycle = 0;
             cx.copy_image_to_current(image, cx.element(e).current.image);
             cx.element_mut(image).current.location = cx.element(e).current.location;
             let angle;
-            if cx.element(e).flags & PLAYER_SHIP as ELEMENT_FLAGS == 0 {
-                angle = COUNT::from(cx.element(e).mass);
+            if cx.element(e).flags & PLAYER_SHIP as u16 == 0 {
+                angle = u16::from(cx.element(e).mass);
                 cx.element_mut(image).current.location.x =
                     (i32::from(cx.element(image).current.location.x)
                         + i32::from(cosine(i32::from(angle), TRANSITION_SPEED)))
-                        as COORD;
+                        as i16;
                 cx.element_mut(image).current.location.y =
                     (i32::from(cx.element(image).current.location.y)
                         + i32::from(sine(i32::from(angle), TRANSITION_SPEED)))
-                        as COORD;
+                        as i16;
                 cx.element_mut(e).pre = None;
             } else {
-                angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as COUNT;
+                angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as u16;
                 let trail = i32::from(cx.element(e).life) - 1;
                 cx.element_mut(image).current.location.x =
                     (i32::from(cx.element(image).current.location.x)
                         - i32::from(cosine(i32::from(angle), TRANSITION_SPEED)) * trail)
-                        as COORD;
+                        as i16;
                 cx.element_mut(image).current.location.y =
                     (i32::from(cx.element(image).current.location.y)
                         - i32::from(sine(i32::from(angle), TRANSITION_SPEED)) * trail)
-                        as COORD;
+                        as i16;
                 let (width, height) = logical_dimensions(cx);
                 cx.element_mut(image).current.location.x =
-                    wrap_val(i32::from(cx.element(image).current.location.x), width) as COORD;
+                    wrap_val(i32::from(cx.element(image).current.location.x), width) as i16;
                 cx.element_mut(image).current.location.y =
-                    wrap_val(i32::from(cx.element(image).current.location.y), height) as COORD;
+                    wrap_val(i32::from(cx.element(image).current.location.y), height) as i16;
             }
-            cx.element_mut(image).mass = angle as BYTE;
+            cx.element_mut(image).mass = angle as u8;
             cx.element_mut(image).pre = Some(ElementHook::Native(phoenix_transition));
             cx.element_mut(image).death = Some(ElementHook::Native(spawn_phoenix_trail));
             cx.set_parent(image, Some(ss));
@@ -437,7 +451,7 @@ pub mod engine {
 
     pub fn pkunk_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
-        if cx.element(e).flags & APPEARING as ELEMENT_FLAGS != 0 {
+        if cx.element(e).flags & APPEARING as u16 != 0 {
             let phoenix = if cx.random() & 1 != 0 {
                 cx.alloc_element()
             } else {
@@ -445,8 +459,7 @@ pub mod engine {
             };
             if let Some(phoenix) = phoenix {
                 cx.element_mut(phoenix).player = cx.element(e).player;
-                cx.element_mut(phoenix).flags =
-                    (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as ELEMENT_FLAGS;
+                cx.element_mut(phoenix).flags = (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16;
                 cx.element_mut(phoenix).life = 1;
                 cx.element_mut(phoenix).death = Some(ElementHook::Native(intercept_pkunk_death));
                 cx.set_parent(phoenix, Some(ss));
@@ -472,39 +485,38 @@ pub mod engine {
             } else {
                 cx.process_ship_sound(ss, 1, e);
                 cx.element_mut(e).life = PHOENIX_LIFE;
-                cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as ELEMENT_FLAGS;
+                cx.primitive_style_mut(e).kind = EMPTY_PRIMITIVE as u8;
+                cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
                 let facing = cx.ship_state(ss).facing;
-                let mut angle = OCTANT as COUNT;
-                while angle < FULL_CIRCLE as COUNT {
+                let mut angle = OCTANT;
+                while angle < FULL_CIRCLE {
                     cx.ship_state_mut(ss).facing =
                         normalize_facing(i32::from(facing) + angle_to_facing(i32::from(angle)));
                     phoenix_transition(cx, e);
-                    angle += QUADRANT as COUNT;
+                    angle += QUADRANT;
                 }
                 cx.ship_state_mut(ss).facing = facing;
             }
         }
         if !matches!(cx.callbacks(ss).pre, Selection::Disabled) {
-            cx.ship_state_mut(ss).status &=
-                !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS);
-            if cx.element(e).life == NORMAL_LIFE as COUNT {
+            cx.ship_state_mut(ss).status &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
+            if cx.element(e).life == NORMAL_LIFE as u16 {
                 let frame = cx.equivalent_frame(
                     cx.element_frame_set_first(e, false),
                     cx.element(e).current.image.frame.view(),
                 );
                 cx.set_frame(e, false, frame.clone());
                 cx.set_frame(e, true, frame);
-                cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE as u8;
                 cx.init_intersect(e);
                 let frame = cx.equivalent_frame(
                     cx.element_frame_set_first(e, true),
                     cx.element(e).next.image.frame.view(),
                 );
                 cx.set_intersect_frame(e, frame);
-                cx.element_mut(e).velocity = VELOCITY_DESC::default();
-                cx.element_mut(e).flags &= !((NONSOLID | FINITE_LIFE) as ELEMENT_FLAGS);
-                cx.element_mut(e).flags |= CHANGING as ELEMENT_FLAGS;
+                cx.element_mut(e).velocity = VelocityDesc::default();
+                cx.element_mut(e).flags &= !((NONSOLID | FINITE_LIFE) as u16);
+                cx.element_mut(e).flags |= CHANGING as u16;
                 cx.set_preprocess(ss, Selection::Disabled);
             }
         }
@@ -517,21 +529,21 @@ pub mod engine {
         let e = cx.ship_element(ss);
         if cx.race_stats(ss).characteristics.special_wait != 0 {
             cx.race_stats_mut(ss).characteristics.special_wait -= 1;
-        } else if cx.ship_state(ss).status & SPECIAL as STATUS_FLAGS != 0
+        } else if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.race_stats(ss).ship_info.energy_level < cx.race_stats(ss).ship_info.max_energy
         {
             cx.observe_special(ss, special_hook);
             let mut sound;
             loop {
                 let count = i32::from(cx.ship_sound_count(ss));
-                sound = (2 + i32::from(cx.random() as COUNT) % (count - 2)) as COUNT;
+                sound = (2 + i32::from(cx.random() as u16) % (count - 2)) as u16;
                 if sound != cx.last_pkunk_sound() {
                     break;
                 }
             }
             cx.process_ship_sound(ss, sound, e);
             cx.set_last_pkunk_sound(sound);
-            cx.delta_energy(e, SPECIAL_ENERGY_COST as SIZE);
+            cx.delta_energy(e, SPECIAL_ENERGY_COST as i16);
             cx.race_stats_mut(ss).characteristics.special_wait = SPECIAL_WAIT;
         }
     }

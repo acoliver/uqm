@@ -4,7 +4,7 @@
 //! `units.h` is translated here with the same `int` promotion the C macros
 //! get, so facing math wraps exactly as the original does.
 
-use crate::ships::native::abi::{CIRCLE_SHIFT, FACING_SHIFT, HALF_CIRCLE, QUADRANT};
+use crate::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT, HALF_CIRCLE, QUADRANT};
 
 /// `ANGLE_TO_FACING`: rounds an angle to the nearest of sixteen facings.
 const fn angle_to_facing(angle: i32) -> i32 {
@@ -30,7 +30,15 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
 
 pub mod engine {
     use super::*;
-    use crate::ships::native::abi::*;
+    use crate::engine::battle::ai_constants::{
+        DONT_CHASE, ENEMY_SHIP_INDEX, FIRES_AFT, FIRES_FORE, IGNORE_SIMILAR, SEEKING_SPECIAL,
+        SPECIAL,
+    };
+    use crate::engine::battle::flags::{CHANGING, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL};
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::ONE_SHIFT;
 
     // Core characteristics
     use crate::engine::battle::views::Missile;
@@ -96,8 +104,8 @@ pub mod engine {
         d.resources.icons = Some(c"ship.spathi.icons");
         d.resources.melee_icon = Some(c"ship.spathi.meleeicons");
         d.fleet_strength = 1000 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet_location = POINT { x: 2549, y: 3600 };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.fleet_location = Point { x: 2549, y: 3600 };
+        d.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -146,7 +154,7 @@ pub mod engine {
 
                 cx.element_mut(missile)
                     .velocity
-                    .set_vector(i32::from((DISCRIMINATOR_SPEED) as SIZE), facing);
+                    .set_vector(i32::from(DISCRIMINATOR_SPEED), facing);
             }
 
             cx.element_mut(missile).turn = TRACK_WAIT;
@@ -201,9 +209,9 @@ pub mod engine {
             ));
             // SIZE locals: the int difference is truncated to 16 bits.
             let delta_x = (i32::from(cx.element(target).current.location.x)
-                - i32::from(concerns.subject.current.location.x)) as SIZE;
+                - i32::from(concerns.subject.current.location.x)) as i16;
             let delta_y = (i32::from(cx.element(target).current.location.y)
-                - i32::from(concerns.subject.current.location.y)) as SIZE;
+                - i32::from(concerns.subject.current.location.y)) as i16;
             let direction_facing = normalize_facing(angle_to_facing(i32::from(
                 crate::math::arctan(delta_x, delta_y),
             )));
@@ -255,7 +263,7 @@ pub mod engine {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0
-            && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
+            && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as i16))
         {
             spawn_butt_missile(cx, ship);
 

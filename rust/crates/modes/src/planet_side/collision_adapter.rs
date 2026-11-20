@@ -204,10 +204,7 @@ impl<R, G: SurfaceGenerator, V: WorldVisualPort, P> SurfaceCollisionAdapter<R, G
                 .generated
                 .iter()
                 .filter_map(|entry| {
-                    let entity = surface
-                        .world
-                        .get(entry.entity)
-                        .expect("generated surface entity");
+                    let entity = surface.entity(entry.entity);
                     match entity.kind {
                         SurfaceEntityKind::LiveCreature {
                             kind,
@@ -241,16 +238,7 @@ impl<R, G: SurfaceGenerator, V: WorldVisualPort, P> SurfaceCollisionAdapter<R, G
                     .generated
                     .iter()
                     .find(|entry| entry.entity == *entity_id)
-                    .map(|entry| {
-                        (
-                            entry.node,
-                            surface
-                                .world
-                                .get(*entity_id)
-                                .expect("canned surface entity")
-                                .position,
-                        )
-                    })
+                    .map(|entry| (entry.node, surface.entity(*entity_id).position))
             };
             if let Some((node, position)) = pending {
                 self.generator.can_node(node, position, *value)?;

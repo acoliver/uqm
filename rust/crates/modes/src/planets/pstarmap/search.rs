@@ -333,7 +333,7 @@ pub(super) fn run(
         ONE_SECOND / 2,
         ONE_SECOND / 12,
         false,
-        GetTimeCounter(),
+        get_time_counter(),
     );
     let success = edit_text(cx, io, input, buffer.len(), &mut buffer, 0, &mut search);
     let text = CStr::from_bytes_until_nul(&buffer)

@@ -3141,10 +3141,10 @@ fn validate_linked_build_cargo_messages(
         })
         .filter_map(|message| message["package_id"].as_str().map(str::to_string))
         .collect();
-    if package_ids.len() != 1 {
+    let mut package_ids = package_ids.into_iter();
+    let (Some(package_id), None) = (package_ids.next(), package_ids.next()) else {
         return Err("linked-build Cargo capture has no unique UQM package identity".to_string());
-    }
-    let package_id = package_ids.into_iter().next().expect("length checked");
+    };
     let build_package = package_id.replace("#uqm@", "/crates/engine#uqm-engine@");
     let mut executables = std::collections::BTreeSet::new();
     let mut rust_archives = std::collections::BTreeSet::new();

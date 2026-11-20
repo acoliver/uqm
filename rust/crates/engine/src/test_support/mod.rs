@@ -7,11 +7,11 @@ pub mod native_probe;
 pub mod native_process;
 pub mod native_session;
 
-use crate::battle::access::schema::{CLOCK_STATE, GAME_STATE};
-use crate::{battle::record::VELOCITY_DESC, graphics::geometry::Point};
+use crate::battle::access::schema::{ClockRecord, GameRecord};
+use crate::{battle::record::VelocityDesc, graphics::geometry::Point};
 
 /// An all-zero campaign state record, as the C initializer produced one.
-impl Default for GAME_STATE {
+impl Default for GameRecord {
     fn default() -> Self {
         Self {
             glob_flags: 0,
@@ -19,7 +19,7 @@ impl Default for GAME_STATE {
             fuel_cost: 0,
             module_cost: [0; 20],
             element_worth: [0; 8],
-            game_clock: CLOCK_STATE {
+            game_clock: ClockRecord {
                 day_index: 0,
                 month_index: 0,
                 year_index: 0,
@@ -32,7 +32,7 @@ impl Default for GAME_STATE {
             ship_facing: 0,
             ip_planet: 0,
             in_orbit: 0,
-            velocity: VELOCITY_DESC::default(),
+            velocity: VelocityDesc::default(),
             battle_group_ref: 0,
         }
     }

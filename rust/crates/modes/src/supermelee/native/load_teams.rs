@@ -34,10 +34,15 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 
 pub(crate) mod live {
     use super::page;
-    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::input_port::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_PAGE_DOWN, KEY_MENU_PAGE_UP, KEY_MENU_SELECT,
+        KEY_MENU_UP,
+    };
+    use crate::engine::time::counter_abi::get_time_counter;
+    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+    use crate::graphics::geometry::{Extent, Point, Rect};
     use crate::graphics::{context::ContextLease, drawable::ContextFrame, font::FontLease};
     use crate::ships::master_native::ShipChoice;
-    use crate::ships::native::abi::*;
     use crate::supermelee::native::menu::live::changes::local_change_team;
     use crate::supermelee::native::menu::live::drawing::repair_frame;
     use crate::supermelee::session::MeleeSession;
@@ -76,7 +81,7 @@ pub(crate) mod live {
                 .sum::<u16>()
                 .to_string(),
         )
-        .unwrap();
+        .unwrap_or_else(|_| panic!("a decimal number has no NUL byte"));
         context.draw_text(
             font,
             &value,
@@ -178,7 +183,7 @@ pub(crate) mod live {
         });
     }
     fn flash(state: &mut MeleeSession) {
-        let now = uqm_engine::time::counter_abi::GetTimeCounter();
+        let now = uqm_engine::time::counter_abi::get_time_counter();
         if now >= state.load.next_flash {
             state.load.next_flash = now.wrapping_add(840 / 9);
             state.load.highlighted = !state.load.highlighted;
@@ -191,9 +196,9 @@ pub(crate) mod live {
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
     ) -> u32 {
-        let time = GetTimeCounter();
+        let time = get_time_counter();
         input.set_paused(false);
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT != 0 {
             return 0;
         }
         input.set_menu_sounds(1 | 2 | 128 | 256, 16);
@@ -213,15 +218,15 @@ pub(crate) mod live {
                 local_change_team(cx, state, state.side as usize, &team);
             }
             state.phase = crate::supermelee::session::MenuPhase::Menu;
-            state.last_input_time = GetTimeCounter();
+            state.last_input_time = get_time_counter();
             {
                 let bounds = state.menu_frames().frame_rect(28);
-                let rect = RECT {
-                    corner: POINT {
+                let rect = Rect {
+                    corner: Point {
                         x: bounds.corner.x,
                         y: bounds.corner.y,
                     },
-                    extent: EXTENT {
+                    extent: Extent {
                         width: bounds.extent.width,
                         height: bounds.extent.height,
                     },
@@ -279,7 +284,8 @@ pub(crate) mod live {
             .to_vec();
         filename.extend(b".mle");
         filename.truncate(254);
-        let filename = CString::new(filename).unwrap();
+        let filename = CString::new(filename)
+            .unwrap_or_else(|_| panic!("a C string name plus an extension has no NUL byte"));
         let ok = screen.with_selected(|| {
             let saved = crate::ui::save_problem::save_confirmation(cx.kernel, screen, true)
                 .unwrap_or_else(|| panic!("save confirmation background"));

@@ -6,28 +6,28 @@ fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
-fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Exit, r as i32));
 }
-fn home(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn home(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Home, r as i32));
 }
-fn human(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn human(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Human, r as i32));
 }
-fn alien(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn alien(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Alien, r as i32));
 }
-fn probe(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn probe(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Probe, r as i32));
 }
-fn function(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn function(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Function, r as i32));
 }
-fn bug(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn bug(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Bug, r as i32));
 }
-fn fix(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+fn fix(comm: &mut Comm, cx: &mut Cx<'_>, r: u16) {
     run(comm, cx, |s| s.handle(Handler::Fix, r as i32));
 }
 pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {

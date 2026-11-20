@@ -35,16 +35,16 @@ impl std::ops::DerefMut for Element {
 }
 impl Element {
     pub fn is_player_ship(&self) -> bool {
-        self.flags & crate::ships::native::abi::PLAYER_SHIP as u16 != 0
+        self.flags & crate::engine::battle::flags::PLAYER_SHIP as u16 != 0
     }
     pub fn has_finite_life(&self) -> bool {
-        self.flags & crate::ships::native::abi::FINITE_LIFE as u16 != 0
+        self.flags & crate::engine::battle::flags::FINITE_LIFE as u16 != 0
     }
     pub fn set_appearing(&mut self) {
-        self.flags |= crate::ships::native::abi::APPEARING as u16;
+        self.flags |= crate::engine::battle::flags::APPEARING as u16;
     }
     pub fn clear_appearing(&mut self) {
-        self.flags &= !(crate::ships::native::abi::APPEARING as u16);
+        self.flags &= !(crate::engine::battle::flags::APPEARING as u16);
     }
 }
 #[derive(Clone)]
@@ -67,7 +67,7 @@ pub struct Ship {
     clear_element: bool,
     pub info: Option<Info>,
     pub data: Option<ShipFrames>,
-    pub characteristics: Option<CHARACTERISTIC_STUFF>,
+    pub characteristics: Option<CharacteristicRecord>,
     pub phoenix: Option<Phoenix>,
 }
 impl Ship {
@@ -109,7 +109,7 @@ impl Ship {
     pub fn for_test(s: &ShipRecord, d: &RaceDescriptor, element: ElementId) -> Self {
         Self {
             state: crate::engine::battle::access::observe_ship_record(s),
-            species: s.SpeciesID,
+            species: s.species_id,
             index: s.index,
             element: Some(element),
             clear_element: false,
@@ -164,9 +164,9 @@ impl FixtureOps for Cx<'_> {
         let s = self.ship(id);
         let mut view = Ship {
             state: self.ship_state(id),
-            species: s.SpeciesID,
+            species: s.species_id,
             index: s.index,
-            element: s.hShip,
+            element: s.ship_element,
             clear_element: false,
             info: None,
             data: None,

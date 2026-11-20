@@ -1,4 +1,24 @@
 use uqm_rust::battle::ContextOps;
+use uqm_rust::engine::battle::flags::APPEARING;
+use uqm_rust::engine::battle::flags::DEFY_PHYSICS;
+use uqm_rust::engine::battle::flags::DISAPPEARING;
+use uqm_rust::engine::battle::flags::FINITE_LIFE;
+use uqm_rust::engine::battle::flags::IN_LAST_BATTLE;
+use uqm_rust::engine::battle::flags::NONSOLID;
+use uqm_rust::engine::battle::flags::NPC_PLAYER_NUM;
+use uqm_rust::engine::battle::flags::PLAYER_SHIP;
+use uqm_rust::engine::battle::flags::RPG_PLAYER_NUM;
+use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_rust::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+use uqm_rust::engine::battle::flags::STAMPFILL_PRIMITIVE;
+use uqm_rust::engine::battle::STAMP_PRIMITIVE;
+use uqm_rust::engine::species::species_id::SPECIES_ID_CHENJESU_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_SA_MATRA_ID;
+use uqm_rust::engine::species::species_id::SPECIES_ID_SIS_SHIP_ID;
+use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+use uqm_rust::engine::world::activity::activity_kinds::WON_LAST_BATTLE;
+use uqm_rust::graphics::geometry::Point;
 #[test]
 fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
     battle_context::run(|_| {
@@ -27,15 +47,13 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
                 let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
                 uqm_rust::battle::process_native::init_display_list(cx, scaled);
             });
-            crate::battle_context::with(|cx| cx.world.set_activity(WON_LAST_BATTLE as u16));
+            crate::battle_context::with(|cx| cx.world.set_activity(WON_LAST_BATTLE));
             assert_eq!(
                 crate::battle_context::with(|cx| observe(cx)),
                 (expected, None)
             );
             // A non-boss battle must clear the result too, before any ship spawns.
-            crate::battle_context::with(|cx| {
-                cx.world.set_activity((IN_ENCOUNTER | IN_BATTLE) as u16)
-            });
+            crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER | IN_BATTLE));
             crate::battle_context::with(|cx| cx.b.initialize(cx.kernel));
             crate::battle_context::with(|cx| assert!(cx.terminal_outcome().is_none()));
             crate::battle_context::with(|cx| cx.world.set_activity(IN_LAST_BATTLE as u16));
@@ -64,17 +82,17 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             let mut player = Ship::with_frames(
                 &battle,
                 SPECIES_ID_CHENJESU_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [16, 10, 6],
                 [4, 4],
             );
-            player.ship_mut().SpeciesID = SPECIES_ID_SIS_SHIP_ID;
+            player.ship_mut().species_id = SPECIES_ID_SIS_SHIP_ID;
             player.ship_mut().ship_facing = 19;
             crate::battle_context::with(|cx| {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1)
             });
             crate::battle_context::with(|cx| {
-                cx.world.set_activity((IN_LAST_BATTLE | IN_BATTLE) as u16)
+                cx.world.set_activity(IN_LAST_BATTLE as u16 | IN_BATTLE)
             });
             let (events, snapshot) = crate::battle_context::with(|cx| observe(cx));
             let snapshot = snapshot.unwrap_or_else(|| panic!("live final battle"));
@@ -139,7 +157,7 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             assert_eq!(snapshot.remaining, 0);
             assert!(snapshot.generators.is_empty());
             assert!(snapshot.gate_open);
-            let mut pa = POINT { x: 0, y: 0 };
+            let mut pa = Point { x: 0, y: 0 };
             let mut pb = pa;
             call_collision(
                 "ships::races::samatra::gate_collision",
@@ -180,7 +198,7 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
             let mut other = Ship::with_frames(
                 &battle,
                 SPECIES_ID_SA_MATRA_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [32; 3],
                 [4, 4],
             );
@@ -205,11 +223,11 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
                 })
                 .unwrap_or_else(|| panic!("boss gate"));
             call_element("ships::races::samatra::gate_preprocess", id(gate.cast()));
-            crate::battle_context::with(|cx| cx.world.set_activity(IN_BATTLE as u16));
+            crate::battle_context::with(|cx| cx.world.set_activity(IN_BATTLE));
             crate::battle_context::with(|cx| {
                 set_game_state(cx.world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1)
             });
-            let mut pa = POINT { x: 0, y: 0 };
+            let mut pa = Point { x: 0, y: 0 };
             let mut pb = pa;
             call_collision(
                 "ships::races::samatra::gate_collision",
@@ -244,7 +262,7 @@ fn identity_does_not_depend_on_scrolling_or_survivor_order() {
             for (index, generator) in generators.into_iter().enumerate().rev() {
                 let generator = generator.unwrap_or_else(|| panic!("eight allocated generators"));
                 crate::battle_context::with(|cx| {
-                    cx.element_mut(generator).current.location = POINT { x: 17, y: 31 };
+                    cx.element_mut(generator).current.location = Point { x: 17, y: 31 };
                     uqm_rust::battle::sounds::engine::unlink(cx, generator);
                     cx.put(generator);
                 });
@@ -271,7 +289,7 @@ fn sentinel_tracking_preserves_absent_owner_element() {
                 .find(|h| (*battle::element(*h)).hits == 10)
                 .unwrap_or_else(|| panic!("sentinel"));
             (*battle::element(sentinel)).turn = 0;
-            ship.ship_mut().hShip = None;
+            ship.ship_mut().ship_element = None;
             crate::battle_context::with(|cx| {
                 assert_eq!(cx.optional_ship_element(ship.ship_id), None);
             });
@@ -299,14 +317,13 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::*;
-use uqm_rust::ships::native::abi::*;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 unsafe fn boss(battle: &Battle) -> Ship<'_> {
     let mut ship = Ship::with_frames(
         battle,
         SPECIES_ID_SA_MATRA_ID,
-        NPC_PLAYER_NUM as SIZE,
+        NPC_PLAYER_NUM as i16,
         [32; 3],
         [4, 4],
     );
@@ -366,7 +383,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
             );
             for (i, h) in generators.iter().enumerate() {
                 hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
-                assert_eq!((*prim(gate)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                assert_eq!((*prim(gate)).kind, STAMP_PRIMITIVE as u8);
                 let g = battle::element(*h);
                 hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
@@ -383,10 +400,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
             hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
             assert!((*gate).preprocess_func.is_none());
             assert_eq!((*gate).state_flags & FINITE_LIFE as u16, 0);
-            assert_eq!(
-                (*prim(gate)).kind,
-                gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
-            );
+            assert_eq!((*prim(gate)).kind, STAMPFILL_PRIMITIVE as u8);
             assert_eq!((*gate).life, 2);
         }
     })
@@ -407,11 +421,11 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
             let player = Ship::with_frames(
                 &_battle,
                 SPECIES_ID_SA_MATRA_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [32; 3],
                 [4, 4],
             );
-            let mut point = POINT { x: 0, y: 0 };
+            let mut point = Point { x: 0, y: 0 };
             let mut other_point = point;
             let collide = (*gate).collision_func.unwrap();
             for generators in [8, 1, 0] {
@@ -422,9 +436,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                 for bomb in [0, 1] {
                     for is_ship in [false, true] {
                         for owner in [RPG_PLAYER_NUM, NPC_PLAYER_NUM] {
-                            crate::battle_context::with(|cx| {
-                                cx.world.set_activity(IN_BATTLE as u16)
-                            });
+                            crate::battle_context::with(|cx| cx.world.set_activity(IN_BATTLE));
                             crate::battle_context::with(|cx| {
                                 set_game_state(
                                     cx.world,
@@ -432,7 +444,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                                     bomb,
                                 )
                             });
-                            (*player.ptr()).playerNr = owner as SIZE;
+                            (*player.ptr()).player_nr = owner as i16;
                             (*player.ptr()).state_flags = if is_ship {
                                 PLAYER_SHIP as u16
                             } else {
@@ -447,8 +459,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                                 hooks::CollisionCall::Hook,
                             );
                             assert_eq!(
-                                crate::battle_context::with(|cx| cx.world.activity())
-                                    & IN_BATTLE as u16
+                                crate::battle_context::with(|cx| cx.world.activity()) & IN_BATTLE
                                     == 0,
                                 generators == 0 && bomb == 1 && is_ship && owner == RPG_PLAYER_NUM
                             );
@@ -493,7 +504,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             assert_eq!(queued().len(), 14);
             assert_ne!((*comet).state_flags & NONSOLID as u16, 0);
             crate::battle_context::with(|cx| {
-                cx.world.set_activity((IN_LAST_BATTLE | IN_BATTLE) as u16)
+                cx.world.set_activity(IN_LAST_BATTLE as u16 | IN_BATTLE)
             });
             let hazards =
                 crate::battle_context::with(|cx| uqm_rust::automation::samatra::observe(cx))
@@ -538,7 +549,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             let mut player = Ship::with_frames(
                 &_battle,
                 SPECIES_ID_SA_MATRA_ID,
-                RPG_PLAYER_NUM as SIZE,
+                RPG_PLAYER_NUM as i16,
                 [32; 3],
                 [4, 4],
             );
@@ -548,7 +559,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             player.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             (*player.ptr()).velocity.set_components(5000, 0);
             uqm_rust::battle::velocity::set_velocity_vector(&mut (*sentinel).velocity, 32, 4);
-            let mut p = POINT { x: 0, y: 0 };
+            let mut p = Point { x: 0, y: 0 };
             let mut q = p;
             hooks::invoke_collision_pointer(
                 (*sentinel).collision_func.unwrap(),

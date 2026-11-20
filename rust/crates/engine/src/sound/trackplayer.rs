@@ -313,13 +313,12 @@ pub fn splice_track(
     let mut state = TRACK_STATE.lock();
 
     // No text → early return
-    if track_text.is_none() {
+    let Some(text) = track_text else {
         return Ok(());
-    }
-    let text = track_text.unwrap();
+    };
 
     // Subtitle-only append (no track_name)
-    if track_name.is_none() {
+    let Some(track_name) = track_name else {
         if state.track_count == 0 {
             return Ok(());
         }
@@ -350,9 +349,7 @@ pub fn splice_track(
             }
         }
         return Ok(());
-    }
-
-    let _name = track_name.unwrap();
+    };
 
     // First track: create sound_sample (no decoder yet — chunks own decoders)
     if state.track_count == 0 {
@@ -451,7 +448,7 @@ pub fn splice_track(
     if !appending_without_page_break {
         state.track_count += 1;
     }
-    state.last_track_name = _name.to_string();
+    state.last_track_name = track_name.to_string();
     let sample_arc = state.sound_sample.clone();
     drop(state);
     if let Some(sample_arc) = sample_arc {
@@ -497,12 +494,17 @@ pub fn splice_multi_track(decoders: Vec<Box<dyn Decoder>>, text: Option<&str>) -
         append_chunk(&mut state, chunk);
     }
 
-    let last_sub = unsafe { state.last_sub.as_mut() }.expect("number speech follows a subtitle");
-    last_sub.text.as_mut().unwrap().push_str(text);
+    // SAFETY: `last_sub` points into the chunk list owned by `state`, which stays locked.
+    let Some(last_sub) = (unsafe { state.last_sub.as_mut() }) else {
+        return Err(AudioError::InvalidSample);
+    };
+    last_sub.text.get_or_insert_with(String::new).push_str(text);
     // An earlier subtitle lookup may have cached this string already.
     last_sub.text_cstr = None;
     state.no_page_break = true;
-    let sample_arc = Arc::clone(state.sound_sample.as_ref().unwrap());
+    let Some(sample_arc) = state.sound_sample.clone() else {
+        return Err(AudioError::InvalidSample);
+    };
     drop(state);
     let mut sample = sample_arc.lock();
     for length in added_lengths {
@@ -520,10 +522,10 @@ pub fn play_track(scope: bool) -> AudioResult<()> {
     // Phase 1: Extract state under TRACK_STATE lock
     let sample_arc = {
         let mut state = TRACK_STATE.lock();
-        if state.sound_sample.is_none() {
+        let Some(sample_arc) = state.sound_sample.clone() else {
             eprintln!("[DBG] play_track: sound_sample is None, returning early");
             return Ok(());
-        }
+        };
         eprintln!(
             "[DBG] play_track: sound_sample present, track_count={}, chunks_head={}",
             state.track_count,
@@ -538,7 +540,7 @@ pub fn play_track(scope: bool) -> AudioResult<()> {
             .map(|c| NonNull::from(c.as_ref()));
         state.cur_sub_chunk = None;
 
-        Arc::clone(state.sound_sample.as_ref().unwrap())
+        sample_arc
         // TRACK_STATE lock dropped here
     };
 
@@ -673,9 +675,9 @@ pub fn fast_forward_smooth() -> AudioResult<()> {
 pub fn fast_reverse_page() -> AudioResult<()> {
     let (sample_arc, offset_ticks) = {
         let mut state = TRACK_STATE.lock();
-        if state.sound_sample.is_none() {
+        let Some(sample_arc) = state.sound_sample.clone() else {
             return Ok(());
-        }
+        };
 
         let prev = find_prev_page_inner(&state.chunks_head, state.cur_sub_chunk);
         let Some(page) = prev else {
@@ -687,10 +689,7 @@ pub fn fast_reverse_page() -> AudioResult<()> {
 
         state.cur_chunk = Some(page);
         state.cur_sub_chunk = Some(page);
-        (
-            Arc::clone(state.sound_sample.as_ref().unwrap()),
-            offset_ticks,
-        )
+        (sample_arc, offset_ticks)
     };
 
     stream::play_stream_with_offset_override(
@@ -709,9 +708,9 @@ pub fn fast_forward_page() -> AudioResult<()> {
     // If cur_sub_chunk is absent, C behavior is to fall through to end-of-track seek.
     let page_target = {
         let mut state = TRACK_STATE.lock();
-        if state.sound_sample.is_none() {
+        let Some(sample_arc) = state.sound_sample.clone() else {
             return Ok(());
-        }
+        };
 
         let next = find_next_page_inner(state.cur_sub_chunk);
         if let Some(page) = next {
@@ -719,10 +718,7 @@ pub fn fast_forward_page() -> AudioResult<()> {
             let offset_ticks = ms_to_ticks(chunk.start_time as u32) as i32;
             state.cur_chunk = Some(page);
             state.cur_sub_chunk = Some(page);
-            Some((
-                Arc::clone(state.sound_sample.as_ref().unwrap()),
-                offset_ticks,
-            ))
+            Some((sample_arc, offset_ticks))
         } else {
             None
         }
@@ -920,15 +916,13 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
         // Keep stream position/timebase coherent with C get_current_track_pos().
         source.start_time = get_time_counter() as i32 - target.clamped_ticks as i32;
 
-        if target.chunk_ptr.is_none() {
+        let Some(chunk_ptr) = target.chunk_ptr else {
             // Beyond end of all tracks.
             state.cur_chunk = None;
             state.cur_sub_chunk = None;
             source.stream_should_be_playing = false;
             return false;
-        }
-
-        let chunk_ptr = target.chunk_ptr.unwrap();
+        };
         let chunk = unsafe { chunk_ptr.as_ref() };
         let seek_ms = target.seek_time_ms;
 
@@ -969,7 +963,7 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
         state.cur_chunk = Some(chunk_ptr);
         true
     })
-    .expect("speech source exists");
+    .ok_or(AudioError::InvalidSource(SPEECH_SOURCE))?;
 
     if !has_chunk {
         let _ = stream::stop_stream(SPEECH_SOURCE);

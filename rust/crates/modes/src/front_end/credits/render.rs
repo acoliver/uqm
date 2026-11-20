@@ -17,7 +17,7 @@ use std::{
     ffi::CString,
     rc::Rc,
 };
-use uqm_engine::time::counter_abi::GetTimeCounter;
+use uqm_engine::time::counter_abi::get_time_counter;
 
 const TRANS_COLOR: Color = crate::ui::rgb15(0, 0, 31);
 const TEXT_COLOR: Color = crate::ui::rgb15(31, 31, 31);
@@ -358,11 +358,11 @@ impl Session {
         window: &Cell<CRect>,
         checkpoint: &mut dyn FnMut(CheckpointView<'_>),
     ) {
-        if GetTimeCounter() < self.next_time {
+        if get_time_counter() < self.next_time {
             return;
         }
         let (direction, step, delay) = scroll_step(self.controls.rate);
-        self.next_time = GetTimeCounter().wrapping_add(delay);
+        self.next_time = get_time_counter().wrapping_add(delay);
         self.draw
             .lease()
             .draw_stamp(&self.frame.lease().context_frame(0), Point { x: 0, y: 0 });

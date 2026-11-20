@@ -371,7 +371,7 @@ mod zoom_tests {
         let expected = request.clone();
         menu.configure_fleets(
             &mut cx.kernel.player_control,
-            cx.world.activity() & super::IN_BATTLE as u16 != 0,
+            cx.world.activity() & super::IN_BATTLE != 0,
             request.ships,
             request.cyborg,
         )
@@ -413,7 +413,7 @@ mod zoom_tests {
         assert!(menu
             .configure_fleets(
                 &mut cx.kernel.player_control,
-                cx.world.activity() & super::IN_BATTLE as u16 != 0,
+                cx.world.activity() & super::IN_BATTLE != 0,
                 request.ships,
                 request.cyborg
             )

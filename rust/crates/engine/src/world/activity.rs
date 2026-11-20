@@ -253,6 +253,16 @@ pub mod activity_flags {
         | CHECK_ABORT;
 }
 
+/// `ActivityKind` values as the activity word that `ActivityState` stores.
+pub mod activity_kinds {
+    use super::ActivityKind;
+
+    pub const SUPER_MELEE: u16 = ActivityKind::SuperMelee as u16;
+    pub const IN_ENCOUNTER: u16 = ActivityKind::InEncounter as u16;
+    pub const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
+    pub const WON_LAST_BATTLE: u16 = ActivityKind::WonLastBattle as u16;
+}
+
 /// Re-exports the activity flag constants at the module root for convenience.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03

@@ -216,7 +216,7 @@ pub(crate) mod live {
     use super::{zoom_scale, SphereState};
     use crate::comm::locdata::{CColor, CRect};
     use crate::engine::graphics::context::ContextLease;
-    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::time::counter_abi::get_time_counter;
     use crate::graphics::{geometry::Color, geometry::DrawMode, geometry::Point, menu as draw};
     use crate::planets::plangen::live::render_sphere;
     use crate::planets::plangen::live::set_shield_throb_effect;
@@ -347,7 +347,7 @@ pub(crate) mod live {
         };
         let mut repair = frame_rect;
         for i in 0..=frame_count {
-            let next_time = GetTimeCounter().wrapping_add(840 / 24);
+            let next_time = get_time_counter().wrapping_add(840 / 24);
             let scale = zoom_scale(i, frame_count);
             let x = width / 2
                 + (f64::from(dx) * (1.0 - scale) * f64::from(width * 6 / 10) + 0.5) as i32;
@@ -376,7 +376,7 @@ pub(crate) mod live {
         keep_rate: bool,
     ) {
         if !animation.rotation_due(
-            GetTimeCounter(),
+            get_time_counter(),
             keep_rate,
             planet.screen_dimensions().0 - 78,
         ) {

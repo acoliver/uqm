@@ -1,7 +1,23 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
 pub mod engine {
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE,
+        MAX_ENERGY_SIZE, MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE,
+        POINT_DEFENSE, RIGHT, SEEKING_SPECIAL, SLOW_SHIP, SPECIAL,
+    };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID,
+        PLAYER_SHIP, PRE_PROCESS, SHIP_BEYOND_MAX_SPEED,
+    };
+    use crate::engine::battle::STAMP_PRIMITIVE;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::VELOCITY_SHIFT;
     use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
+        angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
         wrap_delta,
     };
     const fn color(r: u8, g: u8, b: u8) -> Color {
@@ -24,7 +40,7 @@ pub mod engine {
         d.resources.icons = Some(c"ship.urquan.icons");
         d.resources.melee_icon = Some(c"ship.urquan.meleeicons");
         d.fleet_strength = (2666 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet_location = POINT { x: 5750, y: 6000 };
+        d.fleet_location = Point { x: 5750, y: 6000 };
         d.characteristics.max_thrust = 30;
         d.characteristics.thrust_increment = 6;
         d.characteristics.energy_regeneration = 1;
@@ -92,10 +108,10 @@ pub mod engine {
     }
     pub fn fighter_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
-        let face = COUNT::from(cx.element(e).thrust);
+        let face = u16::from(cx.element(e).thrust);
         let laser = crate::engine::battle::views::Laser {
             origin: cx.element(e).next.location,
-            end: POINT {
+            end: Point {
                 x: cosine(facing_to_angle(i32::from(face)), 44 << ONE_SHIFT),
                 y: sine(facing_to_angle(i32::from(face)), 44 << ONE_SHIFT),
             },
@@ -122,8 +138,8 @@ pub mod engine {
             .wrapping_add(1);
         if 400 - i32::from(cx.element(e).life) > 6 && cx.element(e).flags & CHANGING as u16 == 0 {
             let mut enroute = true;
-            let mut dx = cx.race_stats(ss).ship_info.crew_level as SIZE;
-            let mut dy = cx.element(e).life as SIZE;
+            let mut dx = cx.race_stats(ss).ship_info.crew_level as i16;
+            let mut dy = cx.element(e).life as i16;
             let orig = cx.frame_number(cx.element(e).current.image.frame.view());
             let mut face = orig;
             if (dy & 1 != 0 || cx.target(e).is_some() || cx.track_ship(e, &mut face) >= 0)
@@ -171,7 +187,7 @@ pub mod engine {
                 {
                     cx.element_mut(e).thrust =
                         normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))))
-                            as BYTE;
+                            as u8;
                     cx.element_mut(e).post = Some(ElementHook::Native(fighter_postprocess));
                 }
                 if enroute {
@@ -201,9 +217,9 @@ pub mod engine {
     pub fn fighter_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         let ss = cx.owner(a);
         if u32::from(cx.element(b).mass) > MAX_SHIP_MASS * 10 {
@@ -220,13 +236,13 @@ pub mod engine {
                         (pb).x.wrapping_sub((pa).x),
                         (pb).y.wrapping_sub((pa).y),
                     )) - i32::from(travel),
-                ) as SIZE;
+                ) as i16;
                 if (delta == 0 && cx.element(fighter).turn & LEFT as u8 != 0)
                     || (delta != 0 && i32::from(delta) <= HALF_CIRCLE as i32)
                 {
-                    travel = travel.wrapping_sub(QUADRANT as COUNT);
+                    travel = travel.wrapping_sub(QUADRANT);
                 } else {
-                    travel = travel.wrapping_add(QUADRANT as COUNT);
+                    travel = travel.wrapping_add(QUADRANT);
                 }
                 travel = normalize_facing(angle_to_facing(normalize_angle(i32::from(travel))));
                 cx.set_frame(
@@ -264,7 +280,7 @@ pub mod engine {
     pub fn spawn_fighters(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let face =
-            (i32::from(cx.ship_state(ss).facing) + angle_to_facing(HALF_CIRCLE as i32)) as COUNT;
+            (i32::from(cx.ship_state(ss).facing) + angle_to_facing(HALF_CIRCLE as i32)) as u16;
         let dx = cosine(facing_to_angle(i32::from(face)), 14 << ONE_SHIFT);
         let dy = sine(facing_to_angle(i32::from(face)), 14 << ONE_SHIFT);
         let mut i = if cx.element(e).hits > 2 { 2 } else { 1 };
@@ -282,7 +298,7 @@ pub mod engine {
             cx.element_mut(fighter).flags =
                 (APPEARING | FINITE_LIFE | CREW_OBJECT | IGNORE_SIMILAR) as u16;
             cx.element_mut(fighter).life = 400;
-            cx.primitive_style_mut(fighter).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            cx.primitive_style_mut(fighter).kind = STAMP_PRIMITIVE as u8;
             cx.element_mut(fighter).pre = Some(ElementHook::Native(fighter_preprocess));
             cx.element_mut(fighter).post = None;
             cx.element_mut(fighter).collide = Some(CollisionHook::Native(fighter_collision));
@@ -290,25 +306,25 @@ pub mod engine {
             cx.element_mut(fighter).current.location = cx.element(e).next.location;
             let fighter_face;
             if i == 1 {
-                cx.element_mut(fighter).turn = LEFT as BYTE;
+                cx.element_mut(fighter).turn = LEFT as u8;
                 fighter_face = normalize_facing(i32::from(face) + 2);
                 cx.element_mut(fighter).current.location.x =
                     (i32::from(cx.element(fighter).current.location.x) + i32::from(dx)
-                        - i32::from(dy)) as COORD;
+                        - i32::from(dy)) as i16;
                 cx.element_mut(fighter).current.location.y =
                     (i32::from(cx.element(fighter).current.location.y)
                         + i32::from(dy)
-                        + i32::from(dx)) as COORD;
+                        + i32::from(dx)) as i16;
             } else {
-                cx.element_mut(fighter).turn = RIGHT as BYTE;
+                cx.element_mut(fighter).turn = RIGHT as u8;
                 fighter_face = normalize_facing(i32::from(face) - 2);
                 cx.element_mut(fighter).current.location.x =
                     (i32::from(cx.element(fighter).current.location.x)
                         + i32::from(dx)
-                        + i32::from(dy)) as COORD;
+                        + i32::from(dy)) as i16;
                 cx.element_mut(fighter).current.location.y =
                     (i32::from(cx.element(fighter).current.location.y) + i32::from(dy)
-                        - i32::from(dx)) as COORD;
+                        - i32::from(dx)) as i16;
             }
             let sx = cosine(
                 facing_to_angle(i32::from(fighter_face)),
@@ -322,7 +338,7 @@ pub mod engine {
                 .velocity
                 .set_components(i32::from(sx), i32::from(sy));
             let position = cx.element(fighter).current.location;
-            cx.element_mut(fighter).current.location = POINT {
+            cx.element_mut(fighter).current.location = Point {
                 x: position.x.wrapping_sub(sx >> VELOCITY_SHIFT),
                 y: position.y.wrapping_sub(sy >> VELOCITY_SHIFT),
             };
@@ -389,7 +405,7 @@ pub mod engine {
                     .race_stats(other.unwrap_or_else(|| panic!("enemy ship")))
                     .intelligence
                     .maneuverability
-                    <= SLOW_SHIP as COUNT
+                    <= SLOW_SHIP as u16
                     && cx
                         .ship_state(other.unwrap_or_else(|| panic!("enemy ship")))
                         .status

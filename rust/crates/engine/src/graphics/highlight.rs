@@ -10,7 +10,7 @@ use super::flash_math;
 use super::geometry::{Color, DrawMode, Point, Rect};
 use super::state::{self, Graphics};
 use crate::callback::AlarmId;
-use crate::time::counter_abi::{GetTimeCounter, ONE_SECOND};
+use crate::time::counter_abi::{get_time_counter, ONE_SECOND};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::{Rc, Weak};
@@ -196,7 +196,7 @@ impl Flash {
             Phase::Off => (0, 1),
             Phase::On => (1, 1),
             phase => {
-                let now = GetTimeCounter();
+                let now = get_time_counter();
                 let d = if phase == Phase::FadeIn {
                     self.fade_in_time as i32
                 } else {
@@ -241,7 +241,7 @@ impl Flash {
     }
 
     fn set_state(&mut self, phase: Phase, spent: u32) {
-        let now = GetTimeCounter();
+        let now = get_time_counter();
         self.phase = phase;
         self.fix_state();
         self.last_state_time = now.wrapping_sub(spent);
@@ -269,7 +269,7 @@ impl Flash {
         if !self.started || self.paused {
             return;
         }
-        let now = GetTimeCounter();
+        let now = get_time_counter();
         let duration = self.duration(self.phase);
         match self.phase {
             Phase::FadeIn | Phase::FadeOut => {

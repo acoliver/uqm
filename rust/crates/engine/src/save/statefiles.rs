@@ -1,6 +1,6 @@
 //! Map the live campaign's story offsets and owned state files to save sections.
 
-use super::super::battle::schema::GAME_STATE as CGameState;
+use super::super::battle::schema::GameRecord as CGameState;
 use super::super::world::state_file::StateFileManager;
 use super::super::world::story::GameStateOwnerError;
 use super::super::world::story::{get_state_32_raw, StoryState, NUM_GAME_STATE_BITS};
@@ -62,12 +62,7 @@ pub fn capture_state_files(
     files: &StateFileManager,
 ) -> Result<StateFileSections, RuntimeError> {
     let state = story.as_ref().ok_or(GameStateOwnerError::NotInitialized)?;
-    let contents = |index: usize| {
-        files
-            .get_file(index)
-            .expect("the three state files always exist")
-            .contents()
-    };
+    let contents = |index: usize| files.contents(index);
     let mut sections = capture_from_images(
         contents(STARINFO_FILE),
         contents(RANDGRPINFO_FILE),
@@ -81,11 +76,7 @@ pub fn capture_state_files(
 
 /// Install `plan`. Both owners are held by the caller; nothing here fails.
 fn commit(plan: &RestorePlan, state: &mut StoryState, files: &mut StateFileManager) {
-    let mut install = |index: usize, image: &[u8]| {
-        files
-            .replace_contents(index, image)
-            .expect("the three state files always exist");
-    };
+    let mut install = |index: usize, image: &[u8]| files.replace(index, image);
     if let Some(star_info) = &plan.star_info {
         install(STARINFO_FILE, star_info);
     }
@@ -125,13 +116,11 @@ pub fn restore_state_files(
 pub fn init_group_info(world: &mut World, first_time: bool) -> Result<(), RuntimeError> {
     world
         .files
-        .replace_contents(RANDGRPINFO_FILE, &initial_random_image())
-        .expect("the three state files always exist");
+        .replace(RANDGRPINFO_FILE, &initial_random_image());
     if first_time {
         world
             .files
-            .replace_contents(DEFGRPINFO_FILE, &initial_defined_image())
-            .expect("the three state files always exist");
+            .replace(DEFGRPINFO_FILE, &initial_defined_image());
     }
     Ok(())
 }

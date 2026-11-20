@@ -8,7 +8,7 @@ impl Cx<'_> {
         self.kernel
             .elements
             .record_mut(id)
-            .IntersectControl
+            .intersect_control
             .IntersectStamp
             .origin = point;
     }

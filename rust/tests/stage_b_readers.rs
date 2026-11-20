@@ -4,8 +4,15 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Ship};
+use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_rust::engine::battle::flags::{
+    APPEARING, FINITE_LIFE, LOW_ON_ENERGY, NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, PRE_PROCESS,
+};
 use uqm_rust::engine::battle::views::Laser;
-use uqm_rust::ships::native::abi::*;
+use uqm_rust::engine::battle::LINE_PRIMITIVE;
+use uqm_rust::engine::species::species_id::SPECIES_ID_VUX_ID;
+use uqm_rust::graphics::geometry::Color;
+use uqm_rust::graphics::geometry::Point;
 
 #[test]
 fn laser_construction_preserves_fields_and_pool_exhaustion() {
@@ -14,8 +21,8 @@ fn laser_construction_preserves_fields_and_pool_exhaustion() {
         {
             crate::battle_context::with(|cx| {
                 let laser = Laser {
-                    origin: POINT { x: 100, y: 200 },
-                    end: POINT { x: 300, y: -400 },
+                    origin: Point { x: 100, y: 200 },
+                    end: Point { x: 300, y: -400 },
                     flags: IGNORE_SIMILAR as u16,
                     sender: 1,
                     pixoffs: 0,
@@ -47,7 +54,7 @@ fn laser_construction_preserves_fields_and_pool_exhaustion() {
                     (300 << 5, -400 << 5)
                 );
                 let style = cx.primitive_style(id);
-                assert_eq!(style.kind, gfx_object_LINE_PRIM as u8);
+                assert_eq!(style.kind, LINE_PRIMITIVE);
                 assert_eq!((style.color.r, style.color.g, style.color.b), (11, 22, 33));
                 assert!(cx.spawn_laser(laser).is_none());
                 cx.dispose(id);
@@ -66,11 +73,11 @@ fn gravity_reads_next_positions_and_preserves_queue_order() {
                 let planet = cx.alloc_element().unwrap();
                 cx.element_mut(planet).mass = 200;
                 cx.element_mut(planet).flags = 0;
-                cx.element_mut(planet).current.location = POINT { x: 4000, y: 3000 };
-                cx.element_mut(planet).next.location = POINT { x: 400, y: 400 };
+                cx.element_mut(planet).current.location = Point { x: 4000, y: 3000 };
+                cx.element_mut(planet).next.location = Point { x: 400, y: 400 };
                 cx.put(planet);
-                cx.element_mut(ship.id).current.location = POINT { x: 400, y: 400 };
-                cx.element_mut(ship.id).next.location = POINT { x: 400, y: 400 };
+                cx.element_mut(ship.id).current.location = Point { x: 400, y: 400 };
+                cx.element_mut(ship.id).next.location = Point { x: 400, y: 400 };
                 cx.element_mut(ship.id).flags = PLAYER_SHIP as u16;
                 let head = cx.elements().head();
                 assert!(!cx.gravity(ship.id));
@@ -129,7 +136,7 @@ fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
                     (4000, 4016)
                 );
                 assert_eq!((state.next.location.x, state.next.location.y), (4000, 4016));
-                assert_eq!(cx.primitive_style(trail).kind, gfx_object_POINT_PRIM as u8);
+                assert_eq!(cx.primitive_style(trail).kind, POINT_PRIMITIVE);
                 uqm_rust::battle::sounds::engine::unlink(cx, trail);
                 cx.dispose(trail);
             });

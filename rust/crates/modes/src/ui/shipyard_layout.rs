@@ -1,5 +1,4 @@
 //! Hangar positions and cursor traversal for the shipped PC layout.
-#![allow(non_snake_case)]
 
 use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 
@@ -17,7 +16,7 @@ pub(crate) const HANGAR_ROWS: u8 = 12 / HANGAR_SHIPS_ROW;
 pub(crate) const SHIP_WIN_WIDTH: i16 = 34;
 pub(crate) const SHIP_WIN_HEIGHT: i16 = SHIP_WIN_WIDTH + 6;
 
-pub(crate) const fn DMS_GetEscortShipRect(slot: u8) -> Rect {
+pub(crate) const fn escort_ship_rect(slot: u8) -> Rect {
     let row = slot / HANGAR_SHIPS_ROW;
     let col = slot % HANGAR_SHIPS_ROW;
     Rect {
@@ -32,7 +31,7 @@ pub(crate) const fn DMS_GetEscortShipRect(slot: u8) -> Rect {
     }
 }
 
-pub(crate) const fn DMS_MoveCursor(state: u8, dx: i8, dy: i8) -> u8 {
+pub(crate) const fn move_cursor(state: u8, dx: i8, dy: i8) -> u8 {
     let mut row = (state & 0x0f) / HANGAR_SHIPS_ROW;
     let mut col = (state & 0x0f) % HANGAR_SHIPS_ROW;
     let mut flagship = state >> 4 != 0;
@@ -61,12 +60,12 @@ mod tests {
         for col in 0..HANGAR_SHIPS_ROW {
             let flagship = 0xf0 | col;
             let bottom = (HANGAR_ROWS - 1) * HANGAR_SHIPS_ROW + col;
-            assert_eq!(DMS_MoveCursor(col, 0, -1), flagship);
-            assert_eq!(DMS_MoveCursor(flagship, 0, -1), bottom);
-            assert_eq!(DMS_MoveCursor(bottom, 0, 1), flagship);
-            assert_eq!(DMS_MoveCursor(flagship, 0, 1), col);
-            assert_eq!(DMS_MoveCursor(flagship, -1, 0), flagship);
-            assert_eq!(DMS_MoveCursor(flagship, 1, 0), flagship);
+            assert_eq!(move_cursor(col, 0, -1), flagship);
+            assert_eq!(move_cursor(flagship, 0, -1), bottom);
+            assert_eq!(move_cursor(bottom, 0, 1), flagship);
+            assert_eq!(move_cursor(flagship, 0, 1), col);
+            assert_eq!(move_cursor(flagship, -1, 0), flagship);
+            assert_eq!(move_cursor(flagship, 1, 0), flagship);
         }
     }
 
@@ -75,20 +74,20 @@ mod tests {
         for row in 0..HANGAR_ROWS {
             let left = row * HANGAR_SHIPS_ROW;
             let right = left + HANGAR_SHIPS_ROW - 1;
-            assert_eq!(DMS_MoveCursor(left, -1, 0), right);
-            assert_eq!(DMS_MoveCursor(right, 1, 0), left);
+            assert_eq!(move_cursor(left, -1, 0), right);
+            assert_eq!(move_cursor(right, 1, 0), left);
         }
         for slot in 0..12 {
-            assert_eq!(DMS_MoveCursor(slot, 0, 0), slot);
-            assert_eq!(DMS_MoveCursor(DMS_MoveCursor(slot, 0, 1), 0, -1), slot);
-            assert_eq!(DMS_MoveCursor(slot, 1, -1), DMS_MoveCursor(slot, 0, -1));
+            assert_eq!(move_cursor(slot, 0, 0), slot);
+            assert_eq!(move_cursor(move_cursor(slot, 0, 1), 0, -1), slot);
+            assert_eq!(move_cursor(slot, 1, -1), move_cursor(slot, 0, -1));
         }
     }
 
     #[test]
     fn escort_rectangles_follow_hangar_slot_order() {
         for slot in 0..12 {
-            let r = DMS_GetEscortShipRect(slot);
+            let r = escort_ship_rect(slot);
             assert_eq!(
                 r.corner.x,
                 HANGAR_X_COORDS[(slot % HANGAR_SHIPS_ROW) as usize]

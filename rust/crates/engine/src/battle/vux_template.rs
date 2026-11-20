@@ -1,6 +1,6 @@
 //! Descriptor construction from static resource tokens, inside the accessor boundary.
 use crate::battle::{
-    record::CHARACTERISTIC_STUFF,
+    record::CharacteristicRecord,
     views::{Info, Intelligence},
     Race, RaceDesc, RaceResources, RaceTemplate,
 };
@@ -16,7 +16,7 @@ pub fn descriptor(race: &'static Race) -> RaceDesc {
             energy_level: 40,
             max_energy: 40,
         },
-        characteristics: CHARACTERISTIC_STUFF {
+        characteristics: CharacteristicRecord {
             max_thrust: 21,
             thrust_increment: 7,
             energy_regeneration: 1,

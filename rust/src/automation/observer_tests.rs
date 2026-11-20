@@ -387,7 +387,8 @@ fn map_observation_freezes_projection_and_cursor_per_observer_and_clears_on_exit
     let mut campaign = crate::engine::observe::CampaignView::from_world(&world);
     campaign.instant_move = true;
     let target = super::star_flight::StarTarget::resolve("Sol").unwrap();
-    let observation = super::input_ffi::star_flight_observation(&campaign, target, &first.0.ui);
+    let observation =
+        super::input_ffi::star_flight_observation(&campaign, target, &first.0.ui).unwrap();
     assert_eq!(observation.cursor, Some((1000, 2000)));
     let (x, y) = target.coordinates();
     assert_eq!(
@@ -401,7 +402,9 @@ fn map_observation_freezes_projection_and_cursor_per_observer_and_clears_on_exit
     first.checkpoint(&CheckpointView::StarMap(None));
     assert_eq!(first.0.ui.star_map(), None);
     assert_eq!(
-        super::input_ffi::star_flight_observation(&campaign, target, &first.0.ui).cursor,
+        super::input_ffi::star_flight_observation(&campaign, target, &first.0.ui)
+            .unwrap()
+            .cursor,
         None
     );
     assert_idle(&second.0);

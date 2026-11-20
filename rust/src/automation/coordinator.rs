@@ -1401,7 +1401,7 @@ impl AutomationObserver {
                         observation.flagship_crew,
                         observation.activity,
                         observation.escape_generation,
-                        input_ffi::star_flight_observation(world, flight.target, &self.ui).position
+                        input_ffi::hyperspace_position(world)
                     ),
                 );
             }
@@ -1420,8 +1420,8 @@ impl AutomationObserver {
             // A fleet win resumes the interrupted flight, not the next action.
             return event;
         }
-        let observation = input_ffi::star_flight_observation(world, flight.target, &self.ui);
-        let progress = inner.star_flight.observe(flight, observation);
+        let progress =
+            input_ffi::star_flight_progress(world, flight, &self.ui, &mut inner.star_flight);
         let input = match &progress {
             Progress::Input(key) => *key,
             _ => None,

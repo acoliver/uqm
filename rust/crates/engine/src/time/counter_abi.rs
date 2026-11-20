@@ -3,8 +3,6 @@
 //! The counter runs at `ONE_SECOND` (840) units per second, derived from
 //! the selected process clock.
 
-#![allow(non_snake_case)]
-
 /// `ONE_SECOND` from `libs/timelib.h`: the LCM of every fraction of a second
 /// the game uses.
 pub const ONE_SECOND: u32 = 840;
@@ -21,7 +19,7 @@ pub fn ticks_to_time_count(ticks: u32) -> u32 {
 }
 
 #[track_caller]
-pub fn GetTimeCounter() -> u32 {
+pub fn get_time_counter() -> u32 {
     crate::host::now_ticks()
 }
 
@@ -31,7 +29,7 @@ mod tests {
 
     #[test]
     fn entry_points_are_safe_rust_functions() {
-        let _: fn() -> u32 = GetTimeCounter;
+        let _: fn() -> u32 = get_time_counter;
     }
 
     #[test]

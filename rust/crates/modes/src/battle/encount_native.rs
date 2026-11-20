@@ -1,6 +1,6 @@
 //! Encounter fleet construction, decision screen, combat entry, and salvage.
 
-use crate::graphics::{geometry::Point, geometry::TextAlign};
+use crate::graphics::geometry::TextAlign;
 pub const ENCOUNTER_DISPLAY_POINTS: [(i16, i16); 10] = [
     (10, 51),
     (-10, 51),
@@ -92,18 +92,19 @@ impl EncounterSelection {
 }
 
 fn encounter_has_no_salvage(world: &crate::engine::World) -> bool {
-    use crate::ships::native::abi::{
-        CHECK_ABORT, CHECK_LOAD, COUNT, IN_LAST_BATTLE, WON_LAST_BATTLE,
-    };
-    world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
-        || world.data.flagship.crew_enlisted == COUNT::MAX
+    use crate::engine::battle::flags::IN_LAST_BATTLE;
+    use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD};
+    use crate::engine::world::activity::activity_kinds::WON_LAST_BATTLE;
+    world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
+        || world.data.flagship.crew_enlisted == u16::MAX
         || world.activity() as u8 == IN_LAST_BATTLE as u8
         || world.activity() as u8 == WON_LAST_BATTLE as u8
 }
 
 fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> u16 {
+    use crate::engine::species::ship::THRADDASH_SHIP;
     use crate::engine::StoryKey;
-    use crate::ships::native::abi::{THRADDASH_BODY_THRESHOLD, THRADDASH_SHIP};
+    const THRADDASH_BODY_THRESHOLD: u32 = 25;
     if killed != 0
         && world.encounter_race == THRADDASH_SHIP as i16
         && world.story_state(StoryKey::THRADD_MANNER) == 0
@@ -120,6 +121,8 @@ fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> 
 }
 
 pub(crate) mod engine {
+    use crate::engine::battle::flags::IN_LAST_BATTLE;
+    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
     mod display;
     mod salvage;
     use super::*;
@@ -127,11 +130,27 @@ pub(crate) mod engine {
     use crate::battle::battle_native::engine::{
         AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
+    use crate::engine::battle::ai_constants::MAX_ENERGY_SIZE;
+    use crate::engine::battle::flags::RPG_PLAYER_NUM;
     use crate::engine::battle::link_queue;
-    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::engine::input_port::frames::{KEY_ESCAPE, KEY_MENU_SELECT};
+    use crate::engine::species::ship::SAMATRA_SHIP;
+    use crate::engine::species::species_id::{SPECIES_ID_SA_MATRA_ID, SPECIES_ID_SIS_SHIP_ID};
+    use crate::engine::time::counter_abi::get_time_counter;
+    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+    use crate::engine::world::queues::ShipFragment;
+    use crate::engine::world::IN_HYPERSPACE;
     use crate::engine::StoryKey;
+    use crate::graphics::geometry::Point;
+    use crate::math::random;
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
-    use crate::ships::native::abi::*;
+    use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
+    use crate::sound::heart_ffi::wait_for_sound_end;
+    use crate::starbase::ids::ENCOUNTER_STRING_BASE;
+    use crate::ui::menu_state::PM_CONVERSE;
+    const CYBORG_ENABLED: u32 = 32;
+    const DSME_NONE: u32 = 0;
+    const NUM_SIDES: u32 = 2;
     use crate::ui::border::init_siscontexts;
     use crate::ui::rgb15;
 
@@ -170,7 +189,7 @@ pub(crate) mod engine {
         let input = runtime.input();
         input.set_menu_sounds(0x0f, 1 << 4);
         match menu.advance(
-            cx.world.activity() & CHECK_ABORT as u16 != 0,
+            cx.world.activity() & CHECK_ABORT != 0,
             input.pulsed().menu[KEY_MENU_SELECT as usize] != 0,
             cx.world.activity() as u8 == IN_LAST_BATTLE as u8,
         ) {
@@ -183,7 +202,7 @@ pub(crate) mod engine {
                     cx.kernel,
                     cx.world,
                     cx.screen_dimensions(),
-                    PM_CONVERSE as u8,
+                    PM_CONVERSE,
                     menu.choice as i16,
                 );
                 crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
@@ -193,7 +212,7 @@ pub(crate) mod engine {
             }
             SelectionAction::Continue => {}
         }
-        crate::ui::menu::choose_menu_state(cx, input, &mut menu.choice, PM_CONVERSE as u8);
+        crate::ui::menu::choose_menu_state(cx, input, &mut menu.choice, PM_CONVERSE);
         true
     }
 
@@ -211,7 +230,7 @@ pub(crate) mod engine {
     fn fragment_snapshot(
         world: &crate::engine::World,
         player: bool,
-    ) -> Vec<(FragmentId, SHIP_FRAGMENT)> {
+    ) -> Vec<(FragmentId, ShipFragment)> {
         if player {
             copy_fragments(world.built_ships_ref())
         } else {
@@ -221,7 +240,7 @@ pub(crate) mod engine {
 
     fn copy_fragments<const N: usize>(
         queue: link_queue::LinkQueue<'_, crate::engine::world::queues::Fragment, N>,
-    ) -> Vec<(FragmentId, SHIP_FRAGMENT)> {
+    ) -> Vec<(FragmentId, ShipFragment)> {
         let mut records = Vec::new();
         let mut next = queue.head();
         while let Some(id) = next {
@@ -250,7 +269,7 @@ pub(crate) mod engine {
     pub fn build_battle(
         world: &mut crate::engine::World,
         kernel: &mut crate::engine::Kernel,
-        player: COUNT,
+        player: u16,
     ) {
         world.encounter_race = -1;
         if world.npc_built_ships_ref().head().is_none() {
@@ -260,7 +279,7 @@ pub(crate) mod engine {
         if player != RPG_PLAYER_NUM as u16 {
             let selector = match world.activity() as u8 as u32 {
                 IN_LAST_BATTLE => NUMBER_OF_PLANET_TYPES as u8,
-                IN_HYPERSPACE => ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
+                IN_HYPERSPACE => ((random() as u16) % NUMBER_OF_PLANET_TYPES as u16) as u8,
                 _ => {
                     world.set_story_state(StoryKey::ESCAPE_COUNTER, 110);
                     world.story_state(StoryKey::BATTLE_PLANET) as u8
@@ -269,22 +288,21 @@ pub(crate) mod engine {
             kernel.load_gravity_well(selector);
         }
         kernel.ships(player as usize).reinit();
-        let fragments = fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT);
+        let fragments = fragment_snapshot(world, player == RPG_PLAYER_NUM as u16);
         for (_, frag) in fragments {
-            let built =
-                kernel
-                    .ships(player as usize)
-                    .build(if frag.race_id == SAMATRA_SHIP as u8 {
-                        SPECIES_ID_SA_MATRA_ID
-                    } else {
-                        frag.species_id
-                    });
+            let built = kernel
+                .ships(player as usize)
+                .build(if frag.race_id == SAMATRA_SHIP {
+                    SPECIES_ID_SA_MATRA_ID
+                } else {
+                    frag.species_id
+                });
             if let Some(id) = built {
                 let mut ships = kernel.ships(player as usize);
                 let mut ship = ships.get(id);
                 ship.captain = frag.captains_name_index;
                 ship.player = player as i16;
-                ship.crew = if frag.crew_level != COUNT::MAX {
+                ship.crew = if frag.crew_level != u16::MAX {
                     frag.crew_level
                 } else {
                     frag.max_crew
@@ -306,7 +324,7 @@ pub(crate) mod engine {
                 ship.player = RPG_PLAYER_NUM as i16;
                 ship.crew = 0;
                 ship.max_crew = 0;
-                ship.index = COUNT::MAX;
+                ship.index = u16::MAX;
                 ship.cost = 0;
                 ship.energy_counter = MAX_ENERGY_SIZE as u8;
                 ships.set(id, ship);
@@ -315,17 +333,17 @@ pub(crate) mod engine {
         }
     }
 
-    pub fn fleet_is_infinite(world: &crate::engine::World, player: COUNT) -> BOOLEAN {
-        if player == RPG_PLAYER_NUM as COUNT {
+    pub fn fleet_is_infinite(world: &crate::engine::World, player: u16) -> u32 {
+        if player == RPG_PLAYER_NUM as u16 {
             let queue = world.built_ships_ref();
             queue
                 .head()
-                .is_some_and(|id| queue.get(id).crew_level == COUNT::MAX) as BOOLEAN
+                .is_some_and(|id| queue.get(id).crew_level == u16::MAX) as u32
         } else {
             let queue = world.npc_built_ships_ref();
             queue
                 .head()
-                .is_some_and(|id| queue.get(id).crew_level == COUNT::MAX) as BOOLEAN
+                .is_some_and(|id| queue.get(id).crew_level == u16::MAX) as u32
         }
     }
 
@@ -378,7 +396,7 @@ pub(crate) mod engine {
         let mut i = 0;
         while index < fragments.len() && i < 60 {
             let frag = &fragments[index].1;
-            if frag.crew_level != COUNT::MAX {
+            if frag.crew_level != u16::MAX {
                 index += 1;
             }
             let resources = world.fleet_resources(frag.species_id);
@@ -404,7 +422,7 @@ pub(crate) mod engine {
         crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
         let segue = crate::graphics::drawable::LoadedDrawable::load(c"graphics.segue")
             .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
-        crate::sound::heart_ffi::wait_for_sound_end(COUNT::MAX);
+        crate::sound::heart_ffi::wait_for_sound_end(u16::MAX);
         crate::ui::settings::stop_loaded_music(music.as_ref());
         drop(music);
         let (width, height) = cx.screen_dimensions();
@@ -447,27 +465,27 @@ pub(crate) mod engine {
     pub fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
-    ) -> COUNT {
+    ) -> u16 {
         prepare_encounter(cx);
         let mut menu = EncounterSelection::new();
         crate::ui::menu::draw_menu_state(
             cx.kernel,
             cx.world,
             cx.screen_dimensions(),
-            PM_CONVERSE as u8,
+            PM_CONVERSE,
             menu.choice as i16,
         );
         crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         cx.run_input(io, true, |cx, io| do_select_action(cx, io, &mut menu));
         cx.kernel.sis_highlight.context.borrow_mut().take();
-        COUNT::from(menu.choice)
+        u16::from(menu.choice)
     }
 
     pub fn uninit_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
-    ) -> COUNT {
+    ) -> u16 {
         cx.kernel.free_gravity_well();
         if encounter_has_no_salvage(cx.world) {
             return 0;
@@ -495,7 +513,9 @@ pub(crate) mod engine {
             init_siscontexts(cx.kernel, cx.screen_dimensions());
         }
         let mut salvage = salvage::Salvage::new(cx.kernel, victory);
-        let previous_mode = cx.kernel.set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
+        let previous_mode = cx
+            .kernel
+            .set_status_message_mode(crate::comm::dispatch::smm::RES_UNITS);
         let mut killed = 0u16;
         for side in 0..NUM_SIDES as usize {
             if side != 0 {
@@ -541,9 +561,9 @@ pub(crate) mod engine {
         cx.world.set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
             IN_LAST_BATTLE as u16
         } else {
-            IN_ENCOUNTER as u16
+            IN_ENCOUNTER
         });
-        WaitForSoundEnd(COUNT::MAX);
+        wait_for_sound_end(u16::MAX);
         let mut saved = None;
         if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
             cx.b.nth_frame = 1 | ((combat_speed(cx.world.data.game.glob_flags) as u16) << 8);
@@ -554,8 +574,8 @@ pub(crate) mod engine {
         cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
         battle(cx, io, None);
         cx.kernel.game_sounds = None;
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-            cx.world.data.flagship.crew_enlisted = COUNT::MAX;
+        if cx.world.activity() & CHECK_ABORT != 0 {
+            cx.world.data.flagship.crew_enlisted = u16::MAX;
         }
         if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
             cx.b.nth_frame = 0;
@@ -578,7 +598,7 @@ pub(crate) mod engine {
                     .alloc()
                     .unwrap_or_else(|| panic!("fragment fixture queue is full"));
                 queue.get_mut(id).race_id = 9;
-                queue.get_mut(id).crew_level = COUNT::MAX;
+                queue.get_mut(id).crew_level = u16::MAX;
                 queue.put(id);
                 id
             };
@@ -597,7 +617,7 @@ pub(crate) mod engine {
             assert_eq!(fragment_snapshot(&world, true)[0].0, escort);
             assert_eq!(fragment_snapshot(&world, true)[0].1.crew_level, 3);
             assert_ne!(fleet_is_infinite(&world, 1), 0);
-            assert_eq!(fleet_is_infinite(&world, RPG_PLAYER_NUM as COUNT), 0);
+            assert_eq!(fleet_is_infinite(&world, RPG_PLAYER_NUM as u16), 0);
             assert!(fragment_is_removed(0, false, false));
             remove_campaign_fragment(&mut world, false, npc);
             assert!(fragment_snapshot(&world, false).is_empty());
@@ -676,11 +696,13 @@ mod tests {
     }
     #[test]
     fn retained_world_controls_salvage_and_thraddash_accounting() {
+        use crate::engine::battle::flags::IN_LAST_BATTLE;
+        use crate::engine::species::ship::THRADDASH_SHIP;
+        use crate::engine::world::activity::activity_flags::CHECK_ABORT;
         use crate::engine::StoryKey;
-        use crate::ships::native::abi::{CHECK_ABORT, IN_LAST_BATTLE, THRADDASH_SHIP};
         let mut world = crate::engine::World::new();
         assert!(!encounter_has_no_salvage(&world));
-        world.set_activity(CHECK_ABORT as u16);
+        world.set_activity(CHECK_ABORT);
         assert!(encounter_has_no_salvage(&world));
         world.set_activity(IN_LAST_BATTLE as u16);
         assert!(encounter_has_no_salvage(&world));

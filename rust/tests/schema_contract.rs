@@ -1,12 +1,12 @@
 //! Stable values shared by save files, input, rendering, ships and netplay.
 
-use std::mem::{align_of, offset_of, size_of};
-use uqm_rust::c_bindings::controller_input as input;
+use std::mem::{offset_of, size_of};
+use uqm_rust::engine::input_port::frames as input;
+use uqm_rust::engine::species::ship;
 use uqm_rust::engine::world::story::{
     GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
 };
 use uqm_rust::engine::StoryKey;
-use uqm_rust::ships::native::abi as ship;
 use uqm_rust::starbase::sis_modules::{ModuleType, NUM_MODULES};
 
 #[test]
@@ -17,7 +17,10 @@ fn story_state_size_and_endpoints_remain_stable() {
         uqm_rust::engine::world::story::NUM_GAME_STATE_BITS,
         NUM_GAME_STATE_BITS
     );
-    assert_eq!(ship::NUM_GAME_STATE_BITS as usize, NUM_GAME_STATE_BITS);
+    assert_eq!(
+        uqm_rust::engine::world::story::native_bits::NUM_GAME_STATE_BITS as usize,
+        NUM_GAME_STATE_BITS
+    );
     assert_eq!(GAME_STATE_FIELDS.first(), Some(&("SHOFIXTI_VISITS", 0, 2)));
     assert_eq!(
         GAME_STATE_FIELDS.last(),
@@ -29,22 +32,19 @@ fn story_state_size_and_endpoints_remain_stable() {
 fn controller_keys_and_template_numbers_remain_stable() {
     assert_eq!(input::NUM_KEYS, 7);
     assert_eq!(input::NUM_MENU_KEYS, 24);
-    assert_eq!(input::CONTROL_TEMPLATE_NUM_TEMPLATES, 6);
+    assert_eq!(input::TEMPLATES, 6);
     assert_eq!(input::KEY_ESCAPE, 6);
     assert_eq!(input::KEY_MENU_SELECT, 9);
     assert_eq!(input::KEY_MENU_CANCEL, 10);
     assert_eq!(input::KEY_MENU_ANY, 23);
-    assert_eq!(size_of::<input::CONTROLLER_INPUT_STATE>(), 264);
-    assert_eq!(offset_of!(input::CONTROLLER_INPUT_STATE, menu), 168);
-    assert_eq!(size_of::<input::CONTROL_TEMPLATE>(), 4);
+    assert_eq!(size_of::<input::InputState>(), 264);
+    assert_eq!(offset_of!(input::InputState, menu), 168);
 }
 
 #[test]
 fn engine_scalar_widths_and_species_ids_remain_stable() {
     assert_eq!(size_of::<u16>(), 2);
     assert_eq!(size_of::<u32>(), 4);
-    assert_eq!(size_of::<ship::SPECIES_ID>(), 4);
-    assert_eq!(align_of::<ship::SPECIES_ID>(), 4);
     assert_eq!(ship::HUMAN_SHIP, 2);
     assert_eq!(ship::SAMATRA_SHIP, 23);
     assert_eq!(ModuleType::PlanetLander as u32, 0);

@@ -186,11 +186,9 @@ impl SubtitleTracker {
 
     /// Get total duration (end of last subtitle)
     pub fn total_duration(&self) -> f32 {
-        if self.chunks.is_empty() {
+        let Some(last) = self.chunks.last() else {
             return 0.0;
-        }
-
-        let last = self.chunks.last().unwrap();
+        };
         if last.duration > 0.0 {
             last.start_time + last.duration
         } else {

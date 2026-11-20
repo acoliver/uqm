@@ -19,6 +19,7 @@ pub mod resource;
 pub mod sound;
 pub mod state;
 pub mod strings;
+pub mod sync;
 pub mod threading;
 pub mod time;
 pub mod video;

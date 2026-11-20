@@ -1,5 +1,6 @@
 //! Setup notifications borrow values, never menu or team storage.
-use super::{abi::*, netconnection::NetConnection, packet::Packet, session::SessionCore};
+use super::{netconnection::NetConnection, packet::Packet, session::SessionCore};
+use crate::engine::battle::net::NetState;
 
 fn side(conn: &NetConnection, player: usize) -> u8 {
     u8::from(player == conn.player)
@@ -7,7 +8,7 @@ fn side(conn: &NetConnection, player: usize) -> u8 {
 impl SessionCore {
     fn notify_setup(&self, mut packet: impl FnMut(&NetConnection) -> Packet) {
         self.each(|conn| {
-            if conn.state == NetState_NetState_inSetup {
+            if conn.state == NetState::InSetup {
                 assert!(!conn.flags.handshake.local);
                 conn.queue(packet(conn));
             }
@@ -40,7 +41,7 @@ impl SessionCore {
         let mut conn = self
             .connection_mut(player)
             .unwrap_or_else(|| panic!("seed connection"));
-        assert_eq!(conn.state, NetState_NetState_preBattle);
+        assert_eq!(conn.state, NetState::PreBattle);
         conn.queue(Packet::SeedRandom(seed));
         conn.flags.random_seed = true;
     }

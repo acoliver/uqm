@@ -1,8 +1,22 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
 pub mod engine {
-    use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRST_EMPTY_INDEX, GRAVITY_MASS_INDEX,
+        IGNORE_SIMILAR, LEFT, MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT,
+        SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
     };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, COLLISION, CREW_IMMUNE, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM,
+        NONSOLID, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use crate::math::velocity::VELOCITY_SHIFT;
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
 
     use crate::engine::battle::views::Laser;
     use crate::engine::battle::{
@@ -36,8 +50,8 @@ pub mod engine {
         d.resources.melee_icon = Some(c"ship.slylandro.meleeicons");
         // races.h: INFINITE_RADIUS is (~0), stored in COUNT.
         d.fleet_strength = u16::MAX;
-        d.fleet_location = POINT { x: 333, y: 9812 };
-        d.characteristics = CHARACTERISTIC_STUFF {
+        d.fleet_location = Point { x: 333, y: 9812 };
+        d.characteristics = CharacteristicRecord {
             max_thrust: 60,
             thrust_increment: 60,
             energy_regeneration: 0,
@@ -81,9 +95,9 @@ pub mod engine {
     pub fn lightning_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
-        pa: &mut POINT,
+        pa: &mut Point,
         b: ElementId,
-        pb: &mut POINT,
+        pb: &mut Point,
     ) {
         let ss = cx.owner(a);
         if cx.ship_state(ss).weapon_counter > WEAPON_WAIT >> 1 {
@@ -118,7 +132,7 @@ pub mod engine {
     ) -> (Option<ElementId>, WeaponOrigin) {
         let block = Laser {
             origin: origin.next.location,
-            end: POINT { x: 0, y: 0 },
+            end: Point { x: 0, y: 0 },
             sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             face: 0,
@@ -133,8 +147,8 @@ pub mod engine {
             cx.element_mut(laser).collide = Some(CollisionHook::Native(lightning_collision));
             // This draw precedes TrackShip's optional opposite-facing draw.
             let random = cx.random();
-            let mut angle: COUNT;
-            let delta: SIZE;
+            let mut angle: u16;
+            let delta: i16;
             if origin.flags & PLAYER_SHIP as u16 == 0 {
                 angle = origin.velocity.travel_angle;
                 let mut facing = normalize_facing(angle_to_facing(i32::from(angle)));
@@ -148,7 +162,7 @@ pub mod engine {
                 origin.target = None;
                 delta = cx.track_subject(&mut origin, &mut facing);
                 origin.target = None;
-                angle = facing_to_angle(i32::from(facing)) as COUNT;
+                angle = facing_to_angle(i32::from(facing)) as u16;
                 let mut wait = cx.ship_state(ss).weapon_counter;
                 if wait == 0 {
                     wait = WEAPON_WAIT;
@@ -165,23 +179,23 @@ pub mod engine {
                 };
             }
             if delta == -1 || i32::from(delta) == angle_to_facing(HALF_CIRCLE as i32) {
-                angle = angle.wrapping_add(random as COUNT);
+                angle = angle.wrapping_add(random as u16);
             } else if delta == 0 {
-                angle = if random as COUNT & 1 != 0 {
+                angle = if random as u16 & 1 != 0 {
                     angle.wrapping_sub(1)
                 } else {
                     angle.wrapping_add(1)
                 };
             } else if i32::from(delta) < angle_to_facing(HALF_CIRCLE as i32) {
-                angle = angle.wrapping_add(random as COUNT & (QUADRANT as COUNT - 1));
+                angle = angle.wrapping_add(random as u16 & (QUADRANT - 1));
             } else {
-                angle = angle.wrapping_sub(random as COUNT & (QUADRANT as COUNT - 1));
+                angle = angle.wrapping_sub(random as u16 & (QUADRANT - 1));
             }
             let length = ((((random >> 16) & (LASER_LENGTH - 1)) + 4)
-                << (ONE_SHIFT + VELOCITY_SHIFT)) as SIZE;
+                << (ONE_SHIFT + VELOCITY_SHIFT)) as i16;
             cx.element_mut(laser).velocity.set_components(
-                i32::from((cosine(i32::from(angle), i32::from(length))) as SIZE),
-                i32::from((sine(i32::from(angle), i32::from(length))) as SIZE),
+                i32::from((cosine(i32::from(angle), i32::from(length))) as i16),
+                i32::from((sine(i32::from(angle), i32::from(length))) as i16),
             );
             cx.set_parent(laser, Some(ss));
         }
@@ -199,7 +213,7 @@ pub mod engine {
                 .object
                 .is_none()
         {
-            concerns.count = FIRST_EMPTY_INDEX as COUNT + 1;
+            concerns.count = FIRST_EMPTY_INDEX as u16 + 1;
         }
         if concerns.objects[enemy].object.is_some()
             && concerns.objects[enemy].movement == MOVEMENT_STATE_PURSUE
@@ -239,16 +253,16 @@ pub mod engine {
         while let Some(obj) = h {
             let next = cx.elements().succ(obj);
             if cx.element(obj).flags & (APPEARING | PLAYER_SHIP | FINITE_LIFE) as u16 == 0
-                && cx.element(obj).player == NEUTRAL_PLAYER_NUM as SIZE
+                && cx.element(obj).player == NEUTRAL_PLAYER_NUM as i16
                 && u32::from(cx.element(obj).mass) <= MAX_SHIP_MASS * 10
                 && collision_possible(cx, obj, ship)
             {
                 let mut dx = (i32::from(cx.element(obj).next.location.x)
                     - i32::from(cx.element(ship).next.location.x))
-                    as SIZE;
+                    as i16;
                 let mut dy = (i32::from(cx.element(obj).next.location.y)
                     - i32::from(cx.element(ship).next.location.y))
-                    as SIZE;
+                    as i16;
                 if dx < 0 {
                     dx = dx.wrapping_neg();
                 }
@@ -305,12 +319,12 @@ pub mod engine {
                 cx.ship_state_mut(ss).facing = cx
                     .ship_state(ss)
                     .facing
-                    .wrapping_add(angle_to_facing(HALF_CIRCLE as i32) as COUNT);
+                    .wrapping_add(angle_to_facing(HALF_CIRCLE as i32) as u16);
             }
             if cx.element(ship).turn == 0 {
                 cx.element_mut(ship).turn = (u16::from(cx.element(ship).turn)
                     + u16::from(cx.race_stats(ss).characteristics.turn_wait)
-                    + 1) as BYTE;
+                    + 1) as u8;
                 if cx.ship_state(ss).status & LEFT as u16 != 0 {
                     cx.ship_state_mut(ss).facing = cx.ship_state(ss).facing.wrapping_sub(1);
                 } else if cx.ship_state(ss).status & RIGHT as u16 != 0 {
@@ -321,8 +335,8 @@ pub mod engine {
             if cx.element(ship).thrust == 0 {
                 cx.element_mut(ship).thrust = (u16::from(cx.element(ship).thrust)
                     + u16::from(cx.race_stats(ss).characteristics.thrust_wait)
-                    + 1) as BYTE;
-                let thrust = cx.race_stats(ss).characteristics.max_thrust as SIZE;
+                    + 1) as u8;
+                let thrust = cx.race_stats(ss).characteristics.max_thrust as i16;
                 let facing = cx.ship_state(ss).facing;
                 cx.element_mut(ship)
                     .velocity

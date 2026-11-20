@@ -13,7 +13,11 @@ use crate::sound::heart_ffi::{
 
 pub mod engine {
     use super::*;
-    use crate::ships::native::abi::*;
+
+    use crate::ui::settings::GAME_SOUND_PRIORITY;
+    const FIRST_SFX_CHANNEL: u32 = 0;
+    const LAST_SFX_CHANNEL: u32 = 4;
+    const MIN_FX_CHANNEL: u32 = 1;
 
     /// # Safety
     /// Called while the game-thread battle context is published.
@@ -32,12 +36,6 @@ pub mod engine {
             y: i32::from(point.y) - (height >> 1),
         }
     }
-
-    pub const NON_POSITIONAL: SoundPosition = SoundPosition {
-        positional: 0,
-        x: 0,
-        y: 0,
-    };
 
     pub(crate) fn update_positions(cx: &mut Cx<'_>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
@@ -88,7 +86,7 @@ pub mod engine {
                     &sound,
                     pos,
                     object,
-                    GAME_SOUND_PRIORITY as u8,
+                    GAME_SOUND_PRIORITY,
                 );
             }
             i += 1;
@@ -115,11 +113,11 @@ pub mod engine {
 
     #[cfg(test)]
     mod unlink_tests {
+        use super::FIRST_SFX_CHANNEL;
         use crate::engine::{
             battle::{Battle, Cx},
             Game,
         };
-        use crate::ships::native::abi::FIRST_SFX_CHANNEL;
         use crate::sound::heart_ffi::{get_positional_object, set_positional_object};
 
         #[test]
@@ -193,8 +191,6 @@ pub mod engine {
     }
 }
 
-pub use engine::NON_POSITIONAL;
-
 fn encode_object(object: Option<ElementId>) -> usize {
     object.map_or(0, ElementId::sound_token)
 }
@@ -223,7 +219,6 @@ mod tests {
             crate::math::random,
         );
         assert!(!engine::position(&mut cx, None).positional);
-        assert_eq!(engine::NON_POSITIONAL.positional, 0);
         engine::update_positions(&mut cx);
         engine::flush_sounds(&mut cx);
         engine::remove_sounds(cx.kernel, None);

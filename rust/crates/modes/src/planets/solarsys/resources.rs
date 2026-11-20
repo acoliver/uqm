@@ -17,7 +17,7 @@ pub(crate) fn frame(owner: &LoadedDrawable, index: u16) -> FrameId {
 
 pub(crate) fn ship_facing(
     kernel: &Kernel,
-    game: &crate::engine::battle::schema::GAME_STATE,
+    game: &crate::engine::battle::schema::GameRecord,
 ) -> u16 {
     retained(kernel)
         .flagship

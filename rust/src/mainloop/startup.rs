@@ -1,16 +1,20 @@
 //! Subsystem startup on the SDL owner thread, replacing uqm.c's live init path.
 
+/// Graphics flag bits shared with `gfx_common`.
+const GFX_FLAG_FULLSCREEN: i32 = 1;
+const GFX_FLAG_SHOW_FPS: i32 = 2;
+const GFX_FLAG_SCANLINES: i32 = 4;
+
 fn graphics_config(parsed: &super::options::ParsedOptions) -> (i32, i32) {
-    use crate::ships::native::abi;
     let mut flags = parsed.scaler;
     if parsed.fullscreen {
-        flags |= abi::TFB_GFXFLAGS_FULLSCREEN as i32;
+        flags |= GFX_FLAG_FULLSCREEN;
     }
     if parsed.scanlines {
-        flags |= abi::TFB_GFXFLAGS_SCANLINES as i32;
+        flags |= GFX_FLAG_SCANLINES;
     }
     if parsed.show_fps {
-        flags |= abi::TFB_GFXFLAGS_SHOWFPS as i32;
+        flags |= GFX_FLAG_SHOW_FPS;
     }
     (i32::from(!parsed.opengl), flags)
 }
@@ -90,13 +94,18 @@ fn prepare_directories(
         log::error!("Config directory: {error:?}");
         return false;
     }
-    input.configuration.set_addons(
-        parsed
-            .addons
-            .iter()
-            .map(|name| CString::new(name.as_str()).expect("addon name contains NUL"))
-            .collect(),
-    );
+    let addons: Result<Vec<_>, _> = parsed
+        .addons
+        .iter()
+        .map(|name| CString::new(name.as_str()))
+        .collect();
+    match addons {
+        Ok(addons) => input.configuration.set_addons(addons),
+        Err(error) => {
+            log::error!("Addon name: {error}");
+            return false;
+        }
+    }
     if let Err(error) = dir_prep::prepare_content_dir(
         vfs,
         &input.configuration,
@@ -165,7 +174,7 @@ fn start_media(
         parsed.resolution_width,
         parsed.resolution_height,
     );
-    let gamma = if globals::setGammaCorrection(parsed.gamma) {
+    let gamma = if globals::set_gamma_correction(parsed.gamma) {
         parsed.gamma
     } else {
         1.0

@@ -10,7 +10,7 @@ fn summary() -> Summary {
 #[test]
 fn legacy_summary_skips_both_alignment_words_and_has_no_name() {
     let s = summary();
-    let bytes = super::encode::encode_summary(&s);
+    let bytes = super::encode::encode_summary(&s).unwrap();
     let body = &bytes[8..];
     let mut old = [0xa5; 164];
     old[..122].copy_from_slice(&body[..122]);
@@ -179,7 +179,7 @@ fn legacy_slot_reads_summary_and_compressed_payload_through_files() {
     }
     plain.extend([0; 8]);
     let expected = decode_legacy_payload(&summary, plain.as_slice(), plain.len() as u32).unwrap();
-    let body = super::encode::encode_summary(&summary);
+    let body = super::encode::encode_summary(&summary).unwrap();
     let body = &body[8..];
     let mut header = [0xa5; 164];
     header[..122].copy_from_slice(&body[..122]);

@@ -1,9 +1,19 @@
 //! Live engine callbacks for the Mmrnmhrm, mirroring `mmrnmhrm.c`.
 
 pub mod engine {
-    use crate::ships::native::{
-        abi::*, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,
+    use crate::engine::battle::ai_constants::{
+        ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,
+        WEAPON,
     };
+    use crate::engine::battle::flags::{
+        APPEARING, CHANGING, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
+    };
+    use crate::engine::battle::record::CharacteristicRecord;
+    use crate::engine::battle::CollisionHook;
+    use crate::graphics::geometry::Color;
+    use crate::graphics::geometry::Point;
+    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use crate::ships::native::{cosine, facing_to_angle, normalize_angle, normalize_facing, sine};
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 10;
@@ -33,7 +43,7 @@ pub mod engine {
     const LONG_RANGE_WEAPON: i32 = 1000 << ONE_SHIFT;
     const SLOW_SHIP: u32 = 25;
 
-    const YWING_CHARACTERISTICS: CHARACTERISTIC_STUFF = CHARACTERISTIC_STUFF {
+    const YWING_CHARACTERISTICS: CharacteristicRecord = CharacteristicRecord {
         max_thrust: YWING_MAX_THRUST,
         thrust_increment: YWING_THRUST_INCREMENT,
         energy_regeneration: YWING_ENERGY_REGENERATION,
@@ -58,7 +68,7 @@ pub mod engine {
         desc.resources.strings = Some(c"ship.mmrnmhrm.text");
         desc.resources.icons = Some(c"ship.mmrnmhrm.icons");
         desc.resources.melee_icon = Some(c"ship.mmrnmhrm.meleeicons");
-        desc.characteristics = CHARACTERISTIC_STUFF {
+        desc.characteristics = CharacteristicRecord {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
             energy_regeneration: ENERGY_REGENERATION,
@@ -140,16 +150,16 @@ pub mod engine {
         if can_transform && enemy.is_some() && cx.ship_state(ss).input & WEAPON as u8 == 0 {
             let other = cx.element(enemy.unwrap_or_else(|| panic!("enemy ship")));
             let (x, y) = other.velocity.get_current_components();
-            let (mut dx, mut dy) = (x as SIZE, y as SIZE);
+            let (mut dx, mut dy) = (x as i16, y as i16);
             let (direction_angle, mut travel_angle);
             if dx == 0 && dy == 0 {
                 direction_angle = 0;
                 travel_angle = 0;
             } else {
                 dx = (other.current.location.x as i32 - concerns.subject.current.location.x as i32)
-                    as SIZE;
+                    as i16;
                 dy = (other.current.location.y as i32 - concerns.subject.current.location.y as i32)
-                    as SIZE;
+                    as i16;
                 direction_angle = crate::math::arctan(-i32::from(dx) as _, -i32::from(dy) as _);
                 travel_angle = other.velocity.travel_angle;
             }
@@ -169,7 +179,7 @@ pub mod engine {
                 }
             } else {
                 let (x, y) = concerns.subject.velocity.get_current_components();
-                let (ship_dx, ship_dy) = (x as SIZE, y as SIZE);
+                let (ship_dx, ship_dy) = (x as i16, y as i16);
                 dx = dx.wrapping_sub(ship_dx);
                 dy = dy.wrapping_sub(ship_dy);
                 travel_angle = crate::math::arctan(dx, dy);
@@ -202,9 +212,9 @@ pub mod engine {
     pub fn twin_laser_collision(
         cx: &mut Cx<'_>,
         e0: ElementId,
-        p0: &mut POINT,
+        p0: &mut Point,
         e1: ElementId,
-        p1: &mut POINT,
+        p1: &mut Point,
     ) {
         if cx.element(e1).flags & PLAYER_SHIP as u16 == 0
             || cx.element(e0).player != cx.element(e1).player
@@ -233,8 +243,8 @@ pub mod engine {
                 let bx = x.wrapping_add((i32::from(ox) * sign) as _);
                 let by = y.wrapping_add((i32::from(oy) * sign) as _);
                 let laser = cx.spawn_laser(crate::engine::battle::views::Laser {
-                    origin: POINT { x: bx, y: by },
-                    end: POINT {
+                    origin: Point { x: bx, y: by },
+                    end: Point {
                         x: ex.wrapping_sub(bx),
                         y: ey.wrapping_sub(by),
                     },
