@@ -64,8 +64,8 @@ fn conflict_checks_player_ships_even_when_nonsolid() {
             subject,
             crate::engine::battle::views::FrameSelection::ABSENT,
         );
-        assert_eq!(control.EndPoint.x, 25);
-        assert_eq!(control.IntersectStamp.origin.x, 25);
+        assert_eq!(control.end_point.x, 25);
+        assert_eq!(control.intersect_stamp.origin.x, 25);
         let calls = Cell::new(0);
         let intersect = |id| {
             calls.set(calls.get() + 1);

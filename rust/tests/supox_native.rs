@@ -53,7 +53,7 @@ fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
 #[test]
 fn descriptor_matches_the_c_race_data() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let desc = descriptor(SPECIES_ID_SUPOX_ID);
             assert!(std::ptr::eq(
                 desc.race.unwrap(),

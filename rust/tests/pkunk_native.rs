@@ -8,7 +8,6 @@ mod shared;
 mod special_hooks;
 
 use std::{
-    ffi::CStr,
     mem, ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -118,9 +117,9 @@ impl<'a> Ship<'a> {
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
-        el.intersect_control.IntersectStamp.frame = ship_frames.frame(0);
-        el.intersect_control.EndPoint = Point { x: 1000, y: 1000 };
-        el.intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.frame = ship_frames.frame(0);
+        el.intersect_control.end_point = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
             handle,
@@ -385,7 +384,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: Point, ang
 fn descriptor_matches_every_c_initializer_field() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let d = shared::descriptor(SPECIES_ID_PKUNK_ID);
             assert_eq!(
                 d.ship_info.ship_flags,
@@ -892,14 +891,14 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             let control = (*el).intersect_control;
             assert_eq!(
                 (
-                    control.IntersectStamp.origin.x,
-                    control.IntersectStamp.origin.y
+                    control.intersect_stamp.origin.x,
+                    control.intersect_stamp.origin.y
                 ),
                 (100, -200)
             );
-            assert_eq!((control.EndPoint.x, control.EndPoint.y), (300, 19));
+            assert_eq!((control.end_point.x, control.end_point.y), (300, 19));
             // next.image.frame was overwritten before InitIntersectFrame runs.
-            assert_eq!((control.IntersectStamp.frame).index(), 5);
+            assert_eq!((control.intersect_stamp.frame).index(), 5);
             assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
             assert_eq!(
                 (*el).state_flags & (NONSOLID | FINITE_LIFE) as u16,

@@ -154,7 +154,7 @@ unsafe fn collide(pulse: *mut ElementRecord, target: *mut ElementRecord) {
 fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
     battle_context::run(|_| {
         let _battle = Battle::new(32);
-        unsafe {
+        {
             let d = battle::descriptor(SPECIES_ID_MELNORME_ID);
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(

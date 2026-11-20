@@ -8,7 +8,6 @@ mod battle_context;
 mod special_hooks;
 use battle::FrameSet;
 use battle::{Battle, Ship};
-use std::ffi::CStr;
 use std::ptr;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::{
@@ -101,7 +100,7 @@ unsafe fn velocity_of(element: *mut ElementRecord) -> (i16, i16) {
 #[test]
 fn skiff_descriptor_matches_the_c_template() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let template = battle::descriptor(SPECIES_ID_ARILOU_ID);
             let desc = &template;
             assert!(desc.race.is_some());
@@ -758,7 +757,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
 
             // Life 1 is NORMAL_LIFE: the teleport ends.
             (*ship).current.location = Point { x: -9, y: 13 };
-            (*ship).intersect_control.EndPoint = Point { x: 123, y: -456 };
+            (*ship).intersect_control.end_point = Point { x: 123, y: -456 };
             set_life(ship, 1);
             skiff.preprocess();
             let ship_array = skiff.ship_array();
@@ -778,9 +777,9 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
                 skiff.ship_frames.frame(6)
             );
             // InitIntersectStartPoint: WORLD_TO_DISPLAY is an arithmetic >> 2.
-            let origin = (*ship).intersect_control.IntersectStamp.origin;
+            let origin = (*ship).intersect_control.intersect_stamp.origin;
             assert_eq!((origin.x, origin.y), (-3, 3));
-            let end = (*ship).intersect_control.EndPoint;
+            let end = (*ship).intersect_control.end_point;
             assert_eq!((end.x, end.y), (123, -456));
         }
     })
@@ -844,20 +843,20 @@ fn init_intersect_start_preserves_endpoint_and_frame() {
     battle_context::run(|_| unsafe {
         let battle = Battle::new(4);
         let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
-        let frame = ship.element_mut().intersect_control.IntersectStamp.frame;
+        let frame = ship.element_mut().intersect_control.intersect_stamp.frame;
         ship.element_mut().current.location = Point { x: -9, y: 13 };
         ship.element_mut().next.location = Point { x: 400, y: 800 };
-        ship.element_mut().intersect_control.EndPoint = Point { x: 123, y: -456 };
+        ship.element_mut().intersect_control.end_point = Point { x: 123, y: -456 };
         crate::battle_context::with(|cx| cx.init_intersect_start(ship.id));
         let control = ship.element_mut().intersect_control;
         assert_eq!(
             (
-                control.IntersectStamp.origin.x,
-                control.IntersectStamp.origin.y
+                control.intersect_stamp.origin.x,
+                control.intersect_stamp.origin.y
             ),
             (-3, 3)
         );
-        assert_eq!((control.EndPoint.x, control.EndPoint.y), (123, -456));
-        assert_eq!(control.IntersectStamp.frame, frame);
+        assert_eq!((control.end_point.x, control.end_point.y), (123, -456));
+        assert_eq!(control.intersect_stamp.frame, frame);
     })
 }

@@ -201,8 +201,10 @@ pub fn world_line<G: Generators>(
 pub fn initial_descs(mode: OrbitMode) -> Vec<PlanetDesc> {
     (0..mode.slots())
         .map(|slot| {
-            let mut desc: PlanetDesc = Default::default();
-            desc.rand_seed = 0x1111_0000 + slot as u32;
+            let mut desc = PlanetDesc {
+                rand_seed: 0x1111_0000 + slot as u32,
+                ..Default::default()
+            };
             desc.data_index = if mode.types_defined() {
                 [5, 50, 54, 58][slot % 4]
             } else {

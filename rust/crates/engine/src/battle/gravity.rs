@@ -60,8 +60,8 @@ pub fn control(
     };
     IntersectControl {
         last_time_val: 0,
-        EndPoint: origin,
-        IntersectStamp: crate::graphics::intersection::Stamp {
+        end_point: origin,
+        intersect_stamp: crate::graphics::intersection::Stamp {
             origin,
             frame: frame.raw(),
         },

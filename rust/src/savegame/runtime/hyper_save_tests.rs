@@ -246,9 +246,9 @@ fn the_facing_keeps_the_full_sixteen_bit_width() {
 fn a_facing_that_would_wrap_to_zero_is_refused_and_writes_nothing() {
     let queues = Queues::flight(65535);
     let mut game = game();
-    let before = bytes_of(&*game);
+    let before = bytes_of(&game);
     assert_eq!(queues.save(&mut game), Err(HyperSaveError::FacingOverflow));
-    assert_eq!(bytes_of(&*game), before);
+    assert_eq!(bytes_of(&game), before);
     assert_eq!(game.ship_facing, SENTINEL_FACING);
 }
 
@@ -289,9 +289,9 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
 fn an_empty_player_queue_is_a_no_op() {
     let queues = Queues::new();
     let mut game = game();
-    let before = bytes_of(&*game);
+    let before = bytes_of(&game);
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Absent));
-    assert_eq!(bytes_of(&*game), before);
+    assert_eq!(bytes_of(&game), before);
     assert_eq!(game.ship_facing, SENTINEL_FACING);
 }
 
@@ -303,10 +303,10 @@ fn a_flagship_without_an_element_is_a_no_op_and_the_display_list_is_not_read() {
     queues.head_ship().ship_element = None;
 
     let mut game = game();
-    let before_game = bytes_of(&*game);
+    let before_game = bytes_of(&game);
     let before_queues = queues_snapshot(&queues);
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Absent));
-    assert_eq!(bytes_of(&*game), before_game);
+    assert_eq!(bytes_of(&game), before_game);
     assert_eq!(queues_snapshot(&queues), before_queues);
 }
 

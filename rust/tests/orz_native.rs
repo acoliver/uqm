@@ -19,7 +19,7 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::{Battle, Ship};
-use std::{ffi::CStr, mem, ptr};
+use std::{mem, ptr};
 use uqm_rust::engine::battle::flags::{
     APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM,
     NONSOLID, PLAYER_SHIP, POINT_PRIMITIVE, POST_PROCESS, PRE_PROCESS, SHIP_AT_MAX_SPEED,
@@ -203,7 +203,7 @@ unsafe fn intelligence(ship: &mut Ship<'_>, concerns: &mut [EvaluateRecord; 4]) 
 fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
     battle_context::run(|_| {
         let _battle = Battle::new(128);
-        unsafe {
+        {
             let d = battle::descriptor(SPECIES_ID_ORZ_ID);
             let race = d.race.unwrap();
             assert_eq!(

@@ -5,7 +5,6 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{Battle, FrameSet, Ship};
-use std::ffi::CStr;
 use std::{mem, ptr};
 use uqm_rust::engine::battle::ai_constants::{
     DONT_CHASE, ENEMY_SHIP_INDEX, FIRES_AFT, FIRES_FORE, IGNORE_SIMILAR, SEEKING_SPECIAL, SPECIAL,
@@ -29,7 +28,7 @@ unsafe fn queue_tail() -> *mut std::ffi::c_void {
 #[test]
 fn eluder_descriptor_matches_the_c_template() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let d = battle::descriptor(SPECIES_ID_SPATHI_ID);
             let desc = &d;
             assert_eq!(

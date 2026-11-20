@@ -259,10 +259,12 @@ impl Generators for RustGenerators<'_> {
         };
 
         let mut info: SystemInfo = Default::default();
-        let mut desc: PlanetDesc = Default::default();
-        desc.rand_seed = case.rand_seed;
-        desc.data_index = case.data_index;
-        desc.radius = case.desc_radius;
+        let desc = PlanetDesc {
+            rand_seed: case.rand_seed,
+            data_index: case.data_index,
+            radius: case.desc_radius,
+            ..Default::default()
+        };
         do_planetary_analysis(
             &mut self.rng,
             self.table,

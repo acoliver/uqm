@@ -8,7 +8,7 @@ mod battle_context;
 mod special_hooks;
 use battle::Battle as Battlefield;
 use battle::{prim, PoolElement, Ship};
-use std::{ffi::CStr, mem, ptr};
+use std::{mem, ptr};
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
 use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
@@ -101,7 +101,7 @@ unsafe fn exhaust() -> Vec<*mut std::ffi::c_void> {
 fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let d = battle::descriptor(SPECIES_ID_CHMMR_ID);
             assert_eq!(
                 d.ship_info.ship_flags,

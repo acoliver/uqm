@@ -41,7 +41,7 @@ use uqm_rust::math::velocity::VelocityDesc;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 
-use std::{ffi::CStr, ptr};
+use std::ptr;
 use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
 
@@ -126,7 +126,7 @@ unsafe fn think(ship: &mut Ship<'_>, c: &mut [EvaluateRecord; 4], input: u8, cou
 fn descriptor_matches_all_c_initializer_fields_and_resources() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let d = battle::descriptor(SPECIES_ID_UMGAH_ID);
             assert_eq!(
                 d.ship_info.ship_flags,
@@ -323,11 +323,11 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             assert_eq!((*cone).next.image.frames, ship.frame_set(2));
             let i = (*cone).intersect_control;
             assert_eq!(
-                (i.IntersectStamp.origin.x, i.IntersectStamp.origin.y),
+                (i.intersect_stamp.origin.x, i.intersect_stamp.origin.y),
                 (-3, 3)
             );
-            assert_eq!((i.EndPoint.x, i.EndPoint.y), (-3, 3));
-            assert_eq!(i.IntersectStamp.frame, ship.raw_frame(2, 5));
+            assert_eq!((i.end_point.x, i.end_point.y), (-3, 3));
+            assert_eq!(i.intersect_stamp.frame, ship.raw_frame(2, 5));
             assert_eq!((*prim(cone)).kind, STAMP_PRIMITIVE);
             assert!((*cone).preprocess_func.is_some() && (*cone).collision_func.is_some());
             assert!((*cone).postprocess_func.is_none() && (*cone).death_func.is_none());
@@ -383,7 +383,10 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
             assert_eq!(((*battle::element(h)).current.image.frame.raw()).index(), 9);
             assert_eq!(
-                (*battle::element(h)).intersect_control.IntersectStamp.frame,
+                (*battle::element(h))
+                    .intersect_control
+                    .intersect_stamp
+                    .frame,
                 ship.raw_frame(2, 9)
             );
             battle_context::dispose(h);

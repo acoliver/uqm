@@ -1,6 +1,5 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
 
-use std::ffi::CStr;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -8,7 +7,7 @@ mod battle_context;
 
 #[test]
 fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let d =
             battle::descriptor(uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID);
         let info = d.ship_info;

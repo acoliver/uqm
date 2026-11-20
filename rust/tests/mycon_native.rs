@@ -6,14 +6,13 @@ mod battle;
 mod battle_context;
 use battle::*;
 
-use std::ffi::CStr;
 use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
 use uqm_rust::engine::species::species_id::SPECIES_ID_MYCON_ID;
 use uqm_rust::graphics::geometry::Point;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let d = descriptor(SPECIES_ID_MYCON_ID);
         assert_eq!(d.ship_info.ship_flags, (FIRES_FORE | SEEKING_WEAPON) as u16);
         assert_eq!(d.ship_info.ship_cost, 21);

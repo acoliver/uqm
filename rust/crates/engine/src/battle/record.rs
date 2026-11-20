@@ -191,11 +191,11 @@ impl Default for ElementRecord {
             color_cycle_index: 0,
             velocity: VelocityDesc::new(),
             intersect_control: IntersectControl {
-                IntersectStamp: crate::graphics::intersection::Stamp {
+                intersect_stamp: crate::graphics::intersection::Stamp {
                     origin: Point { x: 0, y: 0 },
                     frame: FrameId::NULL,
                 },
-                EndPoint: Point { x: 0, y: 0 },
+                end_point: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
             prim_index: 0,
@@ -531,11 +531,11 @@ impl ElementState {
             color_cycle_index: self.color_cycle,
             velocity: self.velocity,
             intersect_control: IntersectControl {
-                IntersectStamp: crate::graphics::intersection::Stamp {
+                intersect_stamp: crate::graphics::intersection::Stamp {
                     origin: Point { x: 0, y: 0 },
                     frame: FrameId::NULL,
                 },
-                EndPoint: Point { x: 0, y: 0 },
+                end_point: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
             prim_index: 0,
@@ -568,7 +568,7 @@ impl Subject {
             parent: record.parent,
             intersect: record.intersect_control,
             primitive: record.prim_index,
-            intersect_frame: FrameSelection::retain(record.intersect_control.IntersectStamp.frame),
+            intersect_frame: FrameSelection::retain(record.intersect_control.intersect_stamp.frame),
         }
     }
 }

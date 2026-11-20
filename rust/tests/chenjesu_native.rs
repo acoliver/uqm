@@ -8,7 +8,7 @@ use battle::{
     prim, queued, toward as velocity_toward, velocity as velocity_fields, with_rng, Battle, Object,
     PoolElement, Ship,
 };
-use std::{ffi::CStr, mem};
+use std::mem;
 use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
 use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;

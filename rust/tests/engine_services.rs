@@ -77,7 +77,7 @@ fixture.broken = 3DOVID:broken.duk
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     uqm_rust::platform::install(true);
     // SAFETY: this isolated test owns the repository, graphics state and every loaded resource.
-    unsafe {
+    {
         let mount = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         let dir = uqm_rust::io::content_dir().unwrap();
         retained_string_table_loads_owned_text();

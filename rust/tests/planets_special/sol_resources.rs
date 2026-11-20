@@ -143,7 +143,7 @@ fn names(h: &mut Harness) {
     });
     for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
         let parent = &mut h.state.sys.planets[index];
-        (*parent).data_index = index as u8 + 128;
+        parent.data_index = index as u8 + 128;
         assert!(crate::invoke_generation(&mut h.state, |view, host| {
             GENERATE_SOL_FUNCTIONS.generate_name(
                 view,

@@ -171,18 +171,22 @@ impl SuppliedGenerators {
 impl Generators for SuppliedGenerators {
     fn analyze(&mut self, case: &WorldCase) -> SystemInfo {
         self.set_star(case.star_size, star_type_byte(case));
-        let mut desc: PlanetDesc = Default::default();
-        desc.rand_seed = case.rand_seed;
-        desc.data_index = case.data_index;
-        desc.radius = case.desc_radius;
+        let desc = PlanetDesc {
+            rand_seed: case.rand_seed,
+            data_index: case.data_index,
+            radius: case.desc_radius,
+            ..Default::default()
+        };
         let body = match case.parent_radius {
             None => {
                 self.state.sys.planets[0] = desc;
                 Body::Planet(0)
             }
             Some(radius) => {
-                let mut parent: PlanetDesc = Default::default();
-                parent.radius = radius;
+                let parent = PlanetDesc {
+                    radius: radius,
+                    ..Default::default()
+                };
                 self.state.sys.planets[0] = parent;
                 self.state.sys.moons[0] = desc;
                 Body::Moon { planet: 0, moon: 0 }

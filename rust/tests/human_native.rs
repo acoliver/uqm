@@ -6,7 +6,7 @@ mod battle;
 mod battle_context;
 
 use battle::*;
-use std::{ffi::CStr, mem};
+use std::mem;
 use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, POINT_DEFENSE, SEEKING_WEAPON, SPECIAL};
 use uqm_rust::engine::battle::flags::{APPEARING, FINITE_LIFE, NONSOLID};
 use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;

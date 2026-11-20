@@ -50,11 +50,13 @@ pub trait Ops {
 pub fn descriptors(count: usize) -> Vec<PlanetDesc> {
     (0..count)
         .map(|i| {
-            let mut d: PlanetDesc = Default::default();
-            d.rand_seed = 0xfeed0000 + i as u32;
-            d.data_index = 0;
-            d.num_planets = 0x7f;
-            d.radius = -17;
+            let mut d = PlanetDesc {
+                rand_seed: 0xfeed0000 + i as u32,
+                data_index: 0,
+                num_planets: 0x7f,
+                radius: -17,
+                ..Default::default()
+            };
             d.location.x = -23;
             d.location.y = 29;
             d.temp_color.r = 31;

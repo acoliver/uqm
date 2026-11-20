@@ -95,7 +95,7 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
     for (name, pointer) in [
         ("current.frame", element.current.image.frame.raw()),
         ("next.frame", element.next.image.frame.raw()),
-        ("intersect.frame", element.intersect.IntersectStamp.frame),
+        ("intersect.frame", element.intersect.intersect_stamp.frame),
     ] {
         journal.write_element_frame(
             &identity,

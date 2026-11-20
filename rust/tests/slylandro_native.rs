@@ -42,7 +42,7 @@ use uqm_rust::math::velocity::VELOCITY_SHIFT;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::{ffi::CStr, mem, ptr};
+use std::{mem, ptr};
 use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{cosine, facing_to_angle, normalize_facing, sine};
 

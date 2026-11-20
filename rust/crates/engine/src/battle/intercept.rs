@@ -203,13 +203,13 @@ pub fn plot_intercept(
         let (x, y) = next_velocity(&mut va, first as u16);
         pa.x = pa.x.wrapping_add(x);
         pa.y = pa.y.wrapping_add(y);
-        ca.EndPoint.x = pa.x >> ONE_SHIFT;
-        ca.EndPoint.y = pa.y >> ONE_SHIFT;
+        ca.end_point.x = pa.x >> ONE_SHIFT;
+        ca.end_point.y = pa.y >> ONE_SHIFT;
         let (x, y) = next_velocity(&mut vb, first as u16);
         pb.x = pb.x.wrapping_add(x);
         pb.y = pb.y.wrapping_add(y);
-        cb.EndPoint.x = pb.x >> ONE_SHIFT;
-        cb.EndPoint.y = pb.y >> ONE_SHIFT;
+        cb.end_point.x = pb.x >> ONE_SHIFT;
+        cb.end_point.y = pb.y >> ONE_SHIFT;
     }
     let mut turn = first;
     loop {
@@ -220,19 +220,19 @@ pub fn plot_intercept(
         let (x, y) = next_velocity(&mut vb, 1);
         pb.x = pb.x.wrapping_add(x);
         pb.y = pb.y.wrapping_add(y);
-        ca.IntersectStamp.origin = ca.EndPoint;
-        ca.EndPoint.x = pa.x >> ONE_SHIFT;
-        ca.EndPoint.y = pa.y >> ONE_SHIFT;
-        cb.IntersectStamp.origin = cb.EndPoint;
-        cb.EndPoint.x = pb.x >> ONE_SHIFT;
-        cb.EndPoint.y = pb.y >> ONE_SHIFT;
+        ca.intersect_stamp.origin = ca.end_point;
+        ca.end_point.x = pa.x >> ONE_SHIFT;
+        ca.end_point.y = pa.y >> ONE_SHIFT;
+        cb.intersect_stamp.origin = cb.end_point;
+        cb.end_point.x = pb.x >> ONE_SHIFT;
+        cb.end_point.y = pb.y >> ONE_SHIFT;
         let hit = cx.projected_intersect(&mut ca, &mut cb, MAX_TIME_VALUE as u16);
         if hit != 0 {
             if hit == 1 && turn == 1 && (a.flags | b.flags) & APPEARING as u16 != 0 {
-                ca.EndPoint.x = pa.x >> ONE_SHIFT;
-                ca.EndPoint.y = pa.y >> ONE_SHIFT;
-                cb.EndPoint.x = pb.x >> ONE_SHIFT;
-                cb.EndPoint.y = pb.y >> ONE_SHIFT;
+                ca.end_point.x = pa.x >> ONE_SHIFT;
+                ca.end_point.y = pa.y >> ONE_SHIFT;
+                cb.end_point.x = pb.x >> ONE_SHIFT;
+                cb.end_point.y = pb.y >> ONE_SHIFT;
             } else {
                 return turn as u16;
             }

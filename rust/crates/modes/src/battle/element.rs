@@ -202,10 +202,10 @@ impl From<&crate::engine::battle::record::ElementRecord> for Element {
             velocity: record.velocity,
             intersect_control: IntersectControl {
                 last_time_val: record.intersect_control.last_time_val,
-                end_point: point(record.intersect_control.EndPoint),
+                end_point: point(record.intersect_control.end_point),
                 intersect_stamp: Stamp {
-                    origin: point(record.intersect_control.IntersectStamp.origin),
-                    frame: record.intersect_control.IntersectStamp.frame,
+                    origin: point(record.intersect_control.intersect_stamp.origin),
+                    frame: record.intersect_control.intersect_stamp.frame,
                 },
             },
             prim_index: record.prim_index,
@@ -971,8 +971,8 @@ mod tests {
     fn live_intersection_fields_are_read_at_their_native_offsets() {
         let mut native = crate::engine::battle::record::ElementRecord::default();
         native.intersect_control.last_time_val = 17;
-        native.intersect_control.EndPoint = crate::graphics::geometry::Point { x: 31, y: -47 };
-        native.intersect_control.IntersectStamp.origin =
+        native.intersect_control.end_point = crate::graphics::geometry::Point { x: 31, y: -47 };
+        native.intersect_control.intersect_stamp.origin =
             crate::graphics::geometry::Point { x: -3, y: 91 };
         let model = Element::from(&native);
         assert_eq!(model.intersect_control.last_time_val, 17);

@@ -104,8 +104,8 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             );
             assert_eq!(
                 (
-                    (*copy).intersect_control.EndPoint.x,
-                    (*copy).intersect_control.EndPoint.y
+                    (*copy).intersect_control.end_point.x,
+                    (*copy).intersect_control.end_point.y
                 ),
                 (1235 >> ONE_SHIFT, 2347 >> ONE_SHIFT)
             );

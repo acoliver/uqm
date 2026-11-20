@@ -287,7 +287,7 @@ impl<'a> Ship<'a> {
             ship.element_mut().current.image.frames = ship.ship_frames();
             ship.element_mut().current.image.frame = frames[0].selection(0);
             ship.element_mut().next = ship.element_mut().current.clone();
-            ship.element_mut().intersect_control.IntersectStamp.frame = frames[0].frame(0);
+            ship.element_mut().intersect_control.intersect_stamp.frame = frames[0].frame(0);
             // SAFETY: this slot owns its allocated display primitive.
 
             (*prim(ship.ptr())).kind = STAMP_PRIMITIVE;

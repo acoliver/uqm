@@ -6,7 +6,7 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::{ffi::CStr, mem};
+use std::mem;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
@@ -22,7 +22,7 @@ use battle::Battle as Battlefield;
 fn descriptor_matches_druuge_c_data() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let d = descriptor(SPECIES_ID_DRUUGE_ID);
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(

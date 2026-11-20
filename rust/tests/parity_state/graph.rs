@@ -141,10 +141,10 @@ pub(super) fn element_mutations(
     first.next.location.x = -13;
     first.next.location.y = 29;
     first.intersect_control.last_time_val = 17;
-    first.intersect_control.IntersectStamp.origin.x = -23;
-    first.intersect_control.IntersectStamp.origin.y = 31;
-    first.intersect_control.EndPoint.x = -37;
-    first.intersect_control.EndPoint.y = 41;
+    first.intersect_control.intersect_stamp.origin.x = -23;
+    first.intersect_control.intersect_stamp.origin.y = 31;
+    first.intersect_control.end_point.x = -37;
+    first.intersect_control.end_point.y = 41;
     first.velocity.travel_angle = 43;
     first.velocity.vector.width = -47;
     first.velocity.vector.height = 53;
@@ -192,7 +192,7 @@ pub(super) fn frame_fields(
     observation::assign_set(&mut first.current.image.frames, set.clone(), None);
     observation::assign_frame(&mut first.next.image.frame, view.clone());
     observation::assign_set(&mut first.next.image.frames, set.clone(), None);
-    observation::assign_frame(&mut first.intersect_control.IntersectStamp.frame, pointer);
+    observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
     let (fields, _) = snapshot(observer, directory);
     for name in [
         "current.frame",
@@ -228,7 +228,7 @@ pub(super) fn frame_fields(
         None,
     );
     observation::assign_frame(
-        &mut first.intersect_control.IntersectStamp.frame,
+        &mut first.intersect_control.intersect_stamp.frame,
         uqm_rust::graphics::drawable::FrameId::NULL,
     );
     // SAFETY: both fixture owners retain their slots throughout this read.

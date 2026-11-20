@@ -34,7 +34,7 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod shared;
 
-use std::{ffi::CStr, mem, ptr};
+use std::{mem, ptr};
 use uqm_rust::battle::tactrans_native::reset_winner;
 use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
 use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
@@ -113,9 +113,9 @@ impl<'a> Ship<'a> {
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
-        el.intersect_control.IntersectStamp.frame = ship_frames.frame(0);
-        el.intersect_control.EndPoint = Point { x: 1000, y: 1000 };
-        el.intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.frame = ship_frames.frame(0);
+        el.intersect_control.end_point = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
             handle,

@@ -8,7 +8,6 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::ffi::CStr;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::{
     FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,

@@ -367,7 +367,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     image!(frame; source.current.image.frame, observed_frame(pointer));
     image!(set; source.current.image.frames, observed_set(&views));
     image!(copy; source.next, source.current);
-    image!(frame; source.intersect_control.IntersectStamp.frame, pointer);
+    image!(frame; source.intersect_control.intersect_stamp.frame, pointer);
     observation::record(Event::Allocate(std::ptr::from_ref(&cloned) as usize));
     image!(copy; cloned, source);
     journal.drain_events(&[]);
@@ -386,7 +386,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     journal.write_element_frame(
         &generation,
         "intersect.frame",
-        (cloned.intersect_control.IntersectStamp.frame).bits(),
+        (cloned.intersect_control.intersect_stamp.frame).bits(),
         &mut observed,
         "intersect",
     );

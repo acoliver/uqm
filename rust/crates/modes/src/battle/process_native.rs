@@ -405,7 +405,7 @@ pub mod engine {
                             cx.init_intersect_end(test);
                             cx.set_intersect_origin(
                                 test,
-                                cx.elements()[test].intersect_control.EndPoint,
+                                cx.elements()[test].intersect_control.end_point,
                             );
                             time_value = cx.intersect_elements(el, test, 1);
                             cx.init_intersect_start(test);
@@ -471,8 +471,8 @@ pub mod engine {
                     }
                 }
                 if time_value > 0 {
-                    let mut save = cx.elements()[el].intersect_control.EndPoint;
-                    let mut test_save = cx.elements()[test].intersect_control.EndPoint;
+                    let mut save = cx.elements()[el].intersect_control.end_point;
+                    let mut test_save = cx.elements()[test].intersect_control.end_point;
                     cx.init_intersect_end(el);
                     cx.init_intersect_end(test);
                     let collided = time_value == 1

@@ -54,8 +54,8 @@ fn positions(fields: &mut Fields, prefix: &str, e: &ElementObservation) {
     for (name, point) in [
         ("current", e.current.location),
         ("next", e.next.location),
-        ("intersect.origin", e.intersect.IntersectStamp.origin),
-        ("intersect.end", e.intersect.EndPoint),
+        ("intersect.origin", e.intersect.intersect_stamp.origin),
+        ("intersect.end", e.intersect.end_point),
     ] {
         value(fields, prefix, &format!("{name}.x"), point.x);
         value(fields, prefix, &format!("{name}.y"), point.y);

@@ -224,7 +224,7 @@ impl Journal {
                 "next.farray" => next + set,
                 "intersect.frame" => {
                     std::mem::offset_of!(Element, intersect_control)
-                        + std::mem::offset_of!(IntersectControl, IntersectStamp)
+                        + std::mem::offset_of!(IntersectControl, intersect_stamp)
                         + std::mem::offset_of!(Stamp, frame)
                 }
                 _ => panic!("unknown element image slot {name}"),

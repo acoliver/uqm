@@ -9,7 +9,7 @@ impl Cx<'_> {
             .elements
             .record_mut(id)
             .intersect_control
-            .IntersectStamp
+            .intersect_stamp
             .origin = point;
     }
 

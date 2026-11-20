@@ -60,7 +60,7 @@ fn make_byte(lo: u8, hi: u8) -> u8 {
 #[test]
 fn descriptor_matches_the_c_race_data() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let desc = battle::descriptor(SPECIES_ID_ANDROSYNTH_ID);
             assert!(std::ptr::eq(
                 desc.race.unwrap(),

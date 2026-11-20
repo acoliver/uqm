@@ -190,7 +190,7 @@ impl Cx<'_> {
     }
     pub fn set_intersect_frame(&mut self, id: ElementId, frame: FrameSelection) {
         use crate::collections::observation::image;
-        image!(frame;self.kernel.elements.record_mut(id).intersect_control.IntersectStamp.frame,frame.raw());
+        image!(frame;self.kernel.elements.record_mut(id).intersect_control.intersect_stamp.frame,frame.raw());
         self.kernel.elements.record_mut(id).intersect_frame = frame;
     }
 }
@@ -314,15 +314,15 @@ impl Cx<'_> {
     #[inline]
     pub fn init_intersect_start(&mut self, id: ElementId) {
         let e = self.kernel.elements.record_mut(id);
-        e.intersect_control.IntersectStamp.origin.x = e.current.location.x >> 2;
-        e.intersect_control.IntersectStamp.origin.y = e.current.location.y >> 2;
+        e.intersect_control.intersect_stamp.origin.x = e.current.location.x >> 2;
+        e.intersect_control.intersect_stamp.origin.y = e.current.location.y >> 2;
     }
 
     #[inline]
     pub fn init_intersect_end(&mut self, id: ElementId) {
         let e = self.kernel.elements.record_mut(id);
-        e.intersect_control.EndPoint.x = e.next.location.x >> 2;
-        e.intersect_control.EndPoint.y = e.next.location.y >> 2;
+        e.intersect_control.end_point.x = e.next.location.x >> 2;
+        e.intersect_control.end_point.y = e.next.location.y >> 2;
     }
 }
 
@@ -627,7 +627,7 @@ impl Cx<'_> {
         let first = e.next.image.frames.view(0).to_owned();
         let raw = first.raw().equal_index(e.next.image.frame.raw());
         e.intersect_frame = first.with_raw(raw);
-        crate::collections::observation::image!(frame; e.intersect_control.IntersectStamp.frame, raw);
+        crate::collections::observation::image!(frame; e.intersect_control.intersect_stamp.frame, raw);
     }
 }
 
@@ -676,15 +676,15 @@ mod intersection_projection_tests {
             cx.init_intersect_start(id);
             cx.init_intersect_end(id);
             assert_eq!(
-                cx.elements()[id].intersect_control.IntersectStamp.origin.x,
+                cx.elements()[id].intersect_control.intersect_stamp.origin.x,
                 11
             );
-            assert_eq!(cx.elements()[id].intersect_control.EndPoint.y, 17);
+            assert_eq!(cx.elements()[id].intersect_control.end_point.y, 17);
             cx.element_mut(id).flags = 64;
             cx.refresh_intersect_frame(id);
             assert!(cx.elements()[id]
                 .intersect_control
-                .IntersectStamp
+                .intersect_stamp
                 .frame
                 .is_null());
             assert_eq!(

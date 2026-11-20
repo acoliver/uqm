@@ -7,7 +7,7 @@ mod battle_context;
 use battle::{prim as prim_of, Battle, FrameSet, Ship};
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::{ffi::CStr, ptr};
+use std::ptr;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, FIRST_EMPTY_INDEX, IGNORE_SIMILAR, LEFT,
@@ -76,7 +76,7 @@ unsafe fn avenger(fleet: &mut Ship<'_>) -> *mut ElementRecord {
 #[test]
 fn avenger_descriptor_matches_the_c_template() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let desc = battle::descriptor(SPECIES_ID_ILWRATH_ID);
             assert_eq!(desc.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(desc.ship_info.ship_cost, 10);
