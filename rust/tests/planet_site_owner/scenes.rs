@@ -1,8 +1,5 @@
 use super::*;
-use std::{
-    ffi::{CStr, CString},
-    ptr,
-};
+use std::{ffi::CStr, ptr};
 #[cfg(feature = "debug-process")]
 use uqm_rust::planets::generate::{slylandro::HomeSite, syreen::StarbaseSite};
 use uqm_rust::{

@@ -1,6 +1,6 @@
 //! SDL2 input driver and resource-backed control configuration.
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, CStr, CString};
 use std::ptr;
 
 use parking_lot::Mutex;
@@ -12,7 +12,7 @@ use super::keynames::key_name;
 use super::vcontrol::Gesture;
 use crate::io::Dir;
 use crate::resource::ffi_bridge::{
-    res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove, LoadResourceIndex,
+    load_resource_index, res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove,
 };
 
 const ALTERNATES: usize = 2;
@@ -318,7 +318,7 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
 fn load_index(dir: Option<&Dir>, file: &CStr, prefix: &CStr) {
     if let Some(dir) = dir {
         // SAFETY: both names are terminated C string references.
-        unsafe { LoadResourceIndex(dir, file.as_ptr(), prefix.as_ptr()) };
+        unsafe { load_resource_index(dir, file.as_ptr(), prefix.as_ptr()) };
     }
 }
 

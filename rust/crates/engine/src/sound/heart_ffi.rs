@@ -421,7 +421,7 @@ pub fn fade_music(end_vol: u8, how_long: i16) -> u32 {
 // =============================================================================
 
 pub fn stop_channel(channel: c_uint, priority: c_int) {
-    sfx::stop_channel(channel as usize, priority);
+    let _ = sfx::stop_channel(channel as usize, priority);
 }
 
 pub fn channel_playing(channel: c_uint) -> c_int {

@@ -14,7 +14,7 @@ use crate::host::{FileStream, Files};
 use crate::log_abi::{log_message, LOG_WARNING};
 use crate::memory::{rust_hfree, rust_hmalloc};
 use crate::resource::ffi_bridge::{
-    res_CloseResFile, res_OpenResFile, GetResourceData, LengthResFile,
+    open_res_file, res_CloseResFile, GetResourceData, LengthResFile,
 };
 use crate::resource::ffi_types::ResourceData;
 use crate::strings::string_table::{
@@ -350,7 +350,7 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
     let phrases_c = CString::new(phrases).expect("path has no NUL");
     let content = crate::io::content_dir();
     let fp = content.as_ref().map_or(null_mut(), |content| {
-        res_OpenResFile(content, phrases_c.as_ptr(), c"rb".as_ptr())
+        open_res_file(content, phrases_c.as_ptr(), c"rb".as_ptr())
     });
     if fp.is_null() {
         log_message(

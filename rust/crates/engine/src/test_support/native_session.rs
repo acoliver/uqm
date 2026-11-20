@@ -128,7 +128,7 @@ impl ContentMount {
         let index = cstring(index, "index name");
         // SAFETY: the content directory stays mounted for the guard's life.
         unsafe {
-            crate::resource::ffi_bridge::LoadResourceIndex(
+            crate::resource::ffi_bridge::load_resource_index(
                 &self.content,
                 index.as_ptr(),
                 ptr::null(),
@@ -213,7 +213,7 @@ pub fn reload_content_index(index: &str) {
     let content = crate::io::content_dir().unwrap_or_else(|| panic!("no content directory"));
     // SAFETY: the serialized fixture keeps a content mount live while it reloads.
     unsafe {
-        crate::resource::ffi_bridge::LoadResourceIndex(&content, index.as_ptr(), ptr::null())
+        crate::resource::ffi_bridge::load_resource_index(&content, index.as_ptr(), ptr::null())
     };
 }
 

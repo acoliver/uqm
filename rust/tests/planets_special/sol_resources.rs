@@ -17,9 +17,11 @@ pub fn check(h: &mut Harness) {
         c_api::log_init(100);
         super::shield_additive::check();
         let mount = uqm_engine::test_support::native_session::ContentMount::new(&content);
-        let dir = uqm_rust::io::content_dir().expect("checked-in content directory must open");
+        let Some(dir) = uqm_rust::io::content_dir() else {
+            panic!("checked-in content directory must open");
+        };
         assert!(!ffi_bridge::InitResourceSystem().is_null());
-        ffi_bridge::LoadResourceIndex(&dir, c"uqm.rmp".as_ptr(), std::ptr::null());
+        ffi_bridge::load_resource_index(&dir, c"uqm.rmp".as_ptr(), std::ptr::null());
         names(h);
         binary_palettes();
         scenes(h);

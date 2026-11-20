@@ -15,7 +15,7 @@ unsafe fn load(
     let Some(content) = crate::io::content_dir() else {
         return ptr::null_mut();
     };
-    let fp = res_OpenResFile(&content, path, c"rb".as_ptr());
+    let fp = open_res_file(&content, path, c"rb".as_ptr());
     if fp.is_null() {
         return ptr::null_mut();
     }

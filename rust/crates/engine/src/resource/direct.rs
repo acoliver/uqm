@@ -10,7 +10,7 @@ use std::path::Path;
 
 /// # Safety
 /// `path` and `pattern` must be NUL-terminated. The path must name a directory.
-pub unsafe fn LoadDirEntryTable(
+pub unsafe fn load_dir_entry_table(
     base: &Dir,
     path: *const c_char,
     pattern: *const c_char,
@@ -45,7 +45,7 @@ mod tests {
         let mount = TempMount::new();
         // SAFETY: both strings are terminated literals.
         let table = unsafe {
-            LoadDirEntryTable(
+            load_dir_entry_table(
                 &mount.dir(),
                 c"missing".as_ptr(),
                 c"".as_ptr(),
@@ -65,7 +65,8 @@ mod tests {
         let root = mount.dir();
         // SAFETY: the strings are terminated literals and the table is freed once.
         unsafe {
-            let table = LoadDirEntryTable(&root, c"".as_ptr(), c".sav".as_ptr(), Match::Substring);
+            let table =
+                load_dir_entry_table(&root, c"".as_ptr(), c".sav".as_ptr(), Match::Substring);
             assert!(!table.is_null());
             assert_eq!((*table).size, 2);
             let mut names = Vec::new();
@@ -79,7 +80,7 @@ mod tests {
             assert_eq!(names, [b"one.sav".to_vec(), b"two.sav".to_vec()]);
             FreeStringTable(table);
             assert!(
-                LoadDirEntryTable(&root, c"".as_ptr(), c"absent".as_ptr(), Match::Literal)
+                load_dir_entry_table(&root, c"".as_ptr(), c"absent".as_ptr(), Match::Literal)
                     .is_null()
             );
         }

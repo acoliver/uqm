@@ -10,9 +10,7 @@ use uqm_rust::graphics::{
 use uqm_rust::mainloop::input_frame::rust_complete_input_frame;
 use uqm_rust::video::{
     decoder::DukVideoDecoder,
-    ffi::{
-        tfb_play_video, tfb_process_video_frame, tfb_stop_video, TFB_VideoClip, TFB_VideoDecoder,
-    },
+    ffi::{tfb_play_video, tfb_process_video_frame, tfb_stop_video, ClipSource, TFB_VideoClip},
     DUCK_FPS,
 };
 
@@ -76,7 +74,7 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         TFB_BBox_RegisterRect(&bounds);
 
         let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
-        let descriptor = TFB_VideoDecoder {
+        let descriptor = ClipSource {
             w: 0,
             h: 0,
             length: 0.0,

@@ -1,4 +1,4 @@
-//! C FFI bindings for DukVid decoder vtable and the pure Rust video player.
+//! The pure Rust video player and the clip entry points the game calls.
 
 use std::ffi::{c_int, c_void, CString};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -10,10 +10,8 @@ use crate::sound::decoder::Decoder;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::rodio_audio::{self, SoundCategory};
 
-use super::decoder::DukVideoDecoder;
 use super::player::VideoPlayer;
 use super::scaler::VideoScaler;
-use super::{VideoError, VideoFrame, DUCK_FPS};
 
 pub use crate::graphics::ffi::SDL_Surface;
 
@@ -114,7 +112,7 @@ fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
 // ============================================================================
 
 /// What a clip knows about its video file: where to read it and its geometry.
-pub struct TFB_VideoDecoder {
+pub struct ClipSource {
     pub w: u32,
     pub h: u32,
     pub length: f32,
@@ -388,7 +386,7 @@ pub struct CRect {
 /// `VIDEO_REF` is a pointer to this struct.
 #[repr(C)]
 pub struct TFB_VideoClip {
-    pub decoder: *mut TFB_VideoDecoder,
+    pub decoder: *mut ClipSource,
     pub length: f32,
     pub w: u32,
     pub h: u32,
