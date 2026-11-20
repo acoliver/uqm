@@ -88,7 +88,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 CStr::from_ptr(d.ship_info.melee_icon_rsc),
                 c"ship.chenjesu.meleeicons"
             );
-            assert!(d.ship_info.race_strings.is_null());
+            assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
             assert_eq!(d.fleet.strength, 0);
@@ -148,7 +148,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 c"ship.chenjesu.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null());
-            assert!(d.ship_data.ship_sounds.is_null());
+            assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(d.cyborg_control.ManeuverabilityIndex, 0);
             assert_eq!(d.cyborg_control.WeaponRange, 4000);
 

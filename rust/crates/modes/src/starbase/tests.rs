@@ -226,7 +226,7 @@ fn talk_releases_art_then_flushes_input_runs_conversation_and_restores_the_mark(
     run_starbase_menu(&platform).unwrap();
     let events = platform.events();
 
-    let destroy = position(&events, |e| matches!(e, Event::DestroyDrawable(_)));
+    let destroy = position(&events, |e| matches!(e, Event::FreeDrawable(_)));
     let flush = position(&events, |e| *e == Event::FlushInput);
     let conversation = position(&events, |e| *e == Event::Conversation);
     let mark = position(&events, |e| {
@@ -657,10 +657,7 @@ fn outfit_first_frame_loads_its_art_and_draws_the_screen_in_order() {
     let music = position(&events, |e| matches!(e, Event::PlayMusic(_)));
     assert!(frame < message && message < title && title < transition && transition < music);
     // The background art is drawn once and released at once.
-    assert_eq!(
-        count(&events, |e| matches!(e, Event::DestroyDrawable(_))),
-        1
-    );
+    assert_eq!(count(&events, |e| matches!(e, Event::FreeDrawable(_))), 1);
     assert_eq!(
         count(&events, |e| *e == Event::Batch),
         count(&events, |e| *e == Event::Unbatch)

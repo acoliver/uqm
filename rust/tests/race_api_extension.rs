@@ -118,7 +118,8 @@ fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
         let owner = Battle::new(4);
         let mut a = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         let mut b = Ship::bare(&owner, SPECIES_ID_VUX_ID, 1);
-        {
+        // SAFETY: the serialized fixtures own their descriptors for the whole check.
+        unsafe {
             a.descriptor_mut().install_sound_fixture(5);
             b.descriptor_mut().install_sound_fixture(5);
             crate::battle_context::with(|cx| {
