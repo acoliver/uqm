@@ -14,10 +14,6 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-unsafe extern "C" {
-    fn log_init(max: i32);
-
-}
 static UNINIT: AtomicUsize = AtomicUsize::new(0);
 fn uninit(
     _: &mut uqm_rust::engine::battle::World,
@@ -65,7 +61,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         index.push_str("test.invalid.code = SHIP:255\n");
         std::fs::write(fixture.path().join("ships.rmp"), &index).unwrap();
         unsafe {
-            log_init(100);
+            uqm_rust::log_abi::log_init(100);
             crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
             crate::battle_context::with(|cx| cx.world.data.flagship.module_slots = [255; 16]);
             crate::battle_context::with(|cx| cx.world.data.flagship.drive_slots = [255; 11]);
