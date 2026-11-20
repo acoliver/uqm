@@ -165,4 +165,138 @@ mod tests {
         );
         assert_eq!(translate(&Event::AppTerminating { timestamp: 9 }), None);
     }
+
+    #[test]
+    fn every_input_event_the_engine_reads_is_translated_and_others_are_ignored() {
+        use sdl2::event::DisplayEvent;
+        use sdl2::joystick::HatState;
+        use sdl2::mouse::MouseButton;
+        let up = Event::KeyUp {
+            timestamp: 0,
+            window_id: 0,
+            keycode: Keycode::from_i32(97),
+            scancode: None,
+            keymod: Mod::NOMOD,
+            repeat: false,
+        };
+        let click = |down| {
+            let (timestamp, window_id, which, mouse_btn, clicks, x, y) =
+                (0, 0, 0, MouseButton::Left, 1, 0, 0);
+            if down {
+                Event::MouseButtonDown {
+                    timestamp,
+                    window_id,
+                    which,
+                    mouse_btn,
+                    clicks,
+                    x,
+                    y,
+                }
+            } else {
+                Event::MouseButtonUp {
+                    timestamp,
+                    window_id,
+                    which,
+                    mouse_btn,
+                    clicks,
+                    x,
+                    y,
+                }
+            }
+        };
+        let cases = [
+            (
+                up,
+                Some(HostEvent::KeyUp {
+                    key: 97,
+                    numlock: false,
+                }),
+            ),
+            (
+                Event::TextInput {
+                    timestamp: 0,
+                    window_id: 0,
+                    text: "a".into(),
+                },
+                Some(HostEvent::TextInput("a".into())),
+            ),
+            (click(true), Some(HostEvent::MouseButton { down: true })),
+            (click(false), Some(HostEvent::MouseButton { down: false })),
+            (
+                Event::JoyAxisMotion {
+                    timestamp: 0,
+                    which: 1,
+                    axis_idx: 2,
+                    value: -3,
+                },
+                Some(HostEvent::JoyAxis {
+                    port: 1,
+                    axis: 2,
+                    value: -3,
+                }),
+            ),
+            (
+                Event::JoyHatMotion {
+                    timestamp: 0,
+                    which: 1,
+                    hat_idx: 0,
+                    state: HatState::Up,
+                },
+                Some(HostEvent::JoyHat {
+                    port: 1,
+                    hat: 0,
+                    state: 1,
+                }),
+            ),
+            (
+                Event::JoyButtonDown {
+                    timestamp: 0,
+                    which: 2,
+                    button_idx: 5,
+                },
+                Some(HostEvent::JoyButton {
+                    port: 2,
+                    button: 5,
+                    down: true,
+                }),
+            ),
+            (
+                Event::JoyButtonUp {
+                    timestamp: 0,
+                    which: 2,
+                    button_idx: 5,
+                },
+                Some(HostEvent::JoyButton {
+                    port: 2,
+                    button: 5,
+                    down: false,
+                }),
+            ),
+            (Event::AppTerminating { timestamp: 0 }, None),
+        ];
+        for (event, expected) in cases {
+            assert_eq!(translate(&event), expected, "{event:?}");
+        }
+        let display = Event::Display {
+            timestamp: 0,
+            display_index: 0,
+            display_event: DisplayEvent::Connected,
+        };
+        assert!(matches!(
+            translate(&display),
+            Some(HostEvent::Window { exposed: false, .. })
+        ));
+    }
+
+    #[test]
+    fn an_idle_queue_polls_empty_and_joysticks_start() {
+        let _sdl = crate::SDL_TEST_LOCK.lock();
+        std::env::set_var("SDL_VIDEODRIVER", "dummy");
+        let sdl = sdl2::init().unwrap();
+        let _video = sdl.video().unwrap();
+        set_text_input(true);
+        set_text_input(false);
+        assert!(poll().iter().all(|event| !matches!(event, HostEvent::Quit)));
+        assert!(init_joysticks().is_ok());
+    }
 }

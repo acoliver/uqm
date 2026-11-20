@@ -536,6 +536,7 @@ mod tests {
     #[test]
     fn reconfiguration_keeps_the_window_and_applies_fullscreen_and_size() {
         use sdl2::video::FullscreenType;
+        let _sdl = crate::SDL_TEST_LOCK.lock();
         std::env::set_var("SDL_VIDEODRIVER", "dummy");
         let mut display = SdlDisplay::open(0, None, 640, 480).unwrap();
         let window = display.canvas.window().id();
@@ -551,5 +552,9 @@ mod tests {
             FullscreenType::Off
         );
         assert_eq!(display.canvas.window().size(), (800, 600));
+        display
+            .present_video(&[0x00ff_00ff; 16], 4, 4)
+            .unwrap_or_else(|error| panic!("present a movie frame: {error}"));
+        log_scaler_flags(i32::MAX);
     }
 }

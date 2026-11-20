@@ -20,6 +20,14 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+/// Window-system events the next `poll_input` reports.
+static PENDING_INPUT: std::sync::Mutex<Vec<super::HostEvent>> = std::sync::Mutex::new(Vec::new());
+
+/// Queue events for the test platform's next input poll.
+pub fn queue_input(events: impl IntoIterator<Item = super::HostEvent>) {
+    crate::sync::lock(&PENDING_INPUT).extend(events);
+}
+
 pub(super) struct TestPlatform {
     clock: Arc<dyn Clock>,
     replay_audio: Option<ReplayAudioPort>,
@@ -58,7 +66,7 @@ impl Platform for TestPlatform {
         &self.dispatch
     }
     fn poll_input(&self) -> Vec<super::HostEvent> {
-        Vec::new()
+        std::mem::take(&mut *crate::sync::lock(&PENDING_INPUT))
     }
     fn set_text_input(&self, _on: bool) {}
     /// Tests drive the mixer directly; nothing pulls from it.

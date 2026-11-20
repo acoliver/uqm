@@ -69,26 +69,29 @@ impl AudioPort for RodioDevice {
     }
 }
 
+/// Serve commands until shutdown. Without an output device every clip gets
+/// handle 0 and nothing reports playing.
 fn device_thread(commands: Receiver<AudioCommand>) {
     rust_bridge_log_msg("RUST_AUDIO_THREAD: starting");
-    let (_stream, output) = match OutputStream::try_default() {
-        Ok(stream) => stream,
+    let stream = match OutputStream::try_default() {
+        Ok(stream) => {
+            rust_bridge_log_msg("RUST_AUDIO_THREAD: output stream opened");
+            Some(stream)
+        }
         Err(error) => {
             rust_bridge_log_msg(&format!(
                 "RUST_AUDIO_THREAD: failed to open output - {error}"
             ));
-            // Answer plays with "no handle" until shutdown.
-            answer_without_device(commands);
-            return;
+            None
         }
     };
-    rust_bridge_log_msg("RUST_AUDIO_THREAD: output stream opened");
+    let output = stream.as_ref().map(|(_, output)| output);
     let mut sinks = HashMap::<u32, Sink>::new();
     let mut next_handle = 0u32;
     while let Ok(command) = commands.recv() {
         match command {
             AudioCommand::Play(clip, reply) => {
-                let handle = match play(&output, clip) {
+                let handle = match output.and_then(|output| play(output, clip)) {
                     Some(sink) => {
                         next_handle = next_handle.wrapping_add(1).max(1);
                         sinks.insert(next_handle, sink);
@@ -115,21 +118,6 @@ fn device_thread(commands: Receiver<AudioCommand>) {
     rust_bridge_log_msg("RUST_AUDIO_THREAD: stopped");
 }
 
-fn answer_without_device(commands: Receiver<AudioCommand>) {
-    while let Ok(command) = commands.recv() {
-        match command {
-            AudioCommand::Play(_, reply) => {
-                let _ = reply.send(0);
-            }
-            AudioCommand::IsPlaying(_, reply) => {
-                let _ = reply.send(false);
-            }
-            AudioCommand::Stop(_) => {}
-            AudioCommand::Shutdown => break,
-        }
-    }
-}
-
 fn play(output: &rodio::OutputStreamHandle, clip: PcmClip) -> Option<Sink> {
     let sink = match Sink::try_new(output) {
         Ok(sink) => sink,
@@ -146,4 +134,45 @@ fn play(output: &rodio::OutputStreamHandle, clip: PcmClip) -> Option<Sink> {
     }
     sink.play();
     Some(sink)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_device_plays_reports_and_stops_clips_and_shuts_down_once() {
+        let device = RodioDevice {
+            sender: Mutex::new(None),
+            thread: Mutex::new(None),
+        };
+        assert!(
+            !device.send(AudioCommand::Stop(1)),
+            "nothing runs before start"
+        );
+        assert!(device.start());
+        assert!(device.start(), "a second start keeps the running thread");
+        let (reply, handle) = mpsc::channel();
+        let clip = PcmClip::from_bytes(&[0; 400], 8000, 1, 16, false)
+            .unwrap_or_else(|| panic!("silent clip"));
+        assert!(device.send(AudioCommand::Play(clip, reply)));
+        let handle = handle
+            .recv()
+            .unwrap_or_else(|error| panic!("play reply: {error}"));
+        let (reply, playing) = mpsc::channel();
+        assert!(device.send(AudioCommand::IsPlaying(handle, reply)));
+        let playing = playing
+            .recv()
+            .unwrap_or_else(|error| panic!("query reply: {error}"));
+        assert!(
+            handle != 0 || !playing,
+            "a clip without a device never plays"
+        );
+        assert!(device.send(AudioCommand::Stop(handle)));
+        device.shutdown();
+        assert!(
+            !device.send(AudioCommand::Stop(handle)),
+            "nothing runs after shutdown"
+        );
+    }
 }

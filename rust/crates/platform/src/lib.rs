@@ -18,6 +18,10 @@ pub mod rodio_device;
 pub mod sdl;
 pub mod system;
 
+/// SDL allows one live context per process; tests that open one take turns.
+#[cfg(test)]
+pub(crate) static SDL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Build and install the process platform: the replay clock and audio for a
 /// replay, the OS clock and rodio otherwise.
 pub fn install(replay: bool) {

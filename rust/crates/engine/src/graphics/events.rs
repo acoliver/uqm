@@ -26,3 +26,26 @@ pub fn process_events() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn window_and_quit_events_reach_the_diagnostics_and_the_quit_flag() {
+        state::with(|g| g.quit_posted = false);
+        crate::host::queue_input([
+            HostEvent::Window {
+                detail: "moved".into(),
+                exposed: false,
+            },
+            HostEvent::Quit,
+        ]);
+        process_events();
+        assert!(state::quit_posted());
+        state::with(|g| g.quit_posted = false);
+        process_events();
+        assert!(!state::quit_posted(), "each event is handled once");
+    }
+}

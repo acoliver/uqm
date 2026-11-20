@@ -30,6 +30,8 @@ mod display;
 mod event;
 #[cfg(any(test, feature = "test-support"))]
 mod fallback;
+#[cfg(any(test, feature = "test-support"))]
+pub use fallback::queue_input;
 mod platform;
 mod system;
 pub use clock::Clock;
