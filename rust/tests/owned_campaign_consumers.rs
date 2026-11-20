@@ -122,8 +122,15 @@ fn scene_star_lookup_uses_the_unpublished_world() {
     use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
     let mut world = World::new();
     world.story = Some(uqm_rust::state::game_state::StoryState::new());
-    // SAFETY: descriptors contain only integer fields; this fixture retains every catalog entry.
-    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(
+        [CStarDesc {
+            star_pt: Default::default(),
+            star_type: 0,
+            index: 0,
+            prefix: 0,
+            postfix: 0,
+        }; CATALOG_LEN],
+    );
     for star in catalog.iter_mut() {
         star.star_pt.y = i16::MAX;
     }
@@ -147,8 +154,15 @@ fn rainbow_ordinal_reads_the_unpublished_visit_star() {
     };
     use uqm_rust::planets::generate::{host::PlanetSite, rainbow::RAINBOW_DEFINED};
     let mut world = World::new();
-    // SAFETY: catalog descriptors contain only integer fields.
-    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(
+        [CStarDesc {
+            star_pt: Default::default(),
+            star_type: 0,
+            index: 0,
+            prefix: 0,
+            postfix: 0,
+        }; CATALOG_LEN],
+    );
     catalog[0].index = RAINBOW_DEFINED;
     catalog[1].index = 9;
     world.set_catalog(std::borrow::Cow::Owned(*catalog));

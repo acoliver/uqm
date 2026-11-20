@@ -935,15 +935,15 @@ struct DerivedPreparation {
 
 impl DerivedPreparation {
     fn from_game_data(opening_res_units: u32) -> Self {
-        let mut sis = unsafe { std::mem::zeroed() };
-        let mut state = unsafe { std::mem::zeroed() };
+        let mut sis = uqm_rust::engine::world::SisState::default();
+        let mut state = uqm_rust::engine::battle::schema::GameRecord::default();
         uqm_rust::engine::world::new_game::equipment(&mut sis);
         uqm_rust::engine::world::new_game::prices(&mut sis, &mut state);
         let opening_fuel = sis.fuel_on_board;
         let fuel_price = state.fuel_cost;
 
         // Derive fuel cost from the production Sol physical owner.
-        let mut lunar_info = unsafe { std::mem::zeroed() };
+        let mut lunar_info = Default::default();
         uqm_rust::planets::generate::sol::orbital::physical_overrides(
             &mut lunar_info,
             uqm_rust::planets::generate::special::Body::Moon { planet: 2, moon: 1 },
@@ -954,7 +954,7 @@ impl DerivedPreparation {
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
         ));
 
-        let mut mercury_info = unsafe { std::mem::zeroed() };
+        let mut mercury_info = Default::default();
         uqm_rust::planets::generate::sol::orbital::physical_overrides(
             &mut mercury_info,
             uqm_rust::planets::generate::special::Body::Planet(0),

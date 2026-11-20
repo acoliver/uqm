@@ -15,32 +15,29 @@ pub fn check() {
     h.set_star(0, 0);
     check_initialized_identity(&mut h);
     h.seed(104729);
-    let system = &raw mut *h.state;
-    unsafe {
-        assert!(!crate::invoke_generation(&mut *system, |view, host| table
-            .pickup_energy(
-                view,
-                uqm_rust::planets::generate::special::Body::Planet(0),
-                u16::MAX,
-                host
-            )));
-        assert!(crate::invoke_generation(&mut *system, |view, host| table
-            .pickup_minerals(
-                view,
-                uqm_rust::planets::generate::special::Body::Planet(0),
-                u16::MAX,
-                host
-            )));
-        assert!(crate::invoke_generation(&mut *system, |view, host| table
-            .pickup_life(
-                view,
-                uqm_rust::planets::generate::special::Body::Planet(0),
-                u16::MAX,
-                host
-            )));
-        // No resource/report infrastructure is needed for the no-scene pickup.
-        assert_eq!(h.rng_position(), 104729);
-    }
+    assert!(!crate::invoke_generation(&mut h.state, |view, host| table
+        .pickup_energy(
+            view,
+            uqm_rust::planets::generate::special::Body::Planet(0),
+            u16::MAX,
+            host
+        )));
+    assert!(crate::invoke_generation(&mut h.state, |view, host| table
+        .pickup_minerals(
+            view,
+            uqm_rust::planets::generate::special::Body::Planet(0),
+            u16::MAX,
+            host
+        )));
+    assert!(crate::invoke_generation(&mut h.state, |view, host| table
+        .pickup_life(
+            view,
+            uqm_rust::planets::generate::special::Body::Planet(0),
+            u16::MAX,
+            host
+        )));
+    // No resource/report infrastructure is needed for the no-scene pickup.
+    assert_eq!(h.rng_position(), 104729);
     check_bomb_queue(&mut h);
     super::sol_npcs::check(&mut h);
     check_drawable_ownership(&mut h);
@@ -52,26 +49,22 @@ fn check_initialized_identity(h: &mut Harness) {
     h.set_star(0, 0);
     h.star[0].index = uqm_rust::battle::gendef::SHOFIXTI_DEFINED;
     crate::battle_context::with(|cx| cx.world.set_catalog(std::borrow::Cow::Owned(*h.star)));
-    // SAFETY: the serialized harness retains its catalog, RNG and solar records;
-    // the callback releases all generated references before returning.
-    let generated = {
-        crate::battle_context::with(|cx| {
-            let mut observer = uqm_rust::engine::observe::Unobserved;
-            let mut io = uqm_rust::engine::observe::Io {
-                observer: &mut observer,
-            };
-            uqm_rust::front_end::uqmdebug::Generation::invoke(
-                &mut uqm_rust::planets::solarsys::site::dispatch::DebugGeneration,
-                cx,
-                &mut io,
-                &mut h.state,
-                |generator, system, host| {
-                    assert_eq!(system.star_index(), SOL_DEFINED);
-                    generator.generate_planets(system, host)
-                },
-            )
-        })
-    };
+    let generated = crate::battle_context::with(|cx| {
+        let mut observer = uqm_rust::engine::observe::Unobserved;
+        let mut io = uqm_rust::engine::observe::Io {
+            observer: &mut observer,
+        };
+        uqm_rust::front_end::uqmdebug::Generation::invoke(
+            &mut uqm_rust::planets::solarsys::site::dispatch::DebugGeneration,
+            cx,
+            &mut io,
+            &mut h.state,
+            |generator, system, host| {
+                assert_eq!(system.star_index(), SOL_DEFINED);
+                generator.generate_planets(system, host)
+            },
+        )
+    });
     assert!(generated);
     assert_eq!(
         h.state.sys.sun.num_planets, 9,
@@ -99,26 +92,24 @@ fn check_bomb_queue(h: &mut Harness) {
         cx.world
             .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
-    unsafe {
-        let saved = crate::battle_context::with(|cx| {
-            let saved = (
-                std::mem::take(&mut cx.world.queues),
-                cx.world.data.game.battle_group_ref,
-            );
-            cx.world.data.game.battle_group_ref = 0x12345678;
-            saved
-        });
-        assert!(crate::invoke_generation(&mut h.state, |system, host| {
-            GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
-        }));
-        crate::battle_context::with(|cx| {
-            assert_eq!(cx.world.data.game.battle_group_ref, 0);
-            assert!(cx.world.ip_groups_ref().head().is_none());
-            assert!(cx.world.npc_built_ships_ref().head().is_none());
-            cx.world.queues = saved.0;
-            cx.world.data.game.battle_group_ref = saved.1;
-        });
-    }
+    let saved = crate::battle_context::with(|cx| {
+        let saved = (
+            std::mem::take(&mut cx.world.queues),
+            cx.world.data.game.battle_group_ref,
+        );
+        cx.world.data.game.battle_group_ref = 0x12345678;
+        saved
+    });
+    assert!(crate::invoke_generation(&mut h.state, |system, host| {
+        GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
+    }));
+    crate::battle_context::with(|cx| {
+        assert_eq!(cx.world.data.game.battle_group_ref, 0);
+        assert!(cx.world.ip_groups_ref().head().is_none());
+        assert!(cx.world.npc_built_ships_ref().head().is_none());
+        cx.world.queues = saved.0;
+        cx.world.data.game.battle_group_ref = saved.1;
+    });
     crate::battle_context::with(|cx| {
         cx.world
             .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)

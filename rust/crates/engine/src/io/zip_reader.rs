@@ -646,7 +646,9 @@ mod error_tests {
         assert!(matches!(index.open_entry("absent"), Err(e) if e.kind() == ErrorKind::NotFound));
         std::fs::write(&path, b"invalid zip").unwrap();
         assert_eq!(
-            ZipIndex::new(crate::host::platform().disk(), &path).unwrap_err().kind(),
+            ZipIndex::new(crate::host::platform().disk(), &path)
+                .unwrap_err()
+                .kind(),
             ErrorKind::InvalidData
         );
         assert_eq!(

@@ -30,11 +30,9 @@ impl Ops for Harness {
         self.seed(case.seed);
 
         let mut expected = crate::generation_data(&self.state);
-        let result = unsafe {
-            crate::invoke_generation(&mut self.state, |system, host| {
-                table(case.kind).generate_planets(system, host)
-            })
-        };
+        let result = crate::invoke_generation(&mut self.state, |system, host| {
+            table(case.kind).generate_planets(system, host)
+        });
         expected.1 = self.state.sys.planets;
         expected.0.num_planets = self.state.sys.sun.num_planets;
         assert_eq!(
@@ -54,16 +52,14 @@ impl Ops for Harness {
         self.star_index = case.star;
         self.set_star(case.size, case.color);
         self.state.sys.moons.copy_from_slice(moons);
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
         self.state.sys.planets[usize::from(planet)].num_planets = count;
         self.seed(case.seed);
 
         let mut expected = crate::generation_data(&self.state);
-        let result = unsafe {
-            crate::invoke_generation(&mut self.state, |system, host| {
-                table(case.kind).generate_moons(system, planet, host)
-            })
-        };
+        let result = crate::invoke_generation(&mut self.state, |system, host| {
+            table(case.kind).generate_moons(system, planet, host)
+        });
         expected.2 = self.state.sys.moons;
         assert_eq!(
             format!("{:?}", crate::generation_data(&self.state)),
@@ -81,8 +77,8 @@ impl Ops for Harness {
         ] {
             crate::battle_context::with(|cx| cx.world.set_story_state(key, u32::from(case.taken)));
         }
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
-        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
+        self.state.sys.moons = Default::default();
         self.state.sys.info = *info;
         match case.body {
             uqm_rust::planets::generate::special::Body::Planet(p) => {
@@ -104,16 +100,13 @@ impl Ops for Harness {
             };
         self.seed(case.seed);
         let before = format!("{:?}", crate::generation_data(&self.state));
-        let result = unsafe {
-            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host))
-        };
+        let result =
+            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host));
         let after_rng = self.rng_position();
         self.seed(case.seed);
-        let count_only = unsafe {
-            crate::invoke_generation(&mut self.state, |view, host| {
-                generate(view, &mut crate::planets_common::fresh_node(), host)
-            })
-        };
+        let count_only = crate::invoke_generation(&mut self.state, |view, host| {
+            generate(view, &mut crate::planets_common::fresh_node(), host)
+        });
         assert_eq!(count_only, result, "NULL output count: {case:?}");
         assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(

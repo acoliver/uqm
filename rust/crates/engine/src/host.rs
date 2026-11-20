@@ -34,10 +34,10 @@ mod system;
 pub use clock::Clock;
 pub use display::{Display, Layer, PresentFrame};
 pub use platform::{
-    advance_to, async_wait_ms, dispatch, install, install_platform, is_replay, now_ms,
-    now_ticks, platform, process_async, steps, AudioPort, Platform,
+    advance_to, async_wait_ms, dispatch, install, install_platform, is_replay, now_ms, now_ticks,
+    platform, process_async, steps, AudioPort, Platform,
 };
 pub use system::{
-    at_exit, elapsed, exit, sleep, spawn, thread_number, unix_millis, yield_now, Deadline,
-    System, Worker,
+    at_exit, elapsed, exit, sleep, spawn, thread_number, unix_millis, yield_now, Deadline, System,
+    Worker,
 };

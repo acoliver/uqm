@@ -100,8 +100,13 @@ impl SuppliedGenerators {
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
         let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
         let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
-        // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
-        star[0] = unsafe { std::mem::zeroed() };
+        star[0] = uqm_rust::engine::world::CStarDesc {
+            star_pt: Default::default(),
+            star_type: 0,
+            index: 0,
+            prefix: 0,
+            postfix: 0,
+        };
         let state = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_catalog(std::borrow::Cow::Owned(*star));
@@ -157,18 +162,16 @@ impl SuppliedGenerators {
         run: impl FnOnce(&mut RandomContext, &SystemInfo, &PlanetFrame) -> R,
     ) -> R {
         self.select_info(info);
-        unsafe {
-            crate::invoke_generation(&mut self.state, |system, _| {
-                system.scan(Body::Planet(0), run)
-            })
-        }
+        crate::invoke_generation(&mut self.state, |system, _| {
+            system.scan(Body::Planet(0), run)
+        })
     }
 }
 
 impl Generators for SuppliedGenerators {
     fn analyze(&mut self, case: &WorldCase) -> SystemInfo {
         self.set_star(case.star_size, star_type_byte(case));
-        let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
+        let mut desc: PlanetDesc = Default::default();
         desc.rand_seed = case.rand_seed;
         desc.data_index = case.data_index;
         desc.radius = case.desc_radius;
@@ -178,7 +181,7 @@ impl Generators for SuppliedGenerators {
                 Body::Planet(0)
             }
             Some(radius) => {
-                let mut parent: PlanetDesc = unsafe { std::mem::zeroed() };
+                let mut parent: PlanetDesc = Default::default();
                 parent.radius = radius;
                 self.state.sys.planets[0] = parent;
                 self.state.sys.moons[0] = desc;
@@ -186,16 +189,14 @@ impl Generators for SuppliedGenerators {
             }
         };
         self.state.sys.info = SystemInfo::default();
-        unsafe {
-            crate::invoke_generation(&mut self.state, |system, _| {
-                if case.is_orbit_entry {
-                    calc::analyse_body(system, body);
-                    system.orbital(body, |data| *data.info)
-                } else {
-                    calc::preview_body(system, body)
-                }
-            })
-        }
+        crate::invoke_generation(&mut self.state, |system, _| {
+            if case.is_orbit_entry {
+                calc::analyse_body(system, body);
+                system.orbital(body, |data| *data.info)
+            } else {
+                calc::preview_body(system, body)
+            }
+        })
     }
 
     fn minerals(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
@@ -249,24 +250,22 @@ impl Generators for SuppliedGenerators {
             generating_moons: moons,
             types_defined: case.mode.types_defined(),
         };
-        unsafe {
-            self.state.sys.rng.reseed(case.seed);
-            crate::invoke_generation(&mut self.state, |system, _| {
-                if moons {
-                    system.layout_moons(0, |rng, size, color, _, worlds| {
-                        assert_eq!(size, request.star_size);
-                        assert_eq!(color, request.star_color);
-                        assert!(orbits::fill_orbits(rng, request, &mut worlds[..slots]).is_none());
-                    });
-                } else {
-                    system.layout(|rng, _, size, color, worlds| {
-                        assert_eq!(size, request.star_size);
-                        assert_eq!(color, request.star_color);
-                        orbits::fill_orbits(rng, request, &mut worlds[..slots]).unwrap_or(0)
-                    });
-                }
-            });
-        }
+        self.state.sys.rng.reseed(case.seed);
+        crate::invoke_generation(&mut self.state, |system, _| {
+            if moons {
+                system.layout_moons(0, |rng, size, color, _, worlds| {
+                    assert_eq!(size, request.star_size);
+                    assert_eq!(color, request.star_color);
+                    assert!(orbits::fill_orbits(rng, request, &mut worlds[..slots]).is_none());
+                });
+            } else {
+                system.layout(|rng, _, size, color, worlds| {
+                    assert_eq!(size, request.star_size);
+                    assert_eq!(color, request.star_color);
+                    orbits::fill_orbits(rng, request, &mut worlds[..slots]).unwrap_or(0)
+                });
+            }
+        });
         if moons {
             descs.copy_from_slice(&self.state.sys.moons[..descs.len()]);
         } else {
@@ -281,9 +280,9 @@ impl Generators for SuppliedGenerators {
 impl DefaultOps for SuppliedGenerators {
     fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
         self.state.sys.sun.num_planets = 0;
-        let rng = unsafe {
+        let rng = {
             self.state.sys.rng.reseed(seed);
             assert!(crate::invoke_generation(&mut self.state, |system, host| {
                 uqm_rust::planets::generate::generator(0).generate_planets(system, host)
@@ -303,9 +302,9 @@ impl DefaultOps for SuppliedGenerators {
 
     fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
-        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = Default::default();
         self.state.sys.planets[0].num_planets = count;
-        let rng = unsafe {
+        let rng = {
             self.state.sys.rng.reseed(seed);
             assert!(crate::invoke_generation(&mut self.state, |system, host| {
                 uqm_rust::planets::generate::generator(0).generate_moons(system, 0, host)
@@ -330,29 +329,24 @@ impl DefaultOps for SuppliedGenerators {
         node: &mut NodeInfo,
     ) -> (u16, u32) {
         self.select_info(info);
-        let record = &raw mut *self.state;
-        unsafe {
-            let count = crate::invoke_generation(&mut *record, |system, host| {
-                use uqm_rust::planets::generate::{default, generator};
-                let body = uqm_rust::planets::generate::special::Body::Planet(0);
-                match kind {
-                    NodeKind::Minerals => {
-                        generator(0).generate_minerals(system, body, which, node, host)
-                    }
-                    NodeKind::Energy => {
-                        generator(0).generate_energy(system, body, which, node, host)
-                    }
-                    NodeKind::Life => generator(0).generate_life(system, body, which, node, host),
-                    NodeKind::Artifact => system.scan(body, |rng, info, _| {
-                        default::generate_artifact(rng, info, which, node)
-                    }),
-                    NodeKind::Ruins => system.scan(body, |rng, info, _| {
-                        default::generate_ruins(rng, info, which, node)
-                    }),
+        let count = crate::invoke_generation(&mut self.state, |system, host| {
+            use uqm_rust::planets::generate::{default, generator};
+            let body = uqm_rust::planets::generate::special::Body::Planet(0);
+            match kind {
+                NodeKind::Minerals => {
+                    generator(0).generate_minerals(system, body, which, node, host)
                 }
-            });
-            (count, self.state.sys.rng.seed())
-        }
+                NodeKind::Energy => generator(0).generate_energy(system, body, which, node, host),
+                NodeKind::Life => generator(0).generate_life(system, body, which, node, host),
+                NodeKind::Artifact => system.scan(body, |rng, info, _| {
+                    default::generate_artifact(rng, info, which, node)
+                }),
+                NodeKind::Ruins => system.scan(body, |rng, info, _| {
+                    default::generate_ruins(rng, info, which, node)
+                }),
+            }
+        });
+        (count, self.state.sys.rng.seed())
     }
 }
 
@@ -437,17 +431,16 @@ fn supplied_views_reproduce_the_c_fixtures() {
         planets_special::sol_matches_the_c_original(table);
         oval_parity::retained_ovals_match_original_c_full_offscreen_buffers(&exports.state.sys.rng);
         topography_parity::full_c_fixture_core_and_host_parity(&exports.state.sys.rng);
-        sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects(
-            &exports.state.sys.rng,
-        );
-        assert!(unsafe {
-            crate::invoke_generation(&mut exports.state, |system, host| {
+        sphere_geometry_parity::rust_matches_fixture_without_rng_effects(&exports.state.sys.rng);
+        assert!(crate::invoke_generation(
+            &mut exports.state,
+            |system, host| {
                 let generator = uqm_rust::planets::generate::generator(0);
                 let body = uqm_rust::planets::generate::special::Body::Planet(0);
                 generator.pickup_minerals(system, body, 0, host)
                     && generator.pickup_life(system, body, 0, host)
-            })
-        });
+            }
+        ));
     });
 }
 
@@ -554,7 +547,7 @@ impl Drop for SuppliedGenerators {
     }
 }
 
-unsafe fn invoke_generation<R>(
+fn invoke_generation<R>(
     solar: &mut SolarSystem,
     run: impl FnOnce(
         &mut uqm_rust::engine::world::generation::SolarSys<'_>,

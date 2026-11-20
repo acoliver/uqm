@@ -171,7 +171,7 @@ impl<'a> RustDefault<'a> {
     }
 
     fn blank_descs(count: usize) -> Vec<PlanetDesc> {
-        (0..count).map(|_| unsafe { std::mem::zeroed() }).collect()
+        (0..count).map(|_| Default::default()).collect()
     }
 }
 
@@ -258,8 +258,8 @@ impl Generators for RustGenerators<'_> {
             do_planetary_analysis, AnalysisSite, StarDescription,
         };
 
-        let mut info: SystemInfo = unsafe { std::mem::zeroed() };
-        let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
+        let mut info: SystemInfo = Default::default();
+        let mut desc: PlanetDesc = Default::default();
         desc.rand_seed = case.rand_seed;
         desc.data_index = case.data_index;
         desc.radius = case.desc_radius;
@@ -403,7 +403,7 @@ mod rust_special {
     impl SpecialOps for RustSpecial<'_> {
         fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
             let mut rng = RandomContext::with_seed(case.2);
-            let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+            let mut planets: Vec<PlanetDesc> = vec![Default::default(); 16];
             let drawn = match system {
                 "colony" => colony::generate_planets(
                     &mut rng,
@@ -492,7 +492,7 @@ mod rust_special {
             case: (u8, u8, u32, u8),
         ) -> (Vec<Desc>, u32) {
             let mut rng = RandomContext::with_seed(case.2);
-            let mut moons: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 4];
+            let mut moons: Vec<PlanetDesc> = vec![Default::default(); 4];
             let hook = match system {
                 "syreen" => syreen::generate_moons,
                 "chmmr" => chmmr::generate_moons,
@@ -603,7 +603,7 @@ mod rust_special {
                     "wreck" => &wreck::generate_energy,
                     other => panic!("no such system {other}"),
                 };
-            let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+            let mut info: SystemInfo = Default::default();
             info.planet_info.scan_seed = scan_seeds(seed);
             let mut out = String::new();
             let mut rng = RandomContext::with_seed(seed);

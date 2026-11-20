@@ -537,4 +537,24 @@ mod tests {
         native_bytes(&[0x0102_0304; 3], &mut out);
         assert_eq!(out, [0x0102_0304u32.to_ne_bytes(); 3].as_flattened());
     }
+
+    #[test]
+    fn reconfiguration_keeps_the_window_and_applies_fullscreen_and_size() {
+        use sdl2::video::FullscreenType;
+        std::env::set_var("SDL_VIDEODRIVER", "dummy");
+        let mut display = SdlDisplay::open(0, None, 640, 480).unwrap();
+        let window = display.canvas.window().id();
+        display.reconfigure(GFXFLAGS_FULLSCREEN, 640, 480).unwrap();
+        assert_eq!(
+            display.canvas.window().fullscreen_state(),
+            FullscreenType::Desktop
+        );
+        assert_eq!(display.canvas.window().id(), window);
+        display.reconfigure(0, 800, 600).unwrap();
+        assert_eq!(
+            display.canvas.window().fullscreen_state(),
+            FullscreenType::Off
+        );
+        assert_eq!(display.canvas.window().size(), (800, 600));
+    }
 }

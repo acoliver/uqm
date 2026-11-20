@@ -109,7 +109,10 @@ const STATE_INITIAL: i32 = SourceState::Initial as i32;
 const STATE_STOPPED: i32 = SourceState::Stopped as i32;
 const STATE_PLAYING: i32 = SourceState::Playing as i32;
 const STATE_PAUSED: i32 = SourceState::Paused as i32;
-use SourceProp::{BuffersProcessed as PROCESSED, BuffersQueued as QUEUED, Looping as LOOPING, SourceState as STATE};
+use SourceProp::{
+    BuffersProcessed as PROCESSED, BuffersQueued as QUEUED, Looping as LOOPING,
+    SourceState as STATE,
+};
 
 #[test]
 fn init_reports_the_negotiated_frequency_and_format() {

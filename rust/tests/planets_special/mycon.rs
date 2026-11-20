@@ -19,11 +19,9 @@ impl MyconOps for Harness {
         self.state.sys.sun.num_planets = 0;
         self.seed(case.2);
 
-        let result = unsafe {
-            crate::invoke_generation(&mut self.state, |system, host| {
-                generateMyconFunctions.generate_planets(system, host)
-            })
-        };
+        let result = crate::invoke_generation(&mut self.state, |system, host| {
+            generateMyconFunctions.generate_planets(system, host)
+        });
         planets.copy_from_slice(&self.state.sys.planets);
         (result, self.state.sys.sun.num_planets, self.rng_position())
     }
@@ -38,8 +36,8 @@ impl MyconOps for Harness {
                 u32::from(case.taken),
             )
         });
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
-        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
+        self.state.sys.moons = Default::default();
         self.state.sys.info = mycon::scan_info(case);
         self.state.sys.report =
             uqm_rust::engine::world::generation::ReportSlot::new(case.strings.then(|| {
@@ -62,16 +60,13 @@ impl MyconOps for Harness {
             };
         self.seed(case.seed);
         let before = format!("{:?}", crate::generation_data(&self.state));
-        let count = unsafe {
-            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host))
-        };
+        let count =
+            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host));
         let after_rng = self.rng_position();
         self.seed(case.seed);
-        let count_only = unsafe {
-            crate::invoke_generation(&mut self.state, |view, host| {
-                generate(view, &mut crate::planets_common::fresh_node(), host)
-            })
-        };
+        let count_only = crate::invoke_generation(&mut self.state, |view, host| {
+            generate(view, &mut crate::planets_common::fresh_node(), host)
+        });
         assert_eq!(count_only, count, "NULL output count: {case:?}");
         assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(

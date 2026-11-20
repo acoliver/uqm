@@ -25,8 +25,12 @@ fn in_child(test: &str, body: impl FnOnce()) {
 }
 
 fn addon(path: &str) -> Vec<u8> {
-    std::fs::read(Path::new(env!("UQM_RUST_ROOT")).join("../sc2/content/addons/3dovideo").join(path))
-        .unwrap()
+    std::fs::read(
+        Path::new(env!("UQM_RUST_ROOT"))
+            .join("../sc2/content/addons/3dovideo")
+            .join(path),
+    )
+    .unwrap()
 }
 
 fn logo_content() -> TempMount {

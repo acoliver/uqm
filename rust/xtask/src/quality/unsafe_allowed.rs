@@ -95,7 +95,9 @@ mod tests {
     fn the_check_applies_once_the_platform_crate_exists() {
         let root = tempfile::tempdir().unwrap();
         let mut measurement = Measurement::default();
-        measurement.findings.push(unsafe_in("crates/engine/src/io.rs"));
+        measurement
+            .findings
+            .push(unsafe_in("crates/engine/src/io.rs"));
         assert!(check(root.path(), &measurement).is_ok());
         std::fs::create_dir_all(root.path().join("rust/crates/platform")).unwrap();
         std::fs::write(root.path().join("rust/crates/platform/Cargo.toml"), "").unwrap();

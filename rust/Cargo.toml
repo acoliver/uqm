@@ -130,10 +130,6 @@ path = "tests/graphics_loading.rs"
 name = "queue_native"
 path = "tests/queue_native.rs"
 
-[[test]]
-name = "video_native"
-path = "tests/video_native.rs"
-
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
 

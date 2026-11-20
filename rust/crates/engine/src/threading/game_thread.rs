@@ -1,8 +1,8 @@
 //! The game thread: it owns SDL dispatch and the draw queue, and its
 //! cooperative yield pumps window events (rust_thrcommon.c).
 use super::task_switch;
-use std::sync::atomic::{AtomicBool, Ordering};
 use crate::host::thread_number;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 /// The game thread, which owns SDL dispatch and the draw queue.
@@ -25,8 +25,7 @@ pub fn init_game_thread() {
     );
     *GAME_THREAD
         .lock()
-        .unwrap_or_else(|error| panic!("thread owner lock: {error}")) =
-        Some(thread_number());
+        .unwrap_or_else(|error| panic!("thread owner lock: {error}")) = Some(thread_number());
 }
 
 /// Retire the thread system once every worker has stopped

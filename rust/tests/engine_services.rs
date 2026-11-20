@@ -12,8 +12,8 @@ fn retained_playback_keeps_its_clip_after_descriptor_drop() {
     drop(absent);
     let descriptor =
         LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
-    let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
     let playback_started = std::time::Instant::now();
+    let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
     drop(descriptor);
     assert!(playback.is_playing());
     assert!(playback.process_frame());
@@ -87,7 +87,11 @@ fixture.broken = 3DOVID:broken.duk
         uqm_rust::resource::init();
         uqm_rust::resource::load_index(&dir, c"video.rmp", None);
         retained_playback_keeps_its_clip_after_descriptor_drop();
-        assert!(uqm_rust::graphics::present::present_video(&[0xff00_00ff, 0xff00_ff00], 1, 2));
+        assert!(uqm_rust::graphics::present::present_video(
+            &[0xff00_00ff, 0xff00_ff00],
+            1,
+            2
+        ));
         uqm_rust::sound::rodio_audio::rust_audio_uninit();
         uqm_rust::graphics::present::uninit_graphics();
         drop(mount);

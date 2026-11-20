@@ -29,6 +29,19 @@ pub fn ignore(signal: c_int) -> io::Result<()> {
     set_disposition(signal, libc::SIG_IGN)
 }
 
+/// Deliver `signal` to the calling thread.
+///
+/// # Errors
+///
+/// Returns the OS error from `raise`; `EINVAL` for a signal that does not exist.
+pub fn raise(signal: c_int) -> io::Result<()> {
+    // SAFETY: raise takes the signal number only.
+    if unsafe { libc::raise(signal) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 fn set_disposition(signal: c_int, disposition: usize) -> io::Result<()> {
     // SAFETY: sigaction is plain data for which all-zero is a valid empty value.
     let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
