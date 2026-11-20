@@ -758,3 +758,34 @@ pub fn purge() {
         }
     });
 }
+
+#[cfg(test)]
+mod thread_tests {
+    use super::super::{context::LoadedContext, drawable::LoadedDrawable};
+
+    /// #891: graphics state belongs to the thread that uses it, so fixtures
+    /// running on parallel test threads allocate and release without racing
+    /// each other or needing a shared lock.
+    #[test]
+    fn parallel_threads_allocate_and_release_independently() {
+        let workers: Vec<_> = (0..4)
+            .map(|worker| {
+                std::thread::spawn(move || {
+                    for _ in 0..50 {
+                        let context = LoadedContext::create(c"parallel fixture");
+                        let drawable = LoadedDrawable::create(0, 4, 4, 2)
+                            .unwrap_or_else(|| panic!("worker {worker} drawable"));
+                        let lease = drawable.lease();
+                        drop(drawable);
+                        assert!(lease.frame(1).is_some(), "a lease outlives the owner");
+                        drop(lease);
+                        drop(context);
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap_or_else(|_| panic!("worker"));
+        }
+    }
+}

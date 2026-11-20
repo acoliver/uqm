@@ -296,7 +296,7 @@ fn load_conversation_table<T: LineSource>(
     }
     let column = |pool: Pool| (!pool.bytes.is_empty()).then(|| pool.into_entries(count));
     Some(ConversationTable {
-        strings: strings.into_entries(count),
+        strings: LoadedTextTable::from_strings(strings.into_entries(count)),
         names: extra.names.into_entries(count),
         clips: column(extra.clips),
         timestamps: column(extra.timestamps),

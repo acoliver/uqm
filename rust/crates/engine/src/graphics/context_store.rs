@@ -60,7 +60,6 @@ impl Graphics {
                 held_font: None,
                 held_effect: FrameId::NULL,
                 leases: 1,
-                owned: true,
             },
         );
         self.contexts.order.push(ContextId(id));
@@ -335,14 +334,15 @@ impl Graphics {
         drawable
     }
 
-    /// Hold an owned context for a new lease.
+    /// Hold a live context for a new lease. A context lives while its owner
+    /// or any lease does (#961): a lease kept past the owner's release can be
+    /// selected and named again. Ids are never reused, so a freed id fails.
     pub(super) fn retain_context(&mut self, context: ContextId) {
         let entry = self
             .contexts
             .entries
             .get_mut(&context.0)
-            .filter(|entry| entry.owned)
-            .unwrap_or_else(|| panic!("context is unowned or retired: {context:?}"));
+            .unwrap_or_else(|| panic!("context is retired: {context:?}"));
         entry.leases += 1;
     }
 

@@ -218,6 +218,27 @@ mod tests {
         assert_eq!(selected.next_entry().current_label(), (c"ab", 2));
     }
 
+    /// #952: a string table loaded from the index belongs to its loader;
+    /// dropping it frees its own storage and the resource loads again.
+    #[test]
+    #[serial_test::serial]
+    fn indexed_string_tables_release_by_drop_and_load_again() {
+        let mount = crate::io::fixture::TempMount::new().as_content();
+        mount.write("text.rmp", b"test.strings = STRTAB:strings.txt\n");
+        mount.write("strings.txt", b"#(first)\nhello\n#(second)\nworld\n");
+        crate::resource::init();
+        crate::resource::load_index(&mount.dir(), c"text.rmp", None);
+        for _ in 0..2 {
+            let table = LoadedTextTable::load(c"test.strings")
+                .unwrap_or_else(|| panic!("indexed string table"));
+            assert_eq!(table.text(1), Some(c"world"));
+            let storage = Rc::downgrade(&table.0);
+            drop(table);
+            assert!(storage.upgrade().is_none(), "dropping frees the table");
+        }
+        assert!(crate::resource::remove("test.strings"));
+    }
+
     #[test]
     fn entry_refs_name_one_table_and_the_current_entry() {
         let owner = LoadedTextTable::new(vec![c"a".to_owned(), c"b".to_owned()]);

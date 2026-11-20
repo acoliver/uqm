@@ -178,8 +178,9 @@ impl Drop for PackageMount {
     }
 }
 
-fn content_files() -> Dir {
-    crate::io::content_dir().unwrap_or_else(|| panic!("content directory not set"))
+/// The content directory; loads find nothing before one is mounted.
+fn content_files() -> Option<Dir> {
+    crate::io::content_dir()
 }
 
 /// C: `get_cel_data`: load the animation `path`, whose stream is `stream`
@@ -207,7 +208,7 @@ pub(crate) fn load_cel(
             position = 0;
             (Box::new(files), &mut package_stream, b"")
         } else {
-            (Box::new(content_files()), stream, prefix)
+            (Box::new(content_files()?), stream, prefix)
         };
     file.seek(SeekFrom::Start(position)).ok()?;
     let mut images = Vec::new();
@@ -255,7 +256,7 @@ pub(crate) fn load_font(path: &CStr, package: bool) -> Option<LoadedFont> {
         let (parent, name, _) = path_parts(bytes);
         PackageMount::mount(parent, path, name)
     });
-    let content = content_files();
+    let content = content_files()?;
     let directory = Path::new(path.to_str().ok()?);
     let names: Vec<String> = content
         .list(directory)
@@ -295,7 +296,7 @@ pub(crate) fn load_font(path: &CStr, package: bool) -> Option<LoadedFont> {
 /// C: `LoadGraphicFile`: an animation or image file outside the resource
 /// index.
 pub(crate) fn load_graphic_file(path: &CStr) -> Option<LoadedDrawable> {
-    let mut stream = content_files()
+    let mut stream = content_files()?
         .open_read(Path::new(path.to_str().ok()?))
         .ok()?;
     let length = stream.len().ok()? as u32;
@@ -304,7 +305,7 @@ pub(crate) fn load_graphic_file(path: &CStr) -> Option<LoadedDrawable> {
 
 /// C: `LoadFontFile`.
 pub(crate) fn load_font_file(path: &CStr) -> Option<LoadedFont> {
-    let content = content_files();
+    let content = content_files()?;
     let directory = Path::new(path.to_str().ok()?);
     let package = !content.stat(directory).ok()?.is_dir;
     load_font(path, package)

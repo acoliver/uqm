@@ -45,7 +45,6 @@ pub struct Context {
     held_font: Option<FontId>,
     held_effect: FrameId,
     leases: u32,
-    owned: bool,
 }
 
 /// A copyable name for a context (C: `CONTEXT`). Names are never reused.
@@ -131,7 +130,6 @@ impl Drop for LoadedContext {
             if g.current.context == Some(context) {
                 g.set_context(None);
             }
-            g.context_mut(context).owned = false;
         });
     }
 }
@@ -163,7 +161,7 @@ impl Drop for BatchPause {
 }
 
 impl ContextLease {
-    /// Hold a live, owned context.
+    /// Hold a live context.
     pub fn retain(context: ContextId) -> Self {
         state::with(|g| g.retain_context(context));
         Self(context)
@@ -726,12 +724,35 @@ mod tests {
         first_lease.select();
         second_lease.select();
         drop(first);
-        assert!(std::panic::catch_unwind(|| ContextLease::retain(first_ref)).is_err());
+        drop(ContextLease::retain(first_ref));
         drop(first_lease);
+        assert!(std::panic::catch_unwind(|| ContextLease::retain(first_ref)).is_err());
         assert_eq!(selected(), Some(second.context()));
         drop(second);
         assert_eq!(selected(), None);
         drop(second_lease);
+    }
+
+    /// #961: a lease outliving its context's owner keeps the context
+    /// selectable, by the lease and by the id the selection reports.
+    #[test]
+    fn a_retained_context_stays_selectable_after_its_owner_releases_it() {
+        let owner = LoadedContext::create(c"retired-owner");
+        let lease = owner.lease();
+        let id = owner.context();
+        drop(owner);
+        lease.select();
+        let reselected = lease
+            .selected_context()
+            .unwrap_or_else(|| panic!("the retained context is selected"));
+        assert_eq!(reselected.context(), id);
+        select(None);
+        assert_eq!(select(Some(id)), None);
+        assert_eq!(selected(), Some(id));
+        drop(reselected);
+        drop(lease);
+        assert_eq!(selected(), None);
+        assert!(std::panic::catch_unwind(|| ContextLease::retain(id)).is_err());
     }
 
     #[test]

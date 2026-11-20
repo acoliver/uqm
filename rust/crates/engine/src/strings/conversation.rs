@@ -1,25 +1,20 @@
 //! Owned conversation text, phrase names, speech clips and timestamps.
 
+use super::owned_table::LoadedTextTable;
 use std::ffi::CStr;
 
 /// Every column holds one entry per phrase; an empty entry is absent data.
 /// Clips and timestamps exist only when the resource supplied any.
 pub struct ConversationTable {
-    pub(super) strings: Vec<Vec<u8>>,
+    pub(super) strings: LoadedTextTable,
     pub(super) names: Vec<Vec<u8>>,
     pub(super) clips: Option<Vec<Vec<u8>>>,
     pub(super) timestamps: Option<Vec<Vec<u8>>>,
 }
 
-impl From<super::owned_table::LoadedTextTable> for ConversationTable {
-    fn from(table: super::owned_table::LoadedTextTable) -> Self {
-        let strings = (0..table.len())
-            .map(|index| {
-                table
-                    .text(index)
-                    .map_or_else(Vec::new, |text| text.to_bytes_with_nul().to_vec())
-            })
-            .collect::<Vec<_>>();
+/// Phrase text alone, sharing the table's storage.
+impl From<LoadedTextTable> for ConversationTable {
+    fn from(strings: LoadedTextTable) -> Self {
         Self {
             names: vec![Vec::new(); strings.len()],
             strings,
@@ -67,7 +62,7 @@ impl ConversationTable {
         }
         let index = usize::from(index) % self.len();
         Some(ConversationPhrase {
-            text: text(&self.strings[index]),
+            text: self.strings.text(index),
             name: text(&self.names[index]),
             clip: column(&self.clips, index),
             timestamp: column(&self.timestamps, index),
@@ -89,7 +84,7 @@ mod tests {
     #[test]
     fn conversation_entries_preserve_metadata_and_wrapping() {
         let owner = ConversationTable {
-            strings: column(&[Some(c"First\néclair"), None]),
+            strings: LoadedTextTable::from_strings(column(&[Some(c"First\néclair"), None])),
             names: column(&[Some(c"FIRST_PHRASE"), Some(c"SECOND_PHRASE")]),
             clips: Some(column(&[Some(c"comm/first.ogg"), None])),
             timestamps: Some(column(&[Some(c"1000,2000"), None])),
@@ -110,13 +105,10 @@ mod tests {
 
     #[test]
     fn empty_and_text_only_tables_have_no_fabricated_companions() {
-        let empty =
-            ConversationTable::from(super::super::owned_table::LoadedTextTable::new(Vec::new()));
+        let empty = ConversationTable::from(LoadedTextTable::new(Vec::new()));
         assert!(empty.is_empty());
         assert!(empty.phrase(0).is_none());
-        let plain = ConversationTable::from(super::super::owned_table::LoadedTextTable::new(vec![
-            c"Phrase".to_owned(),
-        ]));
+        let plain = ConversationTable::from(LoadedTextTable::new(vec![c"Phrase".to_owned()]));
         let phrase = plain.phrase(0).unwrap();
         assert_eq!(
             (phrase.text, phrase.name, phrase.clip, phrase.timestamp),
