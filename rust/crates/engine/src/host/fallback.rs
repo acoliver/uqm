@@ -1,8 +1,7 @@
 //! The platform of test processes: the real file system, an in-memory
 //! network and a display that shows nothing, on either the real clock with
-//! the process audio device (which tests replace with a recorder) or the
-//! replay clock with silent audio. A test process that installs no platform
-//! runs on the real-clock one.
+//! no sound device or the replay clock with its silent device. A test
+//! process that installs no platform runs on the real-clock one.
 //!
 //! The game binary always installs a platform (`uqm-platform`); this stand-in
 //! exists only in test builds, so engine, content and mode unit tests run
@@ -15,7 +14,7 @@ use super::{AudioPort, Display, Net, Platform, PresentFrame};
 use crate::callback::Dispatch;
 use crate::graphics::presentation_diagnostics::PresentationSample;
 use crate::graphics::presented_frame::PresentedFrame;
-use crate::sound::rodio_audio::{ReplayAudioPort, RODIO};
+use crate::sound::audio_device::{AudioCommand, ReplayAudioPort};
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -52,7 +51,7 @@ impl Platform for TestPlatform {
     fn audio(&self) -> &dyn AudioPort {
         match &self.replay_audio {
             Some(audio) => audio,
-            None => &RODIO,
+            None => &NoDevice,
         }
     }
     fn dispatch(&self) -> &Dispatch {
@@ -126,6 +125,19 @@ impl Display for TestDisplay {
         self.size = (width as u32, height as u32);
         Ok(())
     }
+}
+
+/// A sound device that never comes up: commands are refused.
+struct NoDevice;
+
+impl AudioPort for NoDevice {
+    fn start(&self) -> bool {
+        false
+    }
+    fn send(&self, _command: AudioCommand) -> bool {
+        false
+    }
+    fn shutdown(&self) {}
 }
 
 struct TestSystem(Instant);

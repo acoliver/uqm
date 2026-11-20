@@ -7,9 +7,10 @@
 //! - `Decoder` trait defines the decoder interface
 //! - `DecoderFormats` specifies the output audio format
 //! - Individual decoder implementations (Ogg, Wav, MOD, etc.)
-//! - `rodio_audio` module provides a simple rodio-based audio system
+//! - `audio_device` module plays whole PCM clips through the platform sound device
 
 pub mod aiff;
+pub mod audio_device;
 pub mod decoder;
 pub mod dukaud;
 pub mod formats;
@@ -21,7 +22,6 @@ pub mod null;
 pub mod ogg;
 pub mod replay_audio;
 pub mod resource_types;
-pub mod rodio_audio;
 mod tracker;
 // @plan PLAN-20260225-AUDIO-HEART.P06
 #[cfg(feature = "audio_heart")]

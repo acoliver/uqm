@@ -10,7 +10,7 @@ use std::sync::{Arc, OnceLock};
 use super::clock::Clock;
 use super::{Display, Files, Net, System};
 use crate::callback::Dispatch;
-use crate::sound::rodio_audio::AudioCommand;
+use crate::sound::audio_device::AudioCommand;
 
 /// A running output stream; `stop` ends it.
 pub trait AudioOutput: Send {

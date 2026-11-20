@@ -20,7 +20,7 @@ fn in_child(test: &str, body: impl FnOnce()) {
     crate::graphics::state::init_headless(crate::graphics::state::VideoMode::default());
     body();
     stop_player();
-    crate::host::platform().audio().shutdown();
+    crate::sound::audio_device::shutdown();
     crate::graphics::state::uninit_headless();
 }
 
@@ -140,7 +140,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
                 directory.write(&format!("{ships}/{name}"), &addon(&format!("ships/{name}")));
             }
             directory.write("3dovideo.rmp", &addon("3dovideo.rmp"));
-            assert!(crate::host::platform().audio().start());
+            assert!(crate::sound::audio_device::start());
             crate::resource::load_index(&directory.dir(), c"3dovideo.rmp", None);
             let descriptor =
                 LoadedVideo::load(c"slides.spins.00").expect("shipped spin descriptor");

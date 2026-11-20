@@ -1,5 +1,4 @@
 //! Resource and movie lifecycle through the engine's normal library build.
-use std::ptr;
 use uqm_rust::graphics::present::GraphicsOptions;
 use uqm_rust::strings::owned_table::LoadedTextTable;
 use uqm_rust::video::legacy::*;
@@ -92,7 +91,7 @@ fixture.broken = 3DOVID:broken.duk
             1,
             2
         ));
-        uqm_rust::sound::rodio_audio::rust_audio_uninit();
+        uqm_rust::sound::audio_device::shutdown();
         uqm_rust::graphics::present::uninit_graphics();
         drop(mount);
     }
@@ -100,44 +99,26 @@ fixture.broken = 3DOVID:broken.duk
 }
 
 fn replay_audio_exports_follow_sample_completion_and_transport() {
-    use uqm_rust::sound::rodio_audio::*;
+    use uqm_rust::sound::audio_device::{self as audio, PcmClip};
     use uqm_rust::{engine::host as source, time::counter_abi::ONE_SECOND};
 
-    let pcm = [0u8; 2000];
-    // SAFETY: replay audio was selected before initialization; every byte slice stays live during calls.
-    unsafe {
-        assert_eq!(rust_audio_init(), 1);
-        assert_eq!(rust_audio_play_raw(ptr::null(), 4, 1000, 1, 16, 0, 0), 0);
-        assert_eq!(rust_audio_play_raw(pcm.as_ptr(), 0, 1000, 1, 16, 0, 0), 0);
-        assert_eq!(
-            rust_audio_play_raw(pcm.as_ptr(), pcm.len(), 0, 1, 16, 0, 0),
-            0
-        );
-        assert_eq!(rust_audio_play_wav(ptr::null(), 1, 0, 0), 0);
-        assert_eq!(rust_audio_play_ogg(pcm.as_ptr(), 0, 1, 0), 0);
-        assert_eq!(rust_audio_play_ogg(pcm.as_ptr(), pcm.len(), 1, 0), 0);
-        let handle = rust_audio_play_raw(pcm.as_ptr(), pcm.len(), 1000, 1, 16, 2, 0);
-        assert_ne!(handle, 0);
-        assert_eq!(rust_audio_is_playing(handle), 1);
-        rust_audio_pause(handle);
-        source::advance_to(source::now_ticks() + 2 * ONE_SECOND);
-        assert_eq!(rust_audio_is_playing(handle), 1);
-        rust_audio_resume(handle);
-        source::advance_to(source::now_ticks() + ONE_SECOND);
-        assert_eq!(rust_audio_is_playing(handle), 0);
-        rust_audio_cleanup();
-        let looping = rust_audio_play_raw(pcm.as_ptr(), pcm.len(), 1000, 1, 16, 7, 1);
-        assert_ne!(looping, 0);
-        source::advance_to(source::now_ticks() + 2 * ONE_SECOND);
-        assert_eq!(rust_audio_is_playing(looping), 1);
-        rust_audio_stop(looping);
-        assert_eq!(rust_audio_is_playing(looping), 0);
-        let last = play_raw_pcm(pcm.to_vec(), 1000, 1, 16, SoundCategory::Music, true);
-        assert_ne!(last, 0);
-        rust_audio_stop_all();
-        assert_eq!(rust_audio_is_playing(last), 0);
-        rust_audio_uninit();
-        assert_eq!(rust_audio_is_playing(last), 0);
-        assert_eq!(rust_audio_play_wav(pcm.as_ptr(), pcm.len(), 0, 0), 0);
-    }
+    let clip = |looping| PcmClip::from_bytes(&[0u8; 2000], 1000, 1, 16, looping).unwrap();
+    assert!(audio::start());
+    let handle = audio::play(clip(false));
+    assert_ne!(handle, 0);
+    assert!(audio::is_playing(handle));
+    source::advance_to(source::now_ticks() + ONE_SECOND - 1);
+    assert!(audio::is_playing(handle));
+    source::advance_to(source::now_ticks() + 1);
+    assert!(!audio::is_playing(handle));
+    let looping = audio::play(clip(true));
+    assert_ne!(looping, 0);
+    source::advance_to(source::now_ticks() + 2 * ONE_SECOND);
+    assert!(audio::is_playing(looping));
+    audio::stop(looping);
+    assert!(!audio::is_playing(looping));
+    let last = audio::play(clip(true));
+    assert_ne!(last, 0);
+    audio::shutdown();
+    assert!(!audio::is_playing(last));
 }

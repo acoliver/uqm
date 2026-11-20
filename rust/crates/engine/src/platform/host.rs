@@ -10,7 +10,8 @@ use crate::host::clock::{Clock, RealClock, ReplayClock};
 use crate::host::{
     AudioOutput, AudioPort, Display, FillAudio, Files, HostEvent, Net, Platform, System,
 };
-use crate::sound::rodio_audio::{ReplayAudioPort, RODIO};
+use super::rodio_device::RODIO;
+use crate::sound::audio_device::ReplayAudioPort;
 
 fn open_display(
     flags: i32,

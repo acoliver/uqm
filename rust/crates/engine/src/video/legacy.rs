@@ -7,7 +7,7 @@ use crate::io::Dir;
 use crate::sound::decoder::Decoder;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::resource_types::LoadedMusic;
-use crate::sound::rodio_audio::{self, SoundCategory};
+use crate::sound::audio_device::{self, PcmClip};
 use std::ffi::CStr;
 use std::sync::{Mutex, MutexGuard};
 
@@ -45,7 +45,7 @@ impl Current {
     fn stop_clip(&mut self) {
         let audio = std::mem::take(&mut self.audio);
         if audio != 0 {
-            rodio_audio::stop_sound(audio);
+            audio_device::stop(audio);
             rust_bridge_log_msg(&format!("RUST_VIDEO: stopped audio handle={audio}"));
         }
         self.player = None;
@@ -159,9 +159,9 @@ impl Clip {
         }
         let bytes = pcm.len();
         // DukAud is 22,050 Hz 16-bit stereo.
-        let handle = rodio_audio::play_raw_pcm(pcm, 22050, 2, 16, SoundCategory::Music, looping);
+        let handle = PcmClip::from_bytes(&pcm, 22050, 2, 16, looping).map_or(0, audio_device::play);
         rust_bridge_log_msg(&format!(
-            "RUST_VIDEO: playing embedded audio via rodio, {bytes} bytes PCM, handle={handle}"
+            "RUST_VIDEO: playing embedded audio, {bytes} bytes PCM, handle={handle}"
         ));
         handle
     }
@@ -198,7 +198,7 @@ impl LoadedVideo {
             drop(playback);
             return None;
         }
-        crate::host::platform().audio().start();
+        audio_device::start();
         current.audio = clip.start_soundtrack(looping);
         current.started = true;
         current.speech = playback.speech.is_some();

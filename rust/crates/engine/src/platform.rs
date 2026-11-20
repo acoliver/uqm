@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 pub mod audio_output;
 pub mod host;
+pub mod rodio_device;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod os;
