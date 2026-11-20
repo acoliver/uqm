@@ -10,8 +10,8 @@ use uqm_engine::{
     network::loopback::LoopbackNet,
 };
 use uqm_rust::engine::battle::net::NetState;
-use uqm_rust::engine::network::NativeNet;
 use uqm_rust::engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolPoll};
+use uqm_rust::engine::network::NativeNet;
 use uqm_rust::supermelee::netplay::{
     checkbuf::ChecksumBuffer,
     netconnection::{NetConnection, PeerOptions, ReadyAction, Rejected},

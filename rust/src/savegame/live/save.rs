@@ -21,8 +21,7 @@ pub(crate) fn capture(
     if cx.world.in_hqspace() {
         crate::engine::save::hyper_save::prepare_hyper_state(cx.world, cx.kernel)?;
     } else if let Some(solar) = solar {
-        // SAFETY: the game thread keeps the campaign's ship frame live.
-        unsafe { live::prepare_live_solar_location(cx.world, &solar)? };
+        live::prepare_live_solar_location(cx.world, &solar)?;
     }
     if groups::saves_ip_group_queue(cx.world.activity()) {
         put_group_info(cx.world, 0, u8::MAX);

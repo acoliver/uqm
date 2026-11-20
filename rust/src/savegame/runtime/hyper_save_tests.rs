@@ -7,7 +7,7 @@
 //! the flagship's stored facing.
 
 use crate::engine::battle::{ElementId, ElementTable, Parent, ShipId};
-use std::mem::size_of;
+use crate::engine::collections::pool::Id;
 
 use super::hyper_save::*;
 use crate::comm::locdata::CGameState;
@@ -25,39 +25,37 @@ const SHIP_SLOTS: u16 = 14;
 const ELEMENT_SLOTS: u16 = 150;
 const SENTINEL_FACING: u16 = 0x5555;
 
-fn allocate(queue: &mut RacePool, record: ShipRecord) -> *mut ShipRecord {
-    let id = queue
+type ShipKey = Id<ShipRecord>;
+
+fn allocate(queue: &mut RacePool, record: ShipRecord) -> ShipKey {
+    queue
         .fixture_pool()
         .alloc(record)
-        .unwrap_or_else(|| panic!("fixture capacity"));
-    std::ptr::from_mut(queue.fixture_pool().get_mut(id))
+        .unwrap_or_else(|| panic!("fixture capacity"))
 }
 
-fn push(queue: &mut RacePool, record: ShipRecord) -> *mut ShipRecord {
-    let id = queue
-        .fixture_pool()
-        .alloc(record)
-        .unwrap_or_else(|| panic!("fixture capacity"));
+fn push(queue: &mut RacePool, record: ShipRecord) -> ShipKey {
+    let id = allocate(queue, record);
     queue.fixture_pool().put(id);
-    std::ptr::from_mut(queue.fixture_pool().get_mut(id))
+    id
 }
 
-fn allocate_element(elements: &mut ElementTable, value: ElementRecord) -> *mut ElementRecord {
-    let id = elements.alloc().expect("fixture capacity");
+fn allocate_element(elements: &mut ElementTable, value: ElementRecord) -> ElementId {
+    let id = elements
+        .alloc()
+        .unwrap_or_else(|| panic!("fixture capacity"));
     *elements.fixture_record_mut(id) = value;
-    elements.raw(id).cast()
+    id
 }
 
-fn push_element(elements: &mut ElementTable, value: ElementRecord) -> *mut ElementRecord {
-    let pointer = allocate_element(elements, value);
-    let id = elements.id(std::ptr::NonNull::new(pointer.cast())).unwrap();
+fn push_element(elements: &mut ElementTable, value: ElementRecord) -> ElementId {
+    let id = allocate_element(elements, value);
     elements.put(id);
-    pointer
+    id
 }
 
 fn starship(facing: u16, element: Option<ElementId>) -> ShipRecord {
-    // SAFETY: `STARSHIP` is integers, pointers and optional function pointers.
-    let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
+    let mut ship = ShipRecord::default();
     ship.ship_facing = facing;
     ship.ship_element = element;
     ship.captains_name_index = 1;
@@ -66,12 +64,12 @@ fn starship(facing: u16, element: Option<ElementId>) -> ShipRecord {
 }
 
 fn element(flags: u16, owner: Parent) -> ElementRecord {
-    // SAFETY: `ELEMENT` is integers, pointers and optional function pointers.
-    let mut element: ElementRecord = unsafe { std::mem::zeroed() };
-    element.state_flags = flags;
-    element.parent = owner;
-    element.player_nr = 0;
-    element
+    ElementRecord {
+        state_flags: flags,
+        parent: owner,
+        player_nr: 0,
+        ..ElementRecord::default()
+    }
 }
 
 /// The two queues of a hyperspace flight with nothing queued yet.
@@ -102,29 +100,33 @@ impl Queues {
             ),
         );
         push_element(&mut queues.display, element(0, Parent::None));
-        // SAFETY: `ship` is the slot just pushed.
-        unsafe {
-            (*ship).ship_element = queues.display.id(std::ptr::NonNull::new(flagship.cast()))
-        };
+        queues.ships.fixture_pool().get_mut(ship).ship_element = Some(flagship);
         queues
     }
 
-    fn head_ship(&self) -> *mut ShipRecord {
+    fn head_key(&self) -> ShipKey {
         self.ships
             .fixture_records()
             .head()
-            .map_or(std::ptr::null_mut(), |id| {
-                std::ptr::from_ref(self.ships.fixture_records().get(id)).cast_mut()
-            })
+            .unwrap_or_else(|| panic!("a queued flagship"))
     }
 
-    fn flagship_element(&self) -> *mut ElementRecord {
-        // SAFETY: the head is a slot of the ship pool.
-        unsafe {
-            self.display
-                .raw((*self.head_ship()).ship_element.unwrap())
-                .cast()
-        }
+    fn head_ship(&mut self) -> &mut ShipRecord {
+        let head = self.head_key();
+        self.ships.fixture_pool().get_mut(head)
+    }
+
+    fn flagship(&self) -> ElementId {
+        self.ships
+            .fixture_records()
+            .get(self.head_key())
+            .ship_element
+            .unwrap_or_else(|| panic!("the flagship has an element"))
+    }
+
+    fn flagship_element(&mut self) -> &mut ElementRecord {
+        let flagship = self.flagship();
+        self.display.fixture_record_mut(flagship)
     }
 
     fn save(&self, game: &mut CGameState) -> Result<HyperFlagship, HyperSaveError> {
@@ -134,8 +136,7 @@ impl Queues {
 
 /// A `GAME_STATE` with a recognisable value in every field the step might touch.
 fn game() -> Box<CGameState> {
-    // SAFETY: `CGameState` is integers and raw pointers; zero is valid.
-    let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
+    let mut game = Box::<CGameState>::default();
     game.ship_stamp.origin.x = 301;
     game.ship_stamp.origin.y = -302;
     game.ip_location.x = 4000;
@@ -151,11 +152,8 @@ fn game() -> Box<CGameState> {
     game
 }
 
-fn bytes_of<T>(value: &T) -> Vec<u8> {
-    // SAFETY: a read of `size_of::<T>()` bytes of a live value; the values here
-    // start zeroed, so padding is initialised.
-    unsafe { std::slice::from_raw_parts(std::ptr::from_ref(value).cast::<u8>(), size_of::<T>()) }
-        .to_vec()
+fn bytes_of(value: &CGameState) -> String {
+    format!("{value:?}")
 }
 
 fn queues_snapshot(queues: &Queues) -> (Vec<String>, Vec<String>) {
@@ -187,12 +185,12 @@ fn queues_snapshot(queues: &Queues) -> (Vec<String>, Vec<String>) {
     )
 }
 
-/// The bytes of the game state apart from `ShipFacing`, which is zeroed.
-fn without_facing(state: &CGameState) -> Vec<u8> {
-    let mut bytes = bytes_of(state);
-    let at = std::mem::offset_of!(CGameState, ship_facing);
-    bytes[at..at + size_of::<u16>()].fill(0);
-    bytes
+/// The game state apart from `ShipFacing`, which is zeroed.
+fn without_facing(state: &CGameState) -> String {
+    bytes_of(&CGameState {
+        ship_facing: 0,
+        ..*state
+    })
 }
 
 #[test]
@@ -260,10 +258,8 @@ fn a_facing_that_would_wrap_to_zero_is_refused_and_writes_nothing() {
 fn the_owner_is_the_elements_parent_even_when_it_is_not_the_queue_head() {
     let mut queues = Queues::flight(3);
     push(&mut queues.ships, starship(11, None));
-    // SAFETY: the flagship element is a slot of the display pool.
-    unsafe { (*queues.flagship_element()).parent = Parent::Ship(queue_ship(&queues.ships, 1)) };
-    // SAFETY: the head is a slot of the ship pool.
-    assert_eq!(unsafe { (*queues.head_ship()).ship_facing }, 3);
+    queues.flagship_element().parent = Parent::Ship(queue_ship(&queues.ships, 1));
+    assert_eq!(queues.head_ship().ship_facing, 3);
 
     let mut game = game();
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Facing(12)));
@@ -279,12 +275,11 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
         &mut queues.display,
         element(PLAYER_SHIP_BIT, Parent::Ship(queue_ship(&queues.ships, 1))),
     );
-    // SAFETY: `other_owner` is a slot of the ship pool.
-    unsafe {
-        (*other_owner).ship_element = queues
-            .display
-            .id(std::ptr::NonNull::new(other_element.cast()))
-    };
+    queues
+        .ships
+        .fixture_pool()
+        .get_mut(other_owner)
+        .ship_element = Some(other_element);
 
     let mut game = game();
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Facing(7)));
@@ -304,9 +299,8 @@ fn an_empty_player_queue_is_a_no_op() {
 /// still queued but has no element.
 #[test]
 fn a_flagship_without_an_element_is_a_no_op_and_the_display_list_is_not_read() {
-    let queues = Queues::flight(5);
-    // SAFETY: the head is a slot of the ship pool.
-    unsafe { (*queues.head_ship()).ship_element = None };
+    let mut queues = Queues::flight(5);
+    queues.head_ship().ship_element = None;
 
     let mut game = game();
     let before_game = bytes_of(&*game);
@@ -324,10 +318,7 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
         &mut queues.display,
         element(PLAYER_SHIP_BIT, Parent::Ship(queue_ship(&queues.ships, 0))),
     );
-    // SAFETY: the head is a slot of the ship pool.
-    unsafe {
-        (*queues.head_ship()).ship_element = queues.display.id(std::ptr::NonNull::new(loose.cast()))
-    };
+    queues.head_ship().ship_element = Some(loose);
 
     let mut game = game();
     assert_eq!(
@@ -339,17 +330,13 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
 
 #[test]
 fn a_stale_generation_or_slot_outside_the_pool_is_refused() {
-    let queues = Queues::flight(5);
-    let flagship = queues
-        .display
-        .id(std::ptr::NonNull::new(queues.flagship_element().cast()))
-        .unwrap();
+    let mut queues = Queues::flight(5);
+    let flagship = queues.flagship();
     for id in [
         ElementId::fixture(flagship.slot(), flagship.generation() + 1),
         ElementId::fixture(u8::MAX, 0),
     ] {
-        // SAFETY: the head is a slot of the ship pool.
-        unsafe { (*queues.head_ship()).ship_element = Some(id) };
+        queues.head_ship().ship_element = Some(id);
         let mut game = game();
         assert_eq!(
             queues.save(&mut game),
@@ -360,9 +347,8 @@ fn a_stale_generation_or_slot_outside_the_pool_is_refused() {
 
 #[test]
 fn an_element_without_player_ship_is_refused() {
-    let queues = Queues::flight(5);
-    // SAFETY: the flagship element is a slot of the display pool.
-    unsafe { (*queues.flagship_element()).state_flags = APPEARING_BIT };
+    let mut queues = Queues::flight(5);
+    queues.flagship_element().state_flags = APPEARING_BIT;
     let mut game = game();
     assert_eq!(
         queues.save(&mut game),
@@ -373,9 +359,8 @@ fn an_element_without_player_ship_is_refused() {
 
 #[test]
 fn an_element_with_no_parent_is_refused() {
-    let queues = Queues::flight(5);
-    // SAFETY: the flagship element is a slot of the display pool.
-    unsafe { (*queues.flagship_element()).parent = Parent::None };
+    let mut queues = Queues::flight(5);
+    queues.flagship_element().parent = Parent::None;
     let mut game = game();
     assert_eq!(queues.save(&mut game), Err(HyperSaveError::NoOwner));
     assert_eq!(game.ship_facing, SENTINEL_FACING);
@@ -385,7 +370,7 @@ fn an_element_with_no_parent_is_refused() {
 fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
     let mut queues = Queues::flight(5);
     let free_slot = allocate(&mut queues.ships, starship(1, None));
-    assert_ne!(free_slot, queues.head_ship());
+    assert_ne!(free_slot, queues.head_key());
     let mut world = crate::engine::World::new();
     let group = world.ip_groups().alloc().unwrap();
     for owner in [
@@ -393,8 +378,7 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
         Parent::Ship(crate::engine::battle::ShipId::fixture(1, 0, 0)),
         Parent::IpGroup(group),
     ] {
-        // SAFETY: the flagship element is a slot of the display pool.
-        unsafe { (*queues.flagship_element()).parent = owner };
+        queues.flagship_element().parent = owner;
         let mut game = game();
         assert_eq!(
             queues.save(&mut game),
@@ -417,10 +401,7 @@ fn a_disabled_ship_pool_has_no_flagship_and_writes_nothing() {
 #[test]
 fn a_retired_element_is_refused_after_its_slot_is_freed() {
     let mut queues = Queues::flight(5);
-    let id = queues
-        .display
-        .id(std::ptr::NonNull::new(queues.flagship_element().cast()))
-        .unwrap();
+    let id = queues.flagship();
     queues.display.remove(id);
     queues.display.free(id);
     let mut game = game();

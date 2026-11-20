@@ -9,10 +9,7 @@ fn observed_set(
     Frames::shared(
         SharedFrames::Fixture(0),
         FrameArray::fixture_source(
-            std::array::from_fn(|index| {
-                // SAFETY: journal fixtures use these retained handles only as opaque identities.
-                views[index.min(views.len() - 1)]
-            }),
+            std::array::from_fn(|index| views[index.min(views.len() - 1)]),
             (),
             Some(views.as_ptr() as usize),
         ),

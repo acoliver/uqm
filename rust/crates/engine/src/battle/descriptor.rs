@@ -15,9 +15,9 @@ impl RaceDescriptor {
             max_crew: 0,
             energy_level: 0,
             max_energy: 0,
-            race_strings_rsc: std::ptr::null(),
-            icons_rsc: std::ptr::null(),
-            melee_icon_rsc: std::ptr::null(),
+            race_strings_rsc: None,
+            icons_rsc: None,
+            melee_icon_rsc: None,
             race_strings: None,
             icons: crate::graphics::drawable::FrameId::NULL,
             melee_icon: crate::graphics::drawable::FrameId::NULL,
@@ -41,19 +41,19 @@ impl RaceDescriptor {
             ship_mass: 0,
         },
         ship_data: DataRecord {
-            ship_rsc: [std::ptr::null(); 3],
-            weapon_rsc: [std::ptr::null(); 3],
-            special_rsc: [std::ptr::null(); 3],
+            ship_rsc: [None; 3],
+            weapon_rsc: [None; 3],
+            special_rsc: [None; 3],
             captain_control: CaptainRecord {
-                captain_rsc: std::ptr::null(),
+                captain_rsc: None,
                 background: crate::graphics::drawable::FrameId::NULL,
                 turn: crate::graphics::drawable::FrameId::NULL,
                 thrust: crate::graphics::drawable::FrameId::NULL,
                 weapon: crate::graphics::drawable::FrameId::NULL,
                 special: crate::battle::frames::FrameSelection::ABSENT,
             },
-            victory_ditty_rsc: std::ptr::null(),
-            ship_sounds_rsc: std::ptr::null(),
+            victory_ditty_rsc: None,
+            ship_sounds_rsc: None,
             ship: crate::battle::frames::FrameArray::EMPTY,
             weapon: crate::battle::frames::FrameArray::EMPTY,
             special: crate::battle::frames::FrameArray::EMPTY,
@@ -91,7 +91,7 @@ mod tests {
             .chain(descriptor.ship_data.weapon_rsc)
             .chain(descriptor.ship_data.special_rsc)
         {
-            assert!(resource.is_null());
+            assert!(resource.is_none());
         }
         for frames in [
             descriptor.ship_data.ship,

@@ -9,7 +9,6 @@ use crate::{
     graphics::drawable::FrameId,
     resource::ResourceKey,
 };
-use std::ffi::CStr;
 
 pub(super) struct Assets<'a> {
     keys: Vec<(&'static str, Resource<'a>)>,
@@ -21,21 +20,10 @@ pub(super) struct Assets<'a> {
 }
 
 impl<'a> Assets<'a> {
-    /// # Safety
-    /// The descriptor's keys and loaded resources are immutable and live for `'a`.
-    pub(super) unsafe fn borrow(info: &'a ShipInfoRecord, data: &'a DataRecord) -> Self {
+    pub(super) fn borrow(info: &'a ShipInfoRecord, data: &'a DataRecord) -> Self {
         let keys = resource_keys(info, data)
             .into_iter()
-            .map(|(name, key)| {
-                let key = if key.is_null() {
-                    None
-                } else {
-                    // SAFETY: non-null keys are NUL-terminated strings owned by
-                    // the descriptor graph, held immutable for this borrow.
-                    Some(unsafe { CStr::from_ptr(key) })
-                };
-                (name, Resource(key))
-            })
+            .map(|(name, key)| (name, Resource(key)))
             .collect();
         let frames = frame_handles(info, data)
             .into_iter()
@@ -158,8 +146,7 @@ mod tests {
         let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_data.ship =
             FrameArray::fixture([crate::graphics::drawable::FrameId::NULL; 3], ());
-        // SAFETY: the local descriptor retains all its null resources and the present ship array.
-        let assets = unsafe { Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
+        let assets = Assets::borrow(&descriptor.ship_info, &descriptor.ship_data);
         assets.register(&mut journal, "test");
         assert_eq!(journal.frame_set(0), None);
         assert_eq!(

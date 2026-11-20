@@ -609,30 +609,30 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     let strings = Some(uqm_rust::strings::owned_table::EntryRef::new(0x5000, 3));
     let mut music = ptr::null_mut();
     let frame_pointer = native.frame(9);
-    descriptor.ship_info.race_strings_rsc = c"test.strings".as_ptr();
-    descriptor.ship_info.icons_rsc = c"test.icons".as_ptr();
-    descriptor.ship_info.melee_icon_rsc = c"test.melee".as_ptr();
+    descriptor.ship_info.race_strings_rsc = Some(c"test.strings");
+    descriptor.ship_info.icons_rsc = Some(c"test.icons");
+    descriptor.ship_info.melee_icon_rsc = Some(c"test.melee");
     descriptor.ship_info.race_strings = strings;
     descriptor.ship_info.icons = frame_pointer;
     descriptor.ship_info.melee_icon = frame_pointer;
-    descriptor.ship_data.ship_rsc = [c"test.ship".as_ptr(); 3];
-    descriptor.ship_data.weapon_rsc = [c"test.weapon".as_ptr(); 3];
-    descriptor.ship_data.special_rsc = [c"test.special".as_ptr(); 3];
+    descriptor.ship_data.ship_rsc = [Some(c"test.ship"); 3];
+    descriptor.ship_data.weapon_rsc = [Some(c"test.weapon"); 3];
+    descriptor.ship_data.special_rsc = [Some(c"test.special"); 3];
     // SAFETY: native retains this registered drawable through every snapshot.
     let view = FrameSelection::retain(frame_pointer);
     descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.weapon = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.special = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.captain_control = CaptainRecord {
-        captain_rsc: c"test.captain".as_ptr(),
+        captain_rsc: Some(c"test.captain"),
         background: frame_pointer,
         turn: frame_pointer,
         thrust: frame_pointer,
         weapon: frame_pointer,
         special: view.clone(),
     };
-    descriptor.ship_data.victory_ditty_rsc = c"test.victory".as_ptr();
-    descriptor.ship_data.ship_sounds_rsc = c"test.sounds".as_ptr();
+    descriptor.ship_data.victory_ditty_rsc = Some(c"test.victory");
+    descriptor.ship_data.ship_sounds_rsc = Some(c"test.sounds");
     descriptor.ship_data.ship_sounds = strings;
     descriptor.ship_data.victory_ditty = &mut music;
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);

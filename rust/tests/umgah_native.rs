@@ -135,13 +135,10 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
             assert_eq!(d.ship_info.ship_cost, 7);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (10, 10));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (30, 30));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.umgah.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.umgah.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.umgah.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.umgah.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.umgah.meleeicons"
             );
             assert!(
@@ -172,11 +169,11 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
             );
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.umgah.graphics.drone.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
+                    d.ship_data.special_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.umgah.graphics.cone.{size}")
                 );
                 assert!(
@@ -186,15 +183,12 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 );
             }
             assert_eq!(
-                CStr::from_ptr(d.ship_data.weapon_rsc[0]),
+                d.ship_data.weapon_rsc[0].unwrap(),
                 c"ship.umgah.graphics.spritz"
             );
-            assert!(d.ship_data.weapon_rsc[1].is_null() && d.ship_data.weapon_rsc[2].is_null());
+            assert!(d.ship_data.weapon_rsc[1].is_none() && d.ship_data.weapon_rsc[2].is_none());
             let captain = &d.ship_data.captain_control;
-            assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
-                c"ship.umgah.graphics.captain"
-            );
+            assert_eq!(captain.captain_rsc.unwrap(), c"ship.umgah.graphics.captain");
             assert!(
                 captain.background.is_null()
                     && captain.turn.is_null()
@@ -202,14 +196,8 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && captain.weapon.is_null()
                     && captain.special.is_absent()
             );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
-                c"ship.umgah.ditty"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
-                c"ship.umgah.sounds"
-            );
+            assert_eq!(d.ship_data.victory_ditty_rsc.unwrap(), c"ship.umgah.ditty");
+            assert_eq!(d.ship_data.ship_sounds_rsc.unwrap(), c"ship.umgah.sounds");
             assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
             assert_eq!(
                 (

@@ -75,7 +75,7 @@ fn descriptor_matches_the_c_race_data() {
             assert_eq!(desc.ship_info.max_crew, 20);
             assert_eq!(desc.ship_info.energy_level, 24);
             assert_eq!(desc.ship_info.max_energy, 24);
-            let text = |p| CStr::from_ptr(p);
+            let text = |p: Option<&'static CStr>| p.unwrap();
             assert_eq!(
                 text(desc.ship_info.race_strings_rsc),
                 c"ship.androsynth.text"

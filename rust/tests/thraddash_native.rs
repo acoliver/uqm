@@ -128,15 +128,12 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (8, 8));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (24, 24));
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
+                d.ship_info.race_strings_rsc.unwrap(),
                 c"ship.thraddash.text"
             );
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.thraddash.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.icons_rsc),
-                c"ship.thraddash.icons"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.thraddash.meleeicons"
             );
             assert!(
@@ -172,7 +169,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     (d.ship_data.special_rsc[i], "napalm"),
                 ] {
                     assert_eq!(
-                        CStr::from_ptr(rsc).to_str().unwrap(),
+                        rsc.unwrap().to_str().unwrap(),
                         format!("ship.thraddash.graphics.{name}.{size}")
                     );
                 }
@@ -184,7 +181,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
             }
             let captain = &d.ship_data.captain_control;
             assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
+                captain.captain_rsc.unwrap(),
                 c"ship.thraddash.graphics.captain"
             );
             assert!(
@@ -195,11 +192,11 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && captain.special.is_absent()
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
+                d.ship_data.victory_ditty_rsc.unwrap(),
                 c"ship.thraddash.ditty"
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
+                d.ship_data.ship_sounds_rsc.unwrap(),
                 c"ship.thraddash.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());

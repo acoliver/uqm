@@ -3,6 +3,7 @@
 // Phase 2: Graphics Modernization (drawable/context systems)
 // Phase 6: Input/VControl system
 // Phase 7: Alien Communication system
+#![forbid(unsafe_code)]
 
 pub use uqm_engine::callback;
 pub use uqm_modes::battle;

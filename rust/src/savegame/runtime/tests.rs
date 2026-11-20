@@ -16,7 +16,7 @@ use crate::savegame::types::{
 };
 use crate::state::ffi::{snapshot_game_state, GameStateOwnerError};
 use serial_test::serial;
-use std::mem::{offset_of, size_of};
+use std::mem::offset_of;
 use std::ops::{Deref, DerefMut};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
@@ -50,8 +50,10 @@ struct LiveGame(Box<TestState>, GameClock);
 
 impl LiveGame {
     fn new() -> Self {
-        // SAFETY: the retained scalar ABI record contains only integers and nullable pointers.
-        let game = Box::new(unsafe { std::mem::zeroed() });
+        let game = Box::new(TestState {
+            game: CGameState::default(),
+            current_activity: 0,
+        });
         Self(game, GameClock::new())
     }
 }
@@ -69,32 +71,128 @@ impl DerefMut for LiveGame {
     }
 }
 
-/// Write `bytes` at byte `offset` of the record, as the C compiler lays it out.
+/// One field of the record: its offset as the C compiler lays it out and
+/// its little-endian bytes.
+struct Field {
+    offset: usize,
+    bytes: Vec<u8>,
+}
+
+fn pair_bytes(a: i16, b: i16) -> Vec<u8> {
+    [a.to_le_bytes(), b.to_le_bytes()].concat()
+}
+
+/// The record's `GlSt` fields and battle group reference at their offsets.
+fn fields(game: &CGameState) -> Vec<Field> {
+    use c_offset::*;
+    let clock = &game.game_clock;
+    let velocity = &game.velocity;
+    [
+        (GLOB_FLAGS, vec![game.glob_flags]),
+        (CREW_COST, vec![game.crew_cost]),
+        (FUEL_COST, vec![game.fuel_cost]),
+        (MODULE_COST, game.module_cost.to_vec()),
+        (ELEMENT_WORTH, game.element_worth.to_vec()),
+        (CLOCK_DAY, vec![clock.day_index]),
+        (CLOCK_MONTH, vec![clock.month_index]),
+        (CLOCK_YEAR, clock.year_index.to_le_bytes().to_vec()),
+        (CLOCK_TICKS, clock.tick_count.to_le_bytes().to_vec()),
+        (CLOCK_DAY_TICKS, clock.day_in_ticks.to_le_bytes().to_vec()),
+        (AUTOPILOT, pair_bytes(game.autopilot.x, game.autopilot.y)),
+        (
+            IP_LOCATION,
+            pair_bytes(game.ip_location.x, game.ip_location.y),
+        ),
+        (
+            STAMP_ORIGIN,
+            pair_bytes(game.ship_stamp.origin.x, game.ship_stamp.origin.y),
+        ),
+        (SHIP_FACING, game.ship_facing.to_le_bytes().to_vec()),
+        (IP_PLANET, vec![game.ip_planet]),
+        (IN_ORBIT, vec![game.in_orbit]),
+        (VELOCITY_ANGLE, velocity.travel_angle.to_le_bytes().to_vec()),
+        (
+            VELOCITY_VECTOR,
+            pair_bytes(velocity.vector.width, velocity.vector.height),
+        ),
+        (
+            VELOCITY_FRACT,
+            pair_bytes(velocity.fract.width, velocity.fract.height),
+        ),
+        (
+            VELOCITY_ERROR,
+            pair_bytes(velocity.error.width, velocity.error.height),
+        ),
+        (
+            VELOCITY_INCR,
+            pair_bytes(velocity.incr.width, velocity.incr.height),
+        ),
+        (
+            BATTLE_GROUP_REF,
+            game.battle_group_ref.to_le_bytes().to_vec(),
+        ),
+    ]
+    .into_iter()
+    .map(|(offset, bytes)| Field { offset, bytes })
+    .collect()
+}
+
+/// Write the field at byte `offset` of the record from its little-endian `bytes`.
 fn put(game: &mut CGameState, offset: usize, bytes: &[u8]) {
-    assert!(offset + bytes.len() <= size_of::<CGameState>());
-    // SAFETY: the range lies inside `game` and covers whole fields.
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            bytes.as_ptr(),
-            (game as *mut CGameState as *mut u8).add(offset),
-            bytes.len(),
-        );
+    use c_offset::*;
+    let byte = || bytes[0];
+    let half = |at: usize| [bytes[at], bytes[at + 1]];
+    let word = |at: usize| i16::from_le_bytes(half(at));
+    let target = &mut *game;
+    match offset {
+        GLOB_FLAGS => target.glob_flags = byte(),
+        CREW_COST => target.crew_cost = byte(),
+        FUEL_COST => target.fuel_cost = byte(),
+        MODULE_COST => target.module_cost.copy_from_slice(bytes),
+        ELEMENT_WORTH => target.element_worth.copy_from_slice(bytes),
+        CLOCK_DAY => target.game_clock.day_index = byte(),
+        CLOCK_MONTH => target.game_clock.month_index = byte(),
+        CLOCK_YEAR => target.game_clock.year_index = u16::from_le_bytes(half(0)),
+        CLOCK_TICKS => target.game_clock.tick_count = word(0),
+        CLOCK_DAY_TICKS => target.game_clock.day_in_ticks = word(0),
+        AUTOPILOT => (target.autopilot.x, target.autopilot.y) = (word(0), word(2)),
+        IP_LOCATION => (target.ip_location.x, target.ip_location.y) = (word(0), word(2)),
+        STAMP_ORIGIN => {
+            let origin = &mut target.ship_stamp.origin;
+            (origin.x, origin.y) = (word(0), word(2));
+        }
+        SHIP_FACING => target.ship_facing = u16::from_le_bytes(half(0)),
+        IP_PLANET => target.ip_planet = byte(),
+        IN_ORBIT => target.in_orbit = byte(),
+        VELOCITY_ANGLE => target.velocity.travel_angle = u16::from_le_bytes(half(0)),
+        VELOCITY_VECTOR => {
+            let v = &mut target.velocity.vector;
+            (v.width, v.height) = (word(0), word(2));
+        }
+        VELOCITY_FRACT => {
+            let v = &mut target.velocity.fract;
+            (v.width, v.height) = (word(0), word(2));
+        }
+        VELOCITY_ERROR => {
+            let v = &mut target.velocity.error;
+            (v.width, v.height) = (word(0), word(2));
+        }
+        VELOCITY_INCR => {
+            let v = &mut target.velocity.incr;
+            (v.width, v.height) = (word(0), word(2));
+        }
+        _ => panic!("no field at offset {offset}"),
     }
 }
 
-/// Read `len` bytes at byte `offset` of the record.
+/// Read the `len` bytes of the field at byte `offset` of the record.
 fn get(game: &CGameState, offset: usize, len: usize) -> Vec<u8> {
-    assert!(offset + len <= size_of::<CGameState>());
-    let mut bytes = vec![0u8; len];
-    // SAFETY: the range lies inside `game` and covers whole fields.
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            (game as *const CGameState as *const u8).add(offset),
-            bytes.as_mut_ptr(),
-            len,
-        );
-    }
-    bytes
+    let field = fields(game)
+        .into_iter()
+        .find(|field| field.offset == offset)
+        .unwrap_or_else(|| panic!("no field at offset {offset}"));
+    assert_eq!(field.bytes.len(), len, "field length at offset {offset}");
+    field.bytes
 }
 
 /// Offsets of the `GlSt` fields in `GAME_STATE`, from the C headers.

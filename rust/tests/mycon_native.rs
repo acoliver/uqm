@@ -19,13 +19,10 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
         assert_eq!(d.ship_info.ship_cost, 21);
         assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (20, 20));
         assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (40, 40));
+        assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.mycon.text");
+        assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.mycon.icons");
         assert_eq!(
-            CStr::from_ptr(d.ship_info.race_strings_rsc),
-            c"ship.mycon.text"
-        );
-        assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.mycon.icons");
-        assert_eq!(
-            CStr::from_ptr(d.ship_info.melee_icon_rsc),
+            d.ship_info.melee_icon_rsc.unwrap(),
             c"ship.mycon.meleeicons"
         );
         assert_eq!(d.fleet.strength, 194);
@@ -56,14 +53,14 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
             (4, 6, 6, 5, 0, 7)
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_data.ship_rsc[0]),
+            d.ship_data.ship_rsc[0].unwrap(),
             c"ship.mycon.graphics.podship.large"
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_data.weapon_rsc[2]),
+            d.ship_data.weapon_rsc[2].unwrap(),
             c"ship.mycon.graphics.plasma.small"
         );
-        assert!(d.ship_data.special_rsc.iter().all(|r| r.is_null()));
+        assert!(d.ship_data.special_rsc.iter().all(|r| r.is_none()));
         assert_eq!(d.cyborg_control.weapon_range, 3200);
         assert!(d.callbacks()[4] != 0);
         assert!(d.callbacks()[2] != 0);

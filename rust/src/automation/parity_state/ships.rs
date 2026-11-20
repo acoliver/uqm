@@ -14,9 +14,7 @@ pub(super) struct Ship<'a> {
     pub(super) observation: crate::battle::context_access::observe::ShipObservation<'a>,
 }
 impl<'a> Ship<'a> {
-    /// # Safety
-    /// The pool and all resource allocations remain immutable for the observation.
-    pub(super) unsafe fn queue(
+    pub(super) fn queue(
         queue: &'a crate::engine::battle::link_queue::RacePool,
         elements: &crate::engine::battle::ElementTable,
     ) -> Vec<Self> {
@@ -74,14 +72,10 @@ impl<'a> Ship<'a> {
         );
     }
 
-    /// # Safety
-    /// All resource and custom-data pointers reachable from this ship must remain
-    /// live and immutable for the returned borrow, on the game thread.
-    pub(super) unsafe fn resources(&self) -> ShipResources<'_> {
+    pub(super) fn resources(&self) -> ShipResources<'_> {
         let state = &self.observation;
         let race = state.race.as_ref().map(|race| {
-            // SAFETY: the observation borrows the descriptor and its resources for this entire scope.
-            let assets = unsafe { assets::Assets::borrow(race.info, race.data) };
+            let assets = assets::Assets::borrow(race.info, race.data);
             Race {
                 species: state.pick.species,
                 address: race.address,
@@ -240,8 +234,7 @@ mod tests {
 
     #[test]
     fn checked_ship_pool_serializes_the_borrowed_ship() {
-        // SAFETY: STARSHIP consists of integers, pointers and optional callbacks.
-        let mut state: ShipRecord = unsafe { std::mem::zeroed() };
+        let mut state = ShipRecord::default();
         state.species_id = SPECIES_ID_EARTHLING_ID;
         state.player_nr = 1;
         state.ship_facing = 31;
@@ -249,13 +242,10 @@ mod tests {
         let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1, 1);
         let id = queue.fixture_pool().alloc(state).unwrap();
         queue.fixture_pool().put(id);
-        // SAFETY: the local pool remains live and immutable until ships is dropped.
-        let ships = unsafe {
-            Ship::queue(
-                &queue,
-                &crate::engine::battle::ElementTable::with_capacity(0),
-            )
-        };
+        let ships = Ship::queue(
+            &queue,
+            &crate::engine::battle::ElementTable::with_capacity(0),
+        );
         let ship = &ships[0];
         assert_eq!(ship.side(), 1);
         assert_eq!(ship.species(), SPECIES_ID_EARTHLING_ID);
@@ -272,15 +262,12 @@ mod tests {
 
     #[test]
     fn borrowed_descriptor_resources_register_and_serialize() {
-        // SAFETY: descriptor fields are integers, pointers or optional callbacks.
-        let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
+        let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_info.max_energy = 23;
-        descriptor.ship_info.icons_rsc = c"test.icons".as_ptr();
+        descriptor.ship_info.icons_rsc = Some(c"test.icons");
         descriptor.characteristics.max_thrust = 513;
         descriptor.characteristics.thrust_increment = 257;
-        // SAFETY: the descriptor's only non-null resource is a static C string.
-        let assets =
-            unsafe { assets::Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
+        let assets = assets::Assets::borrow(&descriptor.ship_info, &descriptor.ship_data);
         let resources = ShipResources {
             icons: Frame(crate::graphics::drawable::FrameId::NULL),
             strings: StringEntry(None),

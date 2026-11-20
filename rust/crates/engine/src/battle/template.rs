@@ -68,17 +68,16 @@ impl RaceTemplate {
                 state: self.state,
             },
         );
-        let token = |s: Option<&'static CStr>| s.map_or(std::ptr::null(), CStr::as_ptr);
         let r = self.resources;
-        raw.ship_info.race_strings_rsc = token(r.strings);
-        raw.ship_info.icons_rsc = token(r.icons);
-        raw.ship_info.melee_icon_rsc = token(r.melee_icon);
-        raw.ship_data.ship_rsc = r.ship.map(token);
-        raw.ship_data.weapon_rsc = r.weapon.map(token);
-        raw.ship_data.special_rsc = r.special.map(token);
-        raw.ship_data.captain_control.captain_rsc = token(r.captain);
-        raw.ship_data.victory_ditty_rsc = token(r.victory);
-        raw.ship_data.ship_sounds_rsc = token(r.sounds);
+        raw.ship_info.race_strings_rsc = r.strings;
+        raw.ship_info.icons_rsc = r.icons;
+        raw.ship_info.melee_icon_rsc = r.melee_icon;
+        raw.ship_data.ship_rsc = r.ship;
+        raw.ship_data.weapon_rsc = r.weapon;
+        raw.ship_data.special_rsc = r.special;
+        raw.ship_data.captain_control.captain_rsc = r.captain;
+        raw.ship_data.victory_ditty_rsc = r.victory;
+        raw.ship_data.ship_sounds_rsc = r.sounds;
         raw.fleet.strength = self.fleet_strength;
         raw.fleet.known_loc = self.fleet_location;
         raw.race = Some(race);
@@ -107,25 +106,18 @@ mod tests {
             super::super::androsynth_template::descriptor(&RACE),
         ] {
             let raw = &descriptor.raw;
-            let token = |key: Option<&'static CStr>| key.map_or(std::ptr::null(), CStr::as_ptr);
-            assert_eq!(token(raw.resources.strings), raw.ship_info.race_strings_rsc);
-            assert_eq!(token(raw.resources.icons), raw.ship_info.icons_rsc);
+            assert_eq!(raw.resources.strings, raw.ship_info.race_strings_rsc);
+            assert_eq!(raw.resources.icons, raw.ship_info.icons_rsc);
+            assert_eq!(raw.resources.melee_icon, raw.ship_info.melee_icon_rsc);
+            assert_eq!(raw.resources.ship, raw.ship_data.ship_rsc);
+            assert_eq!(raw.resources.weapon, raw.ship_data.weapon_rsc);
+            assert_eq!(raw.resources.special, raw.ship_data.special_rsc);
             assert_eq!(
-                token(raw.resources.melee_icon),
-                raw.ship_info.melee_icon_rsc
-            );
-            assert_eq!(raw.resources.ship.map(token), raw.ship_data.ship_rsc);
-            assert_eq!(raw.resources.weapon.map(token), raw.ship_data.weapon_rsc);
-            assert_eq!(raw.resources.special.map(token), raw.ship_data.special_rsc);
-            assert_eq!(
-                token(raw.resources.captain),
+                raw.resources.captain,
                 raw.ship_data.captain_control.captain_rsc
             );
-            assert_eq!(
-                token(raw.resources.victory),
-                raw.ship_data.victory_ditty_rsc
-            );
-            assert_eq!(token(raw.resources.sounds), raw.ship_data.ship_sounds_rsc);
+            assert_eq!(raw.resources.victory, raw.ship_data.victory_ditty_rsc);
+            assert_eq!(raw.resources.sounds, raw.ship_data.ship_sounds_rsc);
         }
     }
 
@@ -142,8 +134,8 @@ mod tests {
             ..RaceTemplate::default()
         }
         .descriptor(&RACE);
-        descriptor.raw.ship_info.icons_rsc = std::ptr::null();
-        descriptor.raw.ship_data.ship_rsc = [std::ptr::null(); 3];
+        descriptor.raw.ship_info.icons_rsc = None;
+        descriptor.raw.ship_data.ship_rsc = [None; 3];
         assert_eq!(descriptor.raw.resources.strings, resources.strings);
         assert_eq!(descriptor.raw.resources.icons, resources.icons);
         assert_eq!(descriptor.raw.resources.ship, resources.ship);

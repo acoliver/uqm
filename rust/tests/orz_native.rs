@@ -213,15 +213,9 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
             assert_eq!(d.ship_info.ship_cost, 23);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (16, 16));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (20, 20));
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.orz.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.orz.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
-                c"ship.orz.meleeicons"
-            );
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.orz.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.orz.icons");
+            assert_eq!(d.ship_info.melee_icon_rsc.unwrap(), c"ship.orz.meleeicons");
             assert!(d.ship_info.race_strings.is_none());
             assert!(d.ship_info.icons.is_null());
             assert!(d.ship_info.melee_icon.is_null());
@@ -248,15 +242,15 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
             );
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.orz.graphics.nemesis.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.orz.graphics.howitzer.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
+                    d.ship_data.special_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.orz.graphics.turret.{size}")
                 );
                 assert!(d.ship_data.ship.view(i).is_absent());
@@ -264,17 +258,11 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
                 assert!(d.ship_data.special.view(i).is_absent());
             }
             assert_eq!(
-                CStr::from_ptr(d.ship_data.captain_control.captain_rsc),
+                d.ship_data.captain_control.captain_rsc.unwrap(),
                 c"ship.orz.graphics.captain"
             );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
-                c"ship.orz.ditty"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
-                c"ship.orz.sounds"
-            );
+            assert_eq!(d.ship_data.victory_ditty_rsc.unwrap(), c"ship.orz.ditty");
+            assert_eq!(d.ship_data.ship_sounds_rsc.unwrap(), c"ship.orz.sounds");
             assert_eq!(d.cyborg_control.weapon_range, 1440);
             assert_eq!(d.cyborg_control.maneuverability_index, 0);
             assert!(race.preprocess.is_some());

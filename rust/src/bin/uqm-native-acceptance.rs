@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 fn main() {
     uqm_rust::engine::host::install(false);
     if let Err(error) = uqm_rust::automation::native_runner::entry_with_arguments(

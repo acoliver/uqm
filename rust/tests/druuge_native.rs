@@ -34,13 +34,10 @@ fn descriptor_matches_druuge_c_data() {
                 (17, 14, 14)
             );
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (32, 32));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.druuge.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.druuge.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.druuge.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.druuge.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.druuge.meleeicons"
             );
             assert_eq!(d.fleet.strength, 254);
@@ -69,14 +66,14 @@ fn descriptor_matches_druuge_c_data() {
             assert!(d.callbacks()[3] != 0 && d.callbacks()[4] != 0);
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.druuge.graphics.mauler.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.druuge.graphics.cannon.{size}")
                 );
-                assert!(d.ship_data.special_rsc[i].is_null());
+                assert!(d.ship_data.special_rsc[i].is_none());
             }
         }
     })

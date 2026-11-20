@@ -83,9 +83,7 @@ impl fmt::Display for LiveLocationError {
 
 impl std::error::Error for LiveLocationError {}
 
-/// # Safety
-/// The campaign's ship frame remains live while its saved facing is read.
-pub unsafe fn prepare_live_solar_location(
+pub fn prepare_live_solar_location(
     world: &mut World,
     solar: &SolarSnapshot,
 ) -> Result<(), LiveLocationError> {

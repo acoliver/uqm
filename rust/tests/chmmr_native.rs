@@ -110,13 +110,10 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
             assert_eq!(d.ship_info.ship_cost, 30);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (42, 42));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (42, 42));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.chmmr.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.chmmr.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.chmmr.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.chmmr.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.chmmr.meleeicons"
             );
             assert!(d.ship_info.race_strings.is_none());
@@ -144,15 +141,15 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
             );
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.chmmr.graphics.avatar.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.chmmr.graphics.muzzle.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
+                    d.ship_data.special_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.chmmr.graphics.satellite.{size}")
                 );
                 assert!(d.ship_data.ship.view(i).is_absent());
@@ -160,10 +157,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                 assert!(d.ship_data.special.view(i).is_absent());
             }
             let captain = &d.ship_data.captain_control;
-            assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
-                c"ship.chmmr.graphics.captain"
-            );
+            assert_eq!(captain.captain_rsc.unwrap(), c"ship.chmmr.graphics.captain");
             assert!([
                 captain.background,
                 captain.turn,
@@ -173,14 +167,8 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
             ]
             .iter()
             .all(|p| p.is_null()));
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
-                c"ship.chmmr.ditty"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
-                c"ship.chmmr.sounds"
-            );
+            assert_eq!(d.ship_data.victory_ditty_rsc.unwrap(), c"ship.chmmr.ditty");
+            assert_eq!(d.ship_data.ship_sounds_rsc.unwrap(), c"ship.chmmr.sounds");
             assert!(d.ship_data.victory_ditty.is_null());
             assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(

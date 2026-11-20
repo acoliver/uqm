@@ -5,6 +5,7 @@
 //! When built with RUST_OWNS_MAIN, this binary is the process entry point.
 //! It calls the C init sequence, runs the game loop on the main thread
 //! (no separate game thread), and tears down subsystems on exit.
+#![forbid(unsafe_code)]
 
 use std::process::exit;
 

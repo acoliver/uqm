@@ -394,13 +394,10 @@ fn descriptor_matches_every_c_initializer_field() {
             assert_eq!(d.ship_info.ship_cost, 20);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (8, 8));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (12, 12));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.pkunk.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.pkunk.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.pkunk.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.pkunk.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.pkunk.meleeicons"
             );
             assert!(d.ship_info.race_strings.is_none());
@@ -431,36 +428,27 @@ fn descriptor_matches_every_c_initializer_field() {
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 // PKUNK_*_MASK_PMAP_ANIM are the fury graphics.
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.pkunk.graphics.fury.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.pkunk.graphics.bug.{size}")
                 );
-                assert!(d.ship_data.special_rsc[i].is_null());
+                assert!(d.ship_data.special_rsc[i].is_none());
                 assert!(d.ship_data.ship.view(i).is_absent());
                 assert!(d.ship_data.weapon.view(i).is_absent());
                 assert!(d.ship_data.special.view(i).is_absent());
             }
             let captain = &d.ship_data.captain_control;
-            assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
-                c"ship.pkunk.graphics.captain"
-            );
+            assert_eq!(captain.captain_rsc.unwrap(), c"ship.pkunk.graphics.captain");
             assert!(captain.background.is_null());
             assert!(captain.turn.is_null());
             assert!(captain.thrust.is_null());
             assert!(captain.weapon.is_null());
             assert!(captain.special.is_absent());
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
-                c"ship.pkunk.ditty"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
-                c"ship.pkunk.sounds"
-            );
+            assert_eq!(d.ship_data.victory_ditty_rsc.unwrap(), c"ship.pkunk.ditty");
+            assert_eq!(d.ship_data.ship_sounds_rsc.unwrap(), c"ship.pkunk.sounds");
             assert!(d.ship_data.victory_ditty.is_null());
             assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(d.cyborg_control.maneuverability_index, 0);

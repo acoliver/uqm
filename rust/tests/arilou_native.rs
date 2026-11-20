@@ -113,15 +113,12 @@ fn skiff_descriptor_matches_the_c_template() {
                 (20, 20)
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.race_strings_rsc),
+                desc.ship_info.race_strings_rsc.unwrap(),
                 c"ship.arilou.text"
             );
+            assert_eq!(desc.ship_info.icons_rsc.unwrap(), c"ship.arilou.icons");
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.icons_rsc),
-                c"ship.arilou.icons"
-            );
-            assert_eq!(
-                CStr::from_ptr(desc.ship_info.melee_icon_rsc),
+                desc.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.arilou.meleeicons"
             );
             // 250 / SPHERE_RADIUS_INCREMENT * 2
@@ -154,19 +151,19 @@ fn skiff_descriptor_matches_the_c_template() {
                 c"ship.arilou.graphics.warp.small",
             ];
             for i in 0..3 {
-                assert_eq!(CStr::from_ptr(data.ship_rsc[i]), expected_ship[i]);
-                assert_eq!(CStr::from_ptr(data.special_rsc[i]), expected_special[i]);
-                assert!(data.weapon_rsc[i].is_null());
+                assert_eq!(data.ship_rsc[i].unwrap(), expected_ship[i]);
+                assert_eq!(data.special_rsc[i].unwrap(), expected_special[i]);
+                assert!(data.weapon_rsc[i].is_none());
                 assert!(data.ship.view(i).is_absent());
                 assert!(data.weapon.view(i).is_absent());
                 assert!(data.special.view(i).is_absent());
             }
             assert_eq!(
-                CStr::from_ptr(data.captain_control.captain_rsc),
+                data.captain_control.captain_rsc.unwrap(),
                 c"ship.arilou.graphics.captain"
             );
-            assert_eq!(CStr::from_ptr(data.victory_ditty_rsc), c"ship.arilou.ditty");
-            assert_eq!(CStr::from_ptr(data.ship_sounds_rsc), c"ship.arilou.sounds");
+            assert_eq!(data.victory_ditty_rsc.unwrap(), c"ship.arilou.ditty");
+            assert_eq!(data.ship_sounds_rsc.unwrap(), c"ship.arilou.sounds");
 
             // LASER_RANGE >> 1, with LASER_RANGE = DISPLAY_TO_WORLD (109).
             assert_eq!(desc.cyborg_control.maneuverability_index, 0);

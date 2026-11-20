@@ -708,14 +708,14 @@ mod projection_tests {
         assert_eq!(ship.energy_counter, 9);
         assert_eq!(ship.weapon_counter, 4);
         let mut descriptor = RaceDescriptor::EMPTY;
-        descriptor.ship_data.ship_rsc[0] = c"retained".as_ptr();
+        descriptor.ship_data.ship_rsc[0] = Some(c"retained");
         let mut stats = RaceStats::decode(&descriptor);
         stats.ship_info.energy_level = 10;
         stats.intelligence.weapon_range = 231;
         RaceStats::apply(&mut descriptor, stats);
         assert_eq!(descriptor.ship_info.energy_level, 10);
         assert_eq!(descriptor.cyborg_control.weapon_range, 231);
-        assert_eq!(descriptor.ship_data.ship_rsc[0], c"retained".as_ptr());
+        assert_eq!(descriptor.ship_data.ship_rsc[0], Some(c"retained"));
         let value = RaceDesc::from_storage(Box::new(descriptor));
         let raw = value.into_legacy();
         assert_eq!(raw.ship_info.energy_level, 10);

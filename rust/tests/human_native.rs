@@ -30,11 +30,11 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_eq!(desc.ship_info.energy_level, 18);
             assert_eq!(desc.ship_info.max_energy, 18);
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.race_strings_rsc),
+                desc.ship_info.race_strings_rsc.unwrap(),
                 c"ship.earthling.text"
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_data.weapon_rsc[0]),
+                desc.ship_data.weapon_rsc[0].unwrap(),
                 c"ship.earthling.graphics.saturn.large"
             );
             assert_eq!(desc.characteristics.special_energy_cost, 4);

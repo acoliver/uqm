@@ -166,7 +166,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
                 (18, 20, 20)
             );
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (42, 42));
-            let s = |p| CStr::from_ptr(p);
+            let s = |p: Option<&'static CStr>| p.unwrap();
             assert_eq!(s(d.ship_info.race_strings_rsc), c"ship.melnorme.text");
             assert_eq!(s(d.ship_info.icons_rsc), c"ship.melnorme.icons");
             assert_eq!(s(d.ship_info.melee_icon_rsc), c"ship.melnorme.meleeicons");

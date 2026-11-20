@@ -46,15 +46,12 @@ fn eluder_descriptor_matches_the_c_template() {
                 (10, 10)
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.race_strings_rsc),
+                desc.ship_info.race_strings_rsc.unwrap(),
                 c"ship.spathi.text"
             );
+            assert_eq!(desc.ship_info.icons_rsc.unwrap(), c"ship.spathi.icons");
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.icons_rsc),
-                c"ship.spathi.icons"
-            );
-            assert_eq!(
-                CStr::from_ptr(desc.ship_info.melee_icon_rsc),
+                desc.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.spathi.meleeicons"
             );
             // 1000 / SPHERE_RADIUS_INCREMENT * 2
@@ -92,19 +89,19 @@ fn eluder_descriptor_matches_the_c_template() {
                 c"ship.spathi.graphics.butt.small",
             ];
             for i in 0..3 {
-                assert_eq!(CStr::from_ptr(data.ship_rsc[i]), expected_ship[i]);
-                assert_eq!(CStr::from_ptr(data.weapon_rsc[i]), expected_weapon[i]);
-                assert_eq!(CStr::from_ptr(data.special_rsc[i]), expected_special[i]);
+                assert_eq!(data.ship_rsc[i].unwrap(), expected_ship[i]);
+                assert_eq!(data.weapon_rsc[i].unwrap(), expected_weapon[i]);
+                assert_eq!(data.special_rsc[i].unwrap(), expected_special[i]);
                 assert!(data.ship.view(i).is_absent());
                 assert!(data.weapon.view(i).is_absent());
                 assert!(data.special.view(i).is_absent());
             }
             assert_eq!(
-                CStr::from_ptr(data.captain_control.captain_rsc),
+                data.captain_control.captain_rsc.unwrap(),
                 c"ship.spathi.graphics.captain"
             );
-            assert_eq!(CStr::from_ptr(data.victory_ditty_rsc), c"ship.spathi.ditty");
-            assert_eq!(CStr::from_ptr(data.ship_sounds_rsc), c"ship.spathi.sounds");
+            assert_eq!(data.victory_ditty_rsc.unwrap(), c"ship.spathi.ditty");
+            assert_eq!(data.ship_sounds_rsc.unwrap(), c"ship.spathi.sounds");
 
             // MISSILE_SPEED * MISSILE_LIFE: the cyborg's weapon range.
             assert_eq!(desc.cyborg_control.maneuverability_index, 0);

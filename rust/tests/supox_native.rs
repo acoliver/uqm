@@ -65,7 +65,7 @@ fn descriptor_matches_the_c_race_data() {
             assert_eq!(desc.ship_info.max_crew, 12);
             assert_eq!(desc.ship_info.energy_level, 16);
             assert_eq!(desc.ship_info.max_energy, 16);
-            let text = |p| CStr::from_ptr(p);
+            let text = |p: Option<&'static CStr>| p.unwrap();
             assert_eq!(text(desc.ship_info.race_strings_rsc), c"ship.supox.text");
             assert_eq!(text(desc.ship_info.icons_rsc), c"ship.supox.icons");
             assert_eq!(
@@ -100,7 +100,7 @@ fn descriptor_matches_the_c_race_data() {
                     text(desc.ship_data.weapon_rsc[i]).to_str().unwrap(),
                     format!("ship.supox.graphics.glob.{size}")
                 );
-                assert!(desc.ship_data.special_rsc[i].is_null());
+                assert!(desc.ship_data.special_rsc[i].is_none());
             }
             assert_eq!(
                 text(desc.ship_data.captain_control.captain_rsc),
