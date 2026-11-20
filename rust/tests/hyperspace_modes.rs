@@ -294,10 +294,8 @@ fn flagship_entry(loading: bool) {
 fn load_palette_fixture(
 ) -> Result<[Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2], Box<dyn std::error::Error>>
 {
-    use std::{ffi::CString, ptr};
     use uqm_rust::{
-        graphics::palette_cycle::PaletteCycle,
-        resource::ffi_bridge::{InitResourceSystem, LoadResourceIndex},
+        graphics::palette_cycle::PaletteCycle, resource::ffi_bridge::InitResourceSystem,
     };
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     std::fs::create_dir_all(&root)?;
@@ -314,13 +312,6 @@ fn load_palette_fixture(
     std::fs::write(
         directory.path().join("palettes.rmp"),
         "fixture.hyper = BINTAB:12.ct\nfixture.quasi = BINTAB:90.ct\n",
-    )?;
-    let host = CString::new(
-        directory
-            .path()
-            .canonicalize()?
-            .to_str()
-            .ok_or("fixture path is not UTF-8")?,
     )?;
     // SAFETY: this serialized fixture restores the content directory before closing its own mount.
     unsafe {

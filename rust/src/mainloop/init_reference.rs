@@ -39,7 +39,7 @@
 //!
 //! | # | Call | Notes |
 //! |---|------|-------|
-//! | 13 | `LoadResourceIndex(configDir, "uqm.cfg", "config.")` | Load `uqm.cfg` *(skipped in safe mode)* |
+//! | 13 | `load_resource_index(configDir, "uqm.cfg", "config.")` | Load `uqm.cfg` *(skipped in safe mode)* |
 //! | 14 | `getUserConfigOptions(&options)` | Merge config-file values into options struct |
 //! | 15 | Remove legacy `config.keys.N.name` entries | Backwards-compat cleanup |
 //! | 16 | Copy options into globals | `snddriver`, `soundflags`, `opt3doMusic`, `optRemixMusic`, `optSpeech`, `optWhichCoarseScan`, `optWhichMenu`, `optWhichFonts`, `optWhichIntro`, `optWhichShield`, `optSmoothScroll`, `optMeleeScale`, `optKeepAspectRatio`, `optSubtitles`, `optStereoSFX`, volume scales, `optAddons` |

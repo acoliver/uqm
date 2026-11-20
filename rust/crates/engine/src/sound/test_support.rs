@@ -4,9 +4,8 @@
 //! that drive them take `ENGINE_TEST_LOCK`.
 
 use super::decoder::{DecodeError, Decoder};
-use super::formats::{AudioFormat, DecoderFormats};
+use super::formats::AudioFormat;
 use parking_lot::Mutex;
-use std::path::Path;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -99,27 +98,6 @@ impl ScriptedDecoder {
         self.length_secs = secs;
         self
     }
-}
-
-impl ScriptedDecoder {
-    pub fn init_module(&mut self, _flags: i32, _formats: &DecoderFormats) -> bool {
-        true
-    }
-    pub fn term_module(&mut self) {}
-    pub fn get_error(&mut self) -> i32 {
-        0
-    }
-    pub fn init(&mut self) -> bool {
-        true
-    }
-    pub fn term(&mut self) {}
-    pub fn open(&mut self, _path: &Path) -> Result<(), DecodeError> {
-        Ok(())
-    }
-    pub fn open_from_bytes(&mut self, _data: &[u8], _name: &str) -> Result<(), DecodeError> {
-        Ok(())
-    }
-    pub fn close(&mut self) {}
 }
 
 impl Decoder for ScriptedDecoder {

@@ -7,7 +7,6 @@ mod battle;
 use battle::Battle;
 use std::{
     ffi::CString,
-    ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
 use uqm_rust::{resource::ffi_bridge, ships::native::abi::*};

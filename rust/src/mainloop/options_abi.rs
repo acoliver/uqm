@@ -10,10 +10,13 @@ pub fn loadIndices(dir: &Dir) -> usize {
     let indices = dir.list_matching(Path::new(""), "\\.[rR][mM][pP]$", Match::Regex);
     for name in &indices {
         log::debug!("Loading resource index '{name}'");
-        let name = CString::new(name.as_str()).expect("directory entry contains NUL");
+        let Ok(name) = CString::new(name.as_str()) else {
+            log::warn!("Skipping resource index '{name}': name contains NUL");
+            continue;
+        };
         // SAFETY: both arguments are terminated or null.
         unsafe {
-            crate::resource::ffi_bridge::LoadResourceIndex(dir, name.as_ptr(), std::ptr::null())
+            crate::resource::ffi_bridge::load_resource_index(dir, name.as_ptr(), std::ptr::null())
         };
     }
     indices.len()

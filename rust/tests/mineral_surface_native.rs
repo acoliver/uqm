@@ -1,5 +1,5 @@
 //! All mineral surface frames through the production visual and stamp path.
-use std::{ffi::CString, ptr};
+use std::ptr;
 use uqm_rust::{
     engine::graphics::native_offscreen::OffscreenFormats,
     graphics::{

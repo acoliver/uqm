@@ -1,11 +1,11 @@
-//! Loading a string table straight from a file (`LoadStringTableFile`).
+//! Loading a string table straight from a file (`load_string_table_file`).
 
 use crate::io::Dir;
 use std::ffi::c_char;
 use std::ptr::{addr_of_mut, null, null_mut};
 
 use crate::resource::ffi_bridge::{
-    _cur_resfile_name, res_CloseResFile, res_OpenResFile, LengthResFile,
+    _cur_resfile_name, open_res_file, res_CloseResFile, LengthResFile,
 };
 use crate::strings::getstr::_get_string_data;
 use crate::strings::string_table::StringTable;
@@ -15,13 +15,13 @@ use crate::strings::string_table::StringTable;
 ///
 /// # Safety
 /// `file_name` must be NUL-terminated and valid until the load returns.
-pub unsafe fn LoadStringTableFile(dir: &Dir, file_name: *const c_char) -> *mut StringTable {
+pub unsafe fn load_string_table_file(dir: &Dir, file_name: *const c_char) -> *mut StringTable {
     // No lock: loads happen on the main thread, as in the original.
     if !(*addr_of_mut!(_cur_resfile_name)).is_null() {
         return null_mut();
     }
 
-    let fp = res_OpenResFile(dir, file_name, c"rb".as_ptr());
+    let fp = open_res_file(dir, file_name, c"rb".as_ptr());
     if fp.is_null() {
         return null_mut();
     }

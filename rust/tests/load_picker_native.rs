@@ -1,7 +1,7 @@
 //! Real virtual controls, restart dispatch, input reset and save enumeration.
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use std::{ffi::CString, ptr};
+use std::ptr;
 use uqm_rust::{
     engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
     front_end::gameopt::{picker_action, PickerAction},

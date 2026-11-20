@@ -5,7 +5,7 @@ use crate::graphics::{native_abi::drawable_desc, resgfx::LoadGraphicInstance};
 use crate::strings::string_table::{
     CaptureStringTable, ReleaseStringTable, StringTable, StringTableEntry,
 };
-use std::ffi::{c_char, c_void};
+use std::ffi::c_char;
 
 /// # Safety
 /// Resource key must be a NUL-terminated string and the loader initialized.

@@ -4,6 +4,13 @@ use std::io::Write;
 use std::ptr;
 use uqm_rust::graphics::{gfxload, native_abi as abi};
 
+fn content_dir() -> uqm_rust::io::Dir {
+    let Some(dir) = uqm_rust::io::content_dir() else {
+        panic!("no content directory installed");
+    };
+    dir
+}
+
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     {
@@ -22,11 +29,7 @@ fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8>
 unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
     abi::_cur_resfile_name = path.as_ptr();
     let fp = if zipped {
-        uqm_rust::resource::ffi_bridge::res_OpenResFile(
-            &uqm_rust::io::content_dir().unwrap(),
-            path.as_ptr(),
-            c"rb".as_ptr(),
-        )
+        uqm_rust::resource::ffi_bridge::open_res_file(&content_dir(), path.as_ptr(), c"rb".as_ptr())
     } else {
         usize::MAX as *mut std::ffi::c_void
     };
@@ -88,8 +91,8 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
             .unwrap_or(path.to_bytes()),
     )
     .unwrap();
-    let fp = uqm_rust::resource::ffi_bridge::res_OpenResFile(
-        &uqm_rust::io::content_dir().unwrap(),
+    let fp = uqm_rust::resource::ffi_bridge::open_res_file(
+        &content_dir(),
         relative_path.as_ptr(),
         c"rb".as_ptr(),
     );

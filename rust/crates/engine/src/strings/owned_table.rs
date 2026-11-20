@@ -176,7 +176,7 @@ impl LoadedTextTable {
         // the text loader transfers one Rc<TableAllocation> with its header first.
         unsafe {
             let content = crate::io::content_dir()?;
-            let table = super::sfileins::LoadStringTableFile(&content, path.as_ptr());
+            let table = super::sfileins::load_string_table_file(&content, path.as_ptr());
             std::ptr::NonNull::new(table).map(|table| Self(Rc::from_raw(table.as_ptr().cast())))
         }
     }

@@ -5,7 +5,6 @@
 //! Streams live in process-wide statics, so every test takes
 //! `ENGINE_TEST_LOCK` and brings the stream engine up and down itself.
 
-use std::ffi::c_int;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 

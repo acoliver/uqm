@@ -3,6 +3,8 @@
 //! helpers, and loading resource data from a content directory.
 
 use std::ffi::{c_void, CStr, CString};
+use std::io::Write;
+use std::path::Path;
 use std::ptr;
 
 use serial_test::serial;
@@ -51,7 +53,7 @@ fn load(content: &Content, name: &str, prefix: Option<&str>) {
     let name = c(name);
     let prefix = prefix.map(c);
     unsafe {
-        LoadResourceIndex(
+        load_resource_index(
             &content.dir,
             name.as_ptr(),
             prefix.as_ref().map_or(ptr::null(), |p| p.as_ptr()),
@@ -81,20 +83,15 @@ fn has_key(key: &str) -> bool {
 }
 
 fn save(content: &Content, name: &str, root: Option<&str>, strip: c_int) {
-    let name = c(name);
-    let root = root.map(c);
-    unsafe {
-        SaveResourceIndex(
-            &content.dir,
-            name.as_ptr(),
-            root.as_ref().map_or(ptr::null(), |r| r.as_ptr()),
-            strip,
-        )
-    };
+    let mut output = content.dir.open_write(Path::new(name)).unwrap();
+    for line in serialize_index(root, strip != 0) {
+        output.write_all(line.as_bytes()).unwrap();
+    }
+    output.finish().unwrap();
 }
 
 fn open(content: &Content, name: &str, mode: &str) -> *mut c_void {
-    unsafe { res_OpenResFile(&content.dir, c(name).as_ptr(), c(mode).as_ptr()) }
+    unsafe { open_res_file(&content.dir, c(name).as_ptr(), c(mode).as_ptr()) }
 }
 
 #[test]
@@ -148,7 +145,7 @@ fn loading_an_unusable_index_changes_nothing() {
     load(&content, "empty.rmp", None);
     load(&content, "binary.rmp", None);
     load(&content, "missing.rmp", None);
-    unsafe { LoadResourceIndex(&content.dir, ptr::null(), ptr::null()) };
+    unsafe { load_resource_index(&content.dir, ptr::null(), ptr::null()) };
     assert!(!has_key("anything"));
     assert_eq!(unsafe { CountResourceTypes() }, 5);
 }
@@ -212,14 +209,6 @@ fn saving_skips_entries_whose_type_cannot_be_written_back() {
 
 #[test]
 #[serial]
-fn saving_with_no_file_name_does_nothing() {
-    let content = Content::new(&[]);
-    unsafe { SaveResourceIndex(&content.dir, ptr::null(), ptr::null(), 0) };
-    assert_eq!(std::fs::read_dir(content.host("")).unwrap().count(), 0);
-}
-
-#[test]
-#[serial]
 fn opening_a_directory_yields_the_sentinel_and_missing_files_yield_null() {
     let content = Content::new(&[("data.bin", b"abc")]);
     std::fs::create_dir(content.host("sub")).unwrap();
@@ -227,8 +216,8 @@ fn opening_a_directory_yields_the_sentinel_and_missing_files_yield_null() {
     assert_eq!(open(&content, "sub", "rb"), STREAM_SENTINEL);
     assert!(open(&content, "missing.bin", "rb").is_null());
     unsafe {
-        assert!(res_OpenResFile(&content.dir, ptr::null(), c("rb").as_ptr()).is_null());
-        assert!(res_OpenResFile(&content.dir, c("data.bin").as_ptr(), ptr::null()).is_null());
+        assert!(open_res_file(&content.dir, ptr::null(), c("rb").as_ptr()).is_null());
+        assert!(open_res_file(&content.dir, c("data.bin").as_ptr(), ptr::null()).is_null());
     }
 }
 

@@ -5,7 +5,7 @@ use uqm_rust::graphics::sdl::lifecycle_abi::{
     GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics,
 };
 use uqm_rust::resource::ffi_bridge::_cur_resfile_name;
-use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::LoadStringTableFile};
+use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::load_string_table_file};
 use uqm_rust::video::{control::*, ffi::*, legacy::*};
 
 fn retained_playback_keeps_its_clip_after_descriptor_drop() {
@@ -73,7 +73,7 @@ fixture.absent = 3DOVID:missing.duk
         retained_string_table_loads_owned_text();
         assert!((*ptr::addr_of!(_cur_resfile_name)).is_null());
         _cur_resfile_name = c"busy".as_ptr();
-        assert!(LoadStringTableFile(&dir, c"strings.txt".as_ptr()).is_null());
+        assert!(load_string_table_file(&dir, c"strings.txt".as_ptr()).is_null());
         _cur_resfile_name = ptr::null();
         let options = GraphicsOptions::default();
         assert_eq!(
@@ -101,7 +101,11 @@ fixture.absent = 3DOVID:missing.duk
         assert_eq!(DestroyVideo(clip), 1);
         assert_eq!(DestroyVideo(ptr::null_mut()), 0);
         uqm_rust::resource::ffi_bridge::InitResourceSystem();
-        uqm_rust::resource::ffi_bridge::LoadResourceIndex(&dir, c"video.rmp".as_ptr(), ptr::null());
+        uqm_rust::resource::ffi_bridge::load_resource_index(
+            &dir,
+            c"video.rmp".as_ptr(),
+            ptr::null(),
+        );
         retained_playback_keeps_its_clip_after_descriptor_drop();
         assert!(VidPlaying().is_null());
         assert!(!rust_present_video_to_window(ptr::null(), 0, 0, 0));

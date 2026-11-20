@@ -47,7 +47,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
         assert_eq!(crate::sound::rodio_audio::rust_audio_init(), 1);
         assert_eq!(super::super::control::InitVideoPlayer(0), 1);
         InstallVideoResType();
-        crate::resource::ffi_bridge::LoadResourceIndex(
+        crate::resource::ffi_bridge::load_resource_index(
             &directory.dir(),
             c"3dovideo.rmp".as_ptr(),
             ptr::null(),

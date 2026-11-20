@@ -124,14 +124,14 @@ pub unsafe extern "C" fn VidPlay(video: *mut TFB_VideoClip) -> c_int {
 }
 
 /// Probe the movie named by `path`; only `.duk` movies have a decoder.
-fn load_clip_source(dir: crate::io::Dir, path: &CStr) -> Option<TFB_VideoDecoder> {
+fn load_clip_source(dir: crate::io::Dir, path: &CStr) -> Option<ClipSource> {
     let name = path.to_str().ok()?;
     let (_, extension) = name.rsplit_once('.')?;
     if extension != "duk" {
         return None;
     }
     let duk = super::files::open(&dir, name).ok()?;
-    Some(TFB_VideoDecoder {
+    Some(ClipSource {
         w: duk.width(),
         h: duk.height(),
         length: duk.duration(),
@@ -227,7 +227,7 @@ fixture.absent = 3DOVID:missing.duk
             assert!(VidPlaying().is_null());
             assert_eq!(DestroyVideo(clip), 1);
             crate::video::legacy::InstallVideoResType();
-            crate::resource::ffi_bridge::LoadResourceIndex(
+            crate::resource::ffi_bridge::load_resource_index(
                 &directory.dir(),
                 c"video.rmp".as_ptr(),
                 ptr::null(),

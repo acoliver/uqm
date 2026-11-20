@@ -1,7 +1,7 @@
 //! Animation and bitmap-font loaders, ported from gfxload.c (GPL-2.0-or-later).
 use super::native_abi::*;
 use crate::host::FileStream;
-use crate::io::{Match, Placement};
+use crate::io::{Dir, Match, MountId, Placement, Vfs};
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
 use crate::strings::string_table as strings;
 use std::io::{Read, Seek, SeekFrom};
@@ -112,6 +112,25 @@ unsafe fn parse_ani(line: *const c_char) -> Option<(CString, AniData)> {
     }
     Some((CStr::from_ptr(filename.as_ptr()).to_owned(), ani))
 }
+/// Mount the archive `name` found in `parent` at `point`, returning `parent` and the mount.
+/// An archive that cannot be mounted leaves its files absent, as the original loader did.
+fn mount_archive(point: &str, parent: &[u8], name: &[u8]) -> (Dir, Option<(Vfs, MountId)>) {
+    let vfs = crate::io::installed().unwrap_or_else(|| panic!("file system not installed"));
+    let dir = vfs.open_dir(Path::new(String::from_utf8_lossy(parent).as_ref()));
+    let archive = String::from_utf8_lossy(name);
+    let mount = vfs
+        .mount_zip(
+            point,
+            &dir,
+            Path::new(archive.as_ref()),
+            Placement::Top,
+            true,
+        )
+        .ok()
+        .map(|id| (vfs, id));
+    (dir, mount)
+}
+
 /// # Safety
 /// Stream and resource path must remain live for this serialized resource load.
 pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_void {
@@ -127,22 +146,10 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
     let _ = (*fp).read(&mut header);
     let mut mount = None;
     let (dir, file, prefix) = if !path.is_empty() && u32::from_le_bytes(header) == 0x04034b50 {
-        let vfs = crate::io::installed().unwrap_or_else(|| panic!("file system not installed"));
-        let parent_text = String::from_utf8_lossy(parent);
-        let dir = vfs.open_dir(Path::new(parent_text.as_ref()));
-        let archive = String::from_utf8_lossy(name);
-        mount = vfs
-            .mount_zip(
-                &parent_text,
-                &dir,
-                Path::new(archive.as_ref()),
-                Placement::Top,
-                true,
-            )
-            .ok()
-            .map(|id| (vfs, id));
+        let (dir, archive) = mount_archive(&String::from_utf8_lossy(parent), parent, name);
+        mount = archive;
         let name = CString::new(name).unwrap();
-        let file = crate::resource::ffi_bridge::res_OpenResFile(&dir, name.as_ptr(), c"r".as_ptr())
+        let file = crate::resource::ffi_bridge::open_res_file(&dir, name.as_ptr(), c"r".as_ptr())
             .cast::<FileStream>();
         position = 0;
         (dir, file, &b""[..])
@@ -166,7 +173,7 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
             break;
         };
         let filename = CString::new([prefix, name.as_bytes()].concat()).unwrap();
-        let canvas = TFB_DrawCanvas_LoadFromFile(&dir, filename.as_ptr());
+        let canvas = load_canvas_from_file(&dir, filename.as_ptr());
         if canvas.is_null() {
             log::warn!("get_cel_data: Unable to load image!");
         } else {
@@ -248,18 +255,11 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
     };
     let mut mount = None;
     if fp as usize != usize::MAX {
-        let vfs = crate::io::installed().unwrap_or_else(|| panic!("file system not installed"));
         let (parent, name, _) = path_parts(path);
-        let parent = String::from_utf8_lossy(parent);
-        let name = String::from_utf8_lossy(name);
-        let dir = vfs.open_dir(Path::new(parent.as_ref()));
         let point = CStr::from_ptr(_cur_resfile_name).to_string_lossy();
-        mount = vfs
-            .mount_zip(&point, &dir, Path::new(name.as_ref()), Placement::Top, true)
-            .ok()
-            .map(|id| (vfs, id));
+        mount = mount_archive(&point, parent, name).1;
     }
-    let table = crate::resource::direct::LoadDirEntryTable(
+    let table = crate::resource::direct::load_dir_entry_table(
         &content,
         _cur_resfile_name,
         c".".as_ptr(),
@@ -283,7 +283,7 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
         if libc::sscanf(name, c"%x.".as_ptr(), &mut index) != 1 || index > 65535 {
             continue;
         }
-        let canvas = TFB_DrawCanvas_LoadFromFile(&dir, name);
+        let canvas = load_canvas_from_file(&dir, name);
         if canvas.is_null() {
             continue;
         }

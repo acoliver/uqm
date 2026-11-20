@@ -2076,7 +2076,7 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "complexity|cyclomatic|uqm-engine::input_port::templates::<ControlTemplate>::save" = 30
 "complexity|cyclomatic|uqm-engine::io::legacy_dirs::expand_bytes" = 42
 "complexity|cyclomatic|uqm-engine::resource::propfile::parse_propfile" = 34
-"complexity|cyclomatic|uqm-engine::sound::aiff::<AiffDecoder as SoundDecoder>::open_from_bytes" = 33
+"complexity|cyclomatic|uqm-engine::sound::aiff::<AiffDecoder>::open_from_bytes" = 33
 "complexity|cyclomatic|uqm-engine::sound::mixer::buffer::mixer_buffer_data" = 30
 "complexity|cyclomatic|uqm-engine::sound::rodio_audio::audio_thread_main" = 27
 "complexity|cyclomatic|uqm-engine::sound::stream::graph_foreground_stream" = 26
@@ -2229,7 +2229,7 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 "complexity|loc|uqm-engine::io::uio_bridge::register_mount" = 96
 "complexity|loc|uqm-engine::io::uio_bridge::uio_getDirList" = 99
 "complexity|loc|uqm-engine::io::uio_bridge::uio_mountDir" = 83
-"complexity|loc|uqm-engine::sound::aiff::<AiffDecoder as SoundDecoder>::open_from_bytes" = 114
+"complexity|loc|uqm-engine::sound::aiff::<AiffDecoder>::open_from_bytes" = 114
 "complexity|loc|uqm-engine::sound::ffi::rust_ova_Open" = 81
 "complexity|loc|uqm-engine::sound::heart_ffi::LoadSoundFile" = 112
 "complexity|loc|uqm-engine::sound::mixer::buffer::mixer_buffer_data" = 127
@@ -2417,6 +2417,7 @@ phase7_sound_access_unsafe = { limit = 4, ends = "phase-7", scopes = { "unsafe|u
 [moved]
 "uqm-engine::observe::@file" = "uqm-engine::observe_port::@file"
 "uqm-engine::observe::Io" = "uqm-engine::observe_port::ObservationIo"
+"uqm-engine::sound::aiff::<AiffDecoder as SoundDecoder>::open_from_bytes" = "uqm-engine::sound::aiff::<AiffDecoder>::open_from_bytes"
 "uqm::automation::native_isolation" = "uqm-engine::platform::macos::sandbox"
 "uqm::battle" = "uqm-modes::battle"
 "uqm::battle::hook_registry::assigned" = "uqm-content::ships::hook_registry::assigned"

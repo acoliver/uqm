@@ -51,9 +51,10 @@ pub fn default_config_dir() -> PathBuf {
     }
     #[cfg(unix)]
     {
-        std::env::home_dir()
-            .expect("OS home directory unavailable")
-            .join(".uqm/")
+        let Some(home) = std::env::home_dir() else {
+            panic!("OS home directory unavailable");
+        };
+        home.join(".uqm/")
     }
 }
 
