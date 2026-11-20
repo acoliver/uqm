@@ -20,6 +20,7 @@ mod retirement;
 mod scoped_tests;
 pub(crate) mod tool;
 pub(crate) mod transfers;
+mod unsafe_allowed;
 pub(crate) mod walk;
 
 use std::collections::BTreeMap;
@@ -219,6 +220,7 @@ fn check_measurement(
     } else {
         Baseline::default()
     };
+    unsafe_allowed::check(root, measurement)?;
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     initialize_layers(root, options, &mut baseline)?;
     budgets::check(measurement, &baseline.budget)?;
