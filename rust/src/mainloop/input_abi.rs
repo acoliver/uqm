@@ -13,6 +13,7 @@ use uqm_engine::{
     battle::Cx,
     input::{InputControls, InputSession},
 };
+#[cfg(feature = "debug-process")]
 use uqm_modes::front_end::uqmdebug::debug_key_pressed_synchronous;
 
 pub(crate) mod live {
