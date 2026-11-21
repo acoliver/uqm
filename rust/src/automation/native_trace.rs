@@ -6,11 +6,13 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use uqm_engine::graphics::presentation_diagnostics::PresentationSample;
 
 pub(super) struct NativeTraceJournal {
     file: File,
     pending: Vec<u8>,
     remaining: u64,
+    last_graphics: Vec<PresentationSample>,
 }
 
 impl NativeTraceJournal {
@@ -23,7 +25,19 @@ impl NativeTraceJournal {
             file,
             pending: Vec::new(),
             remaining: limit,
+            last_graphics: Vec::new(),
         })
+    }
+
+    /// Whether `samples` differ from the previous presentation's, which the
+    /// trace already holds. Records that repeat it would cost about 450 bytes
+    /// per presentation and cap how long a scenario can run.
+    pub(super) fn graphics_changed(&mut self, samples: &[PresentationSample]) -> bool {
+        let changed = self.last_graphics != samples;
+        if changed {
+            self.last_graphics = samples.to_vec();
+        }
+        changed
     }
 
     /// Drain ordered records into bounded memory without touching the file.

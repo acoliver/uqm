@@ -31,10 +31,18 @@ pub struct NativeWindowRuntimeContract {
 }
 
 impl NativeWindowRuntimeContract {
+    /// Admission check for a scenario's contract, before any child launches.
+    pub fn validate(self) -> Result<(), String> {
+        if !self.has_valid_deadline_order() {
+            return Err("native runtime contract has invalid deadline order".to_string());
+        }
+        self.check_trace_fits()
+    }
+
     /// The trace of a scenario with a recorded length must fit one inventory
     /// member, since the journal, the live reader and retention all stop there.
     /// Rejecting it before launch beats a run that dies partway through.
-    pub fn check_trace_fits(self) -> Result<(), String> {
+    fn check_trace_fits(self) -> Result<(), String> {
         let Some(ticks) = self.expected_input_ticks else {
             return Ok(());
         };

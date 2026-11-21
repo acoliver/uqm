@@ -379,7 +379,7 @@ mod tests {
         )
         .expect("campaign scenario exists");
         assert_eq!(scenario.expected_input_ticks, Some(101_050));
-        scenario.runtime_contract().check_trace_fits().unwrap();
+        scenario.runtime_contract().validate().unwrap();
     }
 
     #[test]

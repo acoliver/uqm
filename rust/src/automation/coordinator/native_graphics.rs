@@ -101,11 +101,14 @@ impl AutomationObserver {
         if !self.native_diagnostics() {
             return;
         }
-        let mut inner = self.inner.lock();
-        if inner.terminal_class.is_some() || inner.last_native_graphics == samples {
+        let inner = self.inner.lock();
+        let unchanged = self
+            .native_trace
+            .as_ref()
+            .is_some_and(|journal| !journal.lock().graphics_changed(samples));
+        if inner.terminal_class.is_some() || unchanged {
             return;
         }
-        inner.last_native_graphics = samples.to_vec();
         let reservation = self.runtime.commit.reserve();
         let mut record = crate::automation::capture::capture_trace_record(
             reservation.sequence(),
