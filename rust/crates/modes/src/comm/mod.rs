@@ -28,6 +28,8 @@ pub mod encounter;
 pub mod ffi;
 #[cfg(test)]
 mod ffi_behavior_tests;
+#[cfg(test)]
+mod game_string_tests;
 pub mod glue;
 pub mod hail;
 pub(crate) mod host;
