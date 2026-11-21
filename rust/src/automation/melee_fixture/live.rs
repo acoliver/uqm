@@ -10,6 +10,7 @@ use crate::engine::battle::Cx;
 use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
 use crate::engine::world::activity::activity_flags::IN_BATTLE;
 use crate::engine::world::activity::activity_kinds::IN_INTERPLANETARY;
+use crate::engine::world::StarId;
 use crate::graphics::geometry::Point;
 use crate::math::battle_types::ONE_SHIFT;
 use std::mem;
@@ -38,10 +39,10 @@ struct World {
     ship_order: Vec<ShipId>,
     activity: u16,
     counters: [u8; 2],
-    star: usize,
+    star: Option<StarId>,
 }
 impl World {
-    fn new(activity: u16, counters: [u8; 2], star: usize) -> Self {
+    fn new(activity: u16, counters: [u8; 2], star: Option<StarId>) -> Self {
         Self {
             elements: BTreeMap::new(),
             order: Vec::new(),
@@ -167,7 +168,7 @@ struct Battle {
     crew: u16,
     wait: u16,
     phoenix: Option<Phoenix>,
-    star: usize,
+    star: Option<StarId>,
     velocity: crate::battle::velocity::VelocityDesc,
     captain: FrameSelection,
 }
@@ -215,7 +216,7 @@ impl Battle {
             crew: 0,
             wait: 0,
             phoenix: None,
-            star: 0,
+            star: None,
             velocity: crate::battle::velocity::VelocityDesc::new(),
             captain: FrameSelection::ABSENT,
         }
@@ -461,7 +462,7 @@ mod tests {
         assert_eq!(task.needed_species(), FLEETS[0]);
         assert!(task
             .advance(
-                &mut World::new(0, [0; 2], 0),
+                &mut World::new(0, [0; 2], None),
                 &test_hooks(),
                 &BTreeMap::new(),
                 &|| {}

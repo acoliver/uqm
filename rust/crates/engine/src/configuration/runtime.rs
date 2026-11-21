@@ -6,7 +6,6 @@ use crate::{
         heart_ffi::{set_music_volume, set_speech_volume},
         volume_globals::{sound_options, update_sound_options},
     },
-    video::control::{InitVideoPlayer, UninitVideoPlayer},
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,8 +71,7 @@ impl RuntimeSettings {
         {
             assert!(width > 0 && height > 0, "invalid display dimensions");
             context.flush();
-            // SAFETY: the context verifies the owner thread and retains the display resources.
-            unsafe { UninitVideoPlayer() };
+            crate::video::legacy::stop_player();
             state::reinit_video(state::VideoMode {
                 driver,
                 flags,
@@ -81,8 +79,6 @@ impl RuntimeSettings {
                 height,
             });
             context.flush();
-            // SAFETY: the synchronous video reinitialization above has completed.
-            unsafe { InitVideoPlayer(1) };
         }
         if let Some([music, sfx, speech]) = volumes {
             update_sound_options(|options| {

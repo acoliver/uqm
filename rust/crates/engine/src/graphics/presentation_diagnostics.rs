@@ -27,7 +27,7 @@ pub enum PresentationSample {
 
 pub type ReadbackHook = std::rc::Rc<dyn Fn(u64, &[PresentationSample]) -> Option<u64>>;
 
-pub(super) fn screen_result<E: std::fmt::Display>(
+pub fn screen_result<E: std::fmt::Display>(
     samples: &mut Vec<PresentationSample>,
     screen: i32,
     alpha: u8,
@@ -42,40 +42,9 @@ pub(super) fn screen_result<E: std::fmt::Display>(
     });
 }
 
-pub(super) fn display_event(samples: &mut Vec<PresentationSample>, event: &sdl2::event::Event) {
-    if matches!(
-        event,
-        sdl2::event::Event::Display { .. } | sdl2::event::Event::Window { .. }
-    ) {
-        samples.push(PresentationSample::Display {
-            event: format!("{event:?}"),
-        });
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn display_probe_retains_resize_metadata_and_ignores_unrelated_input() {
-        let mut samples = Vec::new();
-        display_event(
-            &mut samples,
-            &sdl2::event::Event::Window {
-                timestamp: 7,
-                window_id: 1,
-                win_event: sdl2::event::WindowEvent::Resized(1280, 960),
-            },
-        );
-        display_event(&mut samples, &sdl2::event::Event::Quit { timestamp: 8 });
-        assert_eq!(samples.len(), 1);
-        let PresentationSample::Display { event } = &samples[0] else {
-            panic!("expected display sample");
-        };
-        assert!(event.contains("Resized(1280, 960)"));
-        assert!(event.contains("timestamp: 7"));
-    }
 
     #[test]
     fn screen_probe_preserves_success_and_exact_external_error() {

@@ -177,7 +177,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
             assert!(ship.descriptor_mut().callbacks()[3] == 0);
             assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 8);
-            assert!(ship.descriptor_mut().ship_info.icons_rsc.is_null());
+            assert!(ship.descriptor_mut().ship_info.icons_rsc.is_none());
             ((*ship.ptr()).velocity).set_components(256, 0);
             ship.ship_mut().cur_status_flags = THRUST as u16;
             crate::battle_context::with(|cx| {

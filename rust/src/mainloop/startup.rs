@@ -77,9 +77,6 @@ fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
             return false;
         }
     }
-    if !crate::memory::rust_mem_init() {
-        return false;
-    }
     crate::threading::init_game_thread();
     true
 }

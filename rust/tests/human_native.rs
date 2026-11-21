@@ -6,7 +6,7 @@ mod battle;
 mod battle_context;
 
 use battle::*;
-use std::{ffi::CStr, mem};
+use std::mem;
 use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, POINT_DEFENSE, SEEKING_WEAPON, SPECIAL};
 use uqm_rust::engine::battle::flags::{APPEARING, FINITE_LIFE, NONSOLID};
 use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
@@ -30,11 +30,11 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_eq!(desc.ship_info.energy_level, 18);
             assert_eq!(desc.ship_info.max_energy, 18);
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.race_strings_rsc),
+                desc.ship_info.race_strings_rsc.unwrap(),
                 c"ship.earthling.text"
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_data.weapon_rsc[0]),
+                desc.ship_data.weapon_rsc[0].unwrap(),
                 c"ship.earthling.graphics.saturn.large"
             );
             assert_eq!(desc.characteristics.special_energy_cost, 4);

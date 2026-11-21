@@ -3145,7 +3145,8 @@ fn validate_linked_build_cargo_messages(
     let (Some(package_id), None) = (package_ids.next(), package_ids.next()) else {
         return Err("linked-build Cargo capture has no unique UQM package identity".to_string());
     };
-    let build_package = package_id.replace("#uqm@", "/crates/engine#uqm-engine@");
+    // The SDL probe build script whose OUT_DIR the receipt records is uqm-platform's.
+    let build_package = package_id.replace("#uqm@", "/crates/platform#uqm-platform@");
     let mut executables = std::collections::BTreeSet::new();
     let mut rust_archives = std::collections::BTreeSet::new();
     let mut out_dirs = std::collections::BTreeSet::new();
@@ -4357,7 +4358,7 @@ mod tests {
             }),
             serde_json::json!({
                 "reason": "build-script-executed",
-                "package_id": package_id.replace("#uqm@", "/crates/engine#uqm-engine@"),
+                "package_id": package_id.replace("#uqm@", "/crates/platform#uqm-platform@"),
                 "out_dir": "/target/release/build/uqm-test/out"
             }),
             serde_json::json!({"reason": "build-finished", "success": true}),

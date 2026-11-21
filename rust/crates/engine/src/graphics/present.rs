@@ -216,14 +216,14 @@ pub struct GraphicsOptions {
 /// C: `TFB_InitGraphics`: open the window and create the screens. A display
 /// that cannot be opened ends the process, as in C.
 pub fn init_graphics(driver: i32, flags: i32, options: GraphicsOptions, width: i32, height: i32) {
-    let display = match super::sdl::SdlDisplay::open(flags, options.native_position, width, height)
-    {
-        Ok(display) => display,
-        Err(error) => {
-            log::error!("Graphics initialization failed: {error}");
-            std::process::exit(1);
-        }
-    };
+    let display =
+        match crate::host::platform().open_display(flags, options.native_position, width, height) {
+            Ok(display) => display,
+            Err(error) => {
+                log::error!("Graphics initialization failed: {error}");
+                crate::host::exit(1);
+            }
+        };
     state::init(
         VideoMode {
             driver,
@@ -232,7 +232,7 @@ pub fn init_graphics(driver: i32, flags: i32, options: GraphicsOptions, width: i
             height,
         },
         Some(Presentation {
-            display: Box::new(display),
+            display,
             observer: options.observer,
         }),
     );
@@ -267,7 +267,7 @@ pub(crate) fn reinit_video(mode: VideoMode) {
         log::error!("Could not provide requested mode: reverting to last known driver.");
         if reinit_graphics(previous).is_err() {
             log::error!("Video reinitialization failed");
-            std::process::exit(1);
+            crate::host::exit(1);
         }
     }
     swap_buffers(Redraw::Yes);
@@ -358,5 +358,33 @@ mod tests {
         assert_eq!(shown.borrow().frames, [(2, 255, 255, 1), (3, 255, 255, 2)]);
         set_system_rect(None);
         drop(state::uninit());
+    }
+
+    #[test]
+    fn reconfiguration_keeps_the_screen_canvases_and_records_the_mode() {
+        use super::super::dcq::Screen;
+        init_graphics(1, 0, GraphicsOptions::default(), 640, 480);
+        state::draw_on_screen(Screen::Main, |canvas| canvas.set_pixel(3, 4, 0x1234_5600));
+        state::reinit_video(VideoMode {
+            driver: 1,
+            flags: GFXFLAGS_FULLSCREEN,
+            width: 640,
+            height: 480,
+        });
+        state::reinit_video(VideoMode {
+            driver: 1,
+            flags: 0,
+            width: 800,
+            height: 600,
+        });
+        state::flush();
+        let mode = state::video_mode();
+        assert_eq!((mode.width, mode.height, mode.flags), (800, 600, 0));
+        assert_eq!(
+            state::draw_on_screen(Screen::Main, |canvas| canvas.pixel(3, 4)),
+            0x1234_5600
+        );
+        uninit_graphics();
+        assert!(!state::initialized());
     }
 }

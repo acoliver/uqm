@@ -29,6 +29,19 @@ pub fn ignore(signal: c_int) -> io::Result<()> {
     set_disposition(signal, libc::SIG_IGN)
 }
 
+/// Deliver `signal` to the calling thread.
+///
+/// # Errors
+///
+/// Returns the OS error from `raise`; `EINVAL` for a signal that does not exist.
+pub fn raise(signal: c_int) -> io::Result<()> {
+    // SAFETY: raise takes the signal number only.
+    if unsafe { libc::raise(signal) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 fn set_disposition(signal: c_int, disposition: usize) -> io::Result<()> {
     // SAFETY: sigaction is plain data for which all-zero is a valid empty value.
     let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
@@ -64,13 +77,13 @@ mod tests {
 
     #[test]
     fn an_ignored_signal_is_inherited_across_exec() {
-        use crate::platform::os::process::before_exec;
+        use crate::os::process::before_exec;
         let mut command = std::process::Command::new("/bin/sleep");
         command.arg("30");
         before_exec(&mut command, || ignore(libc::SIGTERM));
         let mut child = command.spawn().unwrap();
         let pid = libc::pid_t::try_from(child.id()).unwrap();
-        crate::platform::os::process::send_signal(pid, libc::SIGTERM).unwrap();
+        crate::os::process::send_signal(pid, libc::SIGTERM).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
         assert!(
             child.try_wait().unwrap().is_none(),

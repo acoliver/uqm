@@ -6,9 +6,8 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use uqm_rust::automation::interrupt;
 use uqm_rust::automation::{
-    verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
+    interrupt, verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
     ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
     TraceRecord,
 };
@@ -202,6 +201,7 @@ struct RunEvidence {
 }
 
 fn main() {
+    uqm_rust::platform::install(false);
     if let Err(error) = run() {
         eprintln!("uqm-gameplay-proof: {error}");
         std::process::exit(1);

@@ -121,7 +121,8 @@ pub(crate) fn run_bounded(
         Ok(child) => child,
         Err(error) => return Captured::not_launched(error),
     };
-    let group = child.id() as libc::pid_t;
+    let pid = child.id();
+    let group = crate::parity::process::child_group(&child);
     let stdout = child.stdout.take().map(|pipe| drain(pipe, limit));
     let stderr = child.stderr.take().map(|pipe| drain(pipe, limit));
 
@@ -142,8 +143,8 @@ pub(crate) fn run_bounded(
 
     // A timeout already killed the whole group; probing it again would only see
     // members that have been killed but not yet reaped.
-    // SAFETY: probing and killing the process group created above.
-    let survivors = !timed_out && unsafe { libc::kill(-group, 0) } == 0;
+    let survivors = !timed_out
+        && group.is_ok_and(|group| rustix::process::test_kill_process_group(group).is_ok());
     if survivors {
         let _ = crate::parity::process::kill_group(&child);
     }
@@ -165,7 +166,7 @@ pub(crate) fn run_bounded(
         process_group_cleanup: "verified-empty",
         pipe_cleanup: "complete",
         descendant_survivors: survivors
-            .then(|| format!("process group {group} still had members after the child exited")),
+            .then(|| format!("process group {pid} still had members after the child exited")),
     }
 }
 

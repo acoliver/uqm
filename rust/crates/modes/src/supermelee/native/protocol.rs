@@ -57,7 +57,7 @@ pub(crate) fn feedback(
     use ProtocolNoticeKind::*;
     let index = match notice.kind {
         Connected => Some(if notice.player == 0 { 8 } else { 9 }),
-        Error(_) => Some(if notice.player == 0 { 10 } else { 11 }),
+        Error => Some(if notice.player == 0 { 10 } else { 11 }),
         Closed => Some(if notice.player == 0 { 12 } else { 13 }),
         Abort(reason) if reason < 4 => Some(25 + reason as usize),
         Abort(_) => None,

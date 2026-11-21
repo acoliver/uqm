@@ -14,16 +14,12 @@ pub fn checkpoint(
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
     value(&mut fields, "mode", "boundary", boundary);
-    // SAFETY: the checkpoint owns an immutable borrow of the initialized game,
-    // queue pools and their linked records. No callback runs before it returns.
-    let (queues, elements) = unsafe {
-        (
-            std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
-            crate::battle::context_access::observe::elements(cx.elements(), |id| {
-                cx.element_parent_address(id) as usize
-            }),
-        )
-    };
+    let (queues, elements) = (
+        std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
+        crate::battle::context_access::observe::elements(cx.elements(), |id| {
+            cx.element_parent_address(id) as usize
+        }),
+    );
     crate::automation::parity_mode::capture(&mut fields, cx.world, journal);
     let ships: [_; 2] = std::array::from_fn(|side| {
         queues[side]
@@ -44,8 +40,7 @@ pub fn checkpoint(
     for side in &ships {
         for (prefix, ship) in side {
             ship.write(&mut fields, prefix, journal);
-            // SAFETY: the checkpoint holds the ship's entire immutable live graph.
-            let resources = unsafe { ship.resources() };
+            let resources = ship.resources();
             resources.register(journal, &journal.parent(ship.address()));
             resources.write(&mut fields, prefix, journal, &hooks);
         }
@@ -100,7 +95,7 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
     for (name, pointer) in [
         ("current.frame", element.current.image.frame.raw()),
         ("next.frame", element.next.image.frame.raw()),
-        ("intersect.frame", element.intersect.IntersectStamp.frame),
+        ("intersect.frame", element.intersect.intersect_stamp.frame),
     ] {
         journal.write_element_frame(
             &identity,
@@ -147,10 +142,7 @@ mod tests {
         Frames::shared(
             SharedFrames::Fixture(0),
             FrameArray::fixture_source(
-                std::array::from_fn(|index| {
-                    // SAFETY: journal fixtures use these retained handles only as opaque identities.
-                    views[index.min(views.len() - 1)]
-                }),
+                std::array::from_fn(|index| views[index.min(views.len() - 1)]),
                 (),
                 Some(views.as_ptr() as usize),
             ),

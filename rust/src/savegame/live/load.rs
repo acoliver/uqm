@@ -9,7 +9,7 @@ pub enum LoadRequest<'a, 'game> {
     Restore(&'a mut Cx<'game>),
 }
 
-unsafe fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: u16) {
+fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: u16) {
     crate::planets::c_api::reset_encounter(cx.world);
     // A load can run inside a ship callback. Retire the roster after its leases return.
     cx.kernel.request_ship_reset();
@@ -55,8 +55,7 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
             )?;
             (star, activity)
         };
-        // SAFETY: the supplied context retains the restored campaign and its native resources.
-        unsafe { finish_load(cx, &star, activity) };
+        finish_load(cx, &star, activity);
         Ok(())
     })();
     super::complete(result, "LoadGame", loading.then_some((slot, true)))

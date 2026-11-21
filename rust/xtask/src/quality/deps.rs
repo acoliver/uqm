@@ -7,11 +7,7 @@ use serde::Deserialize;
 
 const NATIVE_REGISTRY: &[&str] = &["sdl2-sys", "oboe-sys"];
 const BUILD_TOOLS: &[&str] = &["cc", "cmake", "bindgen", "cxx-build"];
-const SDL_PROBES: &[&str] = &[
-    "build.rs",
-    "crates/engine/build.rs",
-    "crates/platform/build.rs",
-];
+const SDL_PROBES: &[&str] = &["build.rs", "crates/platform/build.rs"];
 
 #[derive(Deserialize)]
 pub struct Metadata {

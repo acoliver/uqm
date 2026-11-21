@@ -362,13 +362,7 @@ fn saved_campaign_state(
         let key = StoryKey::from_name(name).expect("known story key");
         u32::from(get_state_bits_raw(&save.game_state, key.start(), key.end()))
     };
-    // The catalog is immutable game data; this process never runs the game.
-    let catalog = unsafe {
-        std::slice::from_raw_parts(
-            std::ptr::addr_of!(uqm_rust::planets::tables::STARMAP_ARRAY).cast(),
-            CATALOG_LEN,
-        )
-    };
+    let catalog = &uqm_rust::planets::tables::STARMAP_ARRAY[..CATALOG_LEN];
     let star = resolve_star(catalog, story("ARILOU_SPACE_SIDE") as u8, &save.star)
         .map_err(|error| format!("resolve produced star: {error}"))?;
     let mut state = std::collections::BTreeMap::from([

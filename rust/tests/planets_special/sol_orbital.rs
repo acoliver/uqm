@@ -13,8 +13,8 @@ impl Ops for Harness {
     fn orbital(&mut self, case: Case) -> (bool, SystemInfo, u32) {
         self.set_star(case.layout.size, case.layout.color);
         self.state.sys.info = sol_orbital::initial_info(case.layout.seed);
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
-        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
+        self.state.sys.moons = Default::default();
         let (desc, parent) = sol_orbital::input(case);
         match case.body {
             Body::Planet(planet) => self.state.sys.planets[usize::from(planet)] = desc,
@@ -23,14 +23,11 @@ impl Ops for Harness {
                 self.state.sys.moons[usize::from(moon)] = desc;
             }
         }
-        let system = &raw mut *self.state;
         let mut expected = crate::generation_data(&self.state);
         self.seed(0xabcdef01);
-        let result = unsafe {
-            crate::invoke_generation(&mut *system, |view, host| {
-                super::sol::generateSolFunctions.generate_orbital(view, case.body, host)
-            })
-        };
+        let result = crate::invoke_generation(&mut self.state, |view, host| {
+            super::sol::generateSolFunctions.generate_orbital(view, case.body, host)
+        });
         let info = self.state.sys.info;
         expected.3 = info;
         assert_eq!(

@@ -1,4 +1,6 @@
+#![forbid(unsafe_code)]
 fn main() {
+    uqm_rust::platform::install(false);
     if let Err(error) = uqm_rust::automation::native_runner::entry_with_arguments(
         &std::env::args().collect::<Vec<_>>(),
     ) {

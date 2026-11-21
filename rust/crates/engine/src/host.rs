@@ -17,9 +17,9 @@ pub trait Net {
     fn close(&mut self, connection: Connection);
 }
 
-/// Construct the OS transport at the host boundary; modes only retain the port.
+/// The platform's network transport; modes only retain the port.
 pub fn native_net() -> Box<dyn Net> {
-    Box::new(crate::network::NativeNet::default())
+    platform().net()
 }
 
 mod files;
@@ -27,10 +27,23 @@ pub use files::{File, FileStat, FileStream, Files};
 
 pub mod clock;
 mod display;
+mod event;
+#[cfg(any(test, feature = "test-support"))]
+mod fallback;
+#[cfg(any(test, feature = "test-support"))]
+pub use fallback::queue_input;
 mod platform;
+mod system;
 pub use clock::Clock;
 pub use display::{Display, Layer, PresentFrame};
+pub use event::HostEvent;
+#[cfg(any(test, feature = "test-support"))]
+pub use platform::install_test;
 pub use platform::{
-    advance_to, async_wait_ms, dispatch, install, is_replay, now_ms, now_ticks, platform,
-    process_async, steps, AudioPort, Platform,
+    advance_to, async_wait_ms, dispatch, install_platform, is_replay, now_ms, now_ticks, platform,
+    process_async, steps, AudioOutput, AudioPort, FillAudio, Platform,
+};
+pub use system::{
+    at_exit, elapsed, exit, sleep, sleep_precise, spawn, thread_number, unix_millis, yield_now,
+    Deadline, System, Worker,
 };

@@ -60,7 +60,7 @@ fn make_byte(lo: u8, hi: u8) -> u8 {
 #[test]
 fn descriptor_matches_the_c_race_data() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let desc = battle::descriptor(SPECIES_ID_ANDROSYNTH_ID);
             assert!(std::ptr::eq(
                 desc.race.unwrap(),
@@ -75,7 +75,7 @@ fn descriptor_matches_the_c_race_data() {
             assert_eq!(desc.ship_info.max_crew, 20);
             assert_eq!(desc.ship_info.energy_level, 24);
             assert_eq!(desc.ship_info.max_energy, 24);
-            let text = |p| CStr::from_ptr(p);
+            let text = |p: Option<&'static CStr>| p.unwrap();
             assert_eq!(
                 text(desc.ship_info.race_strings_rsc),
                 c"ship.androsynth.text"

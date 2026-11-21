@@ -148,204 +148,201 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     std::fs::write(directory.path().join("fixture.rmp"), rmp).unwrap();
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    // SAFETY: this serialized fixture owns SDL, the mount and all its native allocations on one thread.
-    unsafe {
-        uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
-        let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-        content.init_resources("fixture.rmp");
-        let mut game = campaign();
+    uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
+    let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
+    content.init_resources("fixture.rmp");
+    let mut game = campaign();
+    check_scene(
+        &mut game,
+        BURVIXESE_DEFINED,
+        Some("ruins"),
+        "burvixeseruins",
+        Some(0),
+        |host, system| BurvScenes::load_ruins_scene(host, system),
+    );
+    check_scene(
+        &mut game,
+        BURVIXESE_DEFINED,
+        Some("burvixcaster"),
+        "burvixcaster",
+        Some(0),
+        |host, system| BurvScenes::load_broadcasters_scene(host, system),
+    );
+    for unshielded in [false, true] {
         check_scene(
             &mut game,
-            BURVIXESE_DEFINED,
-            Some("ruins"),
-            "burvixeseruins",
-            Some(0),
-            |host, system| BurvScenes::load_ruins_scene(host, system),
+            SPATHI_DEFINED,
+            Some("umgahcaster"),
+            "umgahcaster",
+            Some(u16::from(unshielded)),
+            |h, s| SpathiSite::load_broadcasters_scene(h, s, unshielded),
         );
-        check_scene(
-            &mut game,
-            BURVIXESE_DEFINED,
-            Some("burvixcaster"),
-            "burvixcaster",
-            Some(0),
-            |host, system| BurvScenes::load_broadcasters_scene(host, system),
-        );
-        for unshielded in [false, true] {
-            check_scene(
-                &mut game,
-                SPATHI_DEFINED,
-                Some("umgahcaster"),
-                "umgahcaster",
-                Some(u16::from(unshielded)),
-                |h, s| SpathiSite::load_broadcasters_scene(h, s, unshielded),
-            );
-        }
-        for first in 0..3 {
-            check_scene(
-                &mut game,
-                SHIP_VAULT_DEFINED,
-                Some("syreenvault"),
-                "syreenvault",
-                Some(first),
-                |h, s| VaultSite::load_vault_scene(h, s, first),
-            );
-            check_scene(
-                &mut game,
-                URQUAN_WRECK_DEFINED,
-                Some("urquanwreck"),
-                "urquanwreck",
-                Some(first),
-                |h, s| WreckSite::load_wreck_scene(h, s, first),
-            );
-        }
-        check_scene(
-            &mut game,
-            ANDROSYNTH_DEFINED,
-            Some("ruins"),
-            "androsynthruins",
-            Some(2),
-            |h, s| AndrosynthSite::load_ruins_story(h, s, 2),
-        );
-        check_scene(
-            &mut game,
-            ANDROSYNTH_DEFINED,
-            Some("ruins"),
-            "androsynthruins",
-            None,
-            |h, s| AndrosynthSite::load_ruins_story(h, s, 3),
-        );
-        check_scene(
-            &mut game,
-            TAALO_PROTECTOR_DEFINED,
-            Some("taalodevice"),
-            "taalodevice",
-            Some(0),
-            |host, system| OrzSite::load_taalo_device_scene(host, system),
-        );
-        check_scene(
-            &mut game,
-            AQUA_HELIX_DEFINED,
-            Some("aquahelix"),
-            "aquahelix",
-            Some(0),
-            |host, system| ThraddashSite::load_aqua_scene(host, system),
-        );
-        for bomb in [false, true] {
-            let key = if bomb { "utwigbomb" } else { "ruins" };
-            check_scene(&mut game, BOMB_DEFINED, Some(key), key, Some(0), |h, s| {
-                UtwigSite::load_scene(h, s, bomb)
-            });
-        }
-        for (scene, key) in [
-            (
-                uqm_rust::planets::generate::myc::Scene::SunDevice,
-                "sundevice",
-            ),
-            (uqm_rust::planets::generate::myc::Scene::EggCase, "eggcase"),
-        ] {
-            check_scene(&mut game, MYCON_DEFINED, Some(key), key, Some(0), |h, s| {
-                MyconSite::load_scene(h, s, scene)
-            });
-        }
-        for (scene, key, mask) in [
-            (
-                uqm_rust::planets::generate::vux::Scene::Maidens,
-                "maidens",
-                Some("maidens"),
-            ),
-            (
-                uqm_rust::planets::generate::vux::Scene::Beast,
-                "vuxbeast",
-                None,
-            ),
-            (
-                uqm_rust::planets::generate::vux::Scene::Ruins,
-                "ruins",
-                Some("ruins"),
-            ),
-        ] {
-            check_scene(&mut game, VUX_DEFINED, mask, key, Some(0), |h, s| {
-                VuxSite::load_scene(h, s, scene)
-            });
-        }
-        for (index, key) in [
-            (PKUNK_DEFINED, "spindle"),
-            (SUPOX_DEFINED, "ultron"),
-            (DRUUGE_DEFINED, "sphere"),
-            (ORZ_DEFINED, "ruins"),
-        ] {
-            check_scene(&mut game, index, Some("ruins"), key, Some(1), |h, s| {
-                HomeContactSite::load_ruins_scene(h, s, true)
-            });
-        }
-        check_scene(
-            &mut game,
-            YEHAT_DEFINED,
-            Some("ruins"),
-            "ruins",
-            Some(0),
-            |host, system| YehatSite::load_ruins_scene(host, system),
-        );
-        game.kernel
-            .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
-                vec![b"A\0".to_vec(), b"Caller planet\0".to_vec()],
-            ));
-        with_site(&mut game, SOL_DEFINED, |h, system| {
-            use uqm_rust::engine::world::generation::ReportDisposition;
-            use uqm_rust::planets::generate::{
-                default::PlanetNames, host::ReportSite, sol::orbital::Orbital,
-            };
-            PlanetNames::set_planet_name(h, 1);
-            PlanetNames::set_battle_planet(h, 17);
-            Orbital::set_current_activity(h, 4);
-            assert_eq!(Orbital::current_activity(h), 4);
-            Orbital::set_global_flags_and_data(h, 23);
-            assert_eq!(h.flag(StoryKey::GLOBAL_FLAGS_AND_DATA), 23);
-            Orbital::set_current_activity(h, 0);
-            assert!(!ReportSite::report(h, system, ReportDisposition::Once));
-        });
-        let previous_seed = uqm_rust::math::seed_random(123);
-        let mut expected_rng = uqm_rust::math::RandomContext::with_seed(123);
-        with_site(&mut game, TALKING_PET_DEFINED, |host, _| {
-            assert_eq!(
-                UrquanEncounterSite::random(host),
-                expected_rng.next_random()
-            );
-        });
-        uqm_rust::math::seed_random(previous_seed);
-        with_site(&mut game, ZOQFOT_DEFINED, |host, _| {
-            ZoqFotPikSite::clone_black_urquan_into_built_queue(host);
-        });
-        assert_eq!(race_of_first_npc(&game), ship::BLACK_URQUAN_SHIP);
-        game.world.npc_built_ships().reinit();
-        assert_eq!(game.world.flag(StoryKey::BATTLE_PLANET), 17);
-        assert_eq!(
-            CStr::from_ptr(game.world.data.flagship.planet_name.as_ptr().cast()),
-            c"Caller planet"
-        );
-        // Suppressing dialogue interactivity exists only in the debug-process harness,
-        // matching the `#[cfg]` on the production uses in src/planets/orbit.rs.
-        #[cfg(feature = "debug-process")]
-        {
-            let _quiet = game.kernel.diagnostics.suppress_interaction();
-            with_site(&mut game, ORZ_DEFINED, |h, _| {
-                HomeContactSite::talk(h);
-                ZoqFotPikSite::talk_black_urquan(h);
-                TalkingPetSite::talk_pet(h);
-                UtwigSite::talk_druuge(h);
-                SamatraSite::talk_rebels(h);
-                StarbaseSite::talk_to_syreen(h);
-                HomeSite::talk_to_slylandro(h);
-                YehatSite::talk_to_yehat(h);
-                ChmmrSite::talk_to_chmmr(h);
-                ChmmrSite::talk_to_ilwrath(h);
-            });
-        }
-        assert_eq!(game.world.activity(), 0);
-        uqm_rust::graphics::state::flush();
-        drop(game);
-        uqm_rust::resource::uninit();
-        drop(content);
-        uqm_rust::graphics::present::uninit_graphics();
     }
+    for first in 0..3 {
+        check_scene(
+            &mut game,
+            SHIP_VAULT_DEFINED,
+            Some("syreenvault"),
+            "syreenvault",
+            Some(first),
+            |h, s| VaultSite::load_vault_scene(h, s, first),
+        );
+        check_scene(
+            &mut game,
+            URQUAN_WRECK_DEFINED,
+            Some("urquanwreck"),
+            "urquanwreck",
+            Some(first),
+            |h, s| WreckSite::load_wreck_scene(h, s, first),
+        );
+    }
+    check_scene(
+        &mut game,
+        ANDROSYNTH_DEFINED,
+        Some("ruins"),
+        "androsynthruins",
+        Some(2),
+        |h, s| AndrosynthSite::load_ruins_story(h, s, 2),
+    );
+    check_scene(
+        &mut game,
+        ANDROSYNTH_DEFINED,
+        Some("ruins"),
+        "androsynthruins",
+        None,
+        |h, s| AndrosynthSite::load_ruins_story(h, s, 3),
+    );
+    check_scene(
+        &mut game,
+        TAALO_PROTECTOR_DEFINED,
+        Some("taalodevice"),
+        "taalodevice",
+        Some(0),
+        |host, system| OrzSite::load_taalo_device_scene(host, system),
+    );
+    check_scene(
+        &mut game,
+        AQUA_HELIX_DEFINED,
+        Some("aquahelix"),
+        "aquahelix",
+        Some(0),
+        |host, system| ThraddashSite::load_aqua_scene(host, system),
+    );
+    for bomb in [false, true] {
+        let key = if bomb { "utwigbomb" } else { "ruins" };
+        check_scene(&mut game, BOMB_DEFINED, Some(key), key, Some(0), |h, s| {
+            UtwigSite::load_scene(h, s, bomb)
+        });
+    }
+    for (scene, key) in [
+        (
+            uqm_rust::planets::generate::myc::Scene::SunDevice,
+            "sundevice",
+        ),
+        (uqm_rust::planets::generate::myc::Scene::EggCase, "eggcase"),
+    ] {
+        check_scene(&mut game, MYCON_DEFINED, Some(key), key, Some(0), |h, s| {
+            MyconSite::load_scene(h, s, scene)
+        });
+    }
+    for (scene, key, mask) in [
+        (
+            uqm_rust::planets::generate::vux::Scene::Maidens,
+            "maidens",
+            Some("maidens"),
+        ),
+        (
+            uqm_rust::planets::generate::vux::Scene::Beast,
+            "vuxbeast",
+            None,
+        ),
+        (
+            uqm_rust::planets::generate::vux::Scene::Ruins,
+            "ruins",
+            Some("ruins"),
+        ),
+    ] {
+        check_scene(&mut game, VUX_DEFINED, mask, key, Some(0), |h, s| {
+            VuxSite::load_scene(h, s, scene)
+        });
+    }
+    for (index, key) in [
+        (PKUNK_DEFINED, "spindle"),
+        (SUPOX_DEFINED, "ultron"),
+        (DRUUGE_DEFINED, "sphere"),
+        (ORZ_DEFINED, "ruins"),
+    ] {
+        check_scene(&mut game, index, Some("ruins"), key, Some(1), |h, s| {
+            HomeContactSite::load_ruins_scene(h, s, true)
+        });
+    }
+    check_scene(
+        &mut game,
+        YEHAT_DEFINED,
+        Some("ruins"),
+        "ruins",
+        Some(0),
+        |host, system| YehatSite::load_ruins_scene(host, system),
+    );
+    game.kernel
+        .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+            vec![b"A\0".to_vec(), b"Caller planet\0".to_vec()],
+        ));
+    with_site(&mut game, SOL_DEFINED, |h, system| {
+        use uqm_rust::engine::world::generation::ReportDisposition;
+        use uqm_rust::planets::generate::{
+            default::PlanetNames, host::ReportSite, sol::orbital::Orbital,
+        };
+        PlanetNames::set_planet_name(h, 1);
+        PlanetNames::set_battle_planet(h, 17);
+        Orbital::set_current_activity(h, 4);
+        assert_eq!(Orbital::current_activity(h), 4);
+        Orbital::set_global_flags_and_data(h, 23);
+        assert_eq!(h.flag(StoryKey::GLOBAL_FLAGS_AND_DATA), 23);
+        Orbital::set_current_activity(h, 0);
+        assert!(!ReportSite::report(h, system, ReportDisposition::Once));
+    });
+    let previous_seed = uqm_rust::math::seed_random(123);
+    let mut expected_rng = uqm_rust::math::RandomContext::with_seed(123);
+    with_site(&mut game, TALKING_PET_DEFINED, |host, _| {
+        assert_eq!(
+            UrquanEncounterSite::random(host),
+            expected_rng.next_random()
+        );
+    });
+    uqm_rust::math::seed_random(previous_seed);
+    with_site(&mut game, ZOQFOT_DEFINED, |host, _| {
+        ZoqFotPikSite::clone_black_urquan_into_built_queue(host);
+    });
+    assert_eq!(race_of_first_npc(&game), ship::BLACK_URQUAN_SHIP);
+    game.world.npc_built_ships().reinit();
+    assert_eq!(game.world.flag(StoryKey::BATTLE_PLANET), 17);
+    assert_eq!(
+        CStr::from_bytes_until_nul(&game.world.data.flagship.planet_name).unwrap(),
+        c"Caller planet"
+    );
+    // Suppressing dialogue interactivity exists only in the debug-process harness,
+    // matching the `#[cfg]` on the production uses in src/planets/orbit.rs.
+    #[cfg(feature = "debug-process")]
+    {
+        let _quiet = game.kernel.diagnostics.suppress_interaction();
+        with_site(&mut game, ORZ_DEFINED, |h, _| {
+            HomeContactSite::talk(h);
+            ZoqFotPikSite::talk_black_urquan(h);
+            TalkingPetSite::talk_pet(h);
+            UtwigSite::talk_druuge(h);
+            SamatraSite::talk_rebels(h);
+            StarbaseSite::talk_to_syreen(h);
+            HomeSite::talk_to_slylandro(h);
+            YehatSite::talk_to_yehat(h);
+            ChmmrSite::talk_to_chmmr(h);
+            ChmmrSite::talk_to_ilwrath(h);
+        });
+    }
+    assert_eq!(game.world.activity(), 0);
+    uqm_rust::graphics::state::flush();
+    drop(game);
+    uqm_rust::resource::uninit();
+    drop(content);
+    uqm_rust::graphics::present::uninit_graphics();
 }

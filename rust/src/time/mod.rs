@@ -301,26 +301,6 @@ impl Default for SharedGameClock {
     }
 }
 
-// FFI wrappers
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_game_clock_tick() {
-    // In a real implementation, this would tick the global clock
-    // For now, this is a placeholder
-}
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_set_clock_rate(seconds_per_day: i32) {
-    // In a real implementation, this would set the global clock rate
-    // For now, this is a placeholder
-    if seconds_per_day > 0 {
-        // Convert seconds_per_day to ticks_per_day
-        let _ticks = (seconds_per_day * 60) as usize;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

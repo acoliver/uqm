@@ -11,7 +11,6 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::JoinHandle;
 use std::time::Duration;
 
 use parking_lot::{Condvar, Mutex};
@@ -43,7 +42,7 @@ struct StreamEngine {
     /// Fade state — protected by its own mutex, separate from sources.
     fade: Mutex<FadeState>,
     /// Decoder thread handle.
-    decoder_thread: Mutex<Option<JoinHandle<()>>>,
+    decoder_thread: Mutex<Option<Box<dyn crate::host::Worker>>>,
     /// Shutdown flag for decoder thread.
     shutdown: AtomicBool,
     /// Condvar to wake the decoder thread when a stream starts.
@@ -738,205 +737,60 @@ pub fn init_stream_decoder() -> AudioResult<()> {
         return Ok(());
     }
 
-    // Start the mixer pump — a background thread that periodically mixes
-    // all sources into PCM and feeds the result to the rodio backend.
-    #[cfg(not(test))]
-    start_mixer_pump();
+    // The output device pulls 44.1 kHz stereo from the mixer.
+    let mut pump = MixerPump::default();
+    *MIXER_OUTPUT.lock() =
+        crate::host::platform().audio_output(Box::new(move |output| pump.fill(output)));
 
     ENGINE.shutdown.store(false, Ordering::Release);
-
-    let handle = std::thread::Builder::new()
-        .name("audio stream decoder".into())
-        .spawn(stream_decoder_task)
-        .map_err(|_| AudioError::NotInitialized)?;
-
-    *guard = Some(handle);
+    *guard = Some(crate::host::spawn(
+        "audio stream decoder",
+        stream_decoder_task,
+    ));
     Ok(())
 }
 
-/// The mixer pump thread handle.
-static MIXER_PUMP_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
-/// Shutdown flag for mixer pump.
-static MIXER_PUMP_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+/// The running output device the mixer feeds.
+static MIXER_OUTPUT: Mutex<Option<Box<dyn crate::host::AudioOutput>>> = Mutex::new(None);
 
-/// Start a background thread that continuously mixes audio and sends it to rodio.
-#[cfg(not(test))]
-fn start_mixer_pump() {
-    MIXER_PUMP_SHUTDOWN.store(false, Ordering::Release);
-
-    let handle = std::thread::Builder::new()
-        .name("mixer pump".into())
-        .spawn(|| {
-            eprintln!("[mixer_pump] thread started, opening cpal output stream...");
-
-            use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-
-            let host = cpal::default_host();
-            let device = match host.default_output_device() {
-                Some(d) => d,
-                None => {
-                    eprintln!("[mixer_pump] no output audio device found");
-                    return;
-                }
-            };
-
-            let dev_name = device.name().unwrap_or_default();
-            eprintln!("[mixer_pump] using device: {:?}", dev_name);
-
-            // Query the device's default config to find a supported format
-            let default_config = match device.default_output_config() {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("[mixer_pump] failed to get default output config: {}", e);
-                    return;
-                }
-            };
-            eprintln!(
-                "[mixer_pump] device default config: channels={} sample_rate={} sample_format={:?}",
-                default_config.channels(),
-                default_config.sample_rate().0,
-                default_config.sample_format()
-            );
-
-            let config = cpal::StreamConfig {
-                channels: 2,
-                sample_rate: cpal::SampleRate(44100),
-                buffer_size: cpal::BufferSize::Default,
-            };
-
-            let mut pump = MixerPumpSource::new();
-
-            // Try f32 output first (most compatible on macOS), then fall back to i16
-            let stream = match device.build_output_stream(
-                &config,
-                move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    use std::panic::{catch_unwind, AssertUnwindSafe};
-
-                    static CB_COUNT: std::sync::atomic::AtomicU64 =
-                        std::sync::atomic::AtomicU64::new(0);
-                    static CB_PANIC_COUNT: std::sync::atomic::AtomicU64 =
-                        std::sync::atomic::AtomicU64::new(0);
-
-                    let n = CB_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let fill_result = catch_unwind(AssertUnwindSafe(|| {
-                        if n < 3 {
-                            eprintln!("[mixer_pump_cb#{}] output.len()={}", n, output.len());
-                        }
-                        for sample in output.iter_mut() {
-                            let raw = pump.next().unwrap_or(0);
-                            *sample = raw as f32 / 32768.0;
-                        }
-                    }));
-
-                    if fill_result.is_err() {
-                        output.fill(0.0);
-                        let panic_n =
-                            CB_PANIC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if panic_n < 5 || panic_n.is_multiple_of(1000) {
-                            eprintln!(
-                                "[mixer_pump_cb] recovered from panic in output callback #{}",
-                                panic_n
-                            );
-                        }
-                    }
-                },
-                move |err| {
-                    eprintln!("[mixer_pump] audio stream error: {}", err);
-                },
-                None,
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("[mixer_pump] failed to build output stream: {}", e);
-                    return;
-                }
-            };
-
-            if let Err(e) = stream.play() {
-                eprintln!("[mixer_pump] failed to start playback: {}", e);
-                return;
-            }
-
-            eprintln!("[mixer_pump] started — feeding mixer output to cpal");
-
-            // Keep alive until shutdown — stream must stay alive for audio to work
-            while !MIXER_PUMP_SHUTDOWN.load(Ordering::Acquire) {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-
-            drop(stream);
-            eprintln!("[mixer_pump] stopped");
-        })
-        .ok();
-
-    *MIXER_PUMP_HANDLE.lock() = handle;
-}
-
-/// A rodio Source that pulls PCM from the Rust mixer.
-///
-/// rodio calls `next()` repeatedly to get individual samples. We mix in
-/// chunks for efficiency and yield one sample at a time.
-#[cfg(not(test))]
-struct MixerPumpSource {
-    /// Pre-mixed buffer (interleaved i16 samples, little-endian).
+/// Mixed samples waiting to be handed to the output device.
+#[derive(Default)]
+struct MixerPump {
+    /// Interleaved stereo samples from the last mix.
     buf: Vec<i16>,
-    /// Current read position in `buf`.
     pos: usize,
 }
 
-#[cfg(not(test))]
-impl MixerPumpSource {
-    fn new() -> Self {
-        MixerPumpSource {
-            buf: Vec::new(),
-            pos: 0,
-        }
-    }
-
-    /// Mix a new chunk of audio.
-    fn refill(&mut self) {
-        // 4096 bytes = 1024 stereo 16-bit samples
-        let mut raw = vec![0u8; 4096];
-        let _ = super::mixer::mix::mixer_mix_channels(&mut raw);
-
-        // Convert raw bytes to i16 samples
-        self.buf.clear();
-        for chunk in raw.as_chunks::<2>().0 {
-            self.buf.push(i16::from_le_bytes([chunk[0], chunk[1]]));
-        }
-        self.pos = 0;
-    }
-}
-
-#[cfg(not(test))]
-impl Iterator for MixerPumpSource {
-    type Item = i16;
-
-    fn next(&mut self) -> Option<i16> {
-        if self.pos >= self.buf.len() {
-            self.refill();
-        }
-        if self.pos < self.buf.len() {
-            let sample = self.buf[self.pos];
+impl MixerPump {
+    /// Fill `output` with mixer samples scaled to [-1, 1), mixing 1024
+    /// stereo frames at a time.
+    fn fill(&mut self, output: &mut [f32]) {
+        for sample in output {
+            if self.pos >= self.buf.len() {
+                let mut raw = vec![0u8; 4096];
+                let _ = super::mixer::mix::mixer_mix_channels(&mut raw);
+                self.buf = raw
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|bytes| i16::from_le_bytes(*bytes))
+                    .collect();
+                self.pos = 0;
+            }
+            *sample = f32::from(self.buf[self.pos]) / 32768.0;
             self.pos += 1;
-            Some(sample)
-        } else {
-            Some(0)
         }
     }
 }
-
-// MixerPumpSource is used directly via cpal callback, no rodio::Source needed.
 
 /// Shut down the streaming decoder subsystem.
 ///
 /// Signals the decoder thread to stop and joins it.
 pub fn uninit_stream_decoder() -> AudioResult<()> {
     ENGINE.replay_mixer.lock().take();
-    // Stop the mixer pump first
-    MIXER_PUMP_SHUTDOWN.store(true, Ordering::Release);
-    if let Some(handle) = MIXER_PUMP_HANDLE.lock().take() {
-        let _ = handle.join();
+    // Stop the output device first.
+    if let Some(output) = MIXER_OUTPUT.lock().take() {
+        output.stop();
     }
 
     let handle = {
@@ -947,7 +801,7 @@ pub fn uninit_stream_decoder() -> AudioResult<()> {
     if let Some(handle) = handle {
         ENGINE.shutdown.store(true, Ordering::Release);
         ENGINE.wake.notify_one();
-        if handle.join().is_err() {
+        if !handle.join() {
             eprintln!("[stream] decoder thread panicked on join");
         }
     }
@@ -968,7 +822,7 @@ fn stream_decoder_task() {
             let mut guard = ENGINE.wake_mutex.lock();
             let _ = ENGINE.wake.wait_for(&mut guard, Duration::from_millis(100));
         } else {
-            std::thread::yield_now();
+            crate::host::yield_now();
         }
     }
 }
@@ -1926,7 +1780,7 @@ mod replay {
         consume_replay_frames(time.frames_until(841, 44100));
         assert_eq!(trackplayer::playing_track_num(), 0);
         assert!(ENGINE.decoder_thread.lock().is_none());
-        assert!(MIXER_PUMP_HANDLE.lock().is_none());
+        assert!(MIXER_OUTPUT.lock().is_none());
         trackplayer::stop_track().unwrap();
         with_source(SPEECH_SOURCE, |source| *source = SoundSource::new());
         mixer::mixer_delete_sources(&[handle]).unwrap();

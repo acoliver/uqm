@@ -53,22 +53,15 @@ pub(in crate::automation::melee_fixture) fn execute(
     let mut registry = crate::battle::hook_registry::hooks();
     registry.extend(crate::automation::parity_hooks::hooks());
     let run = |cx: &mut Cx<'_>| {
-        // SAFETY: automation admits operations on the game thread after initialization.
-        let (activity, position) = unsafe {
-            (
-                cx.world.activity(),
-                SavedPosition {
-                    slot: 0,
-                    log_x: cx.world.data.flagship.log_x,
-                    log_y: cx.world.data.flagship.log_y,
-                    star: cx
-                        .world
-                        .star_pointer()
-                        .as_ref()
-                        .map(|s| (s.star_pt.x, s.star_pt.y)),
-                },
-            )
-        };
+        let (activity, position) = (
+            cx.world.activity(),
+            SavedPosition {
+                slot: 0,
+                log_x: cx.world.data.flagship.log_x,
+                log_y: cx.world.data.flagship.log_y,
+                star: cx.world.selected_star().map(|s| (s.star_pt.x, s.star_pt.y)),
+            },
+        );
         let task = match admit(operation, activity, position, registry)? {
             Admission::Complete(proof) => return Ok(proof),
             Admission::Task(task) => task,
@@ -167,7 +160,9 @@ fn borrow_world(cx: &Cx<'_>) -> World {
     let mut world = World::new(
         cx.world.activity(),
         cx.b.counters,
-        cx.world.star_pointer() as usize,
+        cx.world
+            .selected_star()
+            .map(|star| cx.world.identify_star(star)),
     );
     let mut next = cx.elements().head();
     while let Some(id) = next {

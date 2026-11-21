@@ -2,7 +2,7 @@
 //!
 //! Uses the `lewton` crate for pure Rust Ogg Vorbis decoding.
 
-use std::fs::File;
+use crate::host::FileStream;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
@@ -89,7 +89,7 @@ pub struct OggDecoder {
     /// Path the file reader was opened from, kept so a rewind can reopen it
     file_path: Option<PathBuf>,
     /// The underlying Ogg stream reader (from file)
-    reader_file: Option<OggStreamReader<BufReader<File>>>,
+    reader_file: Option<OggStreamReader<BufReader<FileStream>>>,
     /// The underlying Ogg stream reader (from bytes)
     reader_bytes: Option<OggStreamReader<Cursor<Vec<u8>>>>,
     /// Original data for seeking (bytes mode only)
@@ -125,8 +125,10 @@ impl OggDecoder {
         }
     }
 
-    fn open_file_reader(path: &Path) -> DecodeResult<OggStreamReader<BufReader<File>>> {
-        let file = File::open(path)
+    fn open_file_reader(path: &Path) -> DecodeResult<OggStreamReader<BufReader<FileStream>>> {
+        let file = crate::host::platform()
+            .disk()
+            .open_read(path)
             .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
         OggStreamReader::new(BufReader::new(file))
             .map_err(|e| DecodeError::InvalidData(format!("Failed to open Ogg stream: {:?}", e)))
@@ -221,7 +223,9 @@ impl OggDecoder {
 
         // lewton does not report the stream length, so read it from the
         // final page's granule position like the in-memory path does.
-        let mut length_probe = File::open(path)
+        let mut length_probe = crate::host::platform()
+            .disk()
+            .open_read(path)
             .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
         self.length = calculate_ogg_duration(&mut length_probe, self.frequency);
         self.total_pcm = (self.length * self.frequency as f32) as u64;

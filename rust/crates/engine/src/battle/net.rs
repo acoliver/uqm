@@ -19,7 +19,7 @@ pub enum NetState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolNoticeKind {
     Connected,
-    Error(i32),
+    Error,
     Closed,
     Abort(u32),
     Reset { reason: u32, remote: bool },

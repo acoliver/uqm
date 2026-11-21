@@ -67,7 +67,7 @@ mod tests {
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
-                "platform::os::stderr::tests::redirect_child",
+                "os::stderr::tests::redirect_child",
                 "--nocapture",
             ])
             .env("UQM_STDERR_REDIRECT_TARGET", &log)

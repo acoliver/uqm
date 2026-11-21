@@ -9,7 +9,7 @@ pub struct FileStat {
     pub is_dir: bool,
 }
 
-pub trait File: Read + Write + Seek {
+pub trait File: Read + Write + Seek + Send {
     fn len(&self) -> io::Result<u64>;
     fn is_empty(&self) -> io::Result<bool> {
         self.len().map(|len| len == 0)
@@ -27,6 +27,17 @@ pub trait Files {
         let mut bytes = Vec::new();
         self.open_read(path)?.read_to_end(&mut bytes)?;
         Ok(bytes)
+    }
+
+    /// Write `contents` to `path`. A failed write removes the partial file.
+    fn write_or_remove(&self, path: &Path, contents: &[u8]) -> io::Result<()> {
+        let written = self.open_write(path).and_then(|mut file| {
+            file.write_all(contents)?;
+            file.finish()
+        });
+        written.inspect_err(|_| {
+            let _ = self.remove(path);
+        })
     }
 }
 

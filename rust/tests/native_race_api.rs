@@ -295,7 +295,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &crate::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
         ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0599"),
         ("sound_operations", "use crate::engine::battle::race_ops;", "E0603"),
-        ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
+        ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.intersect_stamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
     ];
     let probes = probes.into_iter().chain([
         ("escaped_frame", "fn probe(a: crate::engine::battle::frames::FrameArray) { let frame = a.view(0); drop(a); let _ = crate::engine::battle::frames::FrameArray::retain([frame; 3]); }", "E0505"),

@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn complete_outputs_match_sealed_original_c_fixture() {
         cases::check_fixture(&cases::rust_output());
-        cases::report_coverage(false);
+        cases::report_coverage();
     }
 
     #[test]

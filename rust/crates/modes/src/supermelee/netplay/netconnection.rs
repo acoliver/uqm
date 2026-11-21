@@ -61,6 +61,10 @@ pub enum ReadyAction {
     EndBattle,
     EndBattle2,
 }
+/// A packet the protocol refuses; the connection reports an error and closes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rejected;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     ResetSentTeams,
@@ -69,7 +73,7 @@ pub enum Effect {
     FinishReset,
     Connected,
     Closed,
-    Error(i32),
+    Error,
     Bootstrap,
     ConfirmationCancelled,
     Ship { side: u16, index: u16, ship: u32 },

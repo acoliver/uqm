@@ -73,7 +73,9 @@ impl Pool {
 
     /// Appends text to the current string, joining it to the previous line.
     fn append_line(&mut self, line: &[u8]) {
-        let len = self.lens.last_mut().expect("append before first header");
+        let Some(len) = self.lens.last_mut() else {
+            panic!("string table text appended before its first header");
+        };
         if *len != 0 {
             self.bytes.pop();
             *len -= 1;
@@ -91,7 +93,9 @@ impl Pool {
         while *len > 1 && matches!(self.bytes[self.bytes.len() - 2], b'\n' | b'\r') {
             *len -= 1;
             self.bytes.pop();
-            *self.bytes.last_mut().expect("pool not empty") = 0;
+            // `len > 1` left at least the NUL-replaced byte in the pool.
+            let last = self.bytes.len() - 1;
+            self.bytes[last] = 0;
         }
     }
 
@@ -223,8 +227,10 @@ struct Companions<T: LineSource> {
 impl<T: LineSource> Companions<T> {
     fn on_header(&mut self, name: &[u8], rest: &[u8]) {
         self.names.push_terminated(&[name]);
-        if self.timestamp_src.is_some() {
-            self.read_timestamp(name);
+        if let Some(src) = self.timestamp_src.as_mut() {
+            let mut line = Vec::new();
+            let read = src.read_line(&mut line).then_some(line);
+            self.record_timestamp(name, read);
         }
         match next_clip_token(rest) {
             Some(token) => {
@@ -235,11 +241,10 @@ impl<T: LineSource> Companions<T> {
         }
     }
 
-    fn read_timestamp(&mut self, name: &[u8]) {
-        let mut line = Vec::new();
-        let src = self.timestamp_src.as_mut().expect("timestamp source");
-        let read_ok = src.read_line(&mut line);
-        match read_ok.then(|| timestamp_value(&line, name)).flatten() {
+    /// Record the timestamps of `name` from its line in the timestamp
+    /// source; `None` when the line could not be read.
+    fn record_timestamp(&mut self, name: &[u8], line: Option<Vec<u8>>) {
+        match line.as_deref().and_then(|line| timestamp_value(line, name)) {
             Some([]) => self.timestamps.push_empty(),
             Some(value) => self.timestamps.push_terminated(&[value]),
             None => {

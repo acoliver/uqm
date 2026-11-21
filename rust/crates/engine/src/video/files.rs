@@ -90,7 +90,8 @@ mod tests {
     #[test]
     fn shipped_components_decode_in_original_order_and_bad_header_keeps_its_error() {
         let mut fixture = Fixture::default();
-        let source = Path::new(env!("UQM_RUST_ROOT")).join("../sc2/content/addons/3dovideo/logo");
+        let source = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("../sc2/content/addons/3dovideo/logo");
         for extension in ["duk", "frm", "hdr", "tbl"] {
             let filename = format!("logo.{extension}");
             fixture.files.insert(

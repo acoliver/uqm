@@ -3,6 +3,7 @@
 // Phase 2: Graphics Modernization (drawable/context systems)
 // Phase 6: Input/VControl system
 // Phase 7: Alien Communication system
+#![forbid(unsafe_code)]
 
 pub use uqm_engine::callback;
 pub use uqm_modes::battle;
@@ -25,13 +26,12 @@ pub use uqm_engine::log_abi;
 pub use uqm_engine::logging;
 pub mod mainloop;
 pub use uqm_engine::math;
-pub use uqm_engine::memory;
 pub use uqm_engine::network;
-pub use uqm_engine::platform;
 pub use uqm_engine::resource;
 pub use uqm_modes::pickship;
 pub use uqm_modes::planet_side;
 pub use uqm_modes::planets;
+pub use uqm_platform as platform;
 pub mod savegame;
 pub use uqm_content::ships;
 pub use uqm_engine::sound;

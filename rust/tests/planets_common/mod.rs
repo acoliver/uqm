@@ -103,7 +103,7 @@ pub fn star_type_byte(case: &WorldCase) -> u8 {
 }
 
 pub fn fresh_node() -> NodeInfo {
-    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
+    let mut node: NodeInfo = Default::default();
     node.loc_pt.x = -7;
     node.loc_pt.y = -7;
     node.density = NODE_SENTINEL_DENSITY;
@@ -201,8 +201,10 @@ pub fn world_line<G: Generators>(
 pub fn initial_descs(mode: OrbitMode) -> Vec<PlanetDesc> {
     (0..mode.slots())
         .map(|slot| {
-            let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
-            desc.rand_seed = 0x1111_0000 + slot as u32;
+            let mut desc = PlanetDesc {
+                rand_seed: 0x1111_0000 + slot as u32,
+                ..Default::default()
+            };
             desc.data_index = if mode.types_defined() {
                 [5, 50, 54, 58][slot % 4]
             } else {

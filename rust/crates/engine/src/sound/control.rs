@@ -7,7 +7,6 @@
 //! Provides per-category volume control (SFX, speech), source stop/clean operations, and
 //! `sound_playing`/`wait_for_sound_end` for synchronization.
 
-use std::thread;
 use std::time::Duration;
 
 use parking_lot::Mutex;
@@ -185,7 +184,7 @@ pub fn wait_for_sound_end(channel: Option<usize>) {
         if crate::host::is_replay() {
             crate::threading::pacing::linked::replay_sleep_for(840 / 100);
         } else {
-            thread::sleep(Duration::from_millis(10));
+            crate::host::sleep(Duration::from_millis(10));
         }
     }
 }

@@ -191,11 +191,11 @@ impl Default for ElementRecord {
             color_cycle_index: 0,
             velocity: VelocityDesc::new(),
             intersect_control: IntersectControl {
-                IntersectStamp: crate::graphics::intersection::Stamp {
+                intersect_stamp: crate::graphics::intersection::Stamp {
                     origin: Point { x: 0, y: 0 },
                     frame: FrameId::NULL,
                 },
-                EndPoint: Point { x: 0, y: 0 },
+                end_point: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
             prim_index: 0,
@@ -481,7 +481,7 @@ impl RaceDesc {
     pub fn cleanup(&mut self, world: &mut crate::battle::World) {
         self.raw.cleanup(world);
     }
-    /// Extract the legacy record; dereferencing its resource pointers remains unsafe.
+    /// Extract the legacy record.
     pub fn into_legacy(self) -> RaceDescriptor {
         *self.raw
     }
@@ -531,11 +531,11 @@ impl ElementState {
             color_cycle_index: self.color_cycle,
             velocity: self.velocity,
             intersect_control: IntersectControl {
-                IntersectStamp: crate::graphics::intersection::Stamp {
+                intersect_stamp: crate::graphics::intersection::Stamp {
                     origin: Point { x: 0, y: 0 },
                     frame: FrameId::NULL,
                 },
-                EndPoint: Point { x: 0, y: 0 },
+                end_point: Point { x: 0, y: 0 },
                 last_time_val: 0,
             },
             prim_index: 0,
@@ -568,7 +568,7 @@ impl Subject {
             parent: record.parent,
             intersect: record.intersect_control,
             primitive: record.prim_index,
-            intersect_frame: FrameSelection::retain(record.intersect_control.IntersectStamp.frame),
+            intersect_frame: FrameSelection::retain(record.intersect_control.intersect_stamp.frame),
         }
     }
 }
@@ -698,8 +698,7 @@ mod projection_tests {
     }
     #[test]
     fn ship_and_descriptor_values_preserve_resources_while_updating_stats() {
-        // SAFETY: zero is valid for nullable legacy ship fields and scalars.
-        let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
+        let mut ship = ShipRecord::default();
         let mut state = ShipState::decode(&ship);
         state.facing = 7;
         state.energy_counter = 9;
@@ -709,16 +708,15 @@ mod projection_tests {
         assert_eq!(ship.energy_counter, 9);
         assert_eq!(ship.weapon_counter, 4);
         let mut descriptor = RaceDescriptor::EMPTY;
-        descriptor.ship_data.ship_rsc[0] = c"retained".as_ptr();
+        descriptor.ship_data.ship_rsc[0] = Some(c"retained");
         let mut stats = RaceStats::decode(&descriptor);
         stats.ship_info.energy_level = 10;
         stats.intelligence.weapon_range = 231;
         RaceStats::apply(&mut descriptor, stats);
         assert_eq!(descriptor.ship_info.energy_level, 10);
         assert_eq!(descriptor.cyborg_control.weapon_range, 231);
-        assert_eq!(descriptor.ship_data.ship_rsc[0], c"retained".as_ptr());
+        assert_eq!(descriptor.ship_data.ship_rsc[0], Some(c"retained"));
         let value = RaceDesc::from_storage(Box::new(descriptor));
-        // SAFETY: this value retains only test-local static resource tokens.
         let raw = value.into_legacy();
         assert_eq!(raw.ship_info.energy_level, 10);
     }
@@ -731,19 +729,6 @@ impl RaceDescriptor {
             uninit(world, &mut stats);
             RaceStats::apply(self, stats);
         }
-    }
-}
-
-#[cfg(test)]
-mod zero_descriptor_tests {
-    #[test]
-    fn zero_descriptor_has_no_native_race_state() {
-        // SAFETY: a zeroed legacy descriptor contains nullable callbacks, pointers, and scalar state.
-        let descriptor: super::RaceDescriptor = unsafe { std::mem::zeroed() };
-        assert!(matches!(
-            descriptor.race_state,
-            crate::battle::RaceState::None
-        ));
     }
 }
 

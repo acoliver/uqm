@@ -10,7 +10,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     crate::mainloop::input_frame::rust_begin_input_loop();
     loop {
         crate::engine::host::process_async();
-        crate::graphics::sdl::process_events();
+        crate::graphics::events::process_events();
         process_utility_keys(controls);
         super::yield_input_loop(crate::threading::yield_task);
         if step

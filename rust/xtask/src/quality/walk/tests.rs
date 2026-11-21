@@ -847,13 +847,13 @@ fn moved_handoff_calls_keep_existing_bridge_accounting() {
 #[test]
 fn reviewed_macro_handlers_follow_crate_source_moves() {
     let m = fixture(&[
-        ("src/lib.rs", "#[path = \"../crates/engine/src/collections/hash_table.rs\"] mod table;"),
-        ("crates/engine/src/collections/hash_table.rs", "macro_rules! define_hash_table { () => { pub static mut TABLE: u8 = 0; }; } define_hash_table!();")
+        ("src/lib.rs", "#[path = \"../crates/engine/src/world/story/schema.rs\"] mod schema;"),
+        ("crates/engine/src/world/story/schema.rs", "macro_rules! game_state_fields { () => { pub static mut TABLE: u8 = 0; }; } game_state_fields!();")
     ], None, false);
     assert_eq!(m.report("static_mut", None).unwrap(), 1);
     assert!(m.handlers.contains(&(
-        "src/collections/hash_table.rs".into(),
-        "define_hash_table".into()
+        "src/world/story/schema.rs".into(),
+        "game_state_fields".into()
     )));
 }
 

@@ -1,6 +1,5 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
 
-use std::ffi::CStr;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -8,19 +7,16 @@ mod battle_context;
 
 #[test]
 fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let d =
             battle::descriptor(uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID);
         let info = d.ship_info;
         assert_eq!((info.ship_flags, info.ship_cost), (0, 0));
         assert_eq!((info.crew_level, info.max_crew), (1, 1));
         assert_eq!((info.energy_level, info.max_energy), (1, 1));
-        assert!(info.race_strings_rsc.is_null());
-        assert!(info.icons_rsc.is_null());
-        assert_eq!(
-            CStr::from_ptr(info.melee_icon_rsc),
-            c"ship.drone.meleeicons"
-        );
+        assert!(info.race_strings_rsc.is_none());
+        assert!(info.icons_rsc.is_none());
+        assert_eq!(info.melee_icon_rsc.unwrap(), c"ship.drone.meleeicons");
         assert!(info.race_strings.is_none());
         assert!(info.icons.is_null());
         assert!(info.melee_icon.is_null());
@@ -47,9 +43,9 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
             ),
             (0, 0, 0, 0, 0, 0)
         );
-        assert!(d.ship_data.ship_rsc.into_iter().all(|p| p.is_null()));
-        assert!(d.ship_data.weapon_rsc.into_iter().all(|p| p.is_null()));
-        assert!(d.ship_data.special_rsc.into_iter().all(|p| p.is_null()));
+        assert!(d.ship_data.ship_rsc.into_iter().all(|p| p.is_none()));
+        assert!(d.ship_data.weapon_rsc.into_iter().all(|p| p.is_none()));
+        assert!(d.ship_data.special_rsc.into_iter().all(|p| p.is_none()));
         assert!(d.ship_data.ship.views().into_iter().all(|p| p.is_absent()));
         assert!(d
             .ship_data
@@ -64,14 +60,14 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
             .into_iter()
             .all(|p| p.is_absent()));
         let captain = &d.ship_data.captain_control;
-        assert!(captain.captain_rsc.is_null());
+        assert!(captain.captain_rsc.is_none());
         assert!(captain.background.is_null());
         assert!(captain.turn.is_null());
         assert!(captain.thrust.is_null());
         assert!(captain.weapon.is_null());
         assert!(captain.special.is_absent());
-        assert!(d.ship_data.victory_ditty_rsc.is_null());
-        assert!(d.ship_data.ship_sounds_rsc.is_null());
+        assert!(d.ship_data.victory_ditty_rsc.is_none());
+        assert!(d.ship_data.ship_sounds_rsc.is_none());
         assert!(d.ship_data.victory_ditty.is_null());
         assert!(d.ship_data.ship_sounds.is_none());
         assert_eq!(

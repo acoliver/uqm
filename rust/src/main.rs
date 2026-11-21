@@ -5,6 +5,7 @@
 //! When built with RUST_OWNS_MAIN, this binary is the process entry point.
 //! It calls the C init sequence, runs the game loop on the main thread
 //! (no separate game thread), and tears down subsystems on exit.
+#![forbid(unsafe_code)]
 
 use std::process::exit;
 
@@ -20,6 +21,10 @@ fn main() {
         eprintln!("Invalid option. Run with -h to see the allowed arguments.");
         exit(1);
     }
+
+    // Every mode after this, the content check included, reads files and time
+    // through the platform.
+    uqm_rust::platform::install(parsed.replay.is_some());
 
     // Handle early-exit modes (version/usage) that bypass the full init
     match parsed.run_mode {
@@ -44,13 +49,12 @@ fn main() {
         options::RunMode::Normal => {}
     }
 
-    uqm_rust::engine::host::install(parsed.replay.is_some());
     logging::init(&parsed.log_file);
 
     // The frame loop runs on this thread; see threading::qos. Declared after
     // argument handling so --version, --help and --check-content stay inert.
     #[cfg(target_os = "macos")]
-    uqm_rust::threading::qos::declare_game_thread_interactive();
+    uqm_rust::platform::qos::declare_game_thread_interactive();
 
     // Automation setup: validate before run_uqm (REQ-MODE-001)
     let mut auto_opts = uqm_rust::automation::AutomationOptions {

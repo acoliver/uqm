@@ -68,10 +68,14 @@ impl Harness {
         crate::battle_context::with(|cx| rust_init_game_state(cx.world));
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
         let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
-        // SAFETY: the serialized harness copies the initialized integer-only catalog.
         let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
-        // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
-        star[0] = unsafe { std::mem::zeroed() };
+        star[0] = uqm_rust::engine::world::CStarDesc {
+            star_pt: Default::default(),
+            star_type: 0,
+            index: 0,
+            prefix: 0,
+            postfix: 0,
+        };
         let state = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_catalog(std::borrow::Cow::Owned(*star));
@@ -124,15 +128,13 @@ impl Harness {
         case: (u8, u8, u32),
     ) -> (Vec<Desc>, u8, u32) {
         self.set_star(case.0, case.1);
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
         self.state.sys.sun.num_planets = 0;
         self.seed(case.2);
 
-        assert!(unsafe {
-            crate::invoke_generation(&mut self.state, |system, host| {
-                table.generate_planets(system, host)
-            })
-        });
+        assert!(crate::invoke_generation(&mut self.state, |system, host| {
+            table.generate_planets(system, host)
+        }));
         (
             self.state.sys.planets.iter().map(desc_of).collect(),
             self.state.sys.sun.num_planets,
@@ -148,17 +150,15 @@ impl Harness {
         planet_i: usize,
     ) -> (Vec<Desc>, u32) {
         self.set_star(case.0, case.1);
-        self.state.sys.moons = unsafe { std::mem::zeroed() };
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = Default::default();
+        self.state.sys.planets = Default::default();
 
         self.state.sys.planets[planet_i].num_planets = case.3;
         self.seed(case.2);
 
-        assert!(unsafe {
-            crate::invoke_generation(&mut self.state, |system, host| {
-                table.generate_moons(system, planet_i as u8, host)
-            })
-        });
+        assert!(crate::invoke_generation(&mut self.state, |system, host| {
+            table.generate_moons(system, planet_i as u8, host)
+        }));
         (
             self.state.sys.moons.iter().map(desc_of).collect(),
             self.rng_position(),
@@ -167,29 +167,23 @@ impl Harness {
 
     /// The C `generateEnergy` slot on `body`; the node list it produces.
     fn c_energy(&mut self, table: &dyn SystemGenerator, body: Body, seed: u32) -> String {
-        self.state.sys.planets = unsafe { std::mem::zeroed() };
-        self.state.sys.moons = unsafe { std::mem::zeroed() };
-        self.state.sys.info = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = Default::default();
+        self.state.sys.moons = Default::default();
+        self.state.sys.info = Default::default();
         self.state.sys.info.planet_info.scan_seed = scan_seeds(seed);
-
-        let record = &raw mut *self.state;
         let mut out = String::new();
         self.seed(seed);
         let mut node = fresh_node();
-        let count = unsafe {
-            crate::invoke_generation(&mut *record, |system, host| {
-                table.generate_energy(system, body, !0, &mut node, host)
-            })
-        };
+        let count = crate::invoke_generation(&mut self.state, |system, host| {
+            table.generate_energy(system, body, !0, &mut node, host)
+        });
         let _ = write!(out, "{count}@{}[", self.rng_position());
         for which in 0..count.min(32) {
             self.seed(seed);
             let mut node = fresh_node();
-            let ret = unsafe {
-                crate::invoke_generation(&mut *record, |system, host| {
-                    table.generate_energy(system, body, which, &mut node, host)
-                })
-            };
+            let ret = crate::invoke_generation(&mut self.state, |system, host| {
+                table.generate_energy(system, body, which, &mut node, host)
+            });
             write_node(&mut out, ret, &node);
             let _ = write!(out, "@{};", self.rng_position());
         }

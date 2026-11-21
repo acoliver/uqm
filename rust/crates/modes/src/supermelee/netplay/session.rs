@@ -62,7 +62,7 @@ impl SessionCore {
     }
     pub(crate) fn replay_wait(&self, poll: impl FnMut() -> bool) -> bool {
         poll_replay_wait(self.replay_remote_player.is_some(), poll, || {
-            crate::threading::pacing::yield_input_loop(crate::platform::sys::yield_now);
+            crate::threading::pacing::yield_input_loop(uqm_engine::host::yield_now);
         })
     }
 }
@@ -161,16 +161,35 @@ mod tests {
         assert_eq!(menu.melee_setup.teams[0].c_name(), c"owned fleet");
     }
     #[test]
-    fn fixture_server_retains_its_bound_port_until_connection() {
-        use uqm_engine::host::Net;
-        let mut net = uqm_engine::network::NativeNet::default();
+    fn the_session_reports_the_port_its_transport_bound() {
+        use uqm_engine::host::{Connection, Net};
+        struct Bound;
+        impl Net for Bound {
+            fn connect(&mut self, _: &str, _: &str) -> std::io::Result<Connection> {
+                unreachable!("the session only asks for the port")
+            }
+            fn listen(&mut self, _: &str) -> std::io::Result<Connection> {
+                Ok(Connection(7))
+            }
+            fn local_port(&self, connection: Connection) -> std::io::Result<u16> {
+                assert_eq!(connection, Connection(7));
+                Ok(45678)
+            }
+            fn poll(&mut self, _: Connection) -> std::io::Result<bool> {
+                Ok(false)
+            }
+            fn send(&mut self, _: Connection, _: &[u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+            fn recv(&mut self, _: Connection, _: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+            fn close(&mut self, _: Connection) {}
+        }
+        let mut net = Bound;
         let endpoint = net.listen("0").unwrap();
         let session = NetplaySession::with_net(net);
-        let port = session.local_port(endpoint).unwrap();
-        assert_ne!(port, 0);
-        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_err());
-        let peer = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        assert_eq!(peer.peer_addr().unwrap().port(), port);
+        assert_eq!(session.local_port(endpoint).unwrap(), 45678);
     }
     #[test]
     fn replay_protocol_waits_poll_without_admitting_input() {

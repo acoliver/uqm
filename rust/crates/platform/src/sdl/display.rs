@@ -1,14 +1,16 @@
 //! The SDL2 window: present the composed screen canvases through a software
 //! renderer, with the optional 2x and xBRZ filters and scanlines.
-use super::super::canvas::Canvas;
-use super::super::presentation_diagnostics::{display_event, screen_result, PresentationSample};
-use super::super::presented_frame::PresentedFrame;
-use super::super::software_scalers::scale_screen;
-use super::super::state::{GFXFLAGS_FULLSCREEN, GFXFLAGS_SCANLINES, SCREEN_HEIGHT, SCREEN_WIDTH};
-use crate::bridge_log::rust_bridge_log_msg;
-use crate::host::{Display, Layer, PresentFrame};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::BlendMode;
+use uqm_engine::bridge_log::rust_bridge_log_msg;
+use uqm_engine::graphics::canvas::Canvas;
+use uqm_engine::graphics::presentation_diagnostics::{screen_result, PresentationSample};
+use uqm_engine::graphics::presented_frame::PresentedFrame;
+use uqm_engine::graphics::software_scalers::scale_screen;
+use uqm_engine::graphics::state::{
+    GFXFLAGS_FULLSCREEN, GFXFLAGS_SCANLINES, SCREEN_HEIGHT, SCREEN_WIDTH,
+};
+use uqm_engine::host::{Display, Layer, PresentFrame};
 
 #[cfg(all(feature = "debug-process", target_os = "macos"))]
 use super::macos;
@@ -477,13 +479,6 @@ impl Display for SdlDisplay {
     }
 }
 
-/// Window and display events as diagnostic samples for the next present.
-pub(crate) fn display_sample(event: &sdl2::event::Event) -> Option<PresentationSample> {
-    let mut samples = Vec::new();
-    display_event(&mut samples, event);
-    samples.pop()
-}
-
 /// Write canvas words into the reused upload buffer in native byte order.
 ///
 /// Runs on every present, so it must not allocate or go through flattening
@@ -536,5 +531,30 @@ mod tests {
         assert_eq!(out, expected);
         native_bytes(&[0x0102_0304; 3], &mut out);
         assert_eq!(out, [0x0102_0304u32.to_ne_bytes(); 3].as_flattened());
+    }
+
+    #[test]
+    fn reconfiguration_keeps_the_window_and_applies_fullscreen_and_size() {
+        use sdl2::video::FullscreenType;
+        let _sdl = crate::SDL_TEST_LOCK.lock();
+        std::env::set_var("SDL_VIDEODRIVER", "dummy");
+        let mut display = SdlDisplay::open(0, None, 640, 480).unwrap();
+        let window = display.canvas.window().id();
+        display.reconfigure(GFXFLAGS_FULLSCREEN, 640, 480).unwrap();
+        assert_eq!(
+            display.canvas.window().fullscreen_state(),
+            FullscreenType::Desktop
+        );
+        assert_eq!(display.canvas.window().id(), window);
+        display.reconfigure(0, 800, 600).unwrap();
+        assert_eq!(
+            display.canvas.window().fullscreen_state(),
+            FullscreenType::Off
+        );
+        assert_eq!(display.canvas.window().size(), (800, 600));
+        display
+            .present_video(&[0x00ff_00ff; 16], 4, 4)
+            .unwrap_or_else(|error| panic!("present a movie frame: {error}"));
+        log_scaler_flags(i32::MAX);
     }
 }

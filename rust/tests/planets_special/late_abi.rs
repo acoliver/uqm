@@ -83,16 +83,17 @@ pub fn check() {
             (1_u32 << retrieved) - 1
         };
         let before = format!("{:?}", crate::generation_data(&harness.state));
-        assert!(unsafe {
-            crate::invoke_generation(&mut harness.state, |view, host| {
+        assert!(crate::invoke_generation(
+            &mut harness.state,
+            |view, host| {
                 GENERATE_SPATHI_FUNCTIONS.pickup_life(
                     view,
                     uqm_rust::planets::generate::special::Body::Planet(0),
                     0,
                     host,
                 )
-            })
-        });
+            }
+        ));
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
@@ -118,16 +119,17 @@ pub fn check() {
         cx.world
             .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
-    assert!(unsafe {
-        crate::invoke_generation(&mut harness.state, |view, host| {
+    assert!(crate::invoke_generation(
+        &mut harness.state,
+        |view, host| {
             GENERATE_SPATHI_FUNCTIONS.pickup_life(
                 view,
                 uqm_rust::planets::generate::special::Body::Planet(1),
                 u16::MAX,
                 host,
             )
-        })
-    });
+        }
+    ));
     assert_eq!(
         crate::battle_context::with(|cx| get_game_state(
             cx.world,
@@ -138,17 +140,15 @@ pub fn check() {
 
     // Mycon's life callback does not read any pointer or consume RNG.
     assert_eq!(
-        unsafe {
-            crate::invoke_generation(&mut harness.state, |view, host| {
-                GENERATE_MYCON_FUNCTIONS.generate_life(
-                    view,
-                    uqm_rust::planets::generate::special::Body::Planet(0),
-                    u16::MAX,
-                    &mut crate::planets_common::fresh_node(),
-                    host,
-                )
-            })
-        },
+        crate::invoke_generation(&mut harness.state, |view, host| {
+            GENERATE_MYCON_FUNCTIONS.generate_life(
+                view,
+                uqm_rust::planets::generate::special::Body::Planet(0),
+                u16::MAX,
+                &mut crate::planets_common::fresh_node(),
+                host,
+            )
+        }),
         0
     );
     assert_eq!(harness.rng_position(), 104729);
@@ -175,113 +175,111 @@ fn check_live_queues(harness: &mut Harness) {
         });
         (saved, ids, groups.raw(ids[0]))
     });
-    unsafe {
-        let mut visited = Vec::new();
-        crate::invoke_generation(&mut harness.state, |_, host| {
-            GuardSite::for_each_ip_group(host, &mut |group| {
-                visited.push(group.group_id);
-                group.task &= !8;
-            });
+    let mut visited = Vec::new();
+    crate::invoke_generation(&mut harness.state, |_, host| {
+        GuardSite::for_each_ip_group(host, &mut |group| {
+            visited.push(group.group_id);
+            group.task &= !8;
         });
-        assert!(crate::battle_context::with(|cx| ids.iter().all(|id| cx
-            .world
-            .ip_groups_ref()
-            .get(*id)
-            .task
-            == 0)));
-        assert_eq!(visited, [1, 2, 3]);
-        harness.star_index = BOMB_DEFINED;
-        harness.set_star(0, 0);
-        crate::battle_context::with(|cx| {
-            cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0)
-        });
-        let before = format!("{:?}", crate::generation_data(&harness.state));
-        assert!(crate::invoke_generation(
-            &mut harness.state,
-            |system, host| GENERATE_UTWIG_FUNCTIONS.init_npcs(system, host)
-        ));
-        crate::battle_context::with(|cx| {
-            let mut groups = cx.world.ip_groups();
-            assert!(groups.head().is_none() && groups.tail().is_none());
-            assert!(ids.iter().all(|id| !groups.contains(*id)));
-            let reused = groups
-                .alloc()
-                .unwrap_or_else(|| panic!("fixture pool capacity"));
-            assert_eq!(groups.raw(reused), first);
-            assert_ne!(reused, ids[0]);
-            groups.free(reused);
-        });
-        assert_eq!(
-            format!("{:?}", crate::generation_data(&harness.state)),
-            before
-        );
-        assert_eq!(
-            crate::battle_context::with(|cx| get_game_state(
-                cx.world,
-                uqm_rust::engine::StoryKey::UTWIG_BOMB
-            )),
-            0
-        );
-        assert_eq!(harness.rng_position(), 104729);
-        crate::battle_context::with(|cx| cx.world.queues = saved_queues);
+    });
+    assert!(crate::battle_context::with(|cx| ids.iter().all(|id| cx
+        .world
+        .ip_groups_ref()
+        .get(*id)
+        .task
+        == 0)));
+    assert_eq!(visited, [1, 2, 3]);
+    harness.star_index = BOMB_DEFINED;
+    harness.set_star(0, 0);
+    crate::battle_context::with(|cx| {
+        cx.world
+            .set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0)
+    });
+    let before = format!("{:?}", crate::generation_data(&harness.state));
+    assert!(crate::invoke_generation(
+        &mut harness.state,
+        |system, host| GENERATE_UTWIG_FUNCTIONS.init_npcs(system, host)
+    ));
+    crate::battle_context::with(|cx| {
+        let mut groups = cx.world.ip_groups();
+        assert!(groups.head().is_none() && groups.tail().is_none());
+        assert!(ids.iter().all(|id| !groups.contains(*id)));
+        let reused = groups
+            .alloc()
+            .unwrap_or_else(|| panic!("fixture pool capacity"));
+        assert_eq!(groups.raw(reused), first);
+        assert_ne!(reused, ids[0]);
+        groups.free(reused);
+    });
+    assert_eq!(
+        format!("{:?}", crate::generation_data(&harness.state)),
+        before
+    );
+    assert_eq!(
+        crate::battle_context::with(|cx| get_game_state(
+            cx.world,
+            uqm_rust::engine::StoryKey::UTWIG_BOMB
+        )),
+        0
+    );
+    assert_eq!(harness.rng_position(), 104729);
+    crate::battle_context::with(|cx| cx.world.queues = saved_queues);
 
-        use uqm_rust::engine::graphics::geometry::Point;
-        let saved_race = crate::battle_context::with(|cx| cx.world.encounter_race);
-        let saved_group = crate::battle_context::with(|cx| cx.world.encounter_group);
-        crate::battle_context::with(|cx| {
-            cx.world.encounter_race = 18;
-            cx.world.encounter_group = 7;
-        });
-        crate::invoke_generation(&mut harness.state, |_, host| {
-            GuardSite::reset_encounter(host)
-        });
-        assert_eq!(
-            crate::battle_context::with(|cx| cx.world.encounter_race),
-            -1
-        );
-        assert_eq!(
-            crate::battle_context::with(|cx| cx.world.encounter_group),
-            0
-        );
-        crate::battle_context::with(|cx| {
-            cx.world.encounter_race = saved_race;
-            cx.world.encounter_group = saved_group;
-        });
+    use uqm_rust::engine::graphics::geometry::Point;
+    let saved_race = crate::battle_context::with(|cx| cx.world.encounter_race);
+    let saved_group = crate::battle_context::with(|cx| cx.world.encounter_group);
+    crate::battle_context::with(|cx| {
+        cx.world.encounter_race = 18;
+        cx.world.encounter_group = 7;
+    });
+    crate::invoke_generation(&mut harness.state, |_, host| {
+        GuardSite::reset_encounter(host)
+    });
+    assert_eq!(
+        crate::battle_context::with(|cx| cx.world.encounter_race),
+        -1
+    );
+    assert_eq!(
+        crate::battle_context::with(|cx| cx.world.encounter_group),
+        0
+    );
+    crate::battle_context::with(|cx| {
+        cx.world.encounter_race = saved_race;
+        cx.world.encounter_group = saved_group;
+    });
 
-        let saved_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
-        let saved_origin = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin);
-        let saved_sun = harness.state.sys.sun;
-        let saved_planet = harness.state.sys.planets[4];
-        // units.h and solarsys.c: SIS height = screen height - 13;
-        // DISPLAY_TO_LOC = ((SIS width >> 1) - 8) >> 1.
-        let half_width = i32::from(uqm_rust::planets::generate::consts::MAP_WIDTH) >> 1;
-        let half_height = (SCREEN_HEIGHT - 13) >> 1;
-        let display_to_loc = (half_width - 8) >> 1;
-        harness.state.sys.sun.radius = (display_to_loc * 10) as i16;
-        harness.state.sys.planets[4].image.origin = Point {
-            x: (half_width + 12) as i16,
-            y: (half_height - 9) as i16,
-        };
-        let outer = crate::invoke_generation(&mut harness.state, |_, host| {
-            GuardSite::planet_outer_location(host, 4)
-        });
-        assert_eq!((outer.x, outer.y), (120, -90));
-        crate::invoke_generation(&mut harness.state, |_, host| {
-            GuardSite::set_and_transform_ip_location(host, outer)
-        });
-        let location =
-            crate::invoke_generation(&mut harness.state, |_, host| GuardSite::ip_location(host));
-        assert_eq!((location.x, location.y), (120, -90));
-        let origin = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin);
-        assert_eq!(
-            (i32::from(origin.x), i32::from(origin.y)),
-            (half_width + 12, half_height - 9)
-        );
-        crate::battle_context::with(|cx| cx.world.data.game.ip_location = saved_location);
-        crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin = saved_origin);
-        harness.state.sys.sun = saved_sun;
-        harness.state.sys.planets[4] = saved_planet;
-        println!("live adapter checks: guard traversal, bomb queue reset, encounter reset and coordinate ABI");
-    }
+    let saved_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
+    let saved_origin = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin);
+    let saved_sun = harness.state.sys.sun;
+    let saved_planet = harness.state.sys.planets[4];
+    // units.h and solarsys.c: SIS height = screen height - 13;
+    // DISPLAY_TO_LOC = ((SIS width >> 1) - 8) >> 1.
+    let half_width = i32::from(uqm_rust::planets::generate::consts::MAP_WIDTH) >> 1;
+    let half_height = (SCREEN_HEIGHT - 13) >> 1;
+    let display_to_loc = (half_width - 8) >> 1;
+    harness.state.sys.sun.radius = (display_to_loc * 10) as i16;
+    harness.state.sys.planets[4].image.origin = Point {
+        x: (half_width + 12) as i16,
+        y: (half_height - 9) as i16,
+    };
+    let outer = crate::invoke_generation(&mut harness.state, |_, host| {
+        GuardSite::planet_outer_location(host, 4)
+    });
+    assert_eq!((outer.x, outer.y), (120, -90));
+    crate::invoke_generation(&mut harness.state, |_, host| {
+        GuardSite::set_and_transform_ip_location(host, outer)
+    });
+    let location =
+        crate::invoke_generation(&mut harness.state, |_, host| GuardSite::ip_location(host));
+    assert_eq!((location.x, location.y), (120, -90));
+    let origin = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin);
+    assert_eq!(
+        (i32::from(origin.x), i32::from(origin.y)),
+        (half_width + 12, half_height - 9)
+    );
+    crate::battle_context::with(|cx| cx.world.data.game.ip_location = saved_location);
+    crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin = saved_origin);
+    harness.state.sys.sun = saved_sun;
+    harness.state.sys.planets[4] = saved_planet;
+    println!("live adapter checks: guard traversal, bomb queue reset, encounter reset and coordinate ABI");
 }

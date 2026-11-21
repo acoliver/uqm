@@ -65,7 +65,7 @@ pub fn render_layout(ops: &mut impl Ops) -> String {
 }
 
 pub fn scan_info(seed: u32) -> SystemInfo {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = scan_seeds(seed);
     info.planet_info.scan_retrieve_mask = [0x55555555, 0xa5a5a5a5, u32::MAX];
     info.planet_info.atmo_density = 53;

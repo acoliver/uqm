@@ -65,14 +65,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nullable_hooks_keep_zero_initialized_records_valid() {
-        // SAFETY: Option uses the null function-pointer niche for an absent native hook.
-        let empty: (Option<ElementHook>, Option<CollisionHook>) = unsafe { std::mem::zeroed() };
-        assert!(empty.0.is_none());
-        assert!(empty.1.is_none());
-    }
-
-    #[test]
     fn installation_preserves_callback_addresses_and_clears_absent_hooks() {
         fn element(_: &mut Cx<'_>, _: ElementId) {}
         fn collision(_: &mut Cx<'_>, _: ElementId, _: &mut Point, _: ElementId, _: &mut Point) {}

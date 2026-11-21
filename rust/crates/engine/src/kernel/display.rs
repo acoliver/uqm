@@ -34,10 +34,8 @@ fn load_frame(resource: &CStr) -> FrameId {
 }
 
 impl Kernel {
-    /// Start the video player and create the screen context and display.
+    /// Create the screen context and display.
     pub fn open_screen(&mut self) -> bool {
-        // SAFETY: game thread; graphics and the resource system are initialized.
-        unsafe { crate::video::control::InitVideoPlayer(1) };
         self.screen_context = create_context(c"ScreenContext");
         let (width, height) = crate::graphics::state::screen_dimensions();
         (self.screen_width, self.screen_height) = (width as i16, height as i16);
@@ -52,8 +50,7 @@ impl Kernel {
     pub fn close_screen(&mut self) {
         destroy_frame(&mut self.screen);
         destroy_context(&mut self.screen_context);
-        // SAFETY: game thread, after the game loop has stopped using the screen.
-        unsafe { crate::video::control::UninitVideoPlayer() };
+        crate::video::legacy::stop_player();
     }
 
     pub fn init_resources(&mut self) -> bool {

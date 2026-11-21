@@ -14,10 +14,7 @@ fn frame_index(frame: crate::graphics::drawable::FrameId) -> u16 {
 }
 
 /// Prepare the save location from the active solar session.
-///
-/// # Safety
-/// The supplied game record's frame must be null or remain live for this read.
-pub unsafe fn prepare_solar_location(
+pub fn prepare_solar_location(
     game: &CGameState,
     state: &SolarSnapshot,
 ) -> Result<SolarLocation, LocationError> {
@@ -41,10 +38,7 @@ pub unsafe fn prepare_solar_location(
 }
 
 /// `saveNonOrbitalLocation ()`.
-///
-/// # Safety
-/// As [`prepare_solar_location`].
-unsafe fn prepare_non_orbital_location(
+fn prepare_non_orbital_location(
     game: &CGameState,
     state: &SolarSnapshot,
 ) -> Result<SolarLocation, LocationError> {

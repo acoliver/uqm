@@ -26,3 +26,6 @@ quote = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 toml_edit = "0.25"
 uqm-rust = { optional = true, package = "uqm", path = "..", default-features = false, features = ["audio_heart", "debug-process"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }

@@ -42,7 +42,7 @@ use uqm_rust::math::velocity::VELOCITY_SHIFT;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::{ffi::CStr, mem, ptr};
+use std::{mem, ptr};
 use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{cosine, facing_to_angle, normalize_facing, sine};
 
@@ -209,15 +209,12 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
             (12, 12, 20, 20)
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_info.race_strings_rsc),
+            d.ship_info.race_strings_rsc.unwrap(),
             c"ship.slylandro.text"
         );
+        assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.slylandro.icons");
         assert_eq!(
-            CStr::from_ptr(d.ship_info.icons_rsc),
-            c"ship.slylandro.icons"
-        );
-        assert_eq!(
-            CStr::from_ptr(d.ship_info.melee_icon_rsc),
+            d.ship_info.melee_icon_rsc.unwrap(),
             c"ship.slylandro.meleeicons"
         );
         assert!(
@@ -253,10 +250,10 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
         );
         for (i, size) in ["large", "medium", "small"].iter().enumerate() {
             assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                 format!("ship.slylandro.graphics.probe.{size}")
             );
-            assert!(d.ship_data.weapon_rsc[i].is_null() && d.ship_data.special_rsc[i].is_null());
+            assert!(d.ship_data.weapon_rsc[i].is_none() && d.ship_data.special_rsc[i].is_none());
             assert!(
                 d.ship_data.ship.view(i).is_absent()
                     && d.ship_data.weapon.view(i).is_absent()
@@ -264,10 +261,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
             );
         }
         let cap = &d.ship_data.captain_control;
-        assert_eq!(
-            CStr::from_ptr(cap.captain_rsc),
-            c"ship.slylandro.graphics.captain"
-        );
+        assert_eq!(cap.captain_rsc.unwrap(), c"ship.slylandro.graphics.captain");
         assert!(
             cap.background.is_null()
                 && cap.turn.is_null()
@@ -276,11 +270,11 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
                 && cap.special.is_absent()
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_data.victory_ditty_rsc),
+            d.ship_data.victory_ditty_rsc.unwrap(),
             c"ship.slylandro.ditty"
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_data.ship_sounds_rsc),
+            d.ship_data.ship_sounds_rsc.unwrap(),
             c"ship.slylandro.sounds"
         );
         assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());

@@ -8,7 +8,6 @@ mod shared;
 mod special_hooks;
 
 use std::{
-    ffi::CStr,
     mem, ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -118,9 +117,9 @@ impl<'a> Ship<'a> {
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
-        el.intersect_control.IntersectStamp.frame = ship_frames.frame(0);
-        el.intersect_control.EndPoint = Point { x: 1000, y: 1000 };
-        el.intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.frame = ship_frames.frame(0);
+        el.intersect_control.end_point = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
             handle,
@@ -385,7 +384,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: Point, ang
 fn descriptor_matches_every_c_initializer_field() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let d = shared::descriptor(SPECIES_ID_PKUNK_ID);
             assert_eq!(
                 d.ship_info.ship_flags,
@@ -394,13 +393,10 @@ fn descriptor_matches_every_c_initializer_field() {
             assert_eq!(d.ship_info.ship_cost, 20);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (8, 8));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (12, 12));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.pkunk.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.pkunk.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.pkunk.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.pkunk.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.pkunk.meleeicons"
             );
             assert!(d.ship_info.race_strings.is_none());
@@ -431,36 +427,27 @@ fn descriptor_matches_every_c_initializer_field() {
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 // PKUNK_*_MASK_PMAP_ANIM are the fury graphics.
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.pkunk.graphics.fury.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.pkunk.graphics.bug.{size}")
                 );
-                assert!(d.ship_data.special_rsc[i].is_null());
+                assert!(d.ship_data.special_rsc[i].is_none());
                 assert!(d.ship_data.ship.view(i).is_absent());
                 assert!(d.ship_data.weapon.view(i).is_absent());
                 assert!(d.ship_data.special.view(i).is_absent());
             }
             let captain = &d.ship_data.captain_control;
-            assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
-                c"ship.pkunk.graphics.captain"
-            );
+            assert_eq!(captain.captain_rsc.unwrap(), c"ship.pkunk.graphics.captain");
             assert!(captain.background.is_null());
             assert!(captain.turn.is_null());
             assert!(captain.thrust.is_null());
             assert!(captain.weapon.is_null());
             assert!(captain.special.is_absent());
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
-                c"ship.pkunk.ditty"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
-                c"ship.pkunk.sounds"
-            );
+            assert_eq!(d.ship_data.victory_ditty_rsc.unwrap(), c"ship.pkunk.ditty");
+            assert_eq!(d.ship_data.ship_sounds_rsc.unwrap(), c"ship.pkunk.sounds");
             assert!(d.ship_data.victory_ditty.is_null());
             assert!(d.ship_data.ship_sounds.is_none());
             assert_eq!(d.cyborg_control.maneuverability_index, 0);
@@ -904,14 +891,14 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             let control = (*el).intersect_control;
             assert_eq!(
                 (
-                    control.IntersectStamp.origin.x,
-                    control.IntersectStamp.origin.y
+                    control.intersect_stamp.origin.x,
+                    control.intersect_stamp.origin.y
                 ),
                 (100, -200)
             );
-            assert_eq!((control.EndPoint.x, control.EndPoint.y), (300, 19));
+            assert_eq!((control.end_point.x, control.end_point.y), (300, 19));
             // next.image.frame was overwritten before InitIntersectFrame runs.
-            assert_eq!((control.IntersectStamp.frame).index(), 5);
+            assert_eq!((control.intersect_stamp.frame).index(), 5);
             assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
             assert_eq!(
                 (*el).state_flags & (NONSOLID | FINITE_LIFE) as u16,

@@ -50,11 +50,13 @@ pub trait Ops {
 pub fn descriptors(count: usize) -> Vec<PlanetDesc> {
     (0..count)
         .map(|i| {
-            let mut d: PlanetDesc = unsafe { std::mem::zeroed() };
-            d.rand_seed = 0xfeed0000 + i as u32;
-            d.data_index = 0;
-            d.num_planets = 0x7f;
-            d.radius = -17;
+            let mut d = PlanetDesc {
+                rand_seed: 0xfeed0000 + i as u32,
+                data_index: 0,
+                num_planets: 0x7f,
+                radius: -17,
+                ..Default::default()
+            };
             d.location.x = -23;
             d.location.y = 29;
             d.temp_color.r = 31;
@@ -69,7 +71,7 @@ pub fn descriptors(count: usize) -> Vec<PlanetDesc> {
         .collect()
 }
 pub fn scan_info(seed: u32, frame: &PlanetFrame, chance: i16) -> SystemInfo {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = scan_seeds(seed);
     info.planet_info.scan_retrieve_mask = [0xa5a5a5a5, 0x55555555, 0xffffffff];
     info.planet_info.atmo_density = 50;

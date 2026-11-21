@@ -1,6 +1,6 @@
 //! Bounded stream framing; effects run between packets without a connection borrow.
 use super::{
-    netconnection::{Effect, Event, ReadyAction},
+    netconnection::{Effect, Event, ReadyAction, Rejected},
     packet::{DecodeError, Packet},
     session::SessionCore,
 };
@@ -9,7 +9,12 @@ use crate::supermelee::netplay::READ_BUFFER_SIZE;
 use std::io;
 
 impl SessionCore {
-    pub fn dispatch(&self, player: usize, packet: &Packet, emit: &mut dyn FnMut(Event)) -> i32 {
+    pub fn dispatch(
+        &self,
+        player: usize,
+        packet: &Packet,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), Rejected> {
         let (events, result) = {
             let mut conn = self
                 .connection_mut(player)
@@ -53,7 +58,7 @@ impl SessionCore {
         self.net_input_with(timeout.min(uqm_engine::host::async_wait_ms()), emit);
     }
     pub fn net_input_with(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {
-        let deadline = crate::platform::sys::Deadline::after_millis(timeout);
+        let deadline = uqm_engine::host::Deadline::after_millis(timeout);
         let before = self.connection_progress();
         loop {
             uqm_engine::host::process_async();
@@ -79,11 +84,11 @@ impl SessionCore {
                 .map_or((0, 0), |conn| (conn.state as u32, conn.packets_received))
         })
     }
-    fn error(&self, side: usize, error: i32, emit: &mut dyn FnMut(Event)) {
+    fn error(&self, side: usize, emit: &mut dyn FnMut(Event)) {
         let event = self
             .connection(side)
             .unwrap_or_else(|| panic!("error connection"))
-            .event(Effect::Error(error));
+            .event(Effect::Error);
         emit(event);
         self.disconnect(side, emit);
     }
@@ -100,14 +105,8 @@ impl SessionCore {
             let result = self.transport.borrow_mut().poll(socket);
             match result {
                 Ok(false) => return,
-                Err(error) => {
-                    self.error(
-                        side,
-                        error
-                            .raw_os_error()
-                            .unwrap_or(crate::engine::platform::os::errno::EIO),
-                        emit,
-                    );
+                Err(_) => {
+                    self.error(side, emit);
                     return;
                 }
                 Ok(true) => {}
@@ -168,14 +167,8 @@ impl SessionCore {
                 Ok(count) => count,
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => return,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => {
-                    self.error(
-                        side,
-                        error
-                            .raw_os_error()
-                            .unwrap_or(crate::engine::platform::os::errno::EIO),
-                        emit,
-                    );
+                Err(_) => {
+                    self.error(side, emit);
                     return;
                 }
             };
@@ -200,15 +193,15 @@ impl SessionCore {
                         if self.connection(side).is_none() {
                             return;
                         }
-                        if result == -1 {
-                            self.error(side, crate::engine::platform::os::errno::errno(), emit);
+                        if result.is_err() {
+                            self.error(side, emit);
                             return;
                         }
                         processed += length;
                     }
                     Err(DecodeError::Incomplete) => break,
                     Err(_) => {
-                        self.error(side, crate::engine::platform::os::errno::EBADMSG, emit);
+                        self.error(side, emit);
                         return;
                     }
                 }

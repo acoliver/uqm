@@ -147,12 +147,40 @@ mod tests {
 
     #[test]
     fn campaign_fields_include_costs_clock_and_velocity() {
-        // SAFETY: GlobalState contains only integers and integer arrays/structs.
-        let mut state: GlobalState = unsafe { std::mem::zeroed() };
-        state.crew_cost = 7;
-        state.clock.tick_count = -17;
-        state.module_cost[2] = 11;
-        state.velocity.incr.width = -31;
+        use crate::savegame::types::{ClockState, Velocity};
+        let mut module_cost = [0; crate::savegame::types::NUM_MODULES];
+        module_cost[2] = 11;
+        let state = GlobalState {
+            glob_flags: 0,
+            crew_cost: 7,
+            fuel_cost: 0,
+            module_cost,
+            element_worth: Default::default(),
+            current_activity: 0,
+            clock: ClockState {
+                day_index: 0,
+                month_index: 0,
+                year_index: 0,
+                tick_count: -17,
+                day_in_ticks: 0,
+            },
+            autopilot: Default::default(),
+            ip_location: Default::default(),
+            ship_stamp_origin: Default::default(),
+            ship_facing: 0,
+            ip_planet: 0,
+            in_orbit: 0,
+            velocity: Velocity {
+                travel_angle: 0,
+                vector: Default::default(),
+                fract: Default::default(),
+                error: Default::default(),
+                incr: crate::savegame::types::Extent {
+                    width: -31,
+                    height: 0,
+                },
+            },
+        };
         let mut fields = Fields::new();
         global(&mut fields, &state);
         assert_eq!(fields["mode.crew_cost"], "7");

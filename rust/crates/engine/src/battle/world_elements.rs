@@ -315,48 +315,50 @@ mod engine {
             // The original loop retains this reassignment for subsequent crew.
             owner = cx.owner(target);
             cx.set_target(crew, cx.optional_ship_element(owner));
-            intersect.IntersectStamp.origin = cx.weapon_origin(ship).intersection().EndPoint;
+            intersect.intersect_stamp.origin = cx.weapon_origin(ship).intersection().end_point;
             let w = (i32::from(cx.random() as u16) % i32::from(rect.extent.width)) as i16;
             let h = (i32::from(cx.random() as u16) % i32::from(rect.extent.height)) as i16;
             let frame = cx.element(crew).current.image.frame;
             let mut crew_intersect = intersect;
             crew_intersect.last_time_val = 0;
-            crew_intersect.IntersectStamp.origin = Point { x: 0, y: 0 };
-            image!(frame; crew_intersect.IntersectStamp.frame, frame.raw());
+            crew_intersect.intersect_stamp.origin = Point { x: 0, y: 0 };
+            image!(frame; crew_intersect.intersect_stamp.frame, frame.raw());
             if dx == 0 && dy == 0 {
-                crew_intersect.EndPoint.x = crew_intersect
-                    .EndPoint
+                crew_intersect.end_point.x = crew_intersect
+                    .end_point
                     .x
                     .wrapping_add(w - (rect.extent.width >> 1));
-                crew_intersect.EndPoint.y = crew_intersect
-                    .EndPoint
+                crew_intersect.end_point.y = crew_intersect
+                    .end_point
                     .y
                     .wrapping_add(h - (rect.extent.height >> 1));
-                crew_intersect.IntersectStamp.origin =
-                    cx.weapon_origin(target).intersection().EndPoint;
+                crew_intersect.intersect_stamp.origin =
+                    cx.weapon_origin(target).intersection().end_point;
             } else {
-                crew_intersect.EndPoint.x = crew_intersect.EndPoint.x.wrapping_add(if dx == 0 {
+                crew_intersect.end_point.x = crew_intersect.end_point.x.wrapping_add(if dx == 0 {
                     w - (rect.extent.width >> 1)
                 } else if dx > 0 {
                     w
                 } else {
                     -w
                 });
-                crew_intersect.EndPoint.y = crew_intersect.EndPoint.y.wrapping_add(if dy == 0 {
+                crew_intersect.end_point.y = crew_intersect.end_point.y.wrapping_add(if dy == 0 {
                     h - (rect.extent.height >> 1)
                 } else if dy > 0 {
                     h
                 } else {
                     -h
                 });
-                crew_intersect.IntersectStamp.origin.x = crew_intersect.EndPoint.x.wrapping_add(dx);
-                crew_intersect.IntersectStamp.origin.y = crew_intersect.EndPoint.y.wrapping_add(dy);
+                crew_intersect.intersect_stamp.origin.x =
+                    crew_intersect.end_point.x.wrapping_add(dx);
+                crew_intersect.intersect_stamp.origin.y =
+                    crew_intersect.end_point.y.wrapping_add(dy);
             }
             cx.projected_intersect(&mut crew_intersect, &mut intersect, MAX_TIME_VALUE as u16);
             cx.element_mut(crew).current.location.x =
-                (i32::from(crew_intersect.EndPoint.x) << ONE_SHIFT) as i16;
+                (i32::from(crew_intersect.end_point.x) << ONE_SHIFT) as i16;
             cx.element_mut(crew).current.location.y =
-                (i32::from(crew_intersect.EndPoint.y) << ONE_SHIFT) as i16;
+                (i32::from(crew_intersect.end_point.y) << ONE_SHIFT) as i16;
         }
     }
 }

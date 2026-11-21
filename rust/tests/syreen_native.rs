@@ -47,7 +47,7 @@ fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
 #[test]
 fn descriptor_matches_the_c_race_data() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let desc = descriptor(SPECIES_ID_SYREEN_ID);
             assert!(std::ptr::eq(
                 desc.race.unwrap(),
@@ -59,7 +59,7 @@ fn descriptor_matches_the_c_race_data() {
             assert_eq!(desc.ship_info.max_crew, 42);
             assert_eq!(desc.ship_info.energy_level, 16);
             assert_eq!(desc.ship_info.max_energy, 16);
-            let text = |p| CStr::from_ptr(p);
+            let text = |p: Option<&'static CStr>| p.unwrap();
             assert_eq!(text(desc.ship_info.race_strings_rsc), c"ship.syreen.text");
             assert_eq!(text(desc.ship_info.icons_rsc), c"ship.syreen.icons");
             assert_eq!(
@@ -90,7 +90,7 @@ fn descriptor_matches_the_c_race_data() {
                     text(desc.ship_data.weapon_rsc[i]).to_str().unwrap(),
                     format!("ship.syreen.graphics.dagger.{size}")
                 );
-                assert!(desc.ship_data.special_rsc[i].is_null());
+                assert!(desc.ship_data.special_rsc[i].is_none());
             }
             assert_eq!(
                 text(desc.ship_data.captain_control.captain_rsc),

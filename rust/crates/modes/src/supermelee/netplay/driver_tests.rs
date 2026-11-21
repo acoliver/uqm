@@ -62,7 +62,7 @@ fn selection_notice_is_immediate_and_does_not_hold_the_connection() {
     assert_eq!(
         session.dispatch(0, &Packet::SelectShip(3), &mut |event| session
             .effect(event, &mut driver)),
-        0
+        Ok(())
     );
     assert_eq!(
         seen,

@@ -6,26 +6,22 @@ mod battle;
 mod battle_context;
 use battle::*;
 
-use std::ffi::CStr;
 use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
 use uqm_rust::engine::species::species_id::SPECIES_ID_MYCON_ID;
 use uqm_rust::graphics::geometry::Point;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let d = descriptor(SPECIES_ID_MYCON_ID);
         assert_eq!(d.ship_info.ship_flags, (FIRES_FORE | SEEKING_WEAPON) as u16);
         assert_eq!(d.ship_info.ship_cost, 21);
         assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (20, 20));
         assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (40, 40));
+        assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.mycon.text");
+        assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.mycon.icons");
         assert_eq!(
-            CStr::from_ptr(d.ship_info.race_strings_rsc),
-            c"ship.mycon.text"
-        );
-        assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.mycon.icons");
-        assert_eq!(
-            CStr::from_ptr(d.ship_info.melee_icon_rsc),
+            d.ship_info.melee_icon_rsc.unwrap(),
             c"ship.mycon.meleeicons"
         );
         assert_eq!(d.fleet.strength, 194);
@@ -56,14 +52,14 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
             (4, 6, 6, 5, 0, 7)
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_data.ship_rsc[0]),
+            d.ship_data.ship_rsc[0].unwrap(),
             c"ship.mycon.graphics.podship.large"
         );
         assert_eq!(
-            CStr::from_ptr(d.ship_data.weapon_rsc[2]),
+            d.ship_data.weapon_rsc[2].unwrap(),
             c"ship.mycon.graphics.plasma.small"
         );
-        assert!(d.ship_data.special_rsc.iter().all(|r| r.is_null()));
+        assert!(d.ship_data.special_rsc.iter().all(|r| r.is_none()));
         assert_eq!(d.cyborg_control.weapon_range, 3200);
         assert!(d.callbacks()[4] != 0);
         assert!(d.callbacks()[2] != 0);

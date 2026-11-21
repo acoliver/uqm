@@ -191,7 +191,6 @@ pub(crate) fn hyperspace_stopped(world: &CampaignView, ui: &UiObservation) -> Op
     {
         return None;
     }
-    // SAFETY: the input hook runs synchronously on the game thread.
     let velocity = world.velocity;
     Some(velocity == (0, 0))
 }

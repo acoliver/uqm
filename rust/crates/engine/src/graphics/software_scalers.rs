@@ -326,7 +326,7 @@ fn filter_for(flags: i32) -> Filter {
 
 /// Render a whole screen canvas through the 2x filter `flags` select into
 /// the renderer's RGBX byte buffer (four bytes a pixel at twice the size).
-pub(crate) fn scale_screen(src: &Canvas, flags: i32, buffer: &mut [u8]) {
+pub fn scale_screen(src: &Canvas, flags: i32, buffer: &mut [u8]) {
     let image = Image {
         pixels: src.words(),
         stride: src.width() as usize,

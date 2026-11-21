@@ -186,7 +186,7 @@ jobs:
         run: |
           target/${{ matrix.target }}/release/${{ matrix.binary }} --version
           target/${{ matrix.target }}/release/${{ matrix.binary }} --check-content --contentdir=../sc2/content
-          cargo run --release --locked --example platform_smoke --features bundled-sdl --target ${{ matrix.target }}
+          cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl --target ${{ matrix.target }}
 
   parity-policy:
     name: Select parity recording scope

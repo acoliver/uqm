@@ -157,7 +157,7 @@ mod tests {
             assert!(status.success());
             return Ok(());
         }
-        uqm_engine::host::install(true);
+        uqm_engine::host::install_test(true);
         uqm_engine::host::advance_to(42);
         assert_eq!(update_timestamp(0), 50);
         assert_eq!(update_timestamp(1_000_000), 50);

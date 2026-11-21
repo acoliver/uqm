@@ -139,8 +139,6 @@ fn test_linked(root: &Path) -> Result<(), String> {
             "canvas_native",
             "--test",
             "queue_native",
-            "--test",
-            "video_native",
         ]),
         "Cargo test linked fixtures",
     )
@@ -673,20 +671,22 @@ fn build_script_package(
     messages: &[serde_json::Value],
     package_id: &str,
 ) -> Result<String, String> {
-    let engine_source = root.join("rust/crates/engine/src/lib.rs");
-    if engine_source.exists() {
+    // The SDL probe build script, whose OUT_DIR the harness uses, lives in
+    // uqm-platform.
+    let platform_source = root.join("rust/crates/platform/src/lib.rs");
+    if platform_source.exists() {
         exactly_one(
             messages
                 .iter()
                 .filter(|message| {
                     message["reason"] == "compiler-artifact"
-                        && message["target"]["name"] == "uqm_engine"
+                        && message["target"]["name"] == "uqm_platform"
                         && cargo_message_has_target_kind(message, "rlib")
-                        && message_source_is(message, &engine_source)
+                        && message_source_is(message, &platform_source)
                 })
                 .filter_map(|message| message["package_id"].as_str().map(str::to_owned))
                 .collect(),
-            "engine Cargo package identity",
+            "platform Cargo package identity",
         )
     } else {
         Ok(package_id.to_owned())
@@ -895,22 +895,22 @@ mod tests {
             paths.rust_archive,
             Path::new("/target/release/deps/libuqm_rust-test.rlib")
         );
-        let engine_source = root.path().join("rust/crates/engine/src/lib.rs");
-        fs::create_dir_all(engine_source.parent().unwrap()).unwrap();
-        fs::write(&engine_source, "").unwrap();
-        let engine_messages = messages.replace(
+        let platform_source = root.path().join("rust/crates/platform/src/lib.rs");
+        fs::create_dir_all(platform_source.parent().unwrap()).unwrap();
+        fs::write(&platform_source, "").unwrap();
+        let platform_messages = messages.replace(
             "\"package_id\":\"uqm-package\",\"reason\":\"build-script-executed\"",
-            "\"package_id\":\"engine-package\",\"reason\":\"build-script-executed\"",
+            "\"package_id\":\"platform-package\",\"reason\":\"build-script-executed\"",
         ) + &format!(
             "{}\n",
             serde_json::json!({
-                "reason": "compiler-artifact", "package_id": "engine-package",
-                "target": {"name": "uqm_engine", "kind": ["rlib"], "src_path": engine_source},
-                "filenames": ["/target/release/deps/libuqm_engine-test.rlib"]
+                "reason": "compiler-artifact", "package_id": "platform-package",
+                "target": {"name": "uqm_platform", "kind": ["rlib"], "src_path": platform_source},
+                "filenames": ["/target/release/deps/libuqm_platform-test.rlib"]
             })
         );
         assert_eq!(
-            parse_production_paths(root.path(), engine_messages.as_bytes())
+            parse_production_paths(root.path(), platform_messages.as_bytes())
                 .unwrap()
                 .out_dir,
             Path::new("/target/release/build/uqm/out")

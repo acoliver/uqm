@@ -7,7 +7,7 @@
 //! `process_source_stream` directly and observe the result deterministically.
 
 use super::*;
-use crate::sound::mixer::ffi::playback_tests as mixer_playback;
+use crate::sound::mixer::playback_tests as mixer_playback;
 use crate::sound::mixer::types::{BufferState, SourceState};
 use crate::sound::test_support::{Probe, ScriptedDecoder, ENGINE_TEST_LOCK};
 

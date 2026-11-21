@@ -155,12 +155,14 @@ mod tests {
         let mut command = Command::new("/bin/sleep");
         command.arg("30");
         let guard = ChildGuard::spawn(command).unwrap();
-        let pid = guard.id() as libc::pid_t;
+        let pid = rustix::process::Pid::from_raw(guard.id() as i32).unwrap();
         // Signal 0 only probes. A live child, or a zombie, still answers it.
-        assert_eq!(unsafe { libc::kill(pid, 0) }, 0);
+        assert_eq!(rustix::process::test_kill_process(pid), Ok(()));
         drop(guard);
-        assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
-        assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+        assert_eq!(
+            rustix::process::test_kill_process(pid),
+            Err(rustix::io::Errno::SRCH)
+        );
     }
 
     #[cfg(target_os = "macos")]

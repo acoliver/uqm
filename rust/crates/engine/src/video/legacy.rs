@@ -1,13 +1,174 @@
-//! Legacy video resource descriptors and playback, ported from the video library.
-#![allow(non_snake_case)]
+//! Movie resources and their playback: one movie plays at a time.
 
 use super::descriptor::Descriptor;
-use super::ffi::TFB_VideoClip;
+use super::player::VideoPlayer;
+use crate::bridge_log::rust_bridge_log_msg;
+use crate::io::Dir;
+use crate::sound::audio_device::{self, PcmClip};
+use crate::sound::decoder::Decoder;
+use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::resource_types::LoadedMusic;
 use std::ffi::CStr;
-use std::ptr;
-use std::ptr::NonNull;
+use std::sync::{Mutex, MutexGuard};
 
+/// `VID_NO_LOOP`: the descriptor names no loop frame.
+const NO_LOOP: u32 = u32::MAX;
+
+/// The movie that is playing, if any.
+#[derive(Default)]
+struct Current {
+    /// The decoded picture stream of the started movie.
+    player: Option<VideoPlayer>,
+    /// A playback was started and has not been stopped.
+    started: bool,
+    /// The started playback carries a speech track.
+    speech: bool,
+    /// Device handle of the movie's own soundtrack; 0 when none plays.
+    audio: u32,
+}
+
+static CURRENT: Mutex<Current> = Mutex::new(Current {
+    player: None,
+    started: false,
+    speech: false,
+    audio: 0,
+});
+
+fn current() -> MutexGuard<'static, Current> {
+    CURRENT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+impl Current {
+    /// Silence the soundtrack and drop the picture stream.
+    fn stop_clip(&mut self) {
+        let audio = std::mem::take(&mut self.audio);
+        if audio != 0 {
+            audio_device::stop(audio);
+            rust_bridge_log_msg(&format!("RUST_VIDEO: stopped audio handle={audio}"));
+        }
+        self.player = None;
+    }
+
+    /// Stop the started playback: its speech, then its clip.
+    fn stop(&mut self) {
+        if self.speech {
+            crate::sound::heart_ffi::snd_stop_speech();
+        }
+        if self.started {
+            self.stop_clip();
+        }
+        self.started = false;
+        self.speech = false;
+    }
+
+    fn playing(&self) -> bool {
+        self.player.as_ref().is_some_and(VideoPlayer::playing)
+    }
+
+    fn position(&self) -> u32 {
+        if !self.started || !self.playing() {
+            return 0;
+        }
+        self.player.as_ref().map_or(0, VideoPlayer::position_ms)
+    }
+}
+
+/// Stop whatever movie is playing; the video subsystem is being torn down or
+/// reconfigured.
+pub fn stop_player() {
+    current().player = None;
+}
+
+/// Where a movie's files are and its picture size.
+struct Clip {
+    dir: Dir,
+    filename: String,
+    w: u32,
+    h: u32,
+}
+
+impl Clip {
+    /// Probe the movie named by `path` in the content directory; only `.duk`
+    /// movies have a decoder.
+    fn probe(path: &CStr) -> Option<Self> {
+        let dir = crate::io::content_dir()?;
+        let filename = path.to_str().ok()?;
+        let (_, extension) = filename.rsplit_once('.')?;
+        if extension != "duk" {
+            return None;
+        }
+        let duk = super::files::open(&dir, filename).ok()?;
+        Some(Self {
+            w: duk.width(),
+            h: duk.height(),
+            dir,
+            filename: filename.to_owned(),
+        })
+    }
+
+    /// Start the picture stream at `(x, y)` on the main screen.
+    fn start_player(&self, current: &mut Current, x: i32, y: i32, looping: bool) -> bool {
+        let decoder = match super::files::open(&self.dir, &self.filename) {
+            Ok(decoder) => decoder,
+            Err(error) => {
+                rust_bridge_log_msg(&format!("RUST_VIDEO: decoder init failed: {error:?}"));
+                return false;
+            }
+        };
+        let (width, height) = (decoder.width(), decoder.height());
+        let mut player = VideoPlayer::new(decoder);
+        player.set_position(x, y);
+        player.set_loop(looping);
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: play {} ({width}x{height}), scale=1, dst=({x}, {y}), looping={looping}",
+            self.filename
+        ));
+        player.play();
+        current.player = Some(player);
+        true
+    }
+
+    /// Decode the soundtrack embedded in the movie and start it on the
+    /// audio device; returns the device handle, 0 when there is none.
+    fn start_soundtrack(&self, looping: bool) -> u32 {
+        let basename = self.filename.trim_end_matches(".duk");
+        let duk = super::files::read(&self.dir, &format!("{basename}.duk"));
+        let frm = super::files::read(&self.dir, &format!("{basename}.frm"));
+        let (Some(duk), Some(frm)) = (duk, frm) else {
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: could not read .duk/.frm for audio from {}",
+                self.filename
+            ));
+            return 0;
+        };
+        let mut decoder = DukAudDecoder::new();
+        if decoder.open_from_data(&duk, &frm).is_err() {
+            rust_bridge_log_msg("RUST_VIDEO: DukAudDecoder failed to open");
+            return 0;
+        }
+        let mut pcm = Vec::new();
+        let mut chunk = vec![0u8; 8192];
+        while let Ok(count @ 1..) = decoder.decode(&mut chunk) {
+            pcm.extend_from_slice(&chunk[..count]);
+        }
+        if pcm.is_empty() {
+            rust_bridge_log_msg("RUST_VIDEO: no audio decoded from .duk");
+            return 0;
+        }
+        let bytes = pcm.len();
+        // DukAud is 22,050 Hz 16-bit stereo.
+        let handle = PcmClip::from_bytes(&pcm, 22050, 2, 16, looping).map_or(0, audio_device::play);
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: playing embedded audio, {bytes} bytes PCM, handle={handle}"
+        ));
+        handle
+    }
+}
+
+/// A movie resource: the clip, its optional music and speech tracks and the
+/// frame it loops back to.
 pub struct LoadedVideo(Descriptor);
 
 impl LoadedVideo {
@@ -16,90 +177,98 @@ impl LoadedVideo {
         Some(Self(Descriptor::parse(descriptor.as_bytes())))
     }
 
+    /// Stop the movie that is playing and start this one centred on the
+    /// screen.
     pub fn play(&self) -> Option<VideoPlayback> {
-        // SAFETY: the descriptor retains its pathname on the admitted graphics thread.
-        let video =
-            NonNull::new(unsafe { super::control::_init_video_file(self.0.video.as_ptr()) })?;
-        let audio = self
-            .0
-            .audio
-            .as_ref()
-            .and_then(|path| LoadedMusic::load_file(path));
-        let speech = self
-            .0
-            .speech
-            .as_ref()
-            .and_then(|path| LoadedMusic::load_file(path));
+        let clip = Clip::probe(&self.0.video)?;
         let playback = VideoPlayback {
-            video,
-            speech,
-            audio,
+            audio: self.0.audio.as_deref().and_then(LoadedMusic::load_file),
+            speech: self.0.speech.as_deref().and_then(LoadedMusic::load_file),
         };
-        (playback.operation(Operation::Start(self.0.loop_frame)) != 0).then_some(playback)
+        let mut current = current();
+        current.stop();
+        // Centre as C did: the unsigned clip size is subtracted before halving.
+        let (width, height) = crate::graphics::state::screen_dimensions();
+        let x = (width as u32).wrapping_sub(clip.w) / 2;
+        let y = (height as u32).wrapping_sub(clip.h) / 2;
+        rust_bridge_log_msg(&format!("RUST_VIDEO: TFB_PlayVideo {}", clip.filename));
+        let looping = self.0.loop_frame != NO_LOOP;
+        if !clip.start_player(&mut current, x as i32, y as i32, looping) {
+            drop(current);
+            drop(playback);
+            return None;
+        }
+        audio_device::start();
+        current.audio = clip.start_soundtrack(looping);
+        current.started = true;
+        current.speech = playback.speech.is_some();
+        Some(playback)
     }
 }
 
+/// The started movie. Dropping it stops the movie and releases its tracks.
 pub struct VideoPlayback {
-    video: NonNull<TFB_VideoClip>,
     speech: Option<LoadedMusic>,
     audio: Option<LoadedMusic>,
 }
 
-enum Operation {
-    Playing,
-    Position,
-    Seek(u32),
-    Frame,
-    Start(u32),
-    Stop,
+impl VideoPlayback {
+    pub fn is_playing(&self) -> bool {
+        current().playing()
+    }
+
+    /// Milliseconds into the movie; 0 when it is not playing.
+    pub fn position(&self) -> u32 {
+        current().position()
+    }
+
+    /// DUK movies cannot seek: the request is ignored.
+    pub fn seek(&self, _position: u32) {}
+
+    /// Show the next due frame; false when the movie has ended.
+    pub fn process_frame(&self) -> bool {
+        let mut current = current();
+        if !current.started {
+            return false;
+        }
+        let playing = process_frame(&mut current);
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: rust_process_video_frame -> {}",
+            i32::from(playing)
+        ));
+        playing
+    }
 }
 
-impl VideoPlayback {
-    fn operation(&self, operation: Operation) -> u32 {
-        let video = self.video.as_ptr();
-        let audio = self
-            .audio
-            .as_ref()
-            .map_or(ptr::null_mut(), LoadedMusic::identity);
-        let speech = self
-            .speech
-            .as_ref()
-            .map_or(ptr::null_mut(), LoadedMusic::identity);
-        // SAFETY: this non-Send owner retains the clip and audio through each game-thread operation.
-        unsafe {
-            match operation {
-                Operation::Playing => u32::from(super::ffi::tfb_video_playing(video)),
-                Operation::Position => super::control::VidGetPosition(),
-                Operation::Seek(position) => super::control::VidSeek(position) as u32,
-                Operation::Frame => super::control::VidProcessFrame() as u32,
-                Operation::Start(loop_frame) => {
-                    super::control::VidPlayEx(video, audio, speech, loop_frame) as u32
-                }
-                Operation::Stop => {
-                    super::control::VidStop();
-                    super::control::DestroyVideo(video) as u32
-                }
-            }
-        }
+fn process_frame(current: &mut Current) -> bool {
+    use crate::graphics::{dcq::Screen, present, state};
+    if !state::initialized() {
+        rust_bridge_log_msg("RUST_VIDEO: the main screen is not initialized");
+        return false;
     }
-
-    pub fn is_playing(&self) -> bool {
-        self.operation(Operation::Playing) != 0
+    let Some(player) = current.player.as_mut() else {
+        rust_bridge_log_msg("RUST_VIDEO: process_frame called with no active player");
+        return false;
+    };
+    let playing = player.process_frame(&mut |frame, x, y| {
+        state::draw_on_screen(Screen::Main, |canvas| {
+            super::player::blit_frame(canvas, frame, x, y)
+        })
+    });
+    if !playing {
+        current.player = None;
+    } else if !player.direct_window_mode() {
+        present::swap_buffers(present::Redraw::Fading);
     }
-    pub fn position(&self) -> u32 {
-        self.operation(Operation::Position)
-    }
-    pub fn seek(&self, position: u32) {
-        self.operation(Operation::Seek(position));
-    }
-    pub fn process_frame(&self) -> bool {
-        self.operation(Operation::Frame) != 0
-    }
+    playing
 }
 
 impl Drop for VideoPlayback {
     fn drop(&mut self) {
-        self.operation(Operation::Stop);
+        let mut current = current();
+        current.stop();
+        current.stop_clip();
+        drop(current);
         drop(self.speech.take());
         drop(self.audio.take());
     }

@@ -34,7 +34,7 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod shared;
 
-use std::{ffi::CStr, mem, ptr};
+use std::{mem, ptr};
 use uqm_rust::battle::tactrans_native::reset_winner;
 use uqm_rust::engine::test_support::native_probe::{graphics_status, set_graphics_status};
 use uqm_rust::ships::native::{cosine, facing_to_angle, sine};
@@ -113,9 +113,9 @@ impl<'a> Ship<'a> {
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
-        el.intersect_control.IntersectStamp.frame = ship_frames.frame(0);
-        el.intersect_control.EndPoint = Point { x: 1000, y: 1000 };
-        el.intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.frame = ship_frames.frame(0);
+        el.intersect_control.end_point = Point { x: 1000, y: 1000 };
+        el.intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
             handle,
@@ -235,16 +235,10 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                 ),
                 (6, 6, 4, 4)
             );
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.shofixti.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.shofixti.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.shofixti.text"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.icons_rsc),
-                c"ship.shofixti.icons"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.shofixti.meleeicons"
             );
             assert!(
@@ -285,18 +279,18 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 let scout = if damaged { "oldscout" } else { "scout" };
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.shofixti.graphics.{scout}.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.shofixti.graphics.missile.{size}")
                 );
                 if damaged {
-                    assert!(d.ship_data.special_rsc[i].is_null());
+                    assert!(d.ship_data.special_rsc[i].is_none());
                 } else {
                     assert_eq!(
-                        CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
+                        d.ship_data.special_rsc[i].unwrap().to_str().unwrap(),
                         format!("ship.shofixti.graphics.destruct.{size}")
                     );
                 }
@@ -307,7 +301,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                 );
             }
             assert_eq!(
-                CStr::from_ptr(d.ship_data.captain_control.captain_rsc),
+                d.ship_data.captain_control.captain_rsc.unwrap(),
                 if damaged {
                     c"ship.shofixti.graphics.oldcaptain"
                 } else {
@@ -323,11 +317,11 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                     && cap.special.is_absent()
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
+                d.ship_data.victory_ditty_rsc.unwrap(),
                 c"ship.shofixti.ditty"
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
+                d.ship_data.ship_sounds_rsc.unwrap(),
                 c"ship.shofixti.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());

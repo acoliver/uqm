@@ -22,12 +22,8 @@
 //! }
 //! ```
 
-pub mod control;
 pub mod decoder;
 mod descriptor;
-pub mod ffi;
-#[cfg(test)]
-mod ffi_tests;
 mod files;
 pub mod legacy;
 pub mod player;

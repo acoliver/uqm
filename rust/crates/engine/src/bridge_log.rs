@@ -1,52 +1,35 @@
 //! File-based runtime diagnostics.
 
-use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Mutex;
 
-// Global log file handle protected by a mutex for thread safety
-static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
+use crate::host::FileStream;
 
+// Global log file handle protected by a mutex for thread safety
+static LOG_FILE: Mutex<Option<FileStream>> = Mutex::new(None);
+
+/// Created in the working directory.
 const LOG_PATH: &str = "rust-bridge.log";
 
 /// Initialize the Rust bridge logging system.
 /// This function creates or truncates the log file and writes the Phase 0 marker.
 /// Returns 0 on success, -1 on failure.
-pub fn rust_bridge_init() -> libc::c_int {
-    // Use absolute path to ensure log file is created in project root
-    let log_path = std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(LOG_PATH);
-
-    match File::create(&log_path) {
+pub fn rust_bridge_init() -> std::ffi::c_int {
+    let log_path = Path::new(LOG_PATH);
+    match crate::host::platform().disk().open_write(log_path) {
         Ok(mut file) => {
-            // Write the Phase 0 marker with timestamp
-            if writeln!(file, "RUST_BRIDGE_PHASE0_OK").is_err() {
-                eprintln!("rust_bridge_init: Failed to write marker to {:?}", log_path);
+            if writeln!(file, "RUST_BRIDGE_PHASE0_OK").is_err()
+                || writeln!(file, "rust_bridge_init called at: {log_path:?}").is_err()
+            {
+                eprintln!("rust_bridge_init: Failed to write marker to {log_path:?}");
                 return -1;
             }
-
-            // Write initialization timestamp
-            if writeln!(file, "rust_bridge_init called at: {:?}", log_path).is_err() {
-                eprintln!(
-                    "rust_bridge_init: Failed to write timestamp to {:?}",
-                    log_path
-                );
-                return -1;
-            }
-
-            // Store the file handle in the global mutex
-            let mut guard = crate::sync::lock(&LOG_FILE);
-            *guard = Some(file);
-
+            *crate::sync::lock(&LOG_FILE) = Some(file);
             0
         }
         Err(e) => {
-            eprintln!(
-                "rust_bridge_init: Failed to create log file {:?}: {}",
-                log_path, e
-            );
+            eprintln!("rust_bridge_init: Failed to create log file {log_path:?}: {e}");
             -1
         }
     }

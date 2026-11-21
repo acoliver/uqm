@@ -33,12 +33,13 @@ fn termination_does_not_need_another_process() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    // SAFETY: this isolated helper changes only its own process limit.
-    let limited = unsafe { libc::setrlimit(libc::RLIMIT_NPROC, &limit) };
+    let limited = rustix::process::setrlimit(
+        rustix::process::Resource::Nproc,
+        rustix::process::Rlimit {
+            current: Some(0),
+            maximum: Some(0),
+        },
+    );
     let extra = Command::new(std::env::current_exe().unwrap())
         .arg("--list")
         .status();
@@ -49,7 +50,7 @@ fn termination_does_not_need_another_process() {
     let _ = child.kill();
     let _ = child.wait();
 
-    assert_eq!(limited, 0);
+    assert_eq!(limited, Ok(()));
     assert_eq!(extra.unwrap_err().raw_os_error(), Some(libc::EAGAIN));
     assert_eq!(result.unwrap().signal(), Some(libc::SIGKILL));
     assert!(elapsed < Duration::from_secs(3));

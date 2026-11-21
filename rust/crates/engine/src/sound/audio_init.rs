@@ -6,13 +6,38 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::sound::heart_ffi::{
     init_stream_decoder, set_music_volume, set_sfx_volume, set_speech_volume, uninit_stream_decoder,
 };
-use crate::sound::mixer::ffi::{rust_mixer_init, rust_mixer_uninit};
+use crate::sound::mixer::{mixer_init, mixer_uninit, MixerFlags, MixerFormat, MixerQuality};
 use crate::sound::volume_globals::sound_options;
 
 const MIXER_FREQUENCY: u32 = 44100;
-// MIX_FORMAT_MAKE(2, 2): 16-bit samples, two channels.
-const MIXER_FORMAT_STEREO16: u32 = 0x0202;
-const MIXER_QUALITY_MEDIUM: u32 = 1;
+
+/// Start the mixer at 44.1 kHz, 16-bit stereo, medium quality.
+fn start_mixer() -> bool {
+    let log = crate::bridge_log::rust_bridge_log_msg;
+    // The log keeps the C encoding: MIX_FORMAT_MAKE(2, 2) and quality 1.
+    log(&format!(
+        "RUST_MIXER_INIT: freq={MIXER_FREQUENCY} format=0x202 quality=1 flags=0"
+    ));
+    log(&format!(
+        "RUST_MIXER_INIT: decoded format={:?}",
+        MixerFormat::Stereo16
+    ));
+    match mixer_init(
+        MIXER_FREQUENCY,
+        MixerFormat::Stereo16,
+        MixerQuality::Medium,
+        MixerFlags::None,
+    ) {
+        Ok(()) => {
+            log("RUST_MIXER_INIT: success");
+            true
+        }
+        Err(error) => {
+            log(&format!("RUST_MIXER_INIT: failed {error:?}"));
+            false
+        }
+    }
+}
 
 static AUDIO_INITED: AtomicBool = AtomicBool::new(false);
 
@@ -23,24 +48,18 @@ static AUDIO_INITED: AtomicBool = AtomicBool::new(false);
 pub fn init_audio() -> i32 {
     log::info!("initAudio: Using Rust mixer backend");
 
-    if rust_mixer_init(
-        MIXER_FREQUENCY,
-        MIXER_FORMAT_STEREO16,
-        MIXER_QUALITY_MEDIUM,
-        0,
-    ) == 0
-    {
+    if !start_mixer() {
         log::error!("Rust mixer initialization failed.");
-        std::process::exit(1);
+        crate::host::exit(1);
     }
 
     if init_stream_decoder() != 0 {
         log::error!("Stream decoder initialization failed.");
-        rust_mixer_uninit();
+        let _ = mixer_uninit();
         return -1;
     }
 
-    crate::platform::os::sdl::at_exit(uninit_audio_at_exit);
+    crate::host::at_exit(uninit_audio);
 
     let options = sound_options();
     set_sfx_volume(options.sfx_scale);
@@ -51,10 +70,6 @@ pub fn init_audio() -> i32 {
     0
 }
 
-extern "C" fn uninit_audio_at_exit() {
-    uninit_audio();
-}
-
 /// Stops the audio subsystem. Does nothing when `init_audio` has not
 /// succeeded or the subsystem is already down.
 pub fn uninit_audio() {
@@ -63,5 +78,5 @@ pub fn uninit_audio() {
     }
 
     uninit_stream_decoder();
-    rust_mixer_uninit();
+    let _ = mixer_uninit();
 }

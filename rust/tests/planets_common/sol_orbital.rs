@@ -21,7 +21,7 @@ pub trait Ops {
 }
 
 pub fn input(case: Case) -> (PlanetDesc, Option<PlanetDesc>) {
-    let mut planets = unsafe { std::mem::zeroed() };
+    let mut planets = Default::default();
     uqm_rust::planets::generate::sol::generate_planets(
         &mut RandomContext::with_seed(91),
         &mut planets,
@@ -29,7 +29,7 @@ pub fn input(case: Case) -> (PlanetDesc, Option<PlanetDesc>) {
     let (mut world, parent) = match case.body {
         Body::Planet(p) => (planets[usize::from(p)], None),
         Body::Moon { planet, moon } => {
-            let mut moons = unsafe { std::mem::zeroed() };
+            let mut moons = Default::default();
             uqm_rust::planets::generate::sol::generate_moons(
                 &mut RandomContext::with_seed(case.layout.seed),
                 case.layout.size,

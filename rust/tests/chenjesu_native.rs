@@ -8,7 +8,7 @@ use battle::{
     prim, queued, toward as velocity_toward, velocity as velocity_fields, with_rng, Battle, Object,
     PoolElement, Ship,
 };
-use std::{ffi::CStr, mem};
+use std::mem;
 use uqm_rust::engine::battle::ai_constants::ENEMY_SHIP_INDEX;
 use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
@@ -104,16 +104,10 @@ fn descriptor_matches_every_c_initializer_field() {
             assert_eq!(d.ship_info.ship_cost, 28);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (36, 36));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (30, 30));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.chenjesu.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.chenjesu.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.chenjesu.text"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.icons_rsc),
-                c"ship.chenjesu.icons"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.chenjesu.meleeicons"
             );
             assert!(d.ship_info.race_strings.is_none());
@@ -142,15 +136,15 @@ fn descriptor_matches_every_c_initializer_field() {
             );
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.chenjesu.graphics.broodhome.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.chenjesu.graphics.spark.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
+                    d.ship_data.special_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.chenjesu.graphics.doggy.{size}")
                 );
                 assert!(d.ship_data.ship.view(i).is_absent());
@@ -159,7 +153,7 @@ fn descriptor_matches_every_c_initializer_field() {
             }
             let captain = &d.ship_data.captain_control;
             assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
+                captain.captain_rsc.unwrap(),
                 c"ship.chenjesu.graphics.captain"
             );
             assert!(captain.background.is_null());
@@ -168,11 +162,11 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(captain.weapon.is_null());
             assert!(captain.special.is_absent());
             assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
+                d.ship_data.victory_ditty_rsc.unwrap(),
                 c"ship.chenjesu.ditty"
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
+                d.ship_data.ship_sounds_rsc.unwrap(),
                 c"ship.chenjesu.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null());

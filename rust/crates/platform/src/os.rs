@@ -16,6 +16,8 @@ pub mod stderr;
 #[cfg(unix)]
 pub mod clock;
 #[cfg(unix)]
+pub mod descriptor;
+#[cfg(unix)]
 pub mod fd;
 #[cfg(unix)]
 pub mod fs;

@@ -186,7 +186,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(
-                (*ship.ptr()).intersect_control.EndPoint.x,
+                (*ship.ptr()).intersect_control.end_point.x,
                 (x >> ONE_SHIFT) as i16
             );
             crate::battle_context::with(|cx| cx.world.set_activity(previous));

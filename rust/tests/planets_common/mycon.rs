@@ -56,7 +56,7 @@ thread_local! {
 }
 
 pub fn scan_info(case: ScanCase) -> SystemInfo {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = scan_seeds(case.seed);
     info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = u32::from(case.retrieved);
     REPORT_LOADED.set(case.strings);
@@ -69,7 +69,7 @@ pub fn render(ops: &mut impl MyconOps) -> String {
         for size in 0..3 {
             for color in 0..6 {
                 for seed in [7_919, 15_838, 23_757, 190_056] {
-                    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+                    let mut planets: Vec<PlanetDesc> = vec![Default::default(); 16];
                     for (i, desc) in planets.iter_mut().enumerate() {
                         desc.rand_seed = 0xfeed_0000 + i as u32;
                         desc.num_planets = 0x7f;

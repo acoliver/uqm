@@ -309,7 +309,7 @@ pub fn rust_init_speech_graphics(comm: &mut Comm) {
 /// Matches C `UpdateSpeechGraphics`. Uses current system time for rate
 /// limiting. In test mode, operates on state fields only.
 pub fn rust_update_speech_graphics(comm: &mut Comm) {
-    let now_ms = crate::platform::sys::unix_millis()
+    let now_ms = uqm_engine::host::unix_millis()
         .map(super::speech_graphics::update_timestamp)
         .unwrap_or(0);
     crate::comm::speech_graphics::SpeechGraphics::update(comm, now_ms);

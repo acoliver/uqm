@@ -25,10 +25,8 @@ impl GameStrings for LiveGameStrings<'_> {
 
 /// Supply the active solar session to the owned engine snapshot.
 ///
-/// # Safety
-/// Game thread only; the solar-system pointer and star catalog must remain
-/// valid for this synchronous capture.
-pub unsafe fn capture_prepared(
+/// Capture the running game for a save, on the game thread.
+pub fn capture_prepared(
     world: &mut World,
     kernel: &Kernel,
     star: StarDesc,
@@ -85,9 +83,7 @@ impl fmt::Display for LiveLocationError {
 
 impl std::error::Error for LiveLocationError {}
 
-/// # Safety
-/// The campaign's ship frame remains live while its saved facing is read.
-pub unsafe fn prepare_live_solar_location(
+pub fn prepare_live_solar_location(
     world: &mut World,
     solar: &SolarSnapshot,
 ) -> Result<(), LiveLocationError> {

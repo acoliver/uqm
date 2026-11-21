@@ -68,7 +68,7 @@ impl ChangeWait for SleepWait {
 }
 
 #[cfg(unix)]
-pub use crate::threading::descriptor::{guard_descriptor_inheritance, DescriptorInheritanceGuard};
+pub use uqm_platform::os::descriptor::{guard_descriptor_inheritance, DescriptorInheritanceGuard};
 
 /// Spawn `command` while no other thread is between creating a descriptor and
 /// marking it close-on-exec.

@@ -29,8 +29,7 @@ const PROBE_OFFSET_BIT: usize = 790 + 11 * 32;
 const SAMATRA_OFFSET_BIT: usize = 790 + 13 * 32;
 
 fn game() -> Box<CGameState> {
-    // SAFETY: `CGameState` is integers and raw pointers; zero is valid.
-    Box::new(unsafe { std::mem::zeroed() })
+    Box::default()
 }
 
 /// A fresh game state and empty group files, as `InitGlobData` leaves them.

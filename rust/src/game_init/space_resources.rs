@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn battle_survivor_retains_native_descriptor_crew_and_recovers_pods() {
-        let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
+        let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_info.crew_level = 7;
         descriptor.ship_info.max_crew = 18;
         assert_eq!(

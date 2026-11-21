@@ -6,10 +6,8 @@
 
 use std::ffi::{CStr, CString};
 
+use crate::host::HostEvent;
 use parking_lot::Mutex;
-use sdl2::event::Event;
-use sdl2::keyboard::Mod;
-use sdl2::sys;
 
 use super::controls::InputControls;
 use super::frames::{Target, FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
@@ -281,29 +279,14 @@ pub fn attach_controls(controls: &InputControls) {
 }
 
 fn init_joysticks() -> Result<(), InputInitError> {
-    // SAFETY: SDL's joystick calls are made on the thread that owns SDL, after
-    // the video subsystem start-up; the names SDL returns are terminated strings.
-    unsafe {
-        if sys::SDL_InitSubSystem(sys::SDL_INIT_JOYSTICK) == -1 {
-            return Err(InputInitError(format!(
-                "Couldn't initialize joystick subsystem: {}",
-                CStr::from_ptr(sys::SDL_GetError()).to_string_lossy()
-            )));
-        }
-        let joysticks = sys::SDL_NumJoysticks();
-        crate::log_abi::log_message(4, &format!("{joysticks} joysticks were found."));
-        if joysticks > 0 {
-            crate::log_abi::log_message(4, "The names of the joysticks are:");
-            for index in 0..joysticks {
-                crate::log_abi::log_message(
-                    4,
-                    &format!(
-                        "    {}",
-                        CStr::from_ptr(sys::SDL_JoystickNameForIndex(index)).to_string_lossy()
-                    ),
-                );
-            }
-            sys::SDL_JoystickEventState(sys::SDL_ENABLE as i32);
+    let names = crate::host::platform().init_joysticks().map_err(|error| {
+        InputInitError(format!("Couldn't initialize joystick subsystem: {error}"))
+    })?;
+    crate::log_abi::log_message(4, &format!("{} joysticks were found.", names.len()));
+    if !names.is_empty() {
+        crate::log_abi::log_message(4, "The names of the joysticks are:");
+        for name in names {
+            crate::log_abi::log_message(4, &format!("    {name}"));
         }
     }
     Ok(())
@@ -378,34 +361,14 @@ pub fn begin_input_frame() {
     }
 }
 
-/// Drain SDL's event queue.
-pub fn poll_sdl_events() -> Vec<Event> {
-    let mut events = Vec::new();
-    let mut raw = std::mem::MaybeUninit::<sys::SDL_Event>::uninit();
-    // SAFETY: SDL_PollEvent initializes the whole event whenever it returns 1.
-    while unsafe { sys::SDL_PollEvent(raw.as_mut_ptr()) } > 0 {
-        events.push(Event::from_ll(unsafe { raw.assume_init() }));
-    }
-    events
-}
-
 /// Keypad digits typed with NumLock on are characters, not controls, while
 /// text is being entered.
-fn is_numpad_character(event: &Event, character_mode: bool) -> bool {
-    match event {
-        Event::KeyDown {
-            keycode: Some(key),
-            keymod,
-            ..
-        }
-        | Event::KeyUp {
-            keycode: Some(key),
-            keymod,
-            ..
-        } => {
+fn is_numpad_character(event: &HostEvent, character_mode: bool) -> bool {
+    match *event {
+        HostEvent::KeyDown { key, numlock, .. } | HostEvent::KeyUp { key, numlock } => {
             character_mode
-                && keymod.contains(Mod::NUMMOD)
-                && (sdl2_keys::SDLK_KP_1..=sdl2_keys::SDLK_KP_PERIOD).contains(&key.into_i32())
+                && numlock
+                && (sdl2_keys::SDLK_KP_1..=sdl2_keys::SDLK_KP_PERIOD).contains(&key)
         }
         _ => false,
     }
@@ -414,92 +377,74 @@ fn is_numpad_character(event: &Event, character_mode: bool) -> bool {
 fn sync_text_input(state: &mut DriverState) {
     if state.character_mode && !state.applied_character_mode {
         state.applied_character_mode = true;
-        // SAFETY: SDL text input toggling takes no arguments.
-        unsafe { sys::SDL_StartTextInput() };
+        crate::host::platform().set_text_input(true);
     }
     if !state.character_mode && state.applied_character_mode {
         state.applied_character_mode = false;
-        // SAFETY: as above.
-        unsafe { sys::SDL_StopTextInput() };
+        crate::host::platform().set_text_input(false);
     }
 }
 
-/// Deliver one SDL event to the registered controls.
-pub fn process_input_event(event: &Event) {
+/// Deliver one platform event to the registered controls.
+pub fn process_input_event(event: &HostEvent) {
     let mut state = INPUT.lock();
     let Some(controls) = state.controls.clone() else {
         return;
     };
-    match event {
-        Event::MouseButtonDown { .. } => state.mouse_button_down = true,
-        Event::MouseButtonUp { .. } => state.mouse_button_down = false,
-        _ => {}
+    if let HostEvent::MouseButton { down } = *event {
+        state.mouse_button_down = down;
     }
     sync_text_input(&mut state);
     if !is_numpad_character(event, state.character_mode) {
         controls.vcontrol(|vc| apply_event(vc, event));
     }
-    if let Event::TextInput { text, .. } = event {
+    if let HostEvent::TextInput(text) = event {
         state.characters.text_input(text.as_bytes());
     }
 }
 
 /// Apply one event to the bindings and remember the gestures worth rebinding.
-fn apply_event(vc: &mut super::vcontrol::VControl, event: &Event) {
+fn apply_event(vc: &mut super::vcontrol::VControl, event: &HostEvent) {
     match *event {
-        Event::KeyDown {
-            keycode: Some(key),
-            repeat: false,
-            ..
+        HostEvent::KeyDown {
+            key, repeat: false, ..
         } => {
-            let sym = key.into_i32();
-            vc.handle_key_down(sym);
-            vc.set_last_gesture(Gesture::Key(sym));
+            vc.handle_key_down(key);
+            vc.set_last_gesture(Gesture::Key(key));
         }
-        Event::KeyUp {
-            keycode: Some(key), ..
-        } => vc.handle_key_up(key.into_i32()),
-        Event::JoyAxisMotion {
-            which,
-            axis_idx,
-            value,
-            ..
-        } => {
-            vc.handle_joy_axis(which, i32::from(axis_idx), value);
+        HostEvent::KeyUp { key, .. } => vc.handle_key_up(key),
+        HostEvent::JoyAxis { port, axis, value } => {
+            vc.handle_joy_axis(port, axis, value);
             // Only a deliberate push is a gesture.
             if !(-15000..=15000).contains(&value) {
                 vc.set_last_gesture(Gesture::JoyAxis {
-                    port: which,
-                    axis: i32::from(axis_idx),
+                    port,
+                    axis,
                     polarity: if value < 0 { -1 } else { 1 },
                 });
             }
         }
-        Event::JoyHatMotion {
-            which,
-            hat_idx,
-            state,
-            ..
-        } => {
-            vc.handle_joy_hat(which, i32::from(hat_idx), state.to_raw());
+        HostEvent::JoyHat { port, hat, state } => {
+            vc.handle_joy_hat(port, hat, state);
             vc.set_last_gesture(Gesture::JoyHat {
-                port: which,
-                hat: i32::from(hat_idx),
-                dir: state.to_raw(),
+                port,
+                hat,
+                dir: state,
             });
         }
-        Event::JoyButtonDown {
-            which, button_idx, ..
+        HostEvent::JoyButton {
+            port,
+            button,
+            down: true,
         } => {
-            vc.handle_joy_button(which, i32::from(button_idx), true);
-            vc.set_last_gesture(Gesture::JoyButton {
-                port: which,
-                button: i32::from(button_idx),
-            });
+            vc.handle_joy_button(port, button, true);
+            vc.set_last_gesture(Gesture::JoyButton { port, button });
         }
-        Event::JoyButtonUp {
-            which, button_idx, ..
-        } => vc.handle_joy_button(which, i32::from(button_idx), false),
+        HostEvent::JoyButton {
+            port,
+            button,
+            down: false,
+        } => vc.handle_joy_button(port, button, false),
         _ => {}
     }
 }

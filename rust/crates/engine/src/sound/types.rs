@@ -15,9 +15,6 @@ use parking_lot::Mutex;
 use super::decoder::{DecodeError, DecodeResult, Decoder};
 use super::mixer::types::MixerError;
 
-/// Phrase notification dispatched by speech playback and seeking.
-pub type PhraseCallback = unsafe fn();
-
 // =============================================================================
 // Error Types (REQ-CROSS-ERROR-01..03)
 // =============================================================================
@@ -350,22 +347,6 @@ impl SoundPosition {
             y: 0,
         }
     }
-}
-
-/// Track chunk — linked list node for assembled tracks.
-pub struct SoundChunk {
-    /// Sound sample for this chunk.
-    pub sample: Option<Arc<Mutex<SoundSample>>>,
-    /// Start timestamp for this chunk (game-time ticks).
-    pub start_time: u32,
-    /// Tag data for subtitle matching.
-    pub tag_me: bool,
-    /// Tag data value.
-    pub tag_data: usize,
-    /// Callback to call at start of this chunk.
-    pub callback: Option<Box<dyn FnOnce() + Send>>,
-    /// Next chunk in linked list.
-    pub next: Option<Box<SoundChunk>>,
 }
 
 /// Music reference — shared ownership wrapper for loaded music samples.
@@ -716,7 +697,6 @@ mod tests {
         assert_send::<SoundSource>();
         assert_send::<FadeState>();
         assert_send_sync::<SoundPosition>();
-        assert_send::<SoundChunk>();
         assert_send::<MusicRef>();
     }
 

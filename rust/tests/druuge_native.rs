@@ -6,7 +6,7 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::{ffi::CStr, mem};
+use std::mem;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
@@ -22,7 +22,7 @@ use battle::Battle as Battlefield;
 fn descriptor_matches_druuge_c_data() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let d = descriptor(SPECIES_ID_DRUUGE_ID);
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(
@@ -34,13 +34,10 @@ fn descriptor_matches_druuge_c_data() {
                 (17, 14, 14)
             );
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (32, 32));
+            assert_eq!(d.ship_info.race_strings_rsc.unwrap(), c"ship.druuge.text");
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.druuge.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
-                c"ship.druuge.text"
-            );
-            assert_eq!(CStr::from_ptr(d.ship_info.icons_rsc), c"ship.druuge.icons");
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.druuge.meleeicons"
             );
             assert_eq!(d.fleet.strength, 254);
@@ -69,14 +66,14 @@ fn descriptor_matches_druuge_c_data() {
             assert!(d.callbacks()[3] != 0 && d.callbacks()[4] != 0);
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
+                    d.ship_data.ship_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.druuge.graphics.mauler.{size}")
                 );
                 assert_eq!(
-                    CStr::from_ptr(d.ship_data.weapon_rsc[i]).to_str().unwrap(),
+                    d.ship_data.weapon_rsc[i].unwrap().to_str().unwrap(),
                     format!("ship.druuge.graphics.cannon.{size}")
                 );
-                assert!(d.ship_data.special_rsc[i].is_null());
+                assert!(d.ship_data.special_rsc[i].is_none());
             }
         }
     })

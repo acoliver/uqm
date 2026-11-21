@@ -529,8 +529,8 @@ pub mod engine {
         if cx.element(o).player == NPC_PLAYER_NUM as i16 {
             if cx.element(e).pre.map(|f| f.address()) == cx.element(o).pre.map(|f| f.address())
                 && cx.element(e).flags & DEFY_PHYSICS as u16 == 0
-                && (p.x != cx.weapon_origin(e).intersection().IntersectStamp.origin.x
-                    || p.y != cx.weapon_origin(e).intersection().IntersectStamp.origin.y)
+                && (p.x != cx.weapon_origin(e).intersection().intersect_stamp.origin.x
+                    || p.y != cx.weapon_origin(e).intersection().intersect_stamp.origin.y)
             {
                 let angle = crate::math::arctan(p.x.wrapping_sub(q.x), p.y.wrapping_sub(q.y));
                 cx.element_mut(e).velocity.set_components(

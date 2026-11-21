@@ -340,9 +340,9 @@ pub fn check_fixture(output: &[u8]) {
         );
     }
 }
-pub fn report_coverage(live_c: bool) {
+pub fn report_coverage() {
     println!(
-        "SphereGeometry: cases={} bytes={} live_C={live_c}",
+        "SphereGeometry: cases={} bytes={}",
         cases().len(),
         FIXTURE.len()
     );

@@ -7,9 +7,19 @@
 use std::panic::Location;
 use std::sync::{Arc, OnceLock};
 
-use super::clock::{Clock, OsClock, ReplayClock};
+use super::clock::Clock;
+use super::{Display, Files, Net, System};
 use crate::callback::Dispatch;
-use crate::sound::rodio_audio::{AudioCommand, ReplayAudioPort, RodioAudio, RODIO};
+use crate::sound::audio_device::AudioCommand;
+
+/// A running output stream; `stop` ends it.
+pub trait AudioOutput: Send {
+    fn stop(self: Box<Self>);
+}
+
+/// What an output device calls to fill its next buffer of interleaved
+/// 44.1 kHz stereo samples.
+pub type FillAudio = Box<dyn FnMut(&mut [f32]) + Send>;
 
 /// A running audio device, or its replay stand-in.
 pub trait AudioPort: Send + Sync {
@@ -26,88 +36,64 @@ pub trait Platform: Send + Sync {
     /// The game's callback queue and alarms.
     fn dispatch(&self) -> &Dispatch;
     /// Everything the window system has queued since the last poll.
-    fn poll_input(&self) -> Vec<sdl2::event::Event>;
-}
-
-struct OsPlatform {
-    clock: OsClock,
-    audio: &'static RodioAudio,
-    dispatch: Dispatch,
-}
-
-impl OsPlatform {
-    fn new() -> Self {
-        Self {
-            clock: OsClock::new(),
-            audio: &RODIO,
-            dispatch: Dispatch::new(),
-        }
-    }
-}
-
-impl Platform for OsPlatform {
-    fn clock(&self) -> &dyn Clock {
-        &self.clock
-    }
-    fn audio(&self) -> &dyn AudioPort {
-        self.audio
-    }
-    fn dispatch(&self) -> &Dispatch {
-        &self.dispatch
-    }
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
-        crate::input_port::sdl_input::poll_sdl_events()
-    }
-}
-
-struct ReplayPlatform {
-    clock: Arc<ReplayClock>,
-    audio: ReplayAudioPort,
-    dispatch: Dispatch,
-}
-
-impl Platform for ReplayPlatform {
-    fn clock(&self) -> &dyn Clock {
-        &*self.clock
-    }
-    fn audio(&self) -> &dyn AudioPort {
-        &self.audio
-    }
-    fn dispatch(&self) -> &Dispatch {
-        &self.dispatch
-    }
-    /// A replay has no window system: its input is the script's.
-    fn poll_input(&self) -> Vec<sdl2::event::Event> {
-        Vec::new()
-    }
+    fn poll_input(&self) -> Vec<super::HostEvent>;
+    /// Turn the window system's text input (and its on-screen keyboard) on or off.
+    fn set_text_input(&self, on: bool);
+    /// Start the joystick subsystem and name the joysticks found.
+    fn init_joysticks(&self) -> Result<Vec<String>, String>;
+    /// Real time, sleeping, threads and process exit.
+    fn system(&self) -> &dyn System;
+    /// A new network endpoint.
+    fn net(&self) -> Box<dyn Net>;
+    /// Host paths, which the virtual file system mounts.
+    fn disk(&self) -> Arc<dyn Files + Send + Sync>;
+    /// Start the default output device pulling samples from `fill`; `None`
+    /// when no device can play.
+    fn audio_output(&self, fill: FillAudio) -> Option<Box<dyn AudioOutput>>;
+    /// Open the game window at `width` x `height`; `position` places a
+    /// borderless window on the desktop.
+    fn open_display(
+        &self,
+        flags: i32,
+        position: Option<(i32, i32)>,
+        width: i32,
+        height: i32,
+    ) -> Result<Box<dyn Display>, String>;
 }
 
 static PLATFORM: OnceLock<Box<dyn Platform>> = OnceLock::new();
 
-/// Build and install the process platform: replay clock and audio for a
-/// replay, the OS clock and rodio otherwise. Installing twice is a bug.
-pub fn install(replay: bool) {
-    let platform: Box<dyn Platform> = if replay {
-        let clock = Arc::new(ReplayClock::default());
-        Box::new(ReplayPlatform {
-            audio: ReplayAudioPort::new(clock.clone()),
-            clock,
-            dispatch: Dispatch::new(),
-        })
-    } else {
-        Box::new(OsPlatform::new())
-    };
+/// Make `platform` the process platform. Installing twice is a bug.
+pub fn install_platform(platform: Box<dyn Platform>) {
     assert!(PLATFORM.set(platform).is_ok(), "platform installed twice");
 }
 
-/// The installed platform. Before installation the engine runs on the OS
-/// clock with no audio device.
+/// The installed platform.
 pub fn platform() -> &'static dyn Platform {
-    static UNINSTALLED: OnceLock<OsPlatform> = OnceLock::new();
     match PLATFORM.get() {
         Some(platform) => platform.as_ref(),
-        None => UNINSTALLED.get_or_init(OsPlatform::new),
+        None => uninstalled(),
     }
+}
+
+/// Tests that install no platform run on a stand-in with the real clock and
+/// file system, silent audio and no display.
+#[cfg(any(test, feature = "test-support"))]
+fn uninstalled() -> &'static dyn Platform {
+    static FALLBACK: OnceLock<super::fallback::TestPlatform> = OnceLock::new();
+    FALLBACK.get_or_init(|| super::fallback::TestPlatform::new(false))
+}
+
+/// Install the test platform; `replay` runs it on the replay clock with
+/// silent audio.
+#[cfg(any(test, feature = "test-support"))]
+pub fn install_test(replay: bool) {
+    install_platform(Box::new(super::fallback::TestPlatform::new(replay)));
+}
+
+#[cfg(not(any(test, feature = "test-support")))]
+fn uninstalled() -> &'static dyn Platform {
+    panic!("the engine ran before the application installed its platform")
 }
 
 #[track_caller]

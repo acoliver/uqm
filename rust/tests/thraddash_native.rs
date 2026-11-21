@@ -7,7 +7,7 @@ mod battle_context;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
-use std::{ffi::CStr, ptr};
+use std::ptr;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::ENEMY_WEAPON_INDEX;
 use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
@@ -121,22 +121,19 @@ unsafe fn think(ship: &mut Ship, c: &mut [EvaluateRecord; 4], input: u8, count: 
 fn descriptor_matches_all_c_initializer_fields_and_resources() {
     battle_context::run(|_| {
         let _battle = Battle::new(8);
-        unsafe {
+        {
             let d = battle::descriptor(SPECIES_ID_THRADDASH_ID);
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(d.ship_info.ship_cost, 10);
             assert_eq!((d.ship_info.crew_level, d.ship_info.max_crew), (8, 8));
             assert_eq!((d.ship_info.energy_level, d.ship_info.max_energy), (24, 24));
             assert_eq!(
-                CStr::from_ptr(d.ship_info.race_strings_rsc),
+                d.ship_info.race_strings_rsc.unwrap(),
                 c"ship.thraddash.text"
             );
+            assert_eq!(d.ship_info.icons_rsc.unwrap(), c"ship.thraddash.icons");
             assert_eq!(
-                CStr::from_ptr(d.ship_info.icons_rsc),
-                c"ship.thraddash.icons"
-            );
-            assert_eq!(
-                CStr::from_ptr(d.ship_info.melee_icon_rsc),
+                d.ship_info.melee_icon_rsc.unwrap(),
                 c"ship.thraddash.meleeicons"
             );
             assert!(
@@ -172,7 +169,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     (d.ship_data.special_rsc[i], "napalm"),
                 ] {
                     assert_eq!(
-                        CStr::from_ptr(rsc).to_str().unwrap(),
+                        rsc.unwrap().to_str().unwrap(),
                         format!("ship.thraddash.graphics.{name}.{size}")
                     );
                 }
@@ -184,7 +181,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
             }
             let captain = &d.ship_data.captain_control;
             assert_eq!(
-                CStr::from_ptr(captain.captain_rsc),
+                captain.captain_rsc.unwrap(),
                 c"ship.thraddash.graphics.captain"
             );
             assert!(
@@ -195,11 +192,11 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && captain.special.is_absent()
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.victory_ditty_rsc),
+                d.ship_data.victory_ditty_rsc.unwrap(),
                 c"ship.thraddash.ditty"
             );
             assert_eq!(
-                CStr::from_ptr(d.ship_data.ship_sounds_rsc),
+                d.ship_data.ship_sounds_rsc.unwrap(),
                 c"ship.thraddash.sounds"
             );
             assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_none());
@@ -540,11 +537,11 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
             assert_eq!((*prim(e)).kind, STAMP_PRIMITIVE);
             let i = (*e).intersect_control;
             assert_eq!(
-                (i.IntersectStamp.origin.x, i.IntersectStamp.origin.y),
+                (i.intersect_stamp.origin.x, i.intersect_stamp.origin.y),
                 (-3, 3)
             );
-            assert_eq!((i.EndPoint.x, i.EndPoint.y), (10, -2));
-            assert_eq!(i.IntersectStamp.frame, next_frames.frame(7));
+            assert_eq!((i.end_point.x, i.end_point.y), (10, -2));
+            assert_eq!(i.intersect_stamp.frame, next_frames.frame(7));
             assert_eq!((*e).turn, 5);
             assert_eq!((*e).current.image.frame.raw(), ship.raw_frame(2, 9));
             assert_eq!((*e).next.image.frame.raw(), next_frames.frame(7));
@@ -804,7 +801,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             ship.make_opaque(2);
             enemy.make_opaque(0);
             (*enemy.ptr()).intersect_control = (*trail).intersect_control;
-            (*enemy.ptr()).intersect_control.IntersectStamp.frame = enemy.raw_frame(0, 0);
+            (*enemy.ptr()).intersect_control.intersect_stamp.frame = enemy.raw_frame(0, 0);
             (*ship.ptr()).life = 0;
             (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(
                 uqm_rust::battle::tactrans_native::cleanup_dead_ship,
@@ -882,9 +879,9 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     };
                     (*weapon).state_flags &= !(APPEARING as u16);
                     (*weapon).state_flags |= PRE_PROCESS as u16;
-                    (*weapon).intersect_control.IntersectStamp.origin = Point { x: 1000, y: 1000 };
-                    (*weapon).intersect_control.EndPoint = Point { x: 1000, y: 1000 };
-                    (*weapon).intersect_control.IntersectStamp.frame =
+                    (*weapon).intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
+                    (*weapon).intersect_control.end_point = Point { x: 1000, y: 1000 };
+                    (*weapon).intersect_control.intersect_stamp.frame =
                         (*weapon).next.image.frame.raw();
                     target.make_opaque(0);
                     let t = target.ptr();
@@ -900,7 +897,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                         None
                     };
                     (*t).intersect_control = (*weapon).intersect_control;
-                    (*t).intersect_control.IntersectStamp.frame = target.raw_frame(0, 0);
+                    (*t).intersect_control.intersect_stamp.frame = target.raw_frame(0, 0);
                     let context =
                         uqm_rust::graphics::context::LoadedContext::create(c"collision fixture");
                     let old_context = uqm_rust::graphics::menu::select(Some(context.context()));

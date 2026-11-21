@@ -495,14 +495,11 @@ fn template_preserves_typed_resources_stats_and_initial_state() {
     let raw = template.descriptor(&EMPTY_RACE).into_legacy();
     assert_eq!(raw.ship_info.crew_level, 17);
     assert_eq!(raw.characteristics.max_thrust, 23);
-    assert_eq!(
-        raw.ship_data.ship_rsc[0],
-        c"ship.synthetic.graphics".as_ptr()
-    );
-    assert!(raw.ship_data.ship_rsc[1].is_null());
+    assert_eq!(raw.ship_data.ship_rsc[0], Some(c"ship.synthetic.graphics"));
+    assert!(raw.ship_data.ship_rsc[1].is_none());
     assert_eq!(
         raw.ship_data.captain_control.captain_rsc,
-        c"ship.synthetic.captain".as_ptr()
+        Some(c"ship.synthetic.captain")
     );
     assert!(matches!(
         raw.race_state,
@@ -553,7 +550,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
             assert_eq!(d.ship_info.crew_level, 17);
             assert_eq!(
                 d.ship_data.captain_control.captain_rsc,
-                c"ship.synthetic.oldcaptain".as_ptr()
+                Some(c"ship.synthetic.oldcaptain")
             );
             assert_eq!(cx.world.story_state(StoryKey::BOMB_CARRIER), 1);
             cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
@@ -562,7 +559,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                 .ship_data
                 .captain_control
                 .captain_rsc
-                .is_null());
+                .is_none());
             cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
             cx.set_activity(SUPER_MELEE);
             assert!((RACE.descriptor)(cx.world)
@@ -570,7 +567,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                 .ship_data
                 .captain_control
                 .captain_rsc
-                .is_null());
+                .is_none());
             for &(key, _) in &keys {
                 cx.world.set_story_state(key, 0);
             }

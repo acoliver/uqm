@@ -8,7 +8,6 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::ffi::CStr;
 use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::ai_constants::{
     FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,
@@ -44,7 +43,7 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
                 (10, 10)
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_info.race_strings_rsc),
+                desc.ship_info.race_strings_rsc.unwrap(),
                 c"ship.mmrnmhrm.text"
             );
             assert_eq!(desc.characteristics.max_thrust, 20);
@@ -56,15 +55,15 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
             assert_eq!(desc.characteristics.weapon_wait, 0);
             assert_eq!(desc.characteristics.ship_mass, 3);
             assert_eq!(
-                CStr::from_ptr(desc.ship_data.ship_rsc[0]),
+                desc.ship_data.ship_rsc[0].unwrap(),
                 c"ship.mmrnmhrm.graphics.xform.large"
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_data.weapon_rsc[0]),
+                desc.ship_data.weapon_rsc[0].unwrap(),
                 c"ship.mmrnmhrm.graphics.torpedo.large"
             );
             assert_eq!(
-                CStr::from_ptr(desc.ship_data.special_rsc[0]),
+                desc.ship_data.special_rsc[0].unwrap(),
                 c"ship.mmrnmhrm.graphics.ywing.large"
             );
             assert_eq!(desc.cyborg_control.weapon_range, 200);

@@ -1,12 +1,9 @@
 //! Audio completion derived from decoded sample counts and the replay clock.
 
 use std::collections::HashMap;
-use std::io::Cursor;
 
-use rodio::Source;
-
+use super::audio_device::{clip_frames, AudioCommand};
 use super::mixer::{source as mixer_source, SourceProp, SourceState};
-use super::rodio_audio::AudioCommand;
 use crate::time::counter_abi::ONE_SECOND;
 
 pub(super) fn source_may_have_drained(handle: usize, replay: bool) -> bool {
@@ -64,35 +61,11 @@ impl ReplayAudio {
         self.next_handle
     }
 
-    fn decoded(&mut self, data: Vec<u8>, looping: bool, now: u32) -> u32 {
-        let Ok(source) = rodio::Decoder::new(Cursor::new(data)) else {
-            return 0;
-        };
-        let rate = source.sample_rate();
-        let channels = source.channels();
-        let frames = source.count() as u64 / u64::from(channels);
-        self.play(frames, rate, looping, now)
-    }
-
     pub(super) fn command(&mut self, command: AudioCommand, now: u32) {
         match command {
-            AudioCommand::PlayWav(data, _, looping, reply)
-            | AudioCommand::PlayOgg(data, _, looping, reply) => {
-                let handle = self.decoded(data, looping, now);
+            AudioCommand::Play(clip, reply) => {
+                let handle = self.play(clip_frames(&clip), clip.sample_rate, clip.looping, now);
                 // A requester that stopped waiting has no use for the handle.
-                let _ = reply.send(handle);
-            }
-            AudioCommand::PlayRaw(data, rate, channels, bits, _, looping, reply) => {
-                let handle = if !matches!(bits, 8 | 16) || rate == 0 || channels == 0 {
-                    0
-                } else {
-                    self.play(
-                        data.len() as u64 / u64::from(channels) / u64::from(bits / 8),
-                        rate,
-                        looping,
-                        now,
-                    )
-                };
                 let _ = reply.send(handle);
             }
             AudioCommand::IsPlaying(handle, reply) => {
@@ -102,30 +75,10 @@ impl ReplayAudio {
                     .is_some_and(|sound| sound.playing(now));
                 let _ = reply.send(playing);
             }
-            AudioCommand::Pause(handle) => {
-                if let Some(sound) = self.sounds.get_mut(&handle) {
-                    sound.elapsed = sound.elapsed_ticks(now);
-                    sound.paused = true;
-                }
-            }
-            AudioCommand::Resume(handle) => {
-                if let Some(sound) = self.sounds.get_mut(&handle) {
-                    if sound.paused {
-                        sound.started = now;
-                        sound.paused = false;
-                    }
-                }
-            }
             AudioCommand::Stop(handle) => {
                 self.sounds.remove(&handle);
             }
-            AudioCommand::StopAll | AudioCommand::Shutdown => self.sounds.clear(),
-            AudioCommand::Cleanup => self.sounds.retain(|_, sound| sound.playing(now)),
-            AudioCommand::SetVolume(_, _)
-            | AudioCommand::SetMasterVolume(_)
-            | AudioCommand::SetMusicVolume(_)
-            | AudioCommand::SetSfxVolume(_)
-            | AudioCommand::SetSpeechVolume(_) => {}
+            AudioCommand::Shutdown => self.sounds.clear(),
         }
     }
 }
@@ -155,7 +108,7 @@ impl ReplayMixer {
 
 #[cfg(test)]
 mod replay {
-    use super::super::rodio_audio::SoundCategory;
+    use super::super::audio_device::PcmClip;
     use super::*;
     use std::sync::mpsc;
 
@@ -165,65 +118,34 @@ mod replay {
         rx.recv().unwrap()
     }
 
-    #[test]
-    fn decoded_wav_completion_uses_sample_count_and_rate() {
-        let mut wav = Vec::new();
-        wav.extend_from_slice(b"RIFF");
-        wav.extend_from_slice(&2036u32.to_le_bytes());
-        wav.extend_from_slice(b"WAVEfmt ");
-        wav.extend_from_slice(&16u32.to_le_bytes());
-        for value in [1u16, 1] {
-            wav.extend_from_slice(&value.to_le_bytes());
-        }
-        for value in [1000u32, 2000] {
-            wav.extend_from_slice(&value.to_le_bytes());
-        }
-        for value in [2u16, 16] {
-            wav.extend_from_slice(&value.to_le_bytes());
-        }
-        wav.extend_from_slice(b"data");
-        wav.extend_from_slice(&2000u32.to_le_bytes());
-        wav.resize(2044, 0);
-        let mut audio = ReplayAudio::default();
+    fn play(audio: &mut ReplayAudio, bytes: usize, looping: bool, now: u32) -> u32 {
+        let clip = PcmClip::from_bytes(&vec![0; bytes], 1000, 2, 16, looping).unwrap();
         let (tx, rx) = mpsc::channel();
-        audio.command(
-            AudioCommand::PlayWav(wav, SoundCategory::Speech, false, tx),
-            0,
-        );
-        let handle = rx.recv().unwrap();
-        assert_ne!(handle, 0);
-        assert!(playing(&mut audio, handle, 839));
-        assert!(!playing(&mut audio, handle, 840));
-        assert_eq!(audio.decoded(vec![0; 20], false, 0), 0);
+        audio.command(AudioCommand::Play(clip, tx), now);
+        rx.recv().unwrap()
     }
 
     #[test]
-    fn raw_stereo_completion_and_pause_use_replay_time() {
+    fn stereo_completion_uses_frames_and_replay_time() {
         let mut audio = ReplayAudio::default();
-        let (tx, rx) = mpsc::channel();
-        audio.command(
-            AudioCommand::PlayRaw(vec![0; 4000], 1000, 2, 16, SoundCategory::Speech, false, tx),
-            0,
-        );
-        let handle = rx.recv().unwrap();
-        assert!(playing(&mut audio, handle, 419));
-        audio.command(AudioCommand::Pause(handle), 420);
-        assert!(playing(&mut audio, handle, 8400));
-        audio.command(AudioCommand::Resume(handle), 8400);
-        assert!(playing(&mut audio, handle, 8819));
-        assert!(!playing(&mut audio, handle, 8820));
+        // 4000 bytes of 16-bit stereo at 1000 Hz is one second.
+        let handle = play(&mut audio, 4000, false, 0);
+        assert!(playing(&mut audio, handle, ONE_SECOND - 1));
+        assert!(!playing(&mut audio, handle, ONE_SECOND));
     }
 
     #[test]
-    fn loop_stop_and_cleanup_keep_handle_identity() {
+    fn loops_play_until_stopped_and_shutdown_forgets_every_clip() {
         let mut audio = ReplayAudio::default();
-        let handle = audio.play(100, 1000, true, 0);
-        assert!(playing(&mut audio, handle, 100_000));
-        audio.command(AudioCommand::Cleanup, 100_000);
-        assert!(playing(&mut audio, handle, 100_000));
-        audio.command(AudioCommand::Stop(handle), 100_000);
-        assert!(!playing(&mut audio, handle, 100_000));
-        assert!(audio.play(100, 1000, false, 100_000) > handle);
+        let looped = play(&mut audio, 4, true, 0);
+        let once = play(&mut audio, 4, false, 0);
+        assert_ne!(looped, once);
+        assert!(playing(&mut audio, looped, 100_000));
+        audio.command(AudioCommand::Stop(looped), 100_000);
+        assert!(!playing(&mut audio, looped, 100_000));
+        let again = play(&mut audio, 4, true, 0);
+        audio.command(AudioCommand::Shutdown, 0);
+        assert!(!playing(&mut audio, again, 0));
     }
 
     #[test]

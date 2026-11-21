@@ -10,8 +10,7 @@ fn frame_views(views: Frames) -> [FrameId; 3] {
 }
 
 fn records() -> ([Element; 2], [ShipRecord; 2], [RaceDescriptor; 2]) {
-    // SAFETY: these ABI ship records contain only integers, pointers and optional callbacks.
-    let states = unsafe { mem::zeroed() };
+    let states = Default::default();
     let mut races = [RaceDescriptor::EMPTY; 2];
     for race in &mut races {
         race.ship_info.crew_level = 10;
@@ -26,7 +25,7 @@ fn world(
     states: &mut [ShipRecord; 2],
     races: &mut [RaceDescriptor; 2],
 ) -> World {
-    let mut world = World::new(SUPER_MELEE | IN_BATTLE, [2; 2], 0);
+    let mut world = World::new(SUPER_MELEE | IN_BATTLE, [2; 2], None);
     for (side, ((element, state), race)) in elements.iter_mut().zip(states).zip(races).enumerate() {
         let id = ElementId::fixture(side as u8, 0);
         let owner = crate::engine::battle::ShipId::fixture(side as u8, 0, 0);

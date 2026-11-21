@@ -6,7 +6,6 @@ use super::frames::{
 };
 use super::vcontrol::VControl;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread::ThreadId;
 
 #[derive(Default)]
 struct ControllerState {
@@ -41,14 +40,14 @@ fn battle_input(keys: &[i32; FLIGHT_KEYS]) -> u8 {
 #[derive(Clone)]
 pub struct InputControls {
     state: Arc<Mutex<ControllerState>>,
-    owner: ThreadId,
+    owner: u64,
 }
 
 impl Default for InputControls {
     fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(ControllerState::default())),
-            owner: std::thread::current().id(),
+            owner: crate::host::thread_number(),
         }
     }
 }
@@ -57,7 +56,7 @@ impl InputControls {
     fn state(&self) -> MutexGuard<'_, ControllerState> {
         assert_eq!(
             self.owner,
-            std::thread::current().id(),
+            crate::host::thread_number(),
             "input used off its owner thread"
         );
         self.state

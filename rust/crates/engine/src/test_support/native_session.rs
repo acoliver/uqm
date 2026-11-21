@@ -148,23 +148,16 @@ impl Drop for NativeInput {
 
 /// Deliver a key-down for ASCII `key` to the initialized native provider.
 pub fn key_down(key: u8) {
-    sdl_input::process_input_event(&sdl2::event::Event::KeyDown {
-        timestamp: 0,
-        window_id: 0,
-        keycode: sdl2::keyboard::Keycode::from_i32(i32::from(key)),
-        scancode: Some(sdl2::keyboard::Scancode::W),
-        keymod: sdl2::keyboard::Mod::empty(),
+    sdl_input::process_input_event(&crate::host::HostEvent::KeyDown {
+        key: i32::from(key),
+        numlock: false,
         repeat: false,
     });
 }
 
-/// Deliver one SDL text-input event carrying `text`.
+/// Deliver one text-input event carrying `text`.
 pub fn text_input(text: &str) {
-    sdl_input::process_input_event(&sdl2::event::Event::TextInput {
-        timestamp: 0,
-        window_id: 0,
-        text: text.to_owned(),
-    });
+    sdl_input::process_input_event(&crate::host::HostEvent::TextInput(text.to_owned()));
 }
 
 /// Reload `index` from whatever directory is currently the content directory.

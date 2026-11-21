@@ -28,8 +28,7 @@ fn process_is_live(pid: u32) -> bool {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
         return false;
     };
-    // SAFETY: signal zero performs an existence check only.
-    unsafe { libc::kill(pid, 0) == 0 }
+    uqm_rust::platform::os::process::exists(pid).unwrap_or(false)
 }
 
 #[test]
@@ -47,8 +46,7 @@ fn an_interrupted_supervisor_tears_down_the_process_it_supervises() {
     assert!(process_is_live(pid), "the child must be running");
 
     // The supervisor is interrupted mid-run.
-    // SAFETY: raise delivers to this thread, where the handler is installed.
-    assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+    uqm_rust::platform::os::signal::raise(libc::SIGTERM).unwrap();
 
     let started = Instant::now();
     let failure = session
