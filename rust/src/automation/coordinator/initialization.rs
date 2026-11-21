@@ -57,7 +57,6 @@ impl CoordInner {
             replay_final_activity: 0,
             parity_fixture: None,
             save_capture: crate::automation::save_capture::Request::from_environment(),
-            last_native_graphics: Vec::new(),
             orbit: Default::default(),
             departure: Default::default(),
         }
