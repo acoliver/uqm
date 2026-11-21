@@ -638,6 +638,7 @@ pub fn entry_with_arguments(arguments: &[String]) -> Result<(), String> {
             if !runtime_contract.has_valid_deadline_order() {
                 return Err("native runtime contract has invalid deadline order".to_string());
             }
+            runtime_contract.check_trace_fits()?;
             let acceptance_policy: NativeAcceptancePolicy = serde_json::from_str(acceptance_policy)
                 .map_err(|error| format!("parse native acceptance policy: {error}"))?;
             if !acceptance_policy.is_valid() {
