@@ -302,10 +302,15 @@ impl Flash {
     }
 
     /// Restore the original pixels and drop the cache before a change.
+    ///
+    /// The screen no longer shows any cached frame afterwards, so the next
+    /// `draw_current` must draw even if the frame index is unchanged (#890;
+    /// flash.c only reset the index in `Flash_setRect`).
     fn pre_update(&mut self) {
         if self.started {
             self.draw_frame(self.original_frame());
             self.clear_cache();
+            self.last_frame_index = None;
         }
     }
 
@@ -329,7 +334,6 @@ impl Flash {
         assert!(matches!(self.kind, Kind::Highlight));
         self.pre_update();
         self.rect = rect;
-        self.last_frame_index = None;
         self.post_update();
     }
 
