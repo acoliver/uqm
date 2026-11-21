@@ -132,9 +132,7 @@ pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
         .unwrap_or_else(|error| panic!("HailAlien: {error}"));
     {
         if activity & 0xff != 5 {
-            let title = (cx.world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA) == 0xff
-                && cx.world.story_state(StoryKey::STARBASE_AVAILABLE) != 0)
-                .then_some(0x0200);
+            let title = starbase_title(cx.world);
             let dimensions = cx.screen_dimensions();
             crate::ui::border::draw_conversation_frame(cx.kernel, cx.world, dimensions, title);
         }
@@ -154,6 +152,14 @@ pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
     }
     finish(comm, cx);
     admit_completion(comm, cx, io);
+}
+
+/// The game-string index of the "Starbase" title when talking to the allied
+/// Starbase; its "Starbase Commander" message is the next string.
+pub(super) fn starbase_title(world: &uqm_engine::World) -> Option<usize> {
+    (world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA) == 0xff
+        && world.story_state(StoryKey::STARBASE_AVAILABLE) != 0)
+        .then_some(crate::starbase::ids::STARBASE_STRING_BASE as usize)
 }
 
 fn admit_completion(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
