@@ -1,17 +1,17 @@
+#![forbid(unsafe_code)]
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-use uqm_rust::collections::observation::{self, Event};
-use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_engine::collections::observation::{self, Event};
+use uqm_engine::species::species_id::SPECIES_ID_EARTHLING_ID;
 
 #[test]
 fn projected_images_record_provenance_without_borrowing_stack_storage() {
     battle_context::run(|_| {
         let pool = battle::Battle::new(8);
-        // SAFETY: the serialized fixture retains all slots, descriptors and frame arrays.
-        unsafe {
+        {
             let source = battle::Ship::new(&pool, SPECIES_ID_EARTHLING_ID, 0);
             let destination = battle::Object::new(&pool);
             observation::enable();

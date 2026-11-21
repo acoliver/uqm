@@ -1,10 +1,10 @@
 use super::checkbuf::*;
 use super::crc::*;
 use crate::battle::netplay::CrcState;
-use crate::engine::battle::views::{ElementState, Visual};
-use crate::graphics::{geometry::Extent, geometry::Point};
-use crate::math::velocity::VelocityDesc;
 use crate::supermelee::netplay::CHECKSUM_INTERVAL;
+use uqm_engine::battle::views::{ElementState, Visual};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point};
+use uqm_engine::math::velocity::VelocityDesc;
 
 pub fn crc_process_extent(state: &mut CrcState, value: &Extent) {
     crc_process_u16(state, value.width as u16);
@@ -43,10 +43,10 @@ pub fn crc_process_element(state: &mut CrcState, value: &ElementState) {
     crc_process_element_state(state, &value.next);
 }
 
-pub fn crc_process_game_state(cx: &crate::engine::battle::Cx<'_>, state: &mut CrcState) {
-    let seed = crate::math::seed_random(0);
+pub fn crc_process_game_state(cx: &uqm_engine::battle::Cx<'_>, state: &mut CrcState) {
+    let seed = uqm_engine::math::seed_random(0);
     crc_process_u32(state, seed);
-    crate::math::seed_random(seed);
+    uqm_engine::math::seed_random(seed);
     let mut link = cx.elements().head();
     while let Some(id) = link {
         crc_process_element(state, &cx.element(id));
@@ -95,16 +95,16 @@ impl super::session::SessionCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::geometry::Extent;
-    use crate::graphics::geometry::Point;
+    use uqm_engine::graphics::geometry::Extent;
+    use uqm_engine::graphics::geometry::Point;
 
     #[test]
     #[serial_test::serial]
     fn game_checksum_uses_the_supplied_context_and_preserves_the_rng() {
-        let mut other = crate::engine::Game::new();
+        let mut other = uqm_engine::Game::new();
         other.kernel.reset_element_capacity(1);
-        let mut other_battle = crate::engine::battle::Battle::new();
-        let mut other_cx = crate::engine::battle::Cx::new(
+        let mut other_battle = uqm_engine::battle::Battle::new();
+        let mut other_cx = uqm_engine::battle::Cx::new(
             &mut other_battle,
             &mut other.world,
             &mut other.kernel,
@@ -113,20 +113,20 @@ mod tests {
         let id = other_cx.alloc_element().unwrap();
         other_cx.element_mut(id).mass = 7;
         other_cx.put(id);
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = crate::engine::battle::Cx::new(
+        let mut game = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = uqm_engine::battle::Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
-        let previous = crate::math::seed_random(1234);
+        let previous = uqm_engine::math::seed_random(1234);
         let mut expected = CrcState::new();
         crc_process_u32(&mut expected, 1234);
         let mut actual = CrcState::new();
         crc_process_game_state(&cx, &mut actual);
-        let seed_after = crate::math::seed_random(previous);
+        let seed_after = uqm_engine::math::seed_random(previous);
         assert_eq!(seed_after, 1234);
         assert_eq!(crc_finish(&actual), crc_finish(&expected));
         assert!(cx.elements().head().is_none());
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn c_element_checksum_vector_excludes_background_objects() {
-        use crate::engine::battle::views::{FrameSelection, Frames, Image};
+        use uqm_engine::battle::views::{FrameSelection, Frames, Image};
         let visual = Visual {
             location: Point { x: 0, y: 0 },
             image: Image {

@@ -1,6 +1,6 @@
 //! Available escort roster order used by the shipyard.
 
-use crate::engine::{world::queues::FleetInfo, World};
+use uqm_engine::{world::queues::FleetInfo, World};
 
 pub(super) fn get_available_race_count(world: &World) -> u16 {
     let queue = world.avail_races_ref();

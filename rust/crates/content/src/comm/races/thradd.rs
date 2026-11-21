@@ -1,7 +1,7 @@
 //! Thradd dialogue, ported from thraddc.c.
 pub(crate) use super::alliance::AllianceApi;
 pub(crate) use super::script::GLOBAL_PLAYER_NAME;
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -321,7 +321,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api.set(StoryKey::THRADD_MANNER, 1_u8);
         self.api.set(StoryKey::THRADD_STACK_1, 0_u8);
         self.api
-            .set_allied((crate::engine::species::ship::THRADDASH_SHIP) as u16, true);
+            .set_allied((uqm_engine::species::ship::THRADDASH_SHIP) as u16, true);
         self.api.response(BE_POLITE, Handler::ThraddCulture, &[]);
         self.api
             .response(SPEAK_PIG_LATIN, Handler::ThraddCulture, &[]);

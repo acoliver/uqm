@@ -38,7 +38,7 @@ mod tests {
     use super::*;
     use crate::automation::observer::Handle;
     use crate::automation::scenario::{AutomationScene, SceneError};
-    use crate::engine::observe::{CheckpointView, Observer};
+    use uqm_engine::observe::{CheckpointView, Observer};
 
     fn observer() -> (tempfile::TempDir, Handle) {
         let source = br#"{"version":1,"name":"scene-assertion","steps":[{"action":"assert_scene","scene":"sol_probe_encounter"},{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":60}}"#;
@@ -51,7 +51,7 @@ mod tests {
         let owner = AutomationObserver::new(
             script,
             output.path().into(),
-            crate::engine::World::new().activity_control(),
+            uqm_engine::World::new().activity_control(),
             Default::default(),
             Default::default(),
         );

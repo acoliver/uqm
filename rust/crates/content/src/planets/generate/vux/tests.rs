@@ -1,13 +1,13 @@
 use super::*;
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::special::Orbit;
 use crate::planets::generate::testing::RecordReport;
 use std::cell::RefCell;
 use std::rc::Rc;
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 pub(crate) type Calls = Rc<RefCell<Vec<String>>>;
 pub(crate) fn record(calls: &Calls, value: impl Into<String>) {
@@ -86,7 +86,7 @@ impl HomeContactSite for Site {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _: bool,
     ) {
         panic!("special scene required");
@@ -101,7 +101,7 @@ impl VuxSite for Site {
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: Scene,
     ) {
         record(&self.calls, format!("scene:{scene:?}"));
@@ -110,7 +110,7 @@ impl VuxSite for Site {
 impl crate::planets::generate::spa::SpathiSite for Site {
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         unshielded: bool,
     ) {
         record(&self.calls, format!("broadcasters:{unshielded}"));

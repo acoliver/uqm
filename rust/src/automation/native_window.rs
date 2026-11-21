@@ -10,10 +10,10 @@ use std::{
 
 #[cfg(target_os = "macos")]
 use super::child_session::{ChildSession, ChildSessionConfig, ChildSessionError};
-#[cfg(unix)]
-use crate::platform::os as sys;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use uqm_platform::os as sys;
 pub const NATIVE_WINDOW_CONFIG_SCHEMA: &str = "uqm-native-window-config-v1";
 pub const NATIVE_WINDOW_STATE_SCHEMA: &str = "uqm-native-window-state-v1";
 pub const NATIVE_WINDOW_ACK_SCHEMA: &str = "uqm-native-window-ack-v1";
@@ -383,7 +383,7 @@ impl BoundOutputDirectory {
             0,
         )?;
 
-        let queue = crate::platform::macos::critical_timer::create_queue()?;
+        let queue = uqm_platform::macos::critical_timer::create_queue()?;
 
         let registration = libc::kevent {
             ident: directory.as_raw_fd() as libc::uintptr_t,
@@ -393,7 +393,7 @@ impl BoundOutputDirectory {
             data: 0,
             udata: std::ptr::null_mut(),
         };
-        crate::platform::macos::register_events(queue.as_fd(), &[registration])?;
+        uqm_platform::macos::register_events(queue.as_fd(), &[registration])?;
         Ok(DirectoryChangeWake {
             changed: std::sync::atomic::AtomicBool::new(true),
             queue,
@@ -422,8 +422,8 @@ impl DirectoryChangeWake {
     pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
         #[cfg(target_os = "macos")]
         {
-            use crate::platform::macos::critical_timer::{timer_change, wait_for_event};
             use std::os::fd::AsFd as _;
+            use uqm_platform::macos::critical_timer::{timer_change, wait_for_event};
 
             if timeout.is_zero() {
                 return Ok(());
@@ -1574,7 +1574,7 @@ pub fn observe_native_window(
     pid: u32,
     expected_window_id: Option<u64>,
 ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-    let matches = crate::platform::macos::observe(pid)
+    let matches = uqm_platform::macos::observe(pid)
         .map_err(|error| NativeWindowObserverError::Os(error.to_string()))?
         .into_iter()
         .map(|window| ObservedNativeWindow {
@@ -1671,7 +1671,7 @@ pub(crate) fn record_native_window_presentation(
     let Some(config) = active_native_window_config() else {
         return Ok(());
     };
-    let window = crate::graphics::present::native_window(committed_presentation == 1)
+    let window = uqm_engine::graphics::present::native_window(committed_presentation == 1)
         .map(|(id, (x, y, width, height))| {
             (
                 id,

@@ -1754,6 +1754,8 @@ dependencies = [
  "tempfile",
  "toml_edit",
  "uqm",
+ "uqm-engine",
+ "uqm-modes",
 ]
 
 [[package]]

@@ -1,19 +1,19 @@
 //! Campaign crew-purchase accounting.
 
-use crate::engine::input::InputSession;
-use crate::engine::{
-    battle::{link_queue::LinkId, Cx},
-    world::queues::Fragment,
-    StoryKey, World,
-};
-use crate::graphics::{
-    geometry::Color, geometry::Point, geometry::Rect, geometry::TextAlign, menu as draw,
-};
 use crate::starbase::shipyard::SHIP_COST;
 use crate::ui::{
     rgb15,
     shipyard_layout::{escort_ship_rect, SHIP_WIN_WIDTH},
     sis::delta_sis_gauges,
+};
+use uqm_engine::graphics::{
+    geometry::Color, geometry::Point, geometry::Rect, geometry::TextAlign, menu as draw,
+};
+use uqm_engine::input::InputSession;
+use uqm_engine::{
+    battle::{link_queue::LinkId, Cx},
+    world::queues::Fragment,
+    StoryKey, World,
 };
 
 const BLACK: Color = rgb15(0, 0, 0);
@@ -45,9 +45,9 @@ pub(super) fn crew_transaction(cx: &mut Cx<'_>, delta: i16, redraw: impl FnOnce(
         cx.world.data.game.crew_cost -= 2;
         redraw(cx);
     }
-    if crate::engine::world::fleet::check_alliance(
+    if uqm_engine::world::fleet::check_alliance(
         cx.world,
-        crate::engine::species::ship::SHOFIXTI_SHIP as u16,
+        uqm_engine::species::ship::SHOFIXTI_SHIP as u16,
     ) != (crate::starbase::platform::AlliedState::GoodGuy as u16)
     {
         cx.world
@@ -166,7 +166,7 @@ pub(super) fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> 
     ) else {
         return 0;
     };
-    let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
+    let context = uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context);
     if cx.world.data.flagship.res_units < cx.world.data.game.crew_cost as u32 {
         context.set_foreground(cell.foreground);
         return 0;
@@ -201,7 +201,7 @@ pub(super) fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) 
         input.preferences().fonts == crate::ui::settings::OPT_PC,
     )
     .unwrap_or_else(|| panic!("dismissed flagship crew exceeds capacity"));
-    let context = crate::graphics::context::ContextLease::require(cx.kernel.space_context);
+    let context = uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context);
     context.set_foreground(cell.foreground);
     context.draw_point(BLACK, cell.point);
     -1

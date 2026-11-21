@@ -1,16 +1,14 @@
 //! The control flow shared by the ruined homeworlds, checked against a
 //! recording site, report and game state.
 
-use crate::engine::StoryKey;
 use std::collections::HashMap;
+use uqm_engine::StoryKey;
 
 use super::{enter_orbit, pickup_artifact, HomeContactSite, LanderTakeoff, HOME_CONTACT_FLAGS};
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::generation::ReportDisposition;
 use crate::planets::generate::special::Story;
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::generation::ReportDisposition;
 
 const IN_INTERPLANETARY: u16 = 4;
 
@@ -101,7 +99,7 @@ impl HomeContactSite for RecordingSite {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         artifact_taken: bool,
     ) {
         self.record(Call::LoadRuinsScene(artifact_taken));

@@ -1,18 +1,18 @@
 //! Status labels rendered from the supplied campaign and display owners.
 use super::{rgb15, STATUS_MESSAGE_HEIGHT, STATUS_MESSAGE_WIDTH};
-use crate::engine::Kernel;
-use crate::engine::StoryKey;
-use crate::engine::World;
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
-    geometry::Rect, geometry::TextAlign,
-};
 use crate::starbase::ids;
 use crate::starbase::platform::StatusMessageMode;
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
 };
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
+};
+use uqm_engine::Kernel;
+use uqm_engine::StoryKey;
+use uqm_engine::World;
 
 pub fn format_date(month: &CStr, day: u8, year: u16) -> CString {
     let mut bytes = month.to_bytes().to_vec();

@@ -2,16 +2,16 @@
 
 pub(crate) mod engine {
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
-        let d = crate::engine::battle::template::RaceTemplate {
-            info: crate::engine::battle::views::Info {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        let d = uqm_engine::battle::template::RaceTemplate {
+            info: uqm_engine::battle::views::Info {
                 crew_level: 1,
                 max_crew: 1,
                 energy_level: 1,
                 max_energy: 1,
                 ..Default::default()
             },
-            resources: crate::engine::battle::template::RaceResources {
+            resources: uqm_engine::battle::template::RaceResources {
                 melee_icon: Some(c"ship.drone.meleeicons"),
                 ..Default::default()
             },
@@ -20,7 +20,7 @@ pub(crate) mod engine {
         d.descriptor(&PROBE)
     }
 
-    pub static PROBE: crate::engine::battle::Race = crate::engine::battle::Race {
+    pub static PROBE: uqm_engine::battle::Race = uqm_engine::battle::Race {
         descriptor,
         preprocess: None,
         postprocess: None,

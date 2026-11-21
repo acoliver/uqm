@@ -1,4 +1,5 @@
 //! Exercise the Mmrnmhrm callbacks through the linked engine ABI.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;
@@ -8,17 +9,17 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,
 };
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
 };
-use uqm_rust::engine::battle::record::{CharacteristicRecord, ElementRecord, RaceDescriptor};
-use uqm_rust::engine::battle::RaceState;
-use uqm_rust::engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::record::{CharacteristicRecord, RaceDescriptor};
+use uqm_engine::battle::RaceState;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_MMRNMHRM_ID;
 
 use battle::Battle as Battlefield;
 
@@ -26,7 +27,7 @@ use battle::Battle as Battlefield;
 fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let desc = fixture.descriptor_mut();
             assert_eq!(
@@ -72,6 +73,7 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
             assert!(desc.callbacks()[3] != 0);
             assert!(desc.callbacks()[4] != 0);
             assert!(desc.callbacks()[0] != 0);
+            drop(desc);
             fixture.uninit();
         }
     })
@@ -81,34 +83,35 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
 fn special_transform_checks_appearance_energy_and_cooldown() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
-            let ship = fixture.ptr();
+            let ship = fixture.id;
             fixture.ship_mut().cur_status_flags = SPECIAL as u16;
-            (*ship).next.image.frames = fixture.frame_set(0);
-            (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship.view(0).to_owned();
+            battle::get_mut(ship).next.image.frames = fixture.frame_set(0);
+            let value = fixture.descriptor_mut().ship_data.ship.view(0).to_owned();
+            battle::get_mut(ship).next.image.frame = value;
 
             // Exactly enough energy is consumed, switching to Y form.
             observation::enable();
             observation::drain();
             fixture.preprocess();
             assert_eq!(special_hooks::count(&observation::drain(), "mmrnmhrm"), 1);
-            assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
-            assert_ne!((*ship).state_flags & CHANGING as u16, 0);
+            assert_eq!(battle::get(ship).next.image.frames, fixture.frame_set(2));
+            assert_ne!(battle::get(ship).state_flags & CHANGING as u16, 0);
             assert_eq!(fixture.ship_mut().special_counter, 0);
 
             // Cooldown and appearing state preserve the selected form and energy.
             fixture.ship_mut().special_counter = 1;
-            (*ship).next.image.frames = fixture.frame_set(2);
+            battle::get_mut(ship).next.image.frames = fixture.frame_set(2);
             assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 0);
             fixture.preprocess();
             assert_eq!(special_hooks::count(&observation::drain(), "mmrnmhrm"), 0);
-            assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
+            assert_eq!(battle::get(ship).next.image.frames, fixture.frame_set(2));
             fixture.ship_mut().special_counter = 0;
-            (*ship).state_flags |= APPEARING as u16;
+            battle::get_mut(ship).state_flags |= APPEARING as u16;
             fixture.preprocess();
             assert_eq!(special_hooks::count(&observation::drain(), "mmrnmhrm"), 0);
-            assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
+            assert_eq!(battle::get(ship).next.image.frames, fixture.frame_set(2));
             fixture.uninit();
         }
     })
@@ -118,28 +121,26 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
 fn missile_mode_returns_two_missiles_with_c_boundary_values() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
-            let ship = fixture.ptr();
-            (*ship).next.location = Point { x: 1200, y: -900 };
-            (*ship).next.image.frames = fixture.frame_set(2);
+            let ship = fixture.id;
+            battle::get_mut(ship).next.location = Point { x: 1200, y: -900 };
+            battle::get_mut(ship).next.image.frames = fixture.frame_set(2);
             let slots = fixture.weapon(2);
             let handles = slots
                 .into_iter()
-                .map(|slot| fixture.weapon_record(slot).cast::<std::ffi::c_void>())
+                .map(|slot| slot.expect("allocated weapon"))
                 .collect::<Vec<_>>();
-            assert!(!handles[0].is_null());
-            assert!(!handles[1].is_null());
             // Launch positions and the missile's C-defined life/damage fields are
             // asserted after the linked queue has allocated the handles.
             for handle in handles {
-                let missile = handle.cast::<ElementRecord>();
-                assert_eq!((*missile).life, 40);
-                assert_eq!((*missile).hits, 1);
-                assert_eq!((*missile).mass, 1);
-                assert_eq!((*missile).thrust, 0);
-                assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
-                assert_eq!((*missile).turn, 5);
+                let missile = handle;
+                assert_eq!(battle::get(missile).life, 40);
+                assert_eq!(battle::get(missile).hits, 1);
+                assert_eq!(battle::get(missile).mass, 1);
+                assert_eq!(battle::get(missile).thrust, 0);
+                assert_ne!(battle::get(missile).state_flags & IGNORE_SIMILAR as u16, 0);
+                assert_eq!(battle::get(missile).turn, 5);
                 battle_context::dispose(handle);
             }
             fixture.uninit();
@@ -151,7 +152,7 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
 fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut first_fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let mut second_fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             first_fixture.descriptor_mut().install_sound_fixture(4);
@@ -163,13 +164,12 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                     .ship_sounds
                     .map(|sounds| sounds.index())
             };
-            assert_ne!(
-                first_fixture.descriptor_mut() as *mut RaceDescriptor,
-                second_fixture.descriptor_mut() as *mut RaceDescriptor
-            );
-            let ship = first_fixture.ptr();
-            (*ship).current.image.frames = first_fixture.frame_set(0);
-            (*ship).next.image.frames = first_fixture.frame_set(2);
+            let first_descriptor = std::ptr::from_ref(&*first_fixture.descriptor_mut());
+            let second_descriptor = std::ptr::from_ref(&*second_fixture.descriptor_mut());
+            assert_ne!(first_descriptor, second_descriptor);
+            let ship = first_fixture.id;
+            battle::get_mut(ship).current.image.frames = first_fixture.frame_set(0);
+            battle::get_mut(ship).next.image.frames = first_fixture.frame_set(2);
             first_fixture.ship_mut().cur_status_flags =
                 (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             first_fixture.ship_mut().weapon_counter = 7;
@@ -219,13 +219,13 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                 second_fixture.descriptor_mut().characteristics.max_thrust,
                 20
             );
-            assert_eq!(alternate(second_fixture.descriptor_mut()).max_thrust, 50);
+            assert_eq!(alternate(&second_fixture.descriptor_mut()).max_thrust, 50);
             assert_eq!(sound_index(&mut first_fixture), Some(2));
             assert_eq!(sound_index(&mut second_fixture), Some(0));
 
             first_fixture.descriptor_mut().characteristics.turn_wait = 17;
-            (*ship).current.image.frames = first_fixture.frame_set(2);
-            (*ship).next.image.frames = first_fixture.frame_set(0);
+            battle::get_mut(ship).current.image.frames = first_fixture.frame_set(2);
+            battle::get_mut(ship).next.image.frames = first_fixture.frame_set(0);
             first_fixture.ship_mut().cur_status_flags = SHIP_AT_MAX_SPEED as u16;
             first_fixture.postprocess();
             assert_eq!(
@@ -233,7 +233,7 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                 20
             );
             assert_eq!(first_fixture.descriptor_mut().characteristics.turn_wait, 2);
-            assert_eq!(alternate(first_fixture.descriptor_mut()).turn_wait, 17);
+            assert_eq!(alternate(&first_fixture.descriptor_mut()).turn_wait, 17);
             assert_eq!(
                 first_fixture.descriptor_mut().cyborg_control.weapon_range,
                 200
@@ -270,40 +270,42 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
 fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
-            let ship = fixture.ptr();
-            (*ship).next.image.frames = fixture.frame_set(0);
-            (*ship).next.location = Point { x: 1000, y: 1000 };
+            let ship = fixture.id;
+            battle::get_mut(ship).next.image.frames = fixture.frame_set(0);
+            battle::get_mut(ship).next.location = Point { x: 1000, y: 1000 };
             let slots = fixture.weapon(2);
             let handles = slots
                 .into_iter()
-                .map(|slot| fixture.weapon_record(slot).cast::<std::ffi::c_void>())
+                .map(|slot| slot.expect("allocated weapon"))
                 .collect::<Vec<_>>();
-            let first = handles[0].cast::<ElementRecord>();
-            let second = handles[1].cast::<ElementRecord>();
-            assert!(!first.is_null() && !second.is_null());
+            let first = handles[0];
+            let second = handles[1];
             assert_eq!(
-                (*first).current.location.x + (*second).current.location.x,
+                battle::get(first).current.location.x + battle::get(second).current.location.x,
                 2000
             );
-            assert_eq!((*first).current.location.y, (*second).current.location.y);
-            let mut target_fixture = Object::new(&_battle);
-            let target = target_fixture.ptr();
-            (*target).state_flags = PLAYER_SHIP as u16;
-            (*target).player_nr = (*first).player_nr;
-            (*target).hits = 20;
+            assert_eq!(
+                battle::get(first).current.location.y,
+                battle::get(second).current.location.y
+            );
+            let target_fixture = Object::new(&_battle);
+            let target = target_fixture.id;
+            battle::get_mut(target).state_flags = PLAYER_SHIP as u16;
+            battle::get_mut(target).player_nr = battle::get(first).player_nr;
+            battle::get_mut(target).hits = 20;
             let mut point = Point { x: 0, y: 0 };
-            hooks::invoke_collision_pointer(
-                (*first).collision_func.unwrap(),
+            let mut other_point = point;
+            hooks::invoke_collision(
+                battle::get(first).collision_func.unwrap(),
                 first,
                 &mut point,
                 target,
-                &mut point,
-                hooks::CollisionCall::Hook,
+                &mut other_point,
             );
-            assert_eq!((*target).hits, 20);
-            assert_eq!((*first).hits, 1);
+            assert_eq!(battle::get(target).hits, 20);
+            assert_eq!(battle::get(first).hits, 1);
             for handle in handles {
                 battle_context::dispose(handle);
             }

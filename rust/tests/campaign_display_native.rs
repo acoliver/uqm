@@ -1,12 +1,13 @@
 //! Campaign labels borrow unpublished owners and retain their display resources.
+#![forbid(unsafe_code)]
 use std::ffi::CString;
-use uqm_rust::engine::test_support::native_probe::{frame_pixel as GetFramePixel, selected_clip};
-use uqm_rust::engine::Game;
-use uqm_rust::graphics::context::{ContextLease, LoadedContext};
-use uqm_rust::graphics::{
+use uqm_engine::graphics::context::{ContextLease, LoadedContext};
+use uqm_engine::graphics::{
     drawable::LoadedDrawable, geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
     geometry::TextAlign, menu::select as SetContext, present::GraphicsOptions,
 };
+use uqm_engine::test_support::native_probe::{frame_pixel as GetFramePixel, selected_clip};
+use uqm_engine::Game;
 
 #[test]
 fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_clip() {
@@ -25,10 +26,10 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     {
-        uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
+        uqm_engine::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
         content.init_resources("fixture.rmp");
-        let font = uqm_rust::graphics::font::LoadedFont::load(c"fixture.tiny").unwrap();
+        let font = uqm_engine::graphics::font::LoadedFont::load(c"fixture.tiny").unwrap();
         let glyph = font
             .lease()
             .measure(c"A", Point { x: 27, y: 6 }, TextAlign::Center, u16::MAX)
@@ -56,9 +57,9 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         game.kernel.off_screen_context = context;
         game.kernel.screen = screen;
         game.kernel.install_tiny_font(font);
-        uqm_rust::ui::sis::draw_title(&game.kernel, 320, c"A");
+        uqm_modes::ui::sis::draw_title(&game.kernel, 320, c"A");
         assert_eq!(SetContext(previous), previous);
-        uqm_rust::graphics::state::flush();
+        uqm_engine::graphics::state::flush();
         for (point, expected) in [
             (Point { x: 193, y: 2 }, (0, 0, 165)),
             (Point { x: 247, y: 8 }, (0, 0, 165)),
@@ -91,9 +92,9 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         });
         game.kernel.status_context = previous;
         SetContext(context);
-        uqm_rust::ui::sis::draw_status_message(&game.kernel, &game.world, Some(c"A"));
+        uqm_modes::ui::sis::draw_status_message(&game.kernel, &game.world, Some(c"A"));
         assert_eq!(SetContext(context), context);
-        uqm_rust::graphics::state::flush();
+        uqm_engine::graphics::state::flush();
         for (point, expected) in [
             (Point { x: 12, y: 150 }, (0, 66, 0)),
             (Point { x: 71, y: 156 }, (0, 66, 0)),
@@ -113,7 +114,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         (clip, set) = selected_clip();
         assert!(!set);
         assert_eq!((clip.extent.width, clip.extent.height), (320, 240));
-        assert!(uqm_rust::ui::sis::draw_message(
+        assert!(uqm_modes::ui::sis::draw_message(
             &game.kernel,
             320,
             c"A",
@@ -122,12 +123,12 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             0
         ));
         assert_eq!(SetContext(context), context);
-        uqm_rust::graphics::state::flush();
+        uqm_engine::graphics::state::flush();
         let pixel = GetFramePixel(screen, Point { x: 8, y: 3 });
         assert_eq!((pixel.r, pixel.g, pixel.b), (0, 0, 165));
         let long_label = CString::new("A".repeat(100))
             .unwrap_or_else(|error| panic!("invalid fixture label: {error}"));
-        assert!(!uqm_rust::ui::sis::draw_message(
+        assert!(!uqm_modes::ui::sis::draw_message(
             &game.kernel,
             320,
             &long_label,
@@ -137,7 +138,7 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         ));
         assert_eq!(SetContext(context), context);
         assert!(!selected_clip().1);
-        let icons = uqm_rust::graphics::drawable::LoadedDrawable::create(2, 1, 1, 8)
+        let icons = uqm_engine::graphics::drawable::LoadedDrawable::create(2, 1, 1, 8)
             .unwrap_or_else(|| panic!("fixture icon allocation failed"));
         let retained = icons.lease();
         game.kernel.play_frame = retained
@@ -161,39 +162,39 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
             },
         });
         SetContext(context);
-        uqm_rust::ui::menu::draw_menu_state(
+        uqm_modes::ui::menu::draw_menu_state(
             &game.kernel,
             &game.world,
             (320, 240),
-            uqm_rust::ui::menu_state::PM_CONVERSE,
+            uqm_modes::ui::menu_state::PM_CONVERSE,
             0,
         );
         assert_eq!(SetContext(context), context);
-        uqm_rust::graphics::state::flush();
+        uqm_engine::graphics::state::flush();
         let pixel = GetFramePixel(screen, Point { x: 259, y: 173 });
         assert_eq!((pixel.r, pixel.g, pixel.b), (82, 82, 82));
         game.kernel
             .configuration
             .update_preferences(|preferences| preferences.menu = 2);
-        let menu_text_count = uqm_rust::starbase::ids::MAINMENU_STRING_BASE as usize
-            + usize::from(uqm_rust::ui::menu_state::PM_ENCOUNTER_GAME_MENU)
+        let menu_text_count = uqm_modes::starbase::ids::MAINMENU_STRING_BASE as usize
+            + usize::from(uqm_modes::ui::menu_state::PM_ENCOUNTER_GAME_MENU)
             + 1;
         game.kernel
-            .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+            .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
                 vec![b"A\0".to_vec(); menu_text_count],
             ));
         game.kernel.star_con_font = game.kernel.tiny_font;
-        uqm_rust::ui::menu::draw_menu_state(
+        uqm_modes::ui::menu::draw_menu_state(
             &game.kernel,
             &game.world,
             (320, 240),
-            uqm_rust::ui::menu_state::PM_CONVERSE,
+            uqm_modes::ui::menu_state::PM_CONVERSE,
             -1,
         );
         assert_eq!(SetContext(context), context);
         game.kernel.space_context = context;
         SetContext(previous);
-        uqm_rust::ui::border::init_siscontexts(&game.kernel, (320, 240));
+        uqm_modes::ui::border::init_siscontexts(&game.kernel, (320, 240));
         assert_eq!(SetContext(context), context);
         let set;
         (clip, set) = selected_clip();
@@ -205,20 +206,18 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         drop(game);
         drop(selected);
         drop((context_owner, previous_owner));
-        uqm_rust::resource::uninit();
+        uqm_engine::resource::uninit();
         drop(drawable);
-        uqm_rust::graphics::present::uninit_graphics();
+        uqm_engine::graphics::present::uninit_graphics();
     }
 }
 
 #[test]
 fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
-    use uqm_rust::{
-        engine::StoryKey,
-        starbase::ids::{MONTHS_STRING_BASE, STATUS_STRING_BASE},
-        strings::owned_table::LoadedTextTable,
-        ui::sis::{format_date, status_message_text},
-    };
+    use uqm_engine::strings::owned_table::LoadedTextTable;
+    use uqm_engine::StoryKey;
+    use uqm_modes::starbase::ids::{MONTHS_STRING_BASE, STATUS_STRING_BASE};
+    use uqm_modes::ui::sis::{format_date, status_message_text};
     let mut strings = vec![vec![0]; (STATUS_STRING_BASE + 3).max(MONTHS_STRING_BASE + 12) as usize];
     strings[STATUS_STRING_BASE as usize] = b"Cr\0".to_vec();
     strings[(STATUS_STRING_BASE + 1) as usize] = b"RU\0".to_vec();
@@ -227,7 +226,7 @@ fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
     let mut game = Game::new();
     game.kernel
         .install_game_text(LoadedTextTable::fixture(strings.clone()));
-    game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
+    game.world.story = Some(uqm_engine::world::story::StoryState::new());
     game.kernel.set_status_message_mode(2);
     game.world.data.flagship.res_units = 42;
     assert_eq!(
@@ -281,18 +280,16 @@ fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
 #[test]
 #[forbid(unsafe_code)]
 fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
-    use uqm_rust::{
-        engine::battle::flags::IN_LAST_BATTLE,
-        engine::world::activity::activity_kinds::{IN_ENCOUNTER, IN_INTERPLANETARY},
-        engine::world::IN_HYPERSPACE,
-        engine::{
-            world::{CStarDesc, StarId, CATALOG_LEN},
-            StoryKey,
-        },
-        starbase::ids::{NAVIGATION_STRING_BASE, STAR_NUMBER_BASE},
-        strings::owned_table::LoadedTextTable,
-        ui::sis::default_message_text,
+    use uqm_engine::battle::flags::IN_LAST_BATTLE;
+    use uqm_engine::strings::owned_table::LoadedTextTable;
+    use uqm_engine::world::activity::activity_kinds::{IN_ENCOUNTER, IN_INTERPLANETARY};
+    use uqm_engine::world::IN_HYPERSPACE;
+    use uqm_engine::{
+        world::{CStarDesc, StarId, CATALOG_LEN},
+        StoryKey,
     };
+    use uqm_modes::starbase::ids::{NAVIGATION_STRING_BASE, STAR_NUMBER_BASE};
+    use uqm_modes::ui::sis::default_message_text;
     let mut strings =
         vec![vec![0]; (NAVIGATION_STRING_BASE as usize + 2).max(STAR_NUMBER_BASE as usize + 1)];
     strings[NAVIGATION_STRING_BASE as usize] = b"Hyperspace\0".to_vec();
@@ -309,7 +306,7 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
     let mut game = Game::new();
     game.kernel
         .install_game_text(LoadedTextTable::fixture(strings));
-    game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
+    game.world.story = Some(uqm_engine::world::story::StoryState::new());
     game.world.set_catalog(std::borrow::Cow::Owned(catalog));
     game.world.current_star = Some(StarId(0));
     for activity in [IN_INTERPLANETARY, IN_LAST_BATTLE as u16] {

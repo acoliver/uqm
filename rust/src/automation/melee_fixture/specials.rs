@@ -4,10 +4,10 @@
 //! human-controlled with no input, so it never fires.
 
 use super::*;
-use crate::battle::ai::HUMAN_CONTROL;
-use crate::engine::battle::ai_constants::MAX_SHIP_MASS;
-use crate::engine::battle::flags::NEUTRAL_PLAYER_NUM;
-use crate::engine::battle::{record::CharacteristicRecord, views::Info};
+use uqm_engine::battle::ai_constants::MAX_SHIP_MASS;
+use uqm_engine::battle::flags::NEUTRAL_PLAYER_NUM;
+use uqm_engine::battle::{record::CharacteristicRecord, views::Info};
+use uqm_modes::battle::ai::HUMAN_CONTROL;
 
 /// Frames a held SPECIAL may take to activate before the fixture fails.
 pub(super) const HOLD_FRAMES: u16 = 8;

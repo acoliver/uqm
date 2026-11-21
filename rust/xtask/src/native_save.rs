@@ -352,17 +352,17 @@ fn saved_campaign_state(
     bytes: &[u8],
     story_keys: &[&str],
 ) -> Result<std::collections::BTreeMap<String, u32>, String> {
+    use uqm_engine::state::{game_state::get_state_bits_raw, game_state_keys::StoryKey};
     use uqm_rust::savegame::{
         decode_save,
         runtime::star::{resolve_star, LoadedStar, CATALOG_LEN},
     };
-    use uqm_rust::state::{game_state::get_state_bits_raw, game_state_keys::StoryKey};
     let save = decode_save(bytes).map_err(|error| format!("decode produced save: {error}"))?;
     let story = |name: &str| {
         let key = StoryKey::from_name(name).expect("known story key");
         u32::from(get_state_bits_raw(&save.game_state, key.start(), key.end()))
     };
-    let catalog = &uqm_rust::planets::tables::STARMAP_ARRAY[..CATALOG_LEN];
+    let catalog = &uqm_modes::planets::tables::STARMAP_ARRAY[..CATALOG_LEN];
     let star = resolve_star(catalog, story("ARILOU_SPACE_SIDE") as u8, &save.star)
         .map_err(|error| format!("resolve produced star: {error}"))?;
     let mut state = std::collections::BTreeMap::from([

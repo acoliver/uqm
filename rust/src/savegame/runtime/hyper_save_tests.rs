@@ -6,14 +6,14 @@
 //! refusal of missing/retired records, and the guarantee that saving writes only
 //! the flagship's stored facing.
 
-use crate::engine::battle::{ElementId, ElementTable, Parent, ShipId};
-use crate::engine::collections::pool::Id;
+use uqm_engine::battle::{ElementId, ElementTable, Parent, ShipId};
+use uqm_engine::collections::pool::Id;
 
 use super::hyper_save::*;
-use crate::comm::locdata::CGameState;
-use crate::engine::battle::flags::{PLAYER_SHIP, RPG_PLAYER_NUM};
-use crate::engine::battle::link_queue::RacePool;
-use crate::engine::battle::record::{ElementRecord, ShipRecord};
+use uqm_engine::battle::flags::{PLAYER_SHIP, RPG_PLAYER_NUM};
+use uqm_engine::battle::link_queue::RacePool;
+use uqm_engine::battle::record::{ElementRecord, ShipRecord};
+use uqm_modes::comm::locdata::CGameState;
 
 /// `PLAYER_SHIP` (element.h), written out so the generated value is checked
 /// against the header's `1 << 2`.
@@ -371,11 +371,11 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
     let mut queues = Queues::flight(5);
     let free_slot = allocate(&mut queues.ships, starship(1, None));
     assert_ne!(free_slot, queues.head_key());
-    let mut world = crate::engine::World::new();
+    let mut world = uqm_engine::World::new();
     let group = world.ip_groups().alloc().unwrap();
     for owner in [
         Parent::Ship(queue_ship(&queues.ships, 1)),
-        Parent::Ship(crate::engine::battle::ShipId::fixture(1, 0, 0)),
+        Parent::Ship(uqm_engine::battle::ShipId::fixture(1, 0, 0)),
         Parent::IpGroup(group),
     ] {
         queues.flagship_element().parent = owner;
@@ -445,7 +445,7 @@ fn reading_the_facing_of_a_flight_without_a_flagship_is_none() {
 }
 
 fn queue_ship(pool: &RacePool, slot: usize) -> ShipId {
-    use crate::engine::battle::link_queue::{LinkQueue, Starship};
+    use uqm_engine::battle::link_queue::{LinkQueue, Starship};
     let queue = LinkQueue::<Starship>::borrow(pool);
     let key = pool.fixture_records().id_at(slot).unwrap();
     let address = std::ptr::from_ref(pool.fixture_records().get(key)) as usize;

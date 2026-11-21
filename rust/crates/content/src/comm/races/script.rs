@@ -1,7 +1,7 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
 pub(crate) use crate::comm::races::descriptor::AnimationDescriptor;
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 
 pub const ANIM_DISABLED: u8 = 1 << 7;
 pub(crate) const ONE_SECOND: u16 = 840;

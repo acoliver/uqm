@@ -4,10 +4,9 @@
 //! and `orbits.c` were deleted, so this test needs no C and remains the
 //! parity proof. `planets_parity` also drives the supplied production record
 //! views and native resource boundaries.
+#![forbid(unsafe_code)]
 
-use uqm_rust::engine::world::planet::{
-    ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo,
-};
+use uqm_engine::world::planet::{ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 mod planets_common;
 
 use planets_common::default_gen::{
@@ -19,8 +18,8 @@ use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, Records, WorldCase, PRESET_LIFE,
 };
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::topography::delta_topography;
+use uqm_engine::math::RandomContext;
+use uqm_modes::planets::topography::delta_topography;
 
 const PLAN_DATA: &str = include_str!("fixtures/planets/plan_data.txt");
 const WORLDS: &str = include_str!("fixtures/planets/worlds.txt");
@@ -156,7 +155,7 @@ fn default_generator_nodes_match_the_c_fixture() {
     assert_eq!(render_fixture(&records), DEFAULT_NODES);
 }
 
-/// `uqm_rust::planets::generate::default` called directly.
+/// `uqm_modes::planets::generate::default` called directly.
 struct RustDefault<'a> {
     table: &'a [PlanetFrame],
     rng: RandomContext,
@@ -177,7 +176,7 @@ impl<'a> RustDefault<'a> {
 
 impl DefaultOps for RustDefault<'_> {
     fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
-        use uqm_rust::planets::generate::default::generate_planets;
+        use uqm_modes::planets::generate::default::generate_planets;
 
         let mut descs = Self::blank_descs(16);
         self.rng.reseed(seed);
@@ -193,7 +192,7 @@ impl DefaultOps for RustDefault<'_> {
     }
 
     fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
-        use uqm_rust::planets::generate::default::generate_moons;
+        use uqm_modes::planets::generate::default::generate_moons;
 
         let mut descs = Self::blank_descs(usize::from(count));
         self.rng.reseed(seed);
@@ -212,7 +211,7 @@ impl DefaultOps for RustDefault<'_> {
         which: u16,
         node: &mut NodeInfo,
     ) -> (u16, u32) {
-        use uqm_rust::planets::generate::default as gen;
+        use uqm_modes::planets::generate::default as gen;
 
         let rng = &mut self.rng;
         let count = match kind {
@@ -240,21 +239,21 @@ fn orbit_layout_matches_the_c_fixture() {
 
 struct RustGenerators<'a> {
     table: &'a [PlanetFrame],
-    rng: uqm_rust::math::RandomContext,
+    rng: uqm_engine::math::RandomContext,
 }
 
 impl<'a> RustGenerators<'a> {
     fn new(table: &'a [PlanetFrame]) -> Self {
         Self {
             table,
-            rng: uqm_rust::math::RandomContext::with_seed(1),
+            rng: uqm_engine::math::RandomContext::with_seed(1),
         }
     }
 }
 
 impl Generators for RustGenerators<'_> {
     fn analyze(&mut self, case: &WorldCase) -> SystemInfo {
-        use uqm_rust::planets::generate::calc::{
+        use uqm_modes::planets::generate::calc::{
             do_planetary_analysis, AnalysisSite, StarDescription,
         };
 
@@ -283,7 +282,7 @@ impl Generators for RustGenerators<'_> {
     }
 
     fn minerals(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        uqm_rust::planets::generate::surface::generate_mineral_deposits(
+        uqm_modes::planets::generate::surface::generate_mineral_deposits(
             &mut self.rng,
             info,
             frame_for(self.table, info),
@@ -293,7 +292,7 @@ impl Generators for RustGenerators<'_> {
     }
 
     fn life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        uqm_rust::planets::generate::surface::generate_life_forms(
+        uqm_modes::planets::generate::surface::generate_life_forms(
             &mut self.rng,
             info,
             frame_for(self.table, info),
@@ -304,7 +303,7 @@ impl Generators for RustGenerators<'_> {
 
     fn preset_life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         let types = &PRESET_LIFE[..PRESET_LIFE.len() - 1];
-        uqm_rust::planets::generate::surface::generate_preset_life(
+        uqm_modes::planets::generate::surface::generate_preset_life(
             &mut self.rng,
             info,
             types,
@@ -314,7 +313,7 @@ impl Generators for RustGenerators<'_> {
     }
 
     fn random_nodes(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        uqm_rust::planets::generate::surface::generate_random_nodes(
+        uqm_modes::planets::generate::surface::generate_random_nodes(
             &mut self.rng,
             info,
             1,
@@ -326,7 +325,7 @@ impl Generators for RustGenerators<'_> {
     }
 
     fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PlanetDesc]) -> Option<u8> {
-        use uqm_rust::planets::generate::orbits::{fill_orbits, OrbitRequest};
+        use uqm_modes::planets::generate::orbits::{fill_orbits, OrbitRequest};
 
         self.rng.reseed(case.seed);
         fill_orbits(
@@ -361,19 +360,19 @@ fn orbit_records() -> Records {
 
 mod rust_special {
     use std::fmt::Write as _;
-    use uqm_rust::engine::StoryKey;
+    use uqm_engine::StoryKey;
 
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
-    use uqm_rust::battle::gendef::{
+    use uqm_engine::math::RandomContext;
+    use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+    use uqm_modes::battle::gendef::{
         AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
         SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
     };
-    use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-    use uqm_rust::math::RandomContext;
-    use uqm_rust::planets::generate::consts::star_color;
-    use uqm_rust::planets::generate::special::{Body, Story};
-    use uqm_rust::planets::generate::{
+    use uqm_modes::planets::generate::consts::star_color;
+    use uqm_modes::planets::generate::special::{Body, Story};
+    use uqm_modes::planets::generate::{
         andro, burv, chmmr, colony, dru, ilw, myc, orz, pet, pku, rainbow, shof, slylandro, sup,
         syreen, thrad, trap, utw, vault, wreck, yehat, zoq,
     };

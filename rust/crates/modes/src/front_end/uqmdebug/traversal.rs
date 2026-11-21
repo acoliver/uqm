@@ -1,14 +1,14 @@
 //! Ordered universe diagnostics over the same supplied generation calls as play.
 
 use super::*;
-use crate::engine::world::NUM_SOLAR_SYSTEMS;
-use crate::engine::{
-    observe::CheckpointView,
-    world::{generation::SolarSys, CStarDesc},
-};
 use crate::planet_side::creatures::CREATURE_COUNT;
 use crate::planets::generate::{
     sam::SA_MATRA, special::HIERARCHY_STARBASE, SiteHost, SystemGenerator,
+};
+use uqm_engine::world::NUM_SOLAR_SYSTEMS;
+use uqm_engine::{
+    observe::CheckpointView,
+    world::{generation::SolarSys, CStarDesc},
 };
 
 /// `BIO_CREDIT_VALUE` (lander.h): credits per biological data unit.
@@ -58,7 +58,7 @@ pub fn universe_recurse<T, G: Generation>(
     let _quiet = cx.kernel.diagnostics.suppress_interaction();
     let result = (|| {
         for index in 0..NUM_SOLAR_SYSTEMS {
-            star_recurse(cx, io, generation, crate::engine::StarId(index), arg)?;
+            star_recurse(cx, io, generation, uqm_engine::StarId(index), arg)?;
         }
         Ok(())
     })();
@@ -70,7 +70,7 @@ fn star_recurse<T, G: Generation>(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     generation: &mut G,
-    star_id: crate::engine::StarId,
+    star_id: uqm_engine::StarId,
     recurse: &mut UniverseRecurseArg<'_, T, G>,
 ) -> io::Result<()> {
     let old_star = cx.world.current_star;
@@ -173,9 +173,9 @@ fn scan_node<G: Generation>(
     body: Body,
     node: u16,
     scan: u8,
-) -> (u16, crate::engine::world::planet::NodeInfo) {
+) -> (u16, uqm_engine::world::planet::NodeInfo) {
     assert_eq!(solar.selected_body(), Some(body));
-    let mut info = crate::engine::world::planet::NodeInfo::default();
+    let mut info = uqm_engine::world::planet::NodeInfo::default();
     let count = generation.invoke(cx, io, solar, |g, s, h| {
         crate::planets::scan::generate(g, s, body, node, scan, &mut info, h)
     });

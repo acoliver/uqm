@@ -5,7 +5,7 @@
 pub mod ai;
 pub mod ai_entry;
 pub mod battle_native;
-pub use crate::math::battle_types;
+pub use uqm_engine::math::battle_types;
 pub mod context_access;
 pub use context_access::ai_legacy::AiOps;
 pub use context_access::navigation::NavigationOps;
@@ -26,7 +26,7 @@ pub mod ship_native;
 pub mod sounds;
 pub mod status_native;
 pub mod tactrans_native;
-pub use crate::math::velocity;
+pub use uqm_engine::math::velocity;
 mod race_services;
 pub mod services;
 pub mod weapon_native;
@@ -122,7 +122,7 @@ mod integration_tests {
             last_time_val: 0,
             intersect_stamp: Stamp {
                 origin: Point::new(0, 0),
-                frame: crate::graphics::drawable::FrameId::NULL,
+                frame: uqm_engine::graphics::drawable::FrameId::NULL,
             },
             end_point: Point::new(10, 10),
         };

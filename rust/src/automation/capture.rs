@@ -16,7 +16,7 @@ use crate::automation::scheduler::{
 };
 use crate::automation::trace::{PresentationEvidence, RecordKind, TraceRecord};
 
-use crate::graphics::presented_frame::PresentedFrame;
+use uqm_engine::graphics::presented_frame::PresentedFrame;
 
 pub(crate) fn presentation_evidence(frame: &PresentedFrame) -> PresentationEvidence {
     PresentationEvidence {

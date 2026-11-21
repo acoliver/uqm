@@ -1,13 +1,13 @@
 use super::lifecycle_tests::{group, pair, QueueHost, Trace};
 use super::orbital::{Orbital, Queues, Scene};
 use super::*;
-use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::engine::world::planet::{PlanetDesc, SystemInfo};
-use crate::engine::StoryKey;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::Orbit;
 use crate::planets::tables::PLANET_ARRAY;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use uqm_engine::world::planet::{PlanetDesc, SystemInfo};
+use uqm_engine::StoryKey;
 
 struct Surface(Trace);
 
@@ -108,7 +108,7 @@ impl Orbital for Site {
     }
     fn load_scene(
         &mut self,
-        system: &mut crate::engine::world::generation::SolarSys<'_>,
+        system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: Scene,
     ) {
         assert_eq!(

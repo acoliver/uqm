@@ -4,7 +4,7 @@
 //! `units.h` is translated here with the same `int` promotion the C macros
 //! get, so facing math wraps exactly as the original does.
 
-use crate::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT, HALF_CIRCLE, QUADRANT};
+use uqm_engine::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT, HALF_CIRCLE, QUADRANT};
 
 /// `ANGLE_TO_FACING`: rounds an angle to the nearest of sixteen facings.
 const fn angle_to_facing(angle: i32) -> i32 {
@@ -30,19 +30,19 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
 
 pub mod engine {
     use super::*;
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         DONT_CHASE, ENEMY_SHIP_INDEX, FIRES_AFT, FIRES_FORE, IGNORE_SIMILAR, SEEKING_SPECIAL,
         SPECIAL,
     };
-    use crate::engine::battle::flags::{CHANGING, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL};
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::ONE_SHIFT;
+    use uqm_engine::battle::flags::{CHANGING, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     // Core characteristics
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static SPATHI: Race = Race {
@@ -91,7 +91,7 @@ pub mod engine {
         x << ONE_SHIFT
     }
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE | FIRES_AFT | SEEKING_SPECIAL | DONT_CHASE) as u16;
@@ -213,7 +213,7 @@ pub mod engine {
             let delta_y = (i32::from(cx.element(target).current.location.y)
                 - i32::from(concerns.subject.current.location.y)) as i16;
             let direction_facing = normalize_facing(angle_to_facing(i32::from(
-                crate::math::arctan(delta_x, delta_y),
+                uqm_engine::math::arctan(delta_x, delta_y),
             )));
 
             if within_half_circle(

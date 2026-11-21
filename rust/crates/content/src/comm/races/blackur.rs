@@ -1,7 +1,7 @@
 //! Kohr-Ah dialogue, ported from blackurq.c.
 pub(crate) use crate::comm::races::descriptor::Point;
-use crate::engine::world::activity::ActivityKind;
-pub(crate) use crate::engine::StoryKey;
+use uqm_engine::world::activity::ActivityKind;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;

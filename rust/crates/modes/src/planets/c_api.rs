@@ -1,13 +1,13 @@
 //! Campaign helpers shared by the planet generation hosts.
 
 use crate::comm::dispatch::{CPoint, ONE_SECOND};
-use crate::engine::species::ship;
-pub use crate::log_abi::log_init;
 pub use crate::planets::orbit::live::{free_planet, load_planet};
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
+pub use uqm_engine::log_abi::log_init;
+use uqm_engine::species::ship;
 
 /// Clear the guard encounter so the interplanetary groups do not chase.
-pub fn reset_encounter(world: &mut crate::engine::World) {
+pub fn reset_encounter(world: &mut uqm_engine::World) {
     world.encounter_group = 0;
     world.encounter_race = -1;
 }
@@ -16,10 +16,9 @@ pub fn reset_encounter(world: &mut crate::engine::World) {
 ///
 /// # Safety
 /// Game thread, with the available-race and escort queues initialised.
-pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
+pub fn rebel_escort_feasible(world: &uqm_engine::World) -> bool {
     {
-        crate::engine::world::fleet::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
-            != 0
+        uqm_engine::world::fleet::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP)) != 0
     }
 }
 
@@ -37,16 +36,16 @@ const INFINITE_FLEET: u16 = !0;
 ///
 /// # Safety
 /// Game thread, with the fleet queue initialised.
-pub fn start_sphere_tracking(world: &mut crate::engine::World, race: u16) -> bool {
-    crate::engine::world::fleet::start_sphere_tracking(world, race) != 0
+pub fn start_sphere_tracking(world: &mut uqm_engine::World, race: u16) -> bool {
+    uqm_engine::world::fleet::start_sphere_tracking(world, race) != 0
 }
 
 fn clone_npc_ship(
-    world: &mut crate::engine::World,
+    world: &mut uqm_engine::World,
     ship: u8,
     crew: u16,
     captain: Option<u8>,
-) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>> {
+) -> Option<uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Fragment>> {
     {
         let fleets = world.avail_races_ref();
         let template = *fleets.get(fleets.at(usize::from(ship))?);
@@ -65,7 +64,7 @@ fn clone_npc_ship(
 }
 
 /// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), INFINITE_FLEET)`.
-pub fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, ship: u8) {
+pub fn clone_infinite_ship_into_built_queue(world: &mut uqm_engine::World, ship: u8) {
     clone_npc_ship(world, ship, INFINITE_FLEET, None);
 }
 
@@ -73,7 +72,7 @@ pub fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, sh
 ///
 /// # Safety
 /// Game thread; `GlobData` is initialised.
-pub fn built_ship_count(world: &crate::engine::World) -> u16 {
+pub fn built_ship_count(world: &uqm_engine::World) -> u16 {
     world.npc_built_ships_ref().count() as u16
 }
 
@@ -81,7 +80,7 @@ pub fn built_ship_count(world: &crate::engine::World) -> u16 {
 ///
 /// # Safety
 /// Game thread; `GlobData` is initialised.
-pub fn built_ship_queue_has_ships(world: &crate::engine::World) -> bool {
+pub fn built_ship_queue_has_ships(world: &uqm_engine::World) -> bool {
     world.npc_built_ships_ref().head().is_some()
 }
 
@@ -91,7 +90,7 @@ const ONE_SHOT_ENCOUNTER: u8 = 1 << 7;
 /// The one-shot Ur-Quan encounter `ZapToUrquanEncounter` builds at the
 /// universe point `loc` from the `URQUAN_SHIP` fleet template, with the SIS
 /// logical position set to match. False when there is no encounter to use.
-pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16)) -> bool {
+pub fn begin_urquan_encounter(world: &mut uqm_engine::World, loc: (i16, i16)) -> bool {
     {
         let mut encounters = world.encounters();
         let Some(id) = encounters.alloc().or_else(|| encounters.head()) else {
@@ -100,7 +99,7 @@ pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16))
         if Some(id) == encounters.head() {
             encounters.remove(id);
         }
-        *encounters.get_mut(id) = crate::engine::world::queues::EncounterRecord::default();
+        *encounters.get_mut(id) = uqm_engine::world::queues::EncounterRecord::default();
         encounters.insert_before(id, encounters.head());
         let fleets = world.avail_races_ref();
         let Some(urquan) = fleets.at(usize::from(ship::URQUAN_SHIP)) else {
@@ -114,7 +113,7 @@ pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16))
         encounter.race_id = ship::URQUAN_SHIP;
         encounter.num_ships = 1;
         encounter.flags = ONE_SHOT_ENCOUNTER;
-        encounter.ship_list[0] = crate::engine::world::queues::BriefShipInfo {
+        encounter.ship_list[0] = uqm_engine::world::queues::BriefShipInfo {
             race_id: ship::URQUAN_SHIP,
             crew_level: template.crew_level,
             max_crew: template.max_crew,
@@ -131,9 +130,12 @@ pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16))
 }
 
 /// Fade to black while the supplied graphics owner admits presentation and pacing.
-pub fn fade_to_black_for_two_seconds(context: crate::engine::graphics::context::ContextLease) {
+pub fn fade_to_black_for_two_seconds(context: uqm_engine::graphics::context::ContextLease) {
     let interval = i16::try_from(ONE_SECOND * 2)
         .unwrap_or_else(|_| panic!("two seconds must fit the fade interval"));
-    let deadline = context.fade_screen(crate::graphics::menu::ScreenFade::Black as u32, interval);
-    crate::engine::threading::pacing::GameThreadPacer::new(context).sleep_until(deadline);
+    let deadline = context.fade_screen(
+        uqm_engine::graphics::menu::ScreenFade::Black as u32,
+        interval,
+    );
+    uqm_engine::threading::pacing::GameThreadPacer::new(context).sleep_until(deadline);
 }

@@ -47,7 +47,7 @@ impl ConversationSnapshot {
 
 /// UI observations retained by one app-owned automation observer.
 pub struct UiObservation {
-    response_choices: parking_lot::Mutex<crate::engine::observe::ResponseChoices>,
+    response_choices: parking_lot::Mutex<uqm_engine::observe::ResponseChoices>,
     response_request: parking_lot::Mutex<Option<usize>>,
     game_options_active: AtomicBool,
     communication_response_count: AtomicUsize,
@@ -64,10 +64,10 @@ pub struct UiObservation {
     ship_escape_generation: AtomicU64,
     communication_completions: AtomicU64,
     encounter_menu_active: AtomicBool,
-    ship_picker_cursor: std::sync::Mutex<crate::pickship::Cursor>,
-    star_map: std::sync::Mutex<Option<crate::engine::observe::StarMapView>>,
-    devices: std::sync::Mutex<crate::engine::observe::DeviceObservation>,
-    solar: std::sync::Mutex<Option<crate::engine::world::generation::SolarSnapshot>>,
+    ship_picker_cursor: std::sync::Mutex<uqm_modes::pickship::Cursor>,
+    star_map: std::sync::Mutex<Option<uqm_engine::observe::StarMapView>>,
+    devices: std::sync::Mutex<uqm_engine::observe::DeviceObservation>,
+    solar: std::sync::Mutex<Option<uqm_engine::world::generation::SolarSnapshot>>,
 }
 
 impl Default for UiObservation {
@@ -90,7 +90,7 @@ impl Default for UiObservation {
             ship_escape_generation: AtomicU64::new(0),
             communication_completions: AtomicU64::new(0),
             encounter_menu_active: AtomicBool::new(false),
-            ship_picker_cursor: std::sync::Mutex::new(crate::pickship::Cursor::START),
+            ship_picker_cursor: std::sync::Mutex::new(uqm_modes::pickship::Cursor::START),
             star_map: std::sync::Mutex::new(None),
             devices: std::sync::Mutex::new(Default::default()),
             solar: std::sync::Mutex::new(None),
@@ -99,10 +99,7 @@ impl Default for UiObservation {
 }
 
 impl UiObservation {
-    pub fn observe_solar(
-        &self,
-        snapshot: Option<&crate::engine::world::generation::SolarSnapshot>,
-    ) {
+    pub fn observe_solar(&self, snapshot: Option<&uqm_engine::world::generation::SolarSnapshot>) {
         *self
             .solar
             .lock()
@@ -110,28 +107,28 @@ impl UiObservation {
             snapshot.copied();
     }
 
-    pub fn solar_snapshot(&self) -> Option<crate::engine::world::generation::SolarSnapshot> {
+    pub fn solar_snapshot(&self) -> Option<uqm_engine::world::generation::SolarSnapshot> {
         *self
             .solar
             .lock()
             .unwrap_or_else(|error| panic!("solar observation lock poisoned: {error}"))
     }
 
-    pub fn observe_devices(&self, state: &crate::engine::observe::DeviceObservation) {
+    pub fn observe_devices(&self, state: &uqm_engine::observe::DeviceObservation) {
         self.devices
             .lock()
             .unwrap_or_else(|error| panic!("device observation lock poisoned: {error}"))
             .clone_from(state);
     }
 
-    pub fn devices(&self) -> crate::engine::observe::DeviceObservation {
+    pub fn devices(&self) -> uqm_engine::observe::DeviceObservation {
         self.devices
             .lock()
             .unwrap_or_else(|error| panic!("device observation lock poisoned: {error}"))
             .clone()
     }
 
-    pub(crate) fn observe_choices(&self, choices: &crate::engine::observe::ResponseChoices) {
+    pub(crate) fn observe_choices(&self, choices: &uqm_engine::observe::ResponseChoices) {
         *self.response_choices.lock() = choices.clone();
     }
     pub(crate) fn offered_response_index(&self, phrase: &str) -> Result<usize, String> {
@@ -146,14 +143,14 @@ impl UiObservation {
         self.response_request.lock().take()
     }
 
-    pub fn observe_star_map(&self, view: Option<crate::engine::observe::StarMapView>) {
+    pub fn observe_star_map(&self, view: Option<uqm_engine::observe::StarMapView>) {
         *self
             .star_map
             .lock()
             .unwrap_or_else(|error| panic!("map observation lock poisoned: {error}")) = view;
     }
 
-    pub fn star_map(&self) -> Option<crate::engine::observe::StarMapView> {
+    pub fn star_map(&self) -> Option<uqm_engine::observe::StarMapView> {
         *self
             .star_map
             .lock()
@@ -222,12 +219,12 @@ impl UiObservation {
         self.encounter_menu_active.load(Ordering::Acquire)
     }
 
-    pub fn observe_ship_picker_cursor(&self, cursor: crate::pickship::Cursor) {
-        *crate::engine::sync::lock(&self.ship_picker_cursor) = cursor;
+    pub fn observe_ship_picker_cursor(&self, cursor: uqm_modes::pickship::Cursor) {
+        *uqm_engine::sync::lock(&self.ship_picker_cursor) = cursor;
     }
 
-    pub fn ship_picker_cursor(&self) -> crate::pickship::Cursor {
-        *crate::engine::sync::lock(&self.ship_picker_cursor)
+    pub fn ship_picker_cursor(&self) -> uqm_modes::pickship::Cursor {
+        *uqm_engine::sync::lock(&self.ship_picker_cursor)
     }
 
     /// Record entry to or exit from the production battle ship picker.
@@ -365,8 +362,8 @@ impl UiObservation {
 }
 
 impl super::coordinator::AutomationObserver {
-    pub(crate) fn observe_ui_checkpoint(&self, view: crate::engine::observe::CheckpointView<'_>) {
-        use crate::engine::observe::CheckpointView;
+    pub(crate) fn observe_ui_checkpoint(&self, view: uqm_engine::observe::CheckpointView<'_>) {
+        use uqm_engine::observe::CheckpointView;
         match view {
             CheckpointView::ShipEscaped => self.ui.record_ship_escape(),
             CheckpointView::EncounterDispatch(id) => self.scene.lock().observe_encounter(id),
@@ -389,7 +386,7 @@ impl super::coordinator::AutomationObserver {
             CheckpointView::ShipPicker(active) => self.ui.observe_ship_picker(active),
             CheckpointView::ShipPickerCursor { x, y } => self
                 .ui
-                .observe_ship_picker_cursor(crate::pickship::Cursor { x, y }),
+                .observe_ship_picker_cursor(uqm_modes::pickship::Cursor { x, y }),
             CheckpointView::StarbaseMenu(active) => self.ui.observe_starbase_menu(active),
             CheckpointView::StarMap(view) => self.ui.observe_star_map(view),
             CheckpointView::Devices(view) => self.ui.observe_devices(view),
@@ -585,7 +582,7 @@ mod device_tests {
     fn device_events_are_copied_and_isolated_between_observers() {
         let first = UiObservation::default();
         let second = UiObservation::default();
-        let mut observation = crate::engine::observe::DeviceObservation {
+        let mut observation = uqm_engine::observe::DeviceObservation {
             list: Some(vec![1, 3, 12]),
             selected: 2,
             activation: Some((7, 12, "effect".into(), true)),

@@ -1,21 +1,21 @@
 //! The live host for content generation. No system or RNG borrow is retained across effects.
 
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 mod contacts;
 pub mod dispatch;
 mod npcs;
 mod resources;
 
 use crate::battle::gendef::*;
-use crate::engine::battle::Cx;
-use crate::engine::observe::Io;
-use crate::engine::species::{conv, ship};
-use crate::engine::world::generation::{ReportDisposition, SolarSys};
-use crate::engine::world::StarId;
 use crate::planets::generate::special::Story;
 use crate::planets::generate::SiteHost;
 use std::cell::RefCell;
 use std::ffi::CStr;
+use uqm_engine::battle::Cx;
+use uqm_engine::observe::Io;
+use uqm_engine::species::{conv, ship};
+use uqm_engine::world::generation::{ReportDisposition, SolarSys};
+use uqm_engine::world::StarId;
 
 pub struct Site<'a, 'game, 'observer> {
     pub(crate) game: &'a RefCell<Cx<'game>>,
@@ -25,7 +25,7 @@ pub struct Site<'a, 'game, 'observer> {
     index: u8,
     in_orbit: bool,
     presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
-    background: Option<crate::graphics::drawable::ContextFrame>,
+    background: Option<uqm_engine::graphics::drawable::ContextFrame>,
     report_context: Option<crate::planets::report::typography::ReportContext>,
     report_resources: crate::planets::report::typography::ReportResources,
 }
@@ -92,7 +92,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     }
 
     fn load_report(&self, system: &mut SolarSys<'_>, strings: &CStr, report: u16) {
-        use crate::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
+        use uqm_engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
         self.report_resources.load();
         {
             system.report = ReportSlot::new(
@@ -102,9 +102,9 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     }
 
     fn load_scene(&self, system: &mut SolarSys<'_>, graphics: &CStr, strings: &CStr, report: u16) {
-        use crate::engine::graphics::drawable::LoadedDrawable;
-        use crate::engine::strings::owned_table::LoadedTextTable;
-        use crate::engine::world::generation::ReportSlot;
+        use uqm_engine::graphics::drawable::LoadedDrawable;
+        use uqm_engine::strings::owned_table::LoadedTextTable;
+        use uqm_engine::world::generation::ReportSlot;
         self.report_resources.load();
         {
             system.frames[1] = LoadedDrawable::load(graphics);

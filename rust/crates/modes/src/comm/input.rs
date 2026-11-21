@@ -1,7 +1,7 @@
 //! Conversation-owned selection is applied at the admitted input boundary.
 
 use super::Comm;
-use crate::engine::{
+use uqm_engine::{
     battle::Cx,
     input::{self, Frame},
     observe::{Injected, InputView, Io},
@@ -58,7 +58,7 @@ impl Comm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe::{CheckpointView, Observer, Presented};
+    use uqm_engine::observe::{CheckpointView, Observer, Presented};
 
     struct Select {
         calls: usize,
@@ -68,7 +68,7 @@ mod tests {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &mut crate::engine::battle::Cx<'_>,
+            _: &mut uqm_engine::battle::Cx<'_>,
         ) -> Injected {
             self.calls += 1;
             Injected {
@@ -147,7 +147,7 @@ mod tests {
 
 #[cfg(test)]
 pub(crate) mod fixture {
-    use crate::engine::{
+    use uqm_engine::{
         battle::{input::InputContext, Cx},
         input::{Frame, InputRuntime, InputSession},
         observe::{InputView, Io, Observer, Unobserved},

@@ -1,18 +1,18 @@
 //! Netplay connection dialog, ported from uqm/cnctdlg.c.
 
-use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
-use crate::graphics::{
-    context::ContextLease, font::FontLease, font::LoadedFont, geometry::Color, geometry::Extent,
-    geometry::Point, geometry::Rect, geometry::TextAlign,
-};
-use crate::input::frames::{
-    KEY_MENU_CANCEL, KEY_MENU_DELETE, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT,
-    KEY_MENU_SELECT, KEY_MENU_UP,
-};
 use crate::supermelee::netplay::NetplaySession;
 use crate::ui::getchar::{edit_text, TextEntryCallbacks, TextEntryView};
 use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
+    context::ContextLease, font::FontLease, font::LoadedFont, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect, geometry::TextAlign,
+};
+use uqm_engine::input_port::frames::{
+    KEY_MENU_CANCEL, KEY_MENU_DELETE, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT,
+    KEY_MENU_SELECT, KEY_MENU_UP,
+};
 use uqm_engine::time::counter_abi::get_time_counter;
+use uqm_engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
 
 const MCD_WIDTH: i16 = 260;
 const MCD_HEIGHT: i16 = 110;

@@ -19,7 +19,7 @@ impl Request {
 
 pub(crate) fn connect(
     setup: &mut crate::automation::input_admission::Target<'_>,
-    observer: &mut dyn crate::engine::observe::Observer,
+    observer: &mut dyn uqm_engine::observe::Observer,
     request: &Request,
 ) -> Result<(), String> {
     request.validate()?;
@@ -47,7 +47,7 @@ pub(crate) fn connect(
             return Err("netplay fixture disconnected or did not synchronize setup".into());
         }
         setup.poll_peer(observer);
-        crate::threading::pacing::yield_input_loop(std::thread::yield_now);
+        uqm_engine::threading::pacing::yield_input_loop(std::thread::yield_now);
     }
     Ok(())
 }
@@ -57,7 +57,7 @@ mod tests {
     use super::*;
     #[test]
     fn setup_is_not_ready_until_every_bootstrap_update_is_acknowledged() {
-        use crate::supermelee::{setup::team::MeleeSetup, types::MeleeShip};
+        use uqm_modes::supermelee::{setup::team::MeleeSetup, types::MeleeShip};
         let mut setup = MeleeSetup::new();
         for side in 0..2 {
             assert!(setup.sent[side].is_synchronized());
@@ -97,12 +97,12 @@ mod tests {
             }
         }
         assert!(crate::automation::input_admission::with_supplied(|setup| {
-            crate::engine::observe::InputSetup::connect_peer(
+            uqm_engine::observe::InputSetup::connect_peer(
                 setup,
                 0,
                 false,
                 21837,
-                &mut crate::engine::observe::Unobserved,
+                &mut uqm_engine::observe::Unobserved,
             )
         })
         .is_err());

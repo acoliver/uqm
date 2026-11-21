@@ -27,7 +27,7 @@ pub struct MeleeSession {
     pub(crate) menu_font: Option<uqm_engine::graphics::font::FontLease>,
     next_selection_flash: u32,
     selection_highlighted: bool,
-    pub activity: crate::engine::world::activity::ActivityControl,
+    pub activity: uqm_engine::world::activity::ActivityControl,
     pub phase: MenuPhase,
     pub initialized: u32,
     pub melee_started: u32,
@@ -43,7 +43,7 @@ pub struct MeleeSession {
     pub last_input_time: u32,
     pub h_music: Option<uqm_engine::sound::resource_types::LoadedMusic>,
     pub netplay: NetplaySession,
-    pub(crate) catalog: Vec<crate::ships::master_native::ShipChoice>,
+    pub(crate) catalog: Vec<uqm_content::ships::master_native::ShipChoice>,
 }
 
 pub fn validate_fleets(ships: &[[u8; 7]; 2]) -> Result<(), String> {
@@ -83,7 +83,12 @@ impl MeleeSession {
                         slot as u16,
                         crate::supermelee::types::MeleeShip::from_u8(ship)
                             .unwrap_or_else(|| panic!("validated fixture ship")),
-                        |ship| crate::ships::master_native::choice_cost(&self.catalog, ship as u16),
+                        |ship| {
+                            uqm_content::ships::master_native::choice_cost(
+                                &self.catalog,
+                                ship as u16,
+                            )
+                        },
                     )
                     .unwrap_or_else(|error| panic!("validated fixture fleet slot: {error}"));
             }
@@ -192,8 +197,8 @@ impl MeleeSession {
     }
 
     pub fn new(
-        activity: crate::engine::world::activity::ActivityControl,
-        catalog: Vec<crate::ships::master_native::ShipChoice>,
+        activity: uqm_engine::world::activity::ActivityControl,
+        catalog: Vec<uqm_content::ships::master_native::ShipChoice>,
     ) -> Self {
         Self {
             files: None,

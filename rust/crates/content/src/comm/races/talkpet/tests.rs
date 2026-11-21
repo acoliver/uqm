@@ -2,7 +2,7 @@ use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();

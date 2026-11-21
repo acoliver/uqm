@@ -52,6 +52,8 @@ fn owner(ty: &syn::Type) -> bool {
         "Comm",
         "crate::comm::Comm",
         "crate::comm::state::Comm",
+        "uqm_modes::comm::Comm",
+        "uqm_modes::comm::state::Comm",
         "Cx",
         "crate::engine::battle::Cx",
         "uqm_engine::battle::Cx",
@@ -59,10 +61,12 @@ fn owner(ty: &syn::Type) -> bool {
         "crate::engine::World",
         "crate::engine::world::World",
         "uqm_engine::World",
+        "uqm_engine::world::World",
         "Kernel",
         "crate::engine::Kernel",
         "crate::engine::kernel::Kernel",
         "uqm_engine::Kernel",
+        "uqm_engine::kernel::Kernel",
     ]
     .contains(&name.as_str())
 }

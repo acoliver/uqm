@@ -1,24 +1,24 @@
 //! Battle-mode silhouette changes for the supplied status display.
 
-use crate::engine::battle::flags::MAX_TIME_VALUE;
-use crate::graphics::geometry::Point;
-use crate::graphics::intersection::Stamp;
+use uqm_engine::battle::flags::MAX_TIME_VALUE;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::graphics::intersection::Stamp;
 const MODIFY_IMAGE: u32 = 1;
 const MODIFY_SWAP: u32 = 2;
 
 pub(crate) mod engine {
     use super::*;
-    use crate::collections::observation::image;
-    use crate::engine::battle::{Cx, ElementId};
+    use uqm_engine::battle::{Cx, ElementId};
+    use uqm_engine::collections::observation::image;
 
     pub fn modify_silhouette(
         cx: &mut Cx<'_>,
         e: ElementId,
         origin: Point,
-        frame: crate::engine::battle::views::FrameSelection,
+        frame: uqm_engine::battle::views::FrameSelection,
         flags: u8,
     ) {
-        let mut object = crate::graphics::intersection::IntersectControl {
+        let mut object = uqm_engine::graphics::intersection::IntersectControl {
             intersect_stamp: Stamp {
                 origin,
                 frame: frame.raw(),
@@ -30,14 +30,14 @@ pub(crate) mod engine {
         let ship = cx.owner(e);
         if flags & MODIFY_IMAGE as u8 != 0 {
             let silhouette = cx.absolute_frame(
-                crate::engine::battle::views::FrameSelection::retain(cx.desc(ship).ship_info.icons)
+                uqm_engine::battle::views::FrameSelection::retain(cx.desc(ship).ship_info.icons)
                     .view(),
                 1,
             );
-            let mut ship_intersect = crate::graphics::intersection::IntersectControl {
+            let mut ship_intersect = uqm_engine::graphics::intersection::IntersectControl {
                 intersect_stamp: Stamp {
                     origin: Point { x: 0, y: 0 },
-                    frame: crate::graphics::drawable::FrameId::NULL,
+                    frame: uqm_engine::graphics::drawable::FrameId::NULL,
                 },
                 end_point: Point { x: 0, y: 0 },
                 last_time_val: 0,

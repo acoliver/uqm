@@ -1,24 +1,22 @@
 //! VUX behavior over the battle context's ids and per-ship descriptor.
 pub mod engine {
-    fn build_descriptor(
-        _world: &mut crate::engine::battle::World,
-    ) -> crate::engine::battle::RaceDesc {
-        crate::engine::battle::vux_template::descriptor(&VUX)
+    fn build_descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        uqm_engine::battle::vux_template::descriptor(&VUX)
     }
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, IGNORE_SIMILAR, LEFT, MOVEMENT_STATE_AVOID,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, COLLISION, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, PLAYER_SHIP,
     };
-    use crate::engine::battle::CollisionHook;
-    use crate::engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::CollisionHook;
+    use uqm_engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, ONE_SHIFT};
+    use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
     const MODIFY_IMAGE: u32 = 1;
 
     pub static VUX: Race = Race {
@@ -85,7 +83,7 @@ pub mod engine {
 
     pub fn spawn_limpets(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
-        let mut block = crate::engine::battle::views::Missile {
+        let mut block = uqm_engine::battle::views::Missile {
             frames: cx.ship_frame_set(ss, 2),
             // The original expression adds HALF_CIRCLE directly to the facing.
             face: (i32::from(cx.ship_state(ss).facing) + HALF_CIRCLE as i32) as u16,
@@ -115,7 +113,7 @@ pub mod engine {
         origin: WeaponOrigin,
     ) -> WeaponSpawn {
         let face = cx.ship_state(ss).facing;
-        let mut block = crate::engine::battle::views::Laser {
+        let mut block = uqm_engine::battle::views::Laser {
             face,
             origin: origin.next.location,
             end: Point {
@@ -204,8 +202,9 @@ pub mod engine {
                         .location
                         .y
                         .wrapping_sub(cx.element(e).current.location.y);
-                    face =
-                        normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                    face = normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(
+                        dx, dy,
+                    ))));
                     let frame = cx.absolute_frame(cx.element(e).current.image.frame.view(), face);
                     cx.set_frame(e, false, frame);
                     let x = i32::from(cx.element(e).current.location.x) & !((1 << ONE_SHIFT) - 1);
@@ -242,7 +241,7 @@ pub mod engine {
                 cx.set_intersect_frame(e, frame);
                 cx.ship_state_mut(ss).facing = face;
             }
-            cx.set_preprocess(ss, crate::engine::battle::Selection::Disabled);
+            cx.set_preprocess(ss, uqm_engine::battle::Selection::Disabled);
         }
     }
 }

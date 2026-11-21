@@ -1,8 +1,8 @@
 use crate::comm::host::Host;
 use crate::comm::races::{alliance::AllianceApi, encounter::EncounterApi};
 use crate::comm::Comm;
-use crate::engine::species::ship::{YEHAT_REBEL_SHIP, YEHAT_SHIP};
-use crate::engine::{
+use uqm_engine::species::ship::{YEHAT_REBEL_SHIP, YEHAT_SHIP};
+use uqm_engine::{
     battle::{Battle, Cx},
     clock::ARILOU_UMGAH_CHECK,
     Game, StoryKey,
@@ -20,8 +20,8 @@ fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
     let mut game = Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    game.world.story = Some(crate::engine::world::story::StoryState::new());
-    crate::time::clock_bridge::rust_clock_init(&mut game.world);
+    game.world.story = Some(uqm_engine::world::story::StoryState::new());
+    uqm_engine::time::clock_bridge::rust_clock_init(&mut game.world);
     for _ in 0..=YEHAT_REBEL_SHIP {
         let mut fleets = game.world.avail_races();
         let id = fleets.alloc().unwrap();

@@ -1,24 +1,25 @@
 //! The save-error popup restores its pixels and context after an observed wait.
+#![forbid(unsafe_code)]
 use std::{cell::Cell, rc::Rc};
-use uqm_rust::engine::battle::Cx;
-use uqm_rust::engine::input::Frame;
-use uqm_rust::engine::input::InputRuntime;
-use uqm_rust::engine::observe::CampaignView;
-use uqm_rust::engine::observe::CheckpointView;
-use uqm_rust::engine::observe::Injected;
-use uqm_rust::engine::observe::InputView;
-use uqm_rust::engine::observe::Io;
-use uqm_rust::engine::observe::Observer;
-use uqm_rust::engine::observe::Presented;
-use uqm_rust::engine::test_support::native_probe;
-use uqm_rust::engine::test_support::native_probe::frame_pixel as GetFramePixel;
-use uqm_rust::engine::Game;
-use uqm_rust::graphics::context::{ContextLease, LoadedContext};
-use uqm_rust::graphics::drawable::{FrameId, LoadedDrawable};
-use uqm_rust::graphics::{
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::context::{ContextLease, LoadedContext};
+use uqm_engine::graphics::drawable::{FrameId, LoadedDrawable};
+use uqm_engine::graphics::{
     geometry::Color, geometry::Extent, geometry::Point, geometry::Rect,
     menu::clear as ClearDrawable, menu::select as SetContext, present::GraphicsOptions,
 };
+use uqm_engine::input::Frame;
+use uqm_engine::input::InputRuntime;
+use uqm_engine::observe::CampaignView;
+use uqm_engine::observe::CheckpointView;
+use uqm_engine::observe::Injected;
+use uqm_engine::observe::InputView;
+use uqm_engine::observe::Io;
+use uqm_engine::observe::Observer;
+use uqm_engine::observe::Presented;
+use uqm_engine::test_support::native_probe;
+use uqm_engine::test_support::native_probe::frame_pixel as GetFramePixel;
+use uqm_engine::Game;
 
 #[derive(Clone)]
 struct WaitObserver {
@@ -31,7 +32,7 @@ impl Observer for WaitObserver {
     fn input_admitted(
         &mut self,
         view: &InputView,
-        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
     ) -> Injected {
         let campaign = CampaignView::for_input(*view, || CampaignView::capture(cx));
         assert_eq!(*view, InputView::Nested);
@@ -41,7 +42,6 @@ impl Observer for WaitObserver {
             "release and press waits each poll before admission"
         );
         assert!(campaign.is_some());
-        // SAFETY: the fixture retains this canvas until the popup finishes.
         let pixel = GetFramePixel(self.frame, Point { x: 118, y: 110 });
         assert_ne!(
             (pixel.r, pixel.g, pixel.b),
@@ -60,10 +60,10 @@ impl Observer for WaitObserver {
     fn presented(&mut self, _: &mut Presented) {}
 }
 
-struct Runtime(WaitObserver, uqm_rust::engine::input::InputSession);
+struct Runtime(WaitObserver, uqm_engine::input::InputSession);
 
 impl InputRuntime for Runtime {
-    fn input(&self) -> &uqm_rust::engine::input::InputSession {
+    fn input(&self) -> &uqm_engine::input::InputSession {
         &self.1
     }
 
@@ -92,7 +92,7 @@ impl InputRuntime for Runtime {
     fn run(&self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool, _: &mut dyn Frame) {
         panic!("the popup uses the nested wait, not a second input driver");
     }
-    fn battle_input(&self, _: &uqm_rust::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, _: &uqm_engine::battle::input::InputContext) -> u8 {
         panic!("popup must not request battle input");
     }
 }
@@ -121,27 +121,26 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             .unwrap();
     }
     std::fs::write(directory.path().join("font/0041.png"), png).unwrap();
-    // SAFETY: this process owns SDL, the game, and every native fixture handle.
-    unsafe {
+    {
         let options = GraphicsOptions::default();
-        uqm_rust::graphics::present::init_graphics(1, 0, options, 640, 480);
+        uqm_engine::graphics::present::init_graphics(1, 0, options, 640, 480);
         let context_id = LoadedContext::create(c"save-error fixture").into_id();
         let context = Some(context_id);
         let previous = Some(LoadedContext::create(c"previous context").into_id());
         let drawable = LoadedDrawable::create(8, 320, 240, 1).unwrap();
         let frame = drawable.first_frame();
         SetContext(context);
-        uqm_rust::graphics::menu::set_frame(frame);
-        uqm_rust::graphics::menu::background(Color {
+        uqm_engine::graphics::menu::set_frame(frame);
+        uqm_engine::graphics::menu::background(Color {
             r: 9,
             g: 17,
             b: 25,
             a: 255,
         });
         ClearDrawable();
-        uqm_rust::graphics::state::flush();
+        uqm_engine::graphics::state::flush();
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-        let font_owner = uqm_rust::graphics::font::LoadedFont::load_file(c"font")
+        let font_owner = uqm_engine::graphics::font::LoadedFont::load_file(c"font")
             .unwrap_or_else(|| panic!("one-glyph font fixture did not load"));
         let font = Some(font_owner.font());
         drop(content);
@@ -156,16 +155,16 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         });
         let mut strings = vec![Vec::new(); 457];
         strings[456] = c"A".to_bytes_with_nul().to_vec();
-        let context_lease = uqm_rust::graphics::context::ContextLease::require(context);
-        let font_lease = uqm_rust::graphics::font::FontLease::retain(font_owner.font());
+        let context_lease = uqm_engine::graphics::context::ContextLease::require(context);
+        let font_lease = uqm_engine::graphics::font::FontLease::retain(font_owner.font());
         let waits = Rc::new(Cell::new(0));
         let polls = Rc::new(Cell::new(0));
         let mut game = Game::new();
-        uqm_rust::battle::services::install(&mut game.kernel);
+        uqm_modes::battle::services::install(&mut game.kernel);
         game.kernel.space_context = context;
         game.kernel.star_con_font = font;
         game.kernel
-            .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+            .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
                 strings,
             ));
         game.kernel.install_input_runtime(Rc::new(Runtime(
@@ -174,14 +173,14 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 polls: polls.clone(),
                 frame,
             },
-            uqm_rust::engine::input::InputSession::default(),
+            uqm_engine::input::InputSession::default(),
         )));
         {
             {
-                use uqm_rust::engine::host as source;
+                use uqm_engine::host as source;
                 let process_one = || source::dispatch().process_one_alarm(source::now_ms());
                 let wait = || source::dispatch().time_before_next_alarm_ms(source::now_ms());
-                uqm_rust::platform::install(true);
+                uqm_platform::install(true);
                 let region = |x| Rect {
                     corner: Point { x, y: 1 },
                     extent: Extent {
@@ -206,7 +205,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 assert!(process_one());
                 assert!(!process_one());
                 manual.process();
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 let pixel = |x| {
                     let p = GetFramePixel(frame, Point { x, y: 2 });
                     (p.r, p.g, p.b, p.a)
@@ -219,22 +218,22 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 scheduled.resume();
                 assert!(process_one());
                 manual.process();
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 assert_eq!(pixel(2), pixel(11));
                 scheduled.pre_update();
                 manual.pre_update();
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 assert_eq!(pixel(2), (9, 17, 25, 255));
                 assert_eq!(pixel(2), pixel(11));
                 scheduled.post_update();
                 manual.post_update();
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 assert_eq!(pixel(2), pixel(11));
                 drop(scheduled);
                 drop(manual);
                 source::advance_to(1_000);
                 assert!(!process_one());
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 assert_eq!(pixel(2), (9, 17, 25, 255));
                 let clip = Rect {
                     corner: Point { x: 20, y: 10 },
@@ -243,23 +242,23 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         height: 100,
                     },
                 };
-                let flash_kernel = uqm_rust::engine::Kernel::new();
-                let other_kernel = uqm_rust::engine::Kernel::new();
+                let flash_kernel = uqm_engine::Kernel::new();
+                let other_kernel = uqm_engine::Kernel::new();
                 let mut reference = configure(30);
                 reference.start();
-                uqm_rust::ui::sis::set_flash_rect(
+                uqm_modes::ui::sis::set_flash_rect(
                     &flash_kernel.sis_highlight,
                     &context_lease,
                     clip,
                     Some(region(1)),
                 );
-                uqm_rust::ui::sis::set_flash_rect(
+                uqm_modes::ui::sis::set_flash_rect(
                     &other_kernel.sis_highlight,
                     &context_lease,
                     clip,
                     None,
                 );
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 let translated = GetFramePixel(frame, Point { x: 22, y: 12 });
                 assert_eq!((translated.r, translated.g, translated.b), (9, 17, 25));
                 assert_eq!(wait(), 0);
@@ -271,7 +270,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 flash_kernel.sis_highlight.continue_flash();
                 assert!(process_one());
                 reference.process();
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 let translated = GetFramePixel(frame, Point { x: 22, y: 12 });
                 let original = GetFramePixel(frame, Point { x: 31, y: 2 });
                 assert_eq!((translated.r, translated.g, translated.b), (13, 25, 37));
@@ -279,7 +278,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     (translated.r, translated.g, translated.b),
                     (original.r, original.g, original.b)
                 );
-                uqm_rust::ui::sis::set_flash_rect(
+                uqm_modes::ui::sis::set_flash_rect(
                     &flash_kernel.sis_highlight,
                     &context_lease,
                     clip,
@@ -288,7 +287,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 drop(reference);
                 source::advance_to(2_000);
                 assert!(!process_one());
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 let restored = GetFramePixel(frame, Point { x: 22, y: 12 });
                 assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
                 source::dispatch().clear();
@@ -310,8 +309,8 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             },
                         },
                     );
-                    uqm_rust::graphics::menu::select_font(None);
-                    uqm_rust::ui::shipstat::draw_ship_name_text(
+                    uqm_engine::graphics::menu::select_font(None);
+                    uqm_modes::ui::shipstat::draw_ship_name_text(
                         &context_lease,
                         &font_lease,
                         c"AA",
@@ -324,7 +323,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     );
                     let foreground = native_probe::context_foreground(context_id);
                     assert_eq!((foreground.r, foreground.g, foreground.b), (0, 0, 0));
-                    uqm_rust::graphics::state::flush();
+                    uqm_engine::graphics::state::flush();
                     for y in 0..77 {
                         for x in 0..65 {
                             let ink = match count {
@@ -349,9 +348,9 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
-            uqm_rust::ui::shipstat::outline_ship_status(&context_lease, 0);
-            uqm_rust::ui::shipstat::clear_ship_status(&context_lease, 0);
-            uqm_rust::graphics::state::flush();
+            uqm_modes::ui::shipstat::outline_ship_status(&context_lease, 0);
+            uqm_modes::ui::shipstat::clear_ship_status(&context_lease, 0);
+            uqm_engine::graphics::state::flush();
             for y in 0..66 {
                 for x in 0..65 {
                     let shade = if x >= 64 || y == 65 {
@@ -394,13 +393,13 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             },
                         },
                     );
-                    uqm_rust::ui::shipstat::draw_gauge_frames(
+                    uqm_modes::ui::shipstat::draw_gauge_frames(
                         &context_lease,
                         max_crew,
                         max_energy,
                         offset,
                     );
-                    uqm_rust::graphics::state::flush();
+                    uqm_engine::graphics::state::flush();
                     let bottom = 55 + offset;
                     let rectangles = [
                         (66, 3, bottom + 1, 9, 1),
@@ -452,7 +451,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 let target = context_lease.target();
                 // Loaded status stencils have alpha or a color key; an opaque canvas cannot mask a fill.
                 let labels =
-                    uqm_rust::graphics::drawable::LoadedDrawable::create(8, 1, 1, 6).unwrap();
+                    uqm_engine::graphics::drawable::LoadedDrawable::create(8, 1, 1, 6).unwrap();
                 let frames = labels.lease();
                 for index in 0..6 {
                     context_lease.set_frame(frames.context_frame(index));
@@ -473,7 +472,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     );
                 }
                 context_lease.set_frame(target);
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 for index in 0..6 {
                     let pixel = GetFramePixel(frames.frame(index).unwrap(), Point { x: 0, y: 0 });
                     assert_eq!(
@@ -499,14 +498,14 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                                 },
                             },
                         );
-                        uqm_rust::ui::shipstat::draw_crew_energy_labels(
+                        uqm_modes::ui::shipstat::draw_crew_energy_labels(
                             &context_lease,
                             &frames,
                             pc_menu,
                             0,
                             change,
                         );
-                        uqm_rust::graphics::state::flush();
+                        uqm_engine::graphics::state::flush();
                         let index = if pc_menu { 4 } else { 0 };
                         for (x, expected) in [
                             (
@@ -576,23 +575,21 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         let id = {
                             let mut queue = cx.kernel.ships(0);
                             let link = queue.alloc().unwrap();
-                            let record = &mut *queue
-                                .raw(link)
-                                .cast::<uqm_engine::battle::record::ShipRecord>();
-                            let mut descriptor: Box<uqm_engine::battle::record::RaceDescriptor> =
-                                Box::new(std::mem::zeroed());
-                            descriptor.ship_info.icons = icon;
-                            descriptor.ship_info.max_crew = 3;
-                            descriptor.ship_info.max_energy = 4;
-                            descriptor.ship_info.crew_level = 2;
-                            descriptor.ship_info.energy_level = 3;
-                            descriptor.ship_info.ship_cost = 7;
-                            record.descriptor = Some(descriptor);
-                            record.player_nr = 0;
                             queue.ship_id(link)
                         };
+                        let mut descriptor =
+                            Box::new(uqm_engine::battle::record::RaceDescriptor::EMPTY);
+                        descriptor.ship_info.icons = icon;
+                        descriptor.ship_info.max_crew = 3;
+                        descriptor.ship_info.max_energy = 4;
+                        descriptor.ship_info.crew_level = 2;
+                        descriptor.ship_info.energy_level = 3;
+                        descriptor.ship_info.ship_cost = 7;
+                        let record = cx.kernel.fixture_ship_mut(id);
+                        record.descriptor = Some(descriptor);
+                        record.player_nr = 0;
                         SetContext(previous);
-                        uqm_rust::ui::shipstat::draw_battle_status(cx, id, None);
+                        uqm_modes::ui::shipstat::draw_battle_status(cx, id, None);
                         let selected = native_probe::selected_context();
                         assert_eq!(selected, previous);
                         let info = &cx.desc(id).ship_info;
@@ -601,7 +598,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             (info.icons, info.max_crew, info.max_energy, info.ship_cost),
                             (icon, 3, 4, 7)
                         );
-                        uqm_rust::graphics::state::flush();
+                        uqm_engine::graphics::state::flush();
                         let pixel = GetFramePixel(frame, Point { x: 32, y: 31 });
                         assert_eq!((pixel.r, pixel.g, pixel.b), (73, 91, 109));
                         let active_canvas = LoadedDrawable::create(8, 65, 77, 1).unwrap();
@@ -611,7 +608,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         let gauge_pixel = Point { x: 8, y: 52 };
                         let status_before = GetFramePixel(frame, gauge_pixel);
                         cx.draw_statistics(id, 1, -1);
-                        uqm_rust::graphics::state::flush();
+                        uqm_engine::graphics::state::flush();
                         let active_pixel = GetFramePixel(active_frame, gauge_pixel);
                         assert_eq!(
                             (active_pixel.r, active_pixel.g, active_pixel.b),
@@ -648,7 +645,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             ),
                             (2, 3)
                         );
-                        uqm_rust::ui::shipstat::draw_battle_status(cx, id, None);
+                        uqm_modes::ui::shipstat::draw_battle_status(cx, id, None);
                         cx.kernel.reset_ship_capacity(0, 0);
                         (
                             cx.kernel.status_context,
@@ -673,8 +670,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             },
                         },
                     );
-                    let mut ship: uqm_rust::engine::battle::record::ShipInfoRecord =
-                        std::mem::zeroed();
+                    let mut ship = uqm_engine::battle::record::RaceDescriptor::EMPTY.ship_info;
                     ship.max_crew = 2;
                     ship.max_energy = 2;
                     ship.crew_level = 2;
@@ -688,9 +684,9 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     });
                     let original_clip = context_lease.clip_rect();
                     let original_origin = frame.hot_spot();
-                    uqm_rust::graphics::menu::select_font(None);
+                    uqm_engine::graphics::menu::select_font(None);
                     SetContext(previous);
-                    uqm_rust::ui::shipstat::StatusGraphics {
+                    uqm_modes::ui::shipstat::StatusGraphics {
                         context: context_lease.clone(),
                         frames: frames.clone(),
                         font: font_lease.clone(),
@@ -703,7 +699,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         &frames.context_frame(2),
                         0,
                         clip,
-                        Some(uqm_rust::ui::shipstat::StatusTitle {
+                        Some(uqm_modes::ui::shipstat::StatusTitle {
                             name: c"A",
                             name_count: 1,
                             caption: Some((c"A", 1)),
@@ -732,7 +728,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             original_clip.extent.height
                         )
                     );
-                    uqm_rust::graphics::state::flush();
+                    uqm_engine::graphics::state::flush();
                     // Offscreen native primitives use the clip for origin and intersection,
                     // not a per-pixel scissor; an entirely excluded region draws nothing.
                     for (x, y, color) in [
@@ -760,22 +756,21 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
-            let mut stats: uqm_rust::engine::battle::record::ShipInfoRecord = std::mem::zeroed();
+            let mut stats = uqm_engine::battle::record::RaceDescriptor::EMPTY.ship_info;
             stats.ship_flags = 1 << 13;
-            let update =
-                |stats: &mut uqm_rust::engine::battle::record::ShipInfoRecord, crew, energy| {
-                    uqm_rust::ui::shipstat::update_statistics(
-                        Some(&context_lease),
-                        false,
-                        false,
-                        None,
-                        stats,
-                        0,
-                        (crew, energy),
-                    );
-                };
+            let update = |stats: &mut uqm_engine::battle::record::ShipInfoRecord, crew, energy| {
+                uqm_modes::ui::shipstat::update_statistics(
+                    Some(&context_lease),
+                    false,
+                    false,
+                    None,
+                    stats,
+                    0,
+                    (crew, energy),
+                );
+            };
             let assert_pixel = |x, y, expected| {
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 let pixel = GetFramePixel(frame, Point { x, y });
                 assert_eq!(
                     (pixel.r, pixel.g, pixel.b),
@@ -821,7 +816,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             assert_eq!((foreground.r, foreground.g, foreground.b), (0, 165, 0));
             for saving in [true, false] {
                 SetContext(previous);
-                let saved = uqm_rust::ui::save_problem::render_save_confirmation(
+                let saved = uqm_modes::ui::save_problem::render_save_confirmation(
                     &context_lease,
                     &font_lease,
                     c"A",
@@ -829,7 +824,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 );
                 assert_eq!(saved.is_some(), saving);
                 assert_eq!(SetContext(previous), previous);
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 // Recorded from the original ConfirmSaveLoad with the same one-glyph font.
                 let rows = [
                     "lllllllll",
@@ -869,7 +864,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 if let Some(saved) = saved {
                     saved.restore();
                     assert_eq!(SetContext(previous), previous);
-                    uqm_rust::graphics::state::flush();
+                    uqm_engine::graphics::state::flush();
                     for y in 119..129 {
                         for x in 156..165 {
                             let pixel = GetFramePixel(frame, Point { x, y });
@@ -901,7 +896,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     let mut io = Io {
                         observer: &mut *observer,
                     };
-                    uqm_rust::ui::save_problem::render_save_problem(
+                    uqm_modes::ui::save_problem::render_save_problem(
                         cx,
                         &mut io,
                         &context_lease,
@@ -917,7 +912,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 assert_eq!(native_probe::context_font(context_id), font);
                 let foreground = native_probe::context_foreground(context_id);
                 assert_eq!((foreground.r, foreground.g, foreground.b), (165, 165, 165));
-                uqm_rust::graphics::state::flush();
+                uqm_engine::graphics::state::flush();
                 for y in 108..120 {
                     for x in 116..128 {
                         let pixel = GetFramePixel(frame, Point { x, y });
@@ -941,6 +936,6 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         drop(context.map(LoadedContext::from_id));
         drop(previous.map(LoadedContext::from_id));
         drop(font_owner);
-        uqm_rust::graphics::present::uninit_graphics();
+        uqm_engine::graphics::present::uninit_graphics();
     }
 }

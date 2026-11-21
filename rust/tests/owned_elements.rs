@@ -1,4 +1,5 @@
-use uqm_rust::engine::battle::ElementTable;
+#![forbid(unsafe_code)]
+use uqm_engine::battle::ElementTable;
 
 #[test]
 fn owned_storage_preserves_order_reuse_and_reset_generations() {

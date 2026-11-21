@@ -1,13 +1,12 @@
 //! Text-entry frames lend their actual context to synchronous callbacks.
-use uqm_rust::{
-    engine::{
-        battle::Cx,
-        input::{frames::InputState, InputSession},
-        observe::{Io, Unobserved},
-        Game,
-    },
-    ui::getchar::{Alphabet, Editor},
+#![forbid(unsafe_code)]
+use uqm_engine::{
+    battle::Cx,
+    input::{frames::InputState, InputSession},
+    observe::{Io, Unobserved},
+    Game,
 };
+use uqm_modes::ui::getchar::{Alphabet, Editor};
 
 #[derive(Default)]
 struct Callbacks {
@@ -22,12 +21,12 @@ fn frame(key: usize, activity: u16) -> (bool, bool, Callbacks) {
     input.advance(pulse, pulse, 0);
     let mut game = Game::new();
     game.world.set_activity(activity);
-    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
     let mut callbacks = BorrowedCallbacks(Callbacks::default());
     let mut text = *b"ab\0\0\0\0\0\0";
@@ -74,10 +73,10 @@ fn select_and_cancel_finish_before_callbacks_with_the_original_success_value() {
 
 struct BorrowedCallbacks(Callbacks);
 
-impl uqm_rust::ui::getchar::TextEntryCallbacks for BorrowedCallbacks {
+impl uqm_modes::ui::getchar::TextEntryCallbacks for BorrowedCallbacks {
     fn changed(
         &mut self,
-        entry: uqm_rust::ui::getchar::TextEntryView<'_>,
+        entry: uqm_modes::ui::getchar::TextEntryView<'_>,
         cx: &mut Cx<'_>,
         _input: &InputSession,
     ) -> bool {
@@ -90,7 +89,7 @@ impl uqm_rust::ui::getchar::TextEntryCallbacks for BorrowedCallbacks {
 
     fn frame(
         &mut self,
-        entry: uqm_rust::ui::getchar::TextEntryView<'_>,
+        entry: uqm_modes::ui::getchar::TextEntryView<'_>,
         cx: &mut Cx<'_>,
         _io: &mut Io<'_>,
         _input: &InputSession,
@@ -105,12 +104,12 @@ impl uqm_rust::ui::getchar::TextEntryCallbacks for BorrowedCallbacks {
 
 struct OneFrame(InputSession);
 
-impl uqm_rust::engine::input::InputRuntime for OneFrame {
+impl uqm_engine::input::InputRuntime for OneFrame {
     fn input(&self) -> &InputSession {
         &self.0
     }
 
-    fn observer(&self) -> Box<dyn uqm_rust::engine::observe::Observer> {
+    fn observer(&self) -> Box<dyn uqm_engine::observe::Observer> {
         Box::new(Unobserved)
     }
 
@@ -137,13 +136,13 @@ impl uqm_rust::engine::input::InputRuntime for OneFrame {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         reset: bool,
-        frame: &mut dyn uqm_rust::engine::input::Frame,
+        frame: &mut dyn uqm_engine::input::Frame,
     ) {
         assert!(reset);
         assert!(!frame.frame(cx, io));
     }
 
-    fn battle_input(&self, _input: &uqm_rust::engine::battle::input::InputContext) -> u8 {
+    fn battle_input(&self, _input: &uqm_engine::battle::input::InputContext) -> u8 {
         unreachable!("text entry does not poll a battle ship")
     }
 }
@@ -162,14 +161,14 @@ fn borrowed_frame(key: usize, activity: u16, buffer: &mut [u8]) -> (bool, Callba
     let mut io = Io {
         observer: &mut observer,
     };
-    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     let mut cx = Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
-    let success = uqm_rust::ui::getchar::edit_text(
+    let success = uqm_modes::ui::getchar::edit_text(
         &mut cx,
         &mut io,
         &input,

@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::starbas::{api::StarbaseApi, Handler};
 use crate::comm::Comm;
-use crate::engine::{battle::Battle, battle::Cx, Game};
+use uqm_engine::{battle::Battle, battle::Cx, Game};
 
 #[test]
 #[serial_test::serial]
@@ -62,9 +62,9 @@ fn unblocked_ui_adapters_initialize_with_supplied_campaign_owners(
     let display = uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)?;
     for kind in adapters {
         let name = format!("{kind:?}");
-        game.world = crate::engine::World::new();
-        game.world.story = Some(crate::engine::world::story::StoryState::new());
-        crate::time::clock_bridge::rust_clock_init(&mut game.world);
+        game.world = uqm_engine::World::new();
+        game.world.story = Some(uqm_engine::world::story::StoryState::new());
+        uqm_engine::time::clock_bridge::rust_clock_init(&mut game.world);
         let mut comm = Comm::new();
         let mut battle = Battle::new();
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
@@ -85,7 +85,7 @@ fn unblocked_ui_adapters_initialize_with_supplied_campaign_owners(
             0,
             "{name}"
         );
-        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+        uqm_engine::time::clock_bridge::rust_clock_uninit(cx.world);
     }
     display.finish(game);
     Ok(())

@@ -1,10 +1,10 @@
 //! Report assets retained across nested input callbacks without borrowing their owner.
 
-use crate::engine::graphics::{
+use std::{cell::RefCell, rc::Rc};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::DrawableLease, drawable::LoadedDrawable, font::FontLease,
     font::LoadedFont,
 };
-use std::{cell::RefCell, rc::Rc};
 
 pub struct ReportTypography {
     pub(super) font: LoadedFont,
@@ -52,12 +52,12 @@ pub struct ReportContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::graphics::{geometry::Point, geometry::TextAlign};
+    use uqm_engine::graphics::{geometry::Point, geometry::TextAlign};
 
     #[test]
     #[serial_test::serial]
     fn independent_report_owners_keep_snapshots_and_leases_live_after_clear() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let first = ReportResources::default();
         let second = ReportResources::default();
         let display =

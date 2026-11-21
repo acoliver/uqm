@@ -83,7 +83,7 @@ impl AutomationObserver {
             result.labels.push(format!(
                 "planet_side_phase:generation={}:phase={}",
                 observation.generation,
-                crate::engine::observe_port::planet_side::phase_name(observation.phase)
+                uqm_engine::observe_port::planet_side::phase_name(observation.phase)
             ));
         }
 

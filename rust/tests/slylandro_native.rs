@@ -1,57 +1,57 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use battle::{prim, Battle as PoolBattle, PoolElement, Ship};
-use uqm_rust::engine::battle::ai_constants::FIRST_EMPTY_INDEX;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
-use uqm_rust::engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SEEKING_WEAPON;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::APPEARING;
-use uqm_rust::engine::battle::flags::CHANGING;
-use uqm_rust::engine::battle::flags::COLLISION;
-use uqm_rust::engine::battle::flags::CREW_IMMUNE;
-use uqm_rust::engine::battle::flags::DISAPPEARING;
-use uqm_rust::engine::battle::flags::FINITE_LIFE;
-use uqm_rust::engine::battle::flags::NONSOLID;
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
-use uqm_rust::engine::battle::record::ElementRecord;
-use uqm_rust::engine::battle::record::EvaluateRecord;
-use uqm_rust::engine::battle::EMPTY_PRIMITIVE;
-use uqm_rust::engine::battle::LINE_PRIMITIVE;
-use uqm_rust::engine::species::species_id::SPECIES_ID_SLYLANDRO_ID;
-use uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::ONE_SHIFT;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::VelocityDesc;
-use uqm_rust::math::velocity::VELOCITY_SHIFT;
+use battle::{Battle as PoolBattle, PoolElement, Ship};
+use uqm_engine::battle::ai_constants::FIRST_EMPTY_INDEX;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_AVOID;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_ENTICE;
+use uqm_engine::battle::ai_constants::MOVEMENT_STATE_PURSUE;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SEEKING_WEAPON;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::APPEARING;
+use uqm_engine::battle::flags::CHANGING;
+use uqm_engine::battle::flags::COLLISION;
+use uqm_engine::battle::flags::CREW_IMMUNE;
+use uqm_engine::battle::flags::DISAPPEARING;
+use uqm_engine::battle::flags::FINITE_LIFE;
+use uqm_engine::battle::flags::NONSOLID;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::flags::SHIP_IN_GRAVITY_WELL;
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::LINE_PRIMITIVE;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::math::velocity::VELOCITY_SHIFT;
+use uqm_engine::species::species_id::SPECIES_ID_SLYLANDRO_ID;
+use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::{mem, ptr};
-use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{cosine, facing_to_angle, normalize_facing, sine};
+use uqm_content::ships::native::{cosine, facing_to_angle, normalize_facing, sine};
+use uqm_engine::collections::observation;
 
 struct Battle {
     _pool: PoolBattle,
     activity: u16,
 }
 impl Battle {
-    unsafe fn new(capacity: u16) -> Self {
+    fn new(capacity: u16) -> Self {
         let activity = crate::battle_context::with(|cx| cx.world.activity());
         let pool = PoolBattle::new(capacity);
         crate::battle_context::with(|cx| cx.world.set_activity(0));
@@ -83,12 +83,12 @@ fn velocity(v: &VelocityDesc) -> [i32; 9] {
         v.incr.height.into(),
     ]
 }
-unsafe fn vector(speed: i16, facing: u16) -> [i32; 9] {
-    let mut v = mem::zeroed();
-    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+fn vector(speed: i16, facing: u16) -> [i32; 9] {
+    let mut v = VelocityDesc::new();
+    uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
     velocity(&v)
 }
-unsafe fn with_rng<T>(seed: u32, draws: usize, action: impl FnOnce() -> T) -> T {
+fn with_rng<T>(seed: u32, draws: usize, action: impl FnOnce() -> T) -> T {
     seed_random(seed);
     for _ in 0..draws {
         random();
@@ -99,7 +99,7 @@ unsafe fn with_rng<T>(seed: u32, draws: usize, action: impl FnOnce() -> T) -> T 
     assert_eq!(random(), next, "seed {seed}: expected {draws} draws");
     result
 }
-unsafe fn randoms(seed: u32) -> (u32, u32) {
+fn randoms(seed: u32) -> (u32, u32) {
     seed_random(seed);
     (random(), random())
 }
@@ -111,7 +111,7 @@ fn bolt_color(random: u32) -> (u8, u8, u8, u8) {
         _ => (0, 0, 198, 255),
     }
 }
-unsafe fn bolt_velocity(angle: u16, delta: i16, random: u32) -> [i32; 9] {
+fn bolt_velocity(angle: u16, delta: i16, random: u32) -> [i32; 9] {
     let angle = match delta {
         -1 | 8 => angle.wrapping_add(random as u16),
         0 => {
@@ -132,58 +132,52 @@ unsafe fn bolt_velocity(angle: u16, delta: i16, random: u32) -> [i32; 9] {
     );
     velocity(&v)
 }
-unsafe fn queue_len() -> usize {
-    let mut h = battle::head();
+fn queue_len() -> usize {
+    let mut cursor = battle::head();
     let mut n = 0;
-    while !h.is_null() {
+    while let Some(h) = cursor {
         n += 1;
         assert!(n <= 128);
-        h = battle::succ(h);
+        cursor = battle::succ(h);
     }
     n
 }
-unsafe fn junk(ship: &Ship<'_>, dx: i32, dy: i32, flags: u16, mass: u8) -> PoolElement {
-    let mut fixture = PoolElement::new();
-    let e = &raw mut *fixture;
-    (*e).player_nr = -1;
-    (*e).state_flags = flags;
-    (*e).life = 50;
-    (*e).hits = 10;
-    (*e).mass = mass;
-    (*e).next.location = Point {
-        x: (i32::from((*ship.ptr()).next.location.x) + dx) as i16,
-        y: (i32::from((*ship.ptr()).next.location.y) + dy) as i16,
+fn junk(ship: &Ship<'_>, dx: i32, dy: i32, flags: u16, mass: u8) -> PoolElement {
+    let fixture = PoolElement::new();
+    let e = fixture.id;
+    battle::get_mut(e).player_nr = -1;
+    battle::get_mut(e).state_flags = flags;
+    battle::get_mut(e).life = 50;
+    battle::get_mut(e).hits = 10;
+    battle::get_mut(e).mass = mass;
+    battle::get_mut(e).next.location = Point {
+        x: (i32::from(battle::get(ship.id).next.location.x) + dx) as i16,
+        y: (i32::from(battle::get(ship.id).next.location.y) + dy) as i16,
     };
-    (*e).current = (*e).next.clone();
-    battle::put(e.cast());
+    battle::get_mut(e).current = battle::get(e).next.clone();
+    battle::put(e);
     fixture
 }
 
 #[test]
 fn native_weapon_uses_the_projected_source_without_mutating_its_live_target() {
-    // SAFETY: the serialized fixture owns the source, target, and frame resources.
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let battle = Battle::new(8);
         let ship = Ship::with_frames(&battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
-        (*ship.ptr()).target = Some(battle::id((ship.handle).cast()));
-        let projected = with_rng(99, 1, || ship.initialize_from(ship.ptr(), 1)[0]);
-        assert!(!projected.is_null());
-        assert_eq!((*ship.ptr()).target, Some(battle::id((ship.handle).cast())));
-        let direct = with_rng(99, 1, || fire_from(ship.ptr()));
-        assert!(!direct.is_null());
-        assert!((*ship.ptr()).target.is_none());
+        battle::get_mut(ship.id).target = Some(ship.id);
+        let projected = with_rng(99, 1, || ship.initialize_from(ship.id, 1)[0]).unwrap();
+        assert_eq!(battle::get(ship.id).target, Some(ship.id));
+        let direct = with_rng(99, 1, || fire_from(ship.id)).unwrap();
+        assert!(battle::get(ship.id).target.is_none());
         assert_eq!(
-            velocity(&(*battle::element(projected)).velocity),
-            velocity(&(*battle::element(direct)).velocity)
+            velocity(&battle::get(projected).velocity),
+            velocity(&battle::get(direct).velocity)
         );
         assert_eq!(
-            rgba((*prim(battle::element(projected))).color),
-            rgba((*prim(battle::element(direct))).color)
+            rgba(battle::prim(projected).color),
+            rgba(battle::prim(direct).color)
         );
-        assert_eq!(
-            (*battle::element(projected)).turn,
-            (*battle::element(direct)).turn
-        );
+        assert_eq!(battle::get(projected).turn, battle::get(direct).turn);
         battle_context::dispose(projected);
         battle_context::dispose(direct);
     });
@@ -191,7 +185,7 @@ fn native_weapon_uses_the_projected_source_without_mutating_its_live_target() {
 
 #[test]
 fn descriptor_matches_all_c_stats_resources_and_callbacks() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let d = battle::descriptor(SPECIES_ID_SLYLANDRO_ID);
         assert_eq!(
@@ -314,53 +308,63 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
 
 #[test]
 fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         ship.ship_mut().ship_facing = 15;
-        (*ship.ptr()).next.location = Point { x: 321, y: -654 };
+        battle::get_mut(ship.id).next.location = Point { x: 321, y: -654 };
         let mut colors_seen = [false; 4];
         for seed in 1..65 {
             let (random, _) = randoms(seed);
             colors_seen[((random >> 8) & 3) as usize] = true;
             for counter in [0u8, 1, 8, 9, 16, 17, 255] {
                 ship.ship_mut().weapon_counter = counter;
-                (*ship.ptr()).target = Some(battle::id((ship.handle).cast()));
-                let h = with_rng(seed, 1, || fire_from(ship.ptr()));
-                assert!(!h.is_null());
-                let bolt = battle::element(h);
+                battle::get_mut(ship.id).target = Some(ship.id);
+                let h = with_rng(seed, 1, || fire_from(ship.id)).unwrap();
+                let bolt = h;
                 let wait = if counter == 0 { 17u8 } else { counter };
                 let wait = if wait > 8 {
                     17u8.wrapping_sub(wait)
                 } else {
                     wait
                 };
-                assert_eq!((*bolt).turn, wait);
+                assert_eq!(battle::get(bolt).turn, wait);
                 assert_eq!(
-                    (*bolt).state_flags,
+                    battle::get(bolt).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                 );
                 assert_eq!(
-                    ((*bolt).life, (*bolt).hits, (*bolt).mass, (*bolt).thrust),
+                    (
+                        battle::get(bolt).life,
+                        battle::get(bolt).hits,
+                        battle::get(bolt).mass,
+                        battle::get(bolt).thrust
+                    ),
                     (1, 1, 1, 1)
                 );
-                assert_eq!((*bolt).player_nr, 0);
-                assert_eq!((*bolt).parent, (*ship.ptr()).parent);
+                assert_eq!(battle::get(bolt).player_nr, 0);
+                assert_eq!(battle::get(bolt).parent, battle::get(ship.id).parent);
                 assert!(
-                    (*bolt).preprocess_func.is_none()
-                        && (*bolt).postprocess_func.is_some()
-                        && (*bolt).collision_func.is_some()
+                    battle::get(bolt).preprocess_func.is_none()
+                        && battle::get(bolt).postprocess_func.is_some()
+                        && battle::get(bolt).collision_func.is_some()
                 );
                 assert_eq!(
-                    ((*bolt).current.location.x, (*bolt).current.location.y),
+                    (
+                        battle::get(bolt).current.location.x,
+                        battle::get(bolt).current.location.y
+                    ),
                     (321, -654)
                 );
-                assert_eq!((*prim(bolt)).kind, LINE_PRIMITIVE);
-                assert_eq!(rgba((*prim(bolt)).color), bolt_color(random));
-                assert_eq!(velocity(&(*bolt).velocity), bolt_velocity(60, -1, random));
+                assert_eq!(battle::prim(bolt).kind, LINE_PRIMITIVE);
+                assert_eq!(rgba(battle::prim(bolt).color), bolt_color(random));
+                assert_eq!(
+                    velocity(&battle::get(bolt).velocity),
+                    bolt_velocity(60, -1, random)
+                );
                 assert!(
-                    (*ship.ptr()).target.is_none(),
+                    battle::get(ship.id).target.is_none(),
                     "ship targeting starts fresh and is cleared after tracking"
                 );
                 battle_context::dispose(h);
@@ -372,7 +376,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
 
 #[test]
 fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposite_turn() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let ship = Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let mut enemy =
@@ -391,16 +395,15 @@ fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposit
                 } else {
                     facing
                 };
-                let h = with_rng(seed, if delta == 8 { 2 } else { 1 }, || {
-                    fire_from(ship.ptr())
-                });
-                let bolt = battle::element(h);
+                let h =
+                    with_rng(seed, if delta == 8 { 2 } else { 1 }, || fire_from(ship.id)).unwrap();
+                let bolt = h;
                 assert_eq!(
-                    velocity(&(*bolt).velocity),
+                    velocity(&battle::get(bolt).velocity),
                     bolt_velocity(facing_to_angle(facing as i32) as u16, delta, random)
                 );
-                assert_eq!(rgba((*prim(bolt)).color), bolt_color(random));
-                assert!((*ship.ptr()).target.is_none());
+                assert_eq!(rgba(battle::prim(bolt).color), bolt_color(random));
+                assert!(battle::get(ship.id).target.is_none());
                 battle_context::dispose(h);
             }
         }
@@ -409,7 +412,7 @@ fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposit
 
 #[test]
 fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_ship() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         let ship = Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let mut ally =
@@ -422,35 +425,35 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
         let mut cloaked =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut cloaked, 4000, 3997);
-        (*prim(cloaked.ptr())).kind = EMPTY_PRIMITIVE;
+        battle::prim_mut(cloaked.id).kind = EMPTY_PRIMITIVE;
         let mut far =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut far, 4000, 2000);
         let mut near =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut near, 4500, 4000);
-        (*ship.ptr()).target = Some(battle::id((far.handle).cast()));
+        battle::get_mut(ship.id).target = Some(far.id);
         let (random, _) = randoms(313);
-        let h = with_rng(313, 1, || fire_from(ship.ptr()));
+        let h = with_rng(313, 1, || fire_from(ship.id)).unwrap();
         assert_eq!(
-            velocity(&(*battle::element(h)).velocity),
+            velocity(&battle::get(h).velocity),
             bolt_velocity(4, 4, random)
         );
-        assert!((*ship.ptr()).target.is_none());
+        assert!(battle::get(ship.id).target.is_none());
         battle_context::dispose(h);
-        (*ship.ptr()).state_flags |= APPEARING as u16;
-        let h = with_rng(313, 1, || fire_from(ship.ptr()));
+        battle::get_mut(ship.id).state_flags |= APPEARING as u16;
+        let h = with_rng(313, 1, || fire_from(ship.id)).unwrap();
         assert_eq!(
-            velocity(&(*battle::element(h)).velocity),
+            velocity(&battle::get(h).velocity),
             bolt_velocity(0, 0, random),
             "appearing ship can target cloaked opponents"
         );
         battle_context::dispose(h);
-        (*ship.ptr()).state_flags &= !(APPEARING as u16);
-        (*near.ptr()).life = 0;
-        let h = with_rng(313, 1, || fire_from(ship.ptr()));
+        battle::get_mut(ship.id).state_flags &= !(APPEARING as u16);
+        battle::get_mut(near.id).life = 0;
+        let h = with_rng(313, 1, || fire_from(ship.id)).unwrap();
         assert_eq!(
-            velocity(&(*battle::element(h)).velocity),
+            velocity(&battle::get(h).velocity),
             bolt_velocity(0, 0, random)
         );
         battle_context::dispose(h);
@@ -460,7 +463,7 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
 #[test]
 fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_target() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let _battle = Battle::new(16);
             let ship =
                 Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -469,12 +472,12 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
             let mut cached =
                 Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
             at(&mut cached, 6000, 4000);
-            let h = fire_from(ship.ptr());
-            let parent = battle::element(h);
-            (*parent).current.location = Point { x: 4000, y: 4000 };
-            (*parent).next.location = Point { x: 4100, y: 4200 };
-            (*parent).turn = 4;
-            (*prim(parent)).color = Color {
+            let h = fire_from(ship.id).unwrap();
+            let parent = h;
+            battle::get_mut(parent).current.location = Point { x: 4000, y: 4000 };
+            battle::get_mut(parent).next.location = Point { x: 4100, y: 4200 };
+            battle::get_mut(parent).turn = 4;
+            battle::prim_mut(parent).color = Color {
                 r: 3,
                 g: 77,
                 b: 129,
@@ -489,55 +492,59 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
             ] {
                 at(&mut enemy, 4000 + dx, 4000 + dy);
                 cached.descriptor_mut().ship_info.crew_level = 0;
-                (*parent).velocity.travel_angle = angle;
-                (*parent).target = None;
+                battle::get_mut(parent).velocity.travel_angle = angle;
+                battle::get_mut(parent).target = None;
                 let (random, _) = randoms(77);
-                let child_h = with_rng(77, if delta == 8 { 2 } else { 1 }, || fire_from(parent));
-                let child = battle::element(child_h);
+                let child_h =
+                    with_rng(77, if delta == 8 { 2 } else { 1 }, || fire_from(parent)).unwrap();
+                let child = child_h;
                 assert_eq!(
-                    velocity(&(*child).velocity),
+                    velocity(&battle::get(child).velocity),
                     bolt_velocity(angle, delta, random),
                     "angle {angle}, delta {delta}"
                 );
-                assert_eq!(rgba((*prim(child)).color), (3, 77, 129, 43));
-                assert_eq!((*child).turn, 3);
-                assert_eq!((*child).parent, (*parent).parent);
+                assert_eq!(rgba(battle::prim(child).color), (3, 77, 129, 43));
+                assert_eq!(battle::get(child).turn, 3);
+                assert_eq!(battle::get(child).parent, battle::get(parent).parent);
                 assert_eq!(
-                    ((*child).current.location.x, (*child).current.location.y),
+                    (
+                        battle::get(child).current.location.x,
+                        battle::get(child).current.location.y
+                    ),
                     (4100, 4200)
                 );
-                assert_eq!((*parent).target, Some(battle::id((enemy.handle).cast())));
+                assert_eq!(battle::get(parent).target, Some(enemy.id));
                 battle_context::dispose(child_h);
             }
             // A child with a cached target uses that target even if a nearer ship exists.
             cached.descriptor_mut().ship_info.crew_level = 12;
             at(&mut enemy, 4000, 3999);
-            (*parent).velocity.travel_angle = 1;
-            (*parent).target = Some(battle::id((cached.handle).cast()));
+            battle::get_mut(parent).velocity.travel_angle = 1;
+            battle::get_mut(parent).target = Some(cached.id);
             let (random, _) = randoms(99);
-            let child_h = with_rng(99, 1, || fire_from(parent));
-            assert_eq!((*parent).target, Some(battle::id((cached.handle).cast())));
+            let child_h = with_rng(99, 1, || fire_from(parent)).unwrap();
+            assert_eq!(battle::get(parent).target, Some(cached.id));
             assert_eq!(
-                velocity(&(*battle::element(child_h)).velocity),
+                velocity(&battle::get(child_h).velocity),
                 bolt_velocity(1, 4, random)
             );
             battle_context::dispose(child_h);
             // A dead cached target is cleared without starting a fresh queue scan.
             cached.descriptor_mut().ship_info.crew_level = 0;
-            (*parent).target = Some(battle::id((cached.handle).cast()));
-            let child_h = with_rng(99, 1, || fire_from(parent));
-            assert!((*parent).target.is_none());
+            battle::get_mut(parent).target = Some(cached.id);
+            let child_h = with_rng(99, 1, || fire_from(parent)).unwrap();
+            assert!(battle::get(parent).target.is_none());
             assert_eq!(
-                velocity(&(*battle::element(child_h)).velocity),
+                velocity(&battle::get(child_h).velocity),
                 bolt_velocity(1, -1, random)
             );
             battle_context::dispose(child_h);
             enemy.descriptor_mut().ship_info.crew_level = 0;
-            (*parent).turn = 0;
-            let child_h = with_rng(99, 1, || fire_from(parent));
-            assert_eq!((*battle::element(child_h)).turn, 255);
+            battle::get_mut(parent).turn = 0;
+            let child_h = with_rng(99, 1, || fire_from(parent)).unwrap();
+            assert_eq!(battle::get(child_h).turn, 255);
             assert_eq!(
-                velocity(&(*battle::element(child_h)).velocity),
+                velocity(&battle::get(child_h).velocity),
                 bolt_velocity(1, -1, random)
             );
             battle_context::dispose(child_h);
@@ -548,36 +555,39 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
 
 #[test]
 fn lightning_postprocess_extends_chains_until_zero_or_collision() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         ship.ship_mut().weapon_counter = 8;
-        let h = fire_from(ship.ptr());
+        let h = fire_from(ship.id).unwrap();
         battle::put(h);
-        let mut parent = battle::element(h);
+        let mut parent = h;
         for wait in (0..8).rev() {
-            (*parent).next = (*parent).current.clone();
+            battle::get_mut(parent).next = battle::get(parent).current.clone();
             let before = queue_len();
             with_rng(56, 1, || {
-                hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
+                hooks::invoke_element(battle::get(parent).postprocess_func.unwrap(), parent)
             });
             assert_eq!(queue_len(), before + 1);
-            let child = battle::element(battle::tail());
+            let child = battle::tail().unwrap();
             assert_ne!(child, parent);
-            assert_eq!((*child).turn, wait);
-            assert_eq!(rgba((*prim(child)).color), rgba((*prim(parent)).color));
+            assert_eq!(battle::get(child).turn, wait);
+            assert_eq!(
+                rgba(battle::prim(child).color),
+                rgba(battle::prim(parent).color)
+            );
             parent = child;
         }
         let before = queue_len();
         with_rng(56, 0, || {
-            hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
+            hooks::invoke_element(battle::get(parent).postprocess_func.unwrap(), parent)
         });
         assert_eq!(queue_len(), before);
-        (*parent).turn = 5;
-        (*parent).state_flags |= COLLISION as u16;
+        battle::get_mut(parent).turn = 5;
+        battle::get_mut(parent).state_flags |= COLLISION as u16;
         with_rng(56, 0, || {
-            hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
+            hooks::invoke_element(battle::get(parent).postprocess_func.unwrap(), parent)
         });
         assert_eq!(queue_len(), before);
     })
@@ -585,56 +595,56 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
 
 #[test]
 fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(2);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         ship.ship_mut().weapon_counter = 8;
-        let h = fire_from(ship.ptr());
+        let h = fire_from(ship.id).unwrap();
         battle::put(h);
-        let parent = battle::element(h);
-        assert!(with_rng(7, 0, || fire_from(ship.ptr())).is_null());
+        let parent = h;
+        assert!(with_rng(7, 0, || fire_from(ship.id)).is_none());
         with_rng(7, 0, || {
-            hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
+            hooks::invoke_element(battle::get(parent).postprocess_func.unwrap(), parent)
         });
-        assert_eq!({ battle::tail() }, h);
+        assert_eq!({ battle::tail() }, Some(h));
         with_rng(7, 0, || ship.postprocess());
-        assert_eq!({ battle::tail() }, h);
+        assert_eq!({ battle::tail() }, Some(h));
     })
 }
 
 #[test]
 fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_collision() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
-        let h = fire_from(ship.ptr());
-        let beam = battle::element(h);
-        let collide = (*beam).collision_func.unwrap();
+        let h = fire_from(ship.id).unwrap();
+        let beam = h;
+        let collide = battle::get(beam).collision_func.unwrap();
         let mut pa = Point { x: 10, y: 20 };
         let mut pb = Point { x: 30, y: 40 };
-        let mut target = PoolElement::new();
-        target.life = 2;
-        target.hits = 3;
-        target.mass = 2;
-        target.state_flags = FINITE_LIFE as u16;
+        let target = PoolElement::new();
+        battle::get_mut(target.id).life = 2;
+        battle::get_mut(target.id).hits = 3;
+        battle::get_mut(target.id).mass = 2;
+        battle::get_mut(target.id).state_flags = FINITE_LIFE as u16;
         with_rng(13, 0, || {
-            hooks::invoke_collision_pointer(
-                collide,
-                beam,
-                &mut pa,
-                &mut *target,
-                &mut pb,
-                hooks::CollisionCall::Hook,
-            )
+            hooks::invoke_collision(collide, beam, &mut pa, target.id, &mut pb)
         });
-        assert_eq!(target.hits, 2, "generic weapon damage applied");
-        assert_ne!((*beam).state_flags & (COLLISION | NONSOLID) as u16, 0);
-        assert_eq!((*beam).hits, 0);
-        assert_eq!((*beam).life, 0);
         assert_eq!(
-            (*beam).state_flags & DISAPPEARING as u16,
+            battle::get(target.id).hits,
+            2,
+            "generic weapon damage applied"
+        );
+        assert_ne!(
+            battle::get(beam).state_flags & (COLLISION | NONSOLID) as u16,
+            0
+        );
+        assert_eq!(battle::get(beam).hits, 0);
+        assert_eq!(battle::get(beam).life, 0);
+        assert_eq!(
+            battle::get(beam).state_flags & DISAPPEARING as u16,
             0,
             "line prims do not disappear"
         );
@@ -642,24 +652,17 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
         for counter in [0u8, 1, 8, 9, 16, 17, 255] {
             for wait in [0u8, 1, 8, 255] {
                 ship.ship_mut().weapon_counter = counter;
-                (*beam).turn = wait;
+                battle::get_mut(beam).turn = wait;
                 let folded = if counter > 8 {
                     17u8.wrapping_sub(counter)
                 } else {
                     counter
                 };
                 with_rng(13, 0, || {
-                    hooks::invoke_collision_pointer(
-                        collide,
-                        beam,
-                        &mut pa,
-                        &mut *target,
-                        &mut pb,
-                        hooks::CollisionCall::Hook,
-                    )
+                    hooks::invoke_collision(collide, beam, &mut pa, target.id, &mut pb)
                 });
                 assert_eq!(ship.ship_mut().weapon_counter, folded.wrapping_sub(wait));
-                assert_eq!((*beam).turn, 0);
+                assert_eq!(battle::get(beam).turn, 0);
                 assert_eq!(
                     { battle::tail() },
                     tail,
@@ -673,7 +676,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
 
 #[test]
 fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -685,8 +688,8 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
             assert_eq!(queue_len(), before + usize::from(emits));
             if emits {
                 assert_eq!(
-                    (*battle::element(battle::tail())).parent,
-                    (*ship.ptr()).parent
+                    battle::get(battle::tail().unwrap()).parent,
+                    battle::get(ship.id).parent
                 );
             }
             assert_eq!(ship.ship_mut().weapon_counter, counter);
@@ -696,7 +699,7 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
 
 #[test]
 fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_frame() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -714,26 +717,26 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
             ship.ship_mut().ship_facing = initial;
             ship.ship_mut().old_status_flags = old as u16;
             ship.ship_mut().cur_status_flags = (current | SHIP_IN_GRAVITY_WELL) as u16;
-            (*ship.ptr()).state_flags = PLAYER_SHIP as u16;
-            (*ship.ptr()).turn = turn_wait;
-            (*ship.ptr()).thrust = thrust_wait;
-            (*ship.ptr()).velocity = mem::zeroed();
-            (*ship.ptr()).current.image.frame = ship.frame(0, 3);
-            (*ship.ptr()).next.image.frame = ship.frame(0, 15);
+            battle::get_mut(ship.id).state_flags = PLAYER_SHIP as u16;
+            battle::get_mut(ship.id).turn = turn_wait;
+            battle::get_mut(ship.id).thrust = thrust_wait;
+            battle::get_mut(ship.id).velocity = VelocityDesc::new();
+            battle::get_mut(ship.id).current.image.frame = ship.frame(0, 3);
+            battle::get_mut(ship.id).next.image.frame = ship.frame(0, 15);
             with_rng(64, 0, || ship.preprocess());
             assert_eq!(ship.ship_mut().ship_facing, facing);
             assert_eq!(
-                (*ship.ptr()).turn,
+                battle::get(ship.id).turn,
                 if turn_wait == 0 { 1 } else { turn_wait }
             );
             assert_eq!(
-                (*ship.ptr()).thrust,
+                battle::get(ship.id).thrust,
                 if thrust_wait == 0 { 1 } else { thrust_wait }
             );
-            assert_eq!(((*ship.ptr()).next.image.frame.raw()).index(), 0);
-            assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
+            assert_eq!((battle::get(ship.id).next.image.frame.raw()).index(), 0);
+            assert_ne!(battle::get(ship.id).state_flags & CHANGING as u16, 0);
             if thrust_wait == 0 {
-                assert_eq!(velocity(&(*ship.ptr()).velocity), vector(60, facing));
+                assert_eq!(velocity(&battle::get(ship.id).velocity), vector(60, facing));
                 assert_ne!(
                     ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16,
                     0
@@ -743,7 +746,7 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
                     0
                 );
             } else {
-                assert_eq!(velocity(&(*ship.ptr()).velocity), [0; 9]);
+                assert_eq!(velocity(&battle::get(ship.id).velocity), [0; 9]);
                 assert_ne!(
                     ship.ship_mut().cur_status_flags & SHIP_IN_GRAVITY_WELL as u16,
                     0
@@ -752,33 +755,33 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
         }
         ship.descriptor_mut().characteristics.turn_wait = 255;
         ship.descriptor_mut().characteristics.thrust_wait = 255;
-        (*ship.ptr()).turn = 0;
-        (*ship.ptr()).thrust = 0;
+        battle::get_mut(ship.id).turn = 0;
+        battle::get_mut(ship.id).thrust = 0;
         ship.preprocess();
-        assert_eq!((*ship.ptr()).turn, 0);
-        assert_eq!((*ship.ptr()).thrust, 0);
+        assert_eq!(battle::get(ship.id).turn, 0);
+        assert_eq!(battle::get(ship.id).thrust, 0);
         for flags in [APPEARING, NONSOLID, APPEARING | NONSOLID] {
-            (*ship.ptr()).state_flags = flags as u16;
+            battle::get_mut(ship.id).state_flags = flags as u16;
             let facing = ship.ship_mut().ship_facing;
-            let frame = (*ship.ptr()).next.image.frame.raw();
-            let v = velocity(&(*ship.ptr()).velocity);
+            let frame = battle::get(ship.id).next.image.frame.raw();
+            let v = velocity(&battle::get(ship.id).velocity);
             with_rng(64, 0, || ship.preprocess());
             assert_eq!(ship.ship_mut().ship_facing, facing);
-            assert_eq!((*ship.ptr()).next.image.frame.raw(), frame);
-            assert_eq!(velocity(&(*ship.ptr()).velocity), v);
-            assert_eq!((*ship.ptr()).state_flags, flags as u16);
+            assert_eq!(battle::get(ship.id).next.image.frame.raw(), frame);
+            assert_eq!(velocity(&battle::get(ship.id).velocity), v);
+            assert_eq!(battle::get(ship.id).state_flags, flags as u16);
         }
     })
 }
 
 #[test]
 fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_boundaries() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         ship.ship_mut().cur_status_flags = SPECIAL as u16;
-        (*ship.ptr()).state_flags |= COLLISION as u16;
+        battle::get_mut(ship.id).state_flags |= COLLISION as u16;
         let mut objects = Vec::new();
         let mut fixtures = Vec::new();
         for (flags, mass, dx, dy, harvest) in [
@@ -798,26 +801,30 @@ fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_bound
             (0, 1, 55 * 4, -55 * 4, true),
             (0, 1, 56 * 4, 56 * 4, false),
         ] {
-            let mut fixture = junk(&ship, dx, dy, flags as u16, mass);
-            objects.push((&raw mut *fixture, harvest));
+            let fixture = junk(&ship, dx, dy, flags as u16, mass);
+            objects.push((fixture.id, harvest));
             fixtures.push(fixture);
         }
-        let mut owned_fixture = junk(&ship, 0, 0, 0, 1);
-        let owned = &raw mut *owned_fixture;
-        (*owned).player_nr = 0;
+        let owned_fixture = junk(&ship, 0, 0, 0, 1);
+        let owned = owned_fixture.id;
+        battle::get_mut(owned).player_nr = 0;
         objects.push((owned, false));
-        let mut foreign_fixture = junk(&ship, 0, 0, 0, 1);
-        let foreign = &raw mut *foreign_fixture;
-        (*foreign).player_nr = 1;
+        let foreign_fixture = junk(&ship, 0, 0, 0, 1);
+        let foreign = foreign_fixture.id;
+        battle::get_mut(foreign).player_nr = 1;
         objects.push((foreign, false));
         ship.descriptor_mut().ship_info.energy_level = 3;
         with_rng(11, 0, || ship.postprocess());
         for (e, harvest) in objects {
-            assert_eq!((*e).life, if harvest { 0 } else { 50 });
+            assert_eq!(battle::get(e).life, if harvest { 0 } else { 50 });
             if harvest {
-                assert_ne!((*e).state_flags & NONSOLID as u16, 0);
+                assert_ne!(battle::get(e).state_flags & NONSOLID as u16, 0);
             }
-            assert_eq!((*e).hits, 10, "harvesting changes life, not hit points");
+            assert_eq!(
+                battle::get(e).hits,
+                10,
+                "harvesting changes life, not hit points"
+            );
         }
         assert_eq!(ship.descriptor_mut().ship_info.energy_level, 20);
         assert_eq!(ship.ship_mut().energy_counter, 10);
@@ -827,7 +834,7 @@ fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_bound
 
 #[test]
 fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_macro() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         for (ship_flags, obj_flags, same_parent, ship_mass, obj_mass, harvest) in [
             (IGNORE_SIMILAR, IGNORE_SIMILAR, true, 1, 1, false),
             (IGNORE_SIMILAR, IGNORE_SIMILAR, false, 1, 1, true),
@@ -841,15 +848,15 @@ fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_ma
             let mut ship =
                 Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
-            (*ship.ptr()).state_flags |= ship_flags as u16;
-            (*ship.ptr()).mass = ship_mass;
-            let mut e_fixture = junk(&ship, 0, 0, obj_flags as u16, obj_mass);
-            let e = &raw mut *e_fixture;
+            battle::get_mut(ship.id).state_flags |= ship_flags as u16;
+            battle::get_mut(ship.id).mass = ship_mass;
+            let e_fixture = junk(&ship, 0, 0, obj_flags as u16, obj_mass);
+            let e = e_fixture.id;
             if same_parent {
-                (*e).parent = (*ship.ptr()).parent;
+                battle::get_mut(e).parent = battle::get(ship.id).parent;
             }
             with_rng(2, 0, || ship.postprocess());
-            assert_eq!((*e).life == 0, harvest);
+            assert_eq!(battle::get(e).life == 0, harvest);
             assert_eq!(
                 ship.ship_mut().special_counter,
                 if harvest { 20 } else { 0 }
@@ -861,7 +868,7 @@ fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_ma
 #[test]
 fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
     battle_context::run(|_| {
-        unsafe {
+        {
             let _battle = Battle::new(16);
             let mut ship =
                 Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -870,8 +877,8 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
                 (true, 1, 0, false),
                 (true, 0, 20, true),
             ] {
-                let mut e_fixture = junk(&ship, 0, 0, 0, 1);
-                let e = &raw mut *e_fixture;
+                let e_fixture = junk(&ship, 0, 0, 0, 1);
+                let e = e_fixture.id;
                 ship.ship_mut().cur_status_flags = if key { SPECIAL as u16 } else { 0 };
                 ship.ship_mut().special_counter = counter;
                 ship.descriptor_mut().ship_info.energy_level = energy;
@@ -882,7 +889,7 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
                     special_hooks::count(&observation::drain(), "slylandro"),
                     usize::from(harvest)
                 );
-                assert_eq!((*e).life == 0, harvest);
+                assert_eq!(battle::get(e).life == 0, harvest);
                 assert_eq!(
                     ship.ship_mut().special_counter,
                     if harvest { 20 } else { counter }
@@ -892,7 +899,7 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
                     if harvest { 20 } else { energy }
                 );
                 // Exclude this object from later cases.
-                (*e).state_flags |= NONSOLID as u16;
+                battle::get_mut(e).state_flags |= NONSOLID as u16;
             }
             ship.ship_mut().special_counter = 0;
             ship.descriptor_mut().ship_info.energy_level = 0;
@@ -901,12 +908,12 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 0);
             at(&mut ship, -32760, 4000);
-            let mut e_fixture = junk(&ship, 0, 0, 0, 1);
-            let e = &raw mut *e_fixture;
-            (*e).next.location.x = 32760;
+            let e_fixture = junk(&ship, 0, 0, 0, 1);
+            let e = e_fixture.id;
+            battle::get_mut(e).next.location.x = 32760;
             ship.postprocess();
             assert_eq!(
-                (*e).life,
+                battle::get(e).life,
                 0,
                 "subtraction truncates to i16 before absolute value"
             );
@@ -916,16 +923,16 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
 
 #[test]
 fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let enemy = Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
-        let mut concerns: [EvaluateRecord; 5] = mem::zeroed();
-        concerns[0].object_ptr = enemy.ptr();
-        concerns[2].object_ptr = enemy.ptr();
-        concerns[4].object_ptr = enemy.ptr();
-        for (activity, turns, energy, special_turns, move_state, expected_move) in [
+        let mut concerns: [Concern; 5] = [Concern::default(); 5];
+        concerns[0].object = Some(enemy.id);
+        concerns[2].object = Some(enemy.id);
+        concerns[4].object = Some(enemy.id);
+        for (activity, turns, energy, special_turns, movement, expected_move) in [
             (0, 6, 19, 14, MOVEMENT_STATE_PURSUE, MOVEMENT_STATE_ENTICE),
             (0, 7, 19, 15, MOVEMENT_STATE_PURSUE, MOVEMENT_STATE_PURSUE),
             (
@@ -941,14 +948,14 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
         ] {
             crate::battle_context::with(|cx| cx.world.set_activity(activity));
             concerns[0].which_turn = turns;
-            concerns[0].move_state = move_state;
-            concerns[2].object_ptr = enemy.ptr();
+            concerns[0].movement = movement;
+            concerns[2].object = Some(enemy.id);
             concerns[4].which_turn = special_turns;
             ship.descriptor_mut().ship_info.energy_level = energy;
             ship.ship_mut().ship_input_state = (WEAPON | SPECIAL) as u8;
-            (*ship.ptr()).thrust = 255;
+            battle::get_mut(ship.id).thrust = 255;
             with_rng(17, 0, || think(&mut ship, &mut concerns, 0));
-            assert_eq!(concerns[0].move_state, expected_move);
+            assert_eq!(concerns[0].movement, expected_move);
             assert_eq!(
                 ship.ship_mut().ship_input_state & WEAPON as u8 != 0,
                 turns <= 14
@@ -958,13 +965,13 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
                 energy < 20 && special_turns <= 14
             );
             assert_eq!(
-                concerns[2].object_ptr.is_null(),
+                concerns[2].object.is_none(),
                 activity as u8 == IN_ENCOUNTER as u8
             );
-            assert_eq!((*ship.ptr()).thrust, 255);
+            assert_eq!(battle::get(ship.id).thrust, 255);
         }
-        concerns[0].object_ptr = ptr::null_mut();
-        concerns[4].object_ptr = ptr::null_mut();
+        concerns[0].object = None;
+        concerns[4].object = None;
         ship.ship_mut().ship_input_state = (SPECIAL | WEAPON) as u8;
         with_rng(17, 0, || think(&mut ship, &mut concerns, 0));
         assert_eq!(
@@ -976,16 +983,16 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
 
 #[test]
 fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresses_thrust() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
-        let mut e_fixture = junk(&ship, 1000, 0, 0, 1);
-        let e = &raw mut *e_fixture;
-        let mut concerns: [EvaluateRecord; 5] = mem::zeroed();
-        concerns[4].object_ptr = e;
+        let e_fixture = junk(&ship, 1000, 0, 0, 1);
+        let e = e_fixture.id;
+        let mut concerns: [Concern; 5] = [Concern::default(); 5];
+        concerns[4].object = Some(e);
         concerns[4].which_turn = 10;
-        concerns[4].move_state = MOVEMENT_STATE_PURSUE;
+        concerns[4].movement = MOVEMENT_STATE_PURSUE;
         for (energy, cooldown, gravity, turns) in [
             (0, 0, false, true),
             (1, 0, false, false),
@@ -996,14 +1003,14 @@ fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresse
             ship.ship_mut().special_counter = cooldown;
             ship.ship_mut().ship_input_state = 0;
             ship.ship_mut().ship_facing = 0;
-            (*ship.ptr()).turn = 0;
-            (*ship.ptr()).thrust = 0;
-            concerns[3].object_ptr = if gravity { e } else { ptr::null_mut() };
+            battle::get_mut(ship.id).turn = 0;
+            battle::get_mut(ship.id).thrust = 0;
+            concerns[3].object = if gravity { Some(e) } else { None };
             with_rng(8, 0, || think(&mut ship, &mut concerns, 0));
             assert_eq!(ship.ship_mut().ship_input_state & RIGHT as u8 != 0, turns);
             assert_eq!(ship.ship_mut().ship_facing, if turns { 1 } else { 0 });
             assert_eq!(ship.ship_mut().ship_input_state & THRUST as u8, 0);
-            assert_eq!((*ship.ptr()).thrust, 0);
+            assert_eq!(battle::get(ship.id).thrust, 0);
             assert_eq!(
                 ship.ship_mut().ship_input_state & SPECIAL as u8,
                 SPECIAL as u8
@@ -1014,22 +1021,18 @@ fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresse
 
 #[test]
 fn native_ai_preserves_fifth_concern_and_expands_active_count() {
-    // SAFETY: battle_context serializes the pool, ship, and loaded fixture resources.
-    battle_context::run(|_| unsafe {
-        use uqm_rust::engine::battle::{Concern, Concerns};
+    battle_context::run(|_| {
+        use uqm_engine::battle::{Concern, Concerns};
         let battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
-        let mut debris = junk(&ship, 1000, 0, 0, 1);
-        let debris = &raw mut *debris;
+        let debris = junk(&ship, 1000, 0, 0, 1);
+        let debris = debris.id;
         ship.descriptor_mut().ship_info.energy_level = 0;
         ship.ship_mut().special_counter = 0;
         with_rng(8, 0, || {
             crate::battle_context::with(|cx| {
-                let junk_id = cx
-                    .elements()
-                    .id(std::ptr::NonNull::new(debris.cast()))
-                    .unwrap();
+                let junk_id = debris;
                 let mut concerns = Concerns {
                     subject: cx.weapon_origin(ship.id),
                     objects: [Concern {
@@ -1059,45 +1062,37 @@ fn native_ai_preserves_fifth_concern_and_expands_active_count() {
 
 #[test]
 fn shared_ai_turns_toward_a_ship_without_applying_generic_thrust() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let mut enemy =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut enemy, 5000, 4000);
-        let mut concerns: [EvaluateRecord; 5] = mem::zeroed();
-        concerns[0].object_ptr = enemy.ptr();
-        concerns[0].move_state = MOVEMENT_STATE_PURSUE;
+        let mut concerns: [Concern; 5] = [Concern::default(); 5];
+        concerns[0].object = Some(enemy.id);
+        concerns[0].movement = MOVEMENT_STATE_PURSUE;
         concerns[0].which_turn = 10;
         ship.descriptor_mut().ship_info.energy_level = 1;
-        let before = velocity(&(*ship.ptr()).velocity);
+        let before = velocity(&battle::get(ship.id).velocity);
         with_rng(71, 0, || think(&mut ship, &mut concerns, 1));
         assert_eq!(ship.ship_mut().ship_facing, 1);
         assert_ne!(ship.ship_mut().ship_input_state & RIGHT as u8, 0);
         assert_eq!(ship.ship_mut().ship_input_state & THRUST as u8, 0);
-        assert_eq!((*ship.ptr()).thrust, 0);
-        assert_eq!(velocity(&(*ship.ptr()).velocity), before);
+        assert_eq!(battle::get(ship.id).thrust, 0);
+        assert_eq!(velocity(&battle::get(ship.id).velocity), before);
     })
 }
 
-unsafe fn at(ship: &mut Ship<'_>, x: i16, y: i16) {
+fn at(ship: &mut Ship<'_>, x: i16, y: i16) {
     ship.element_mut().current.location = Point { x, y };
     ship.element_mut().next.location = Point { x, y };
 }
-unsafe fn fire_from(source: *mut ElementRecord) -> *mut std::ffi::c_void {
-    // SAFETY: the fixture retains the source element in the published battle pool.
-    crate::battle_context::with(|cx| {
-        let source = cx
-            .elements()
-            .id(std::ptr::NonNull::new(source.cast()))
-            .unwrap();
-        uqm_rust::ships::races::lightning_segment(cx, source)
-            .map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast())
-    })
+fn fire_from(source: ElementId) -> Option<ElementId> {
+    crate::battle_context::with(|cx| uqm_content::ships::races::lightning_segment(cx, source))
 }
-unsafe fn think(ship: &mut Ship<'_>, concerns: &mut [EvaluateRecord; 5], count: u16) {
-    ship.intelligence(&mut *ship.ptr(), concerns, count);
+fn think(ship: &mut Ship<'_>, concerns: &mut [Concern; 5], count: u16) {
+    ship.think(ship.id, concerns, count);
 }
 
 #[path = "support/hooks.rs"]

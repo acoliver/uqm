@@ -1,24 +1,26 @@
-use crate::engine::world::MUSIC_DISABLED;
+use uqm_engine::world::MUSIC_DISABLED;
 
 pub(crate) const OPT_PC: i32 = 2;
 const SOUND_DISABLED: u8 = 16;
 pub(crate) const GAME_SOUND_PRIORITY: u8 = 2;
 
-pub fn toggle_music(world: &mut crate::engine::World) {
+pub fn toggle_music(world: &mut uqm_engine::World) {
     world.data.game.glob_flags ^= MUSIC_DISABLED;
-    crate::sound::music::set_requested_enabled(world.data.game.glob_flags & MUSIC_DISABLED == 0);
+    uqm_engine::sound::music::set_requested_enabled(
+        world.data.game.glob_flags & MUSIC_DISABLED == 0,
+    );
 }
 
 pub(crate) fn play_loaded_music(
-    world: &crate::engine::World,
-    music: Option<&crate::sound::resource_types::LoadedMusic>,
+    world: &uqm_engine::World,
+    music: Option<&uqm_engine::sound::resource_types::LoadedMusic>,
     continuous: u32,
     priority: u8,
 ) {
-    let request = music.map_or(crate::sound::music::MusicRequest::Absent, |music| {
-        crate::sound::music::MusicRequest::Track(music.playback())
+    let request = music.map_or(uqm_engine::sound::music::MusicRequest::Absent, |music| {
+        uqm_engine::sound::music::MusicRequest::Track(music.playback())
     });
-    crate::sound::music::remember_music(
+    uqm_engine::sound::music::remember_music(
         request,
         continuous != 0,
         priority,
@@ -26,39 +28,35 @@ pub(crate) fn play_loaded_music(
     );
 }
 pub fn stop_music() {
-    crate::sound::music::stop_requested_music();
+    uqm_engine::sound::music::stop_requested_music();
 }
-pub(crate) fn stop_loaded_music(music: Option<&crate::sound::resource_types::LoadedMusic>) {
-    let request = music.map_or(crate::sound::music::MusicRequest::Absent, |music| {
-        crate::sound::music::MusicRequest::Track(music.playback())
+pub(crate) fn stop_loaded_music(music: Option<&uqm_engine::sound::resource_types::LoadedMusic>) {
+    let request = music.map_or(uqm_engine::sound::music::MusicRequest::Absent, |music| {
+        uqm_engine::sound::music::MusicRequest::Track(music.playback())
     });
-    crate::sound::music::stop_music_request(&request);
+    uqm_engine::sound::music::stop_music_request(&request);
 }
 pub fn resume_music() {
-    crate::sound::music::resume_requested_music();
+    uqm_engine::sound::music::resume_requested_music();
 }
 pub fn pause_music() {
-    crate::sound::music::pause_requested_music();
+    uqm_engine::sound::music::pause_requested_music();
 }
-pub fn toggle_sound_effect(world: &mut crate::engine::World) {
+pub fn toggle_sound_effect(world: &mut uqm_engine::World) {
     world.data.game.glob_flags ^= SOUND_DISABLED;
 }
 
-pub(crate) fn play_menu_failure(kernel: &crate::engine::Kernel, world: &crate::engine::World) {
+pub(crate) fn play_menu_failure(kernel: &uqm_engine::Kernel, world: &uqm_engine::World) {
     play_menu_sound(kernel, world, 2);
 }
 
-pub(crate) fn play_menu_sound(
-    kernel: &crate::engine::Kernel,
-    world: &crate::engine::World,
-    index: u16,
-) {
+pub(crate) fn play_menu_sound(kernel: &uqm_engine::Kernel, world: &uqm_engine::World, index: u16) {
     if let Some(bank) = kernel.menu_sound_bank() {
         play_loaded_sound(
             world,
             &bank.clip(index),
             0,
-            crate::sound::types::SoundPosition::non_positional(),
+            uqm_engine::sound::types::SoundPosition::non_positional(),
             0,
             GAME_SOUND_PRIORITY,
         );
@@ -66,10 +64,10 @@ pub(crate) fn play_menu_sound(
 }
 
 pub fn play_loaded_sound(
-    world: &crate::engine::World,
-    sound: &crate::sound::owned_bank::SoundClip,
+    world: &uqm_engine::World,
+    sound: &uqm_engine::sound::owned_bank::SoundClip,
     channel: usize,
-    position: crate::sound::types::SoundPosition,
+    position: uqm_engine::sound::types::SoundPosition,
     object: usize,
     priority: u8,
 ) {
@@ -87,16 +85,22 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn absent_loaded_music_preserves_options_and_clears_playback() {
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         world.data.game.glob_flags = MUSIC_DISABLED;
         play_loaded_music(&world, None, 1, 3);
-        let (request, continuous, priority) = crate::sound::music::requested_music();
-        assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
+        let (request, continuous, priority) = uqm_engine::sound::music::requested_music();
+        assert!(matches!(
+            request,
+            uqm_engine::sound::music::MusicRequest::Absent
+        ));
         assert_eq!((continuous, priority), (true, 3));
         assert_eq!(world.data.game.glob_flags, MUSIC_DISABLED);
         stop_loaded_music(None);
         stop_battle_music();
-        let (request, _, _) = crate::sound::music::requested_music();
-        assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
+        let (request, _, _) = uqm_engine::sound::music::requested_music();
+        assert!(matches!(
+            request,
+            uqm_engine::sound::music::MusicRequest::Absent
+        ));
     }
 }

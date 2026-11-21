@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::pkunk::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
@@ -85,10 +85,10 @@ mod api {
             )
         }
         fn gift_ships(&mut self) -> u16 {
-            use crate::engine::world::fleet;
+            use uqm_engine::world::fleet;
             let added = fleet::add_escort_ships(
                 self.cx.borrow_mut().world,
-                crate::engine::species::ship::PKUNK_SHIP as u16,
+                uqm_engine::species::ship::PKUNK_SHIP as u16,
                 4,
                 fleet::captain_name,
             );

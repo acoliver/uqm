@@ -4,7 +4,7 @@
 //! independently of ScreenWidth and output/window scaling. No scaled sphere
 //! array is needed. Each routine preserves the C-inactive fields.
 
-use crate::graphics::{geometry::Color, geometry::Point};
+use uqm_engine::graphics::{geometry::Color, geometry::Point};
 
 pub const RADIUS: i32 = 37;
 pub const DIAMETER: usize = (RADIUS * 2 + 1) as usize;

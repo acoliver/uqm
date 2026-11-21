@@ -1,9 +1,10 @@
 //! The typed driver exercises the same nested native input and completion loop.
+#![forbid(unsafe_code)]
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
 use std::{cell::RefCell, rc::Rc};
-use uqm_rust::engine::observe::{
+use uqm_engine::observe::{
     CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
 };
 
@@ -17,7 +18,7 @@ impl Observer for Recording {
     fn input_admitted(
         &mut self,
         view: &InputView,
-        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
     ) -> Injected {
         let campaign = CampaignView::for_input(*view, || CampaignView::capture(cx));
         match view {
@@ -50,7 +51,7 @@ impl Observer for Recording {
         }
     }
 
-    fn simulation(&mut self, _: &uqm_rust::engine::battle::Cx<'_>, boundary: &str) {
+    fn simulation(&mut self, _: &uqm_engine::battle::Cx<'_>, boundary: &str) {
         assert_eq!(boundary, "input-loop");
         self.events.borrow_mut().push("complete");
     }
@@ -65,10 +66,7 @@ impl Observer for Recording {
     }
 }
 
-fn record_hook(
-    emit: &mut dyn FnMut(CheckpointView<'_>),
-    input: &uqm_rust::engine::input::InputControls,
-) {
+fn record_hook(emit: &mut dyn FnMut(CheckpointView<'_>), input: &uqm_engine::input::InputControls) {
     assert_eq!(input.menu_sounds(), (32, 64));
     emit(CheckpointView::InputSampled(HOOK_SAMPLE));
 }
@@ -79,12 +77,12 @@ const HOOK_SAMPLE: u16 = 0x7e57;
 #[test]
 fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_not_update() {
     battle_context::run(|input| {
-        uqm_rust::graphics::state::init_headless(Default::default());
-        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
+        uqm_engine::graphics::state::init_headless(Default::default());
+        input.set_default_menu_repeat(uqm_engine::time::counter_abi::get_time_counter());
         input.set_menu_sounds(32, 64);
         uqm_rust::mainloop::input_abi::set_input_callback(
             input,
-            Some(uqm_rust::engine::input::InputFrameHook::new(record_hook)),
+            Some(uqm_engine::input::InputFrameHook::new(record_hook)),
         );
         let events = Rc::new(RefCell::new(Vec::new()));
         let activities = Rc::new(RefCell::new(Vec::new()));
@@ -131,7 +129,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         });
         assert_eq!(*events.borrow(), ["before"]);
         uqm_rust::mainloop::input_abi::set_input_callback(input, None);
-        uqm_rust::graphics::state::uninit_headless();
+        uqm_engine::graphics::state::uninit_headless();
     });
 }
 
@@ -140,10 +138,10 @@ struct AdmittedFrame {
     admissions: usize,
 }
 
-impl uqm_rust::engine::input::Frame for AdmittedFrame {
+impl uqm_engine::input::Frame for AdmittedFrame {
     fn admit(
         &mut self,
-        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
         io: &mut Io<'_>,
         view: InputView,
     ) -> Injected {
@@ -153,10 +151,10 @@ impl uqm_rust::engine::input::Frame for AdmittedFrame {
             _ => panic!("unexpected mode admission {view:?}"),
         });
         self.admissions += 1;
-        uqm_rust::engine::input::admit_observer(cx, io, view)
+        uqm_engine::input::admit_observer(cx, io, view)
     }
 
-    fn frame(&mut self, _: &mut uqm_rust::engine::battle::Cx<'_>, _: &mut Io<'_>) -> bool {
+    fn frame(&mut self, _: &mut uqm_engine::battle::Cx<'_>, _: &mut Io<'_>) -> bool {
         assert_eq!(self.admissions, 2);
         self.events.borrow_mut().push("mode-frame");
         false
@@ -166,8 +164,8 @@ impl uqm_rust::engine::input::Frame for AdmittedFrame {
 #[test]
 fn mode_owned_frame_admission_keeps_the_native_observer_order() {
     battle_context::run(|input| {
-        uqm_rust::graphics::state::init_headless(Default::default());
-        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
+        uqm_engine::graphics::state::init_headless(Default::default());
+        input.set_default_menu_repeat(uqm_engine::time::counter_abi::get_time_counter());
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
             events: events.clone(),
@@ -198,6 +196,6 @@ fn mode_owned_frame_admission_keeps_the_native_observer_order() {
                 "complete"
             ]
         );
-        uqm_rust::graphics::state::uninit_headless();
+        uqm_engine::graphics::state::uninit_headless();
     });
 }

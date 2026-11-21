@@ -1,13 +1,13 @@
 //! Equipment statistics drawn through retained campaign resources.
 use super::*;
-use crate::graphics::{
-    drawable::ContextFrame, font::FontLease, geometry::Extent, geometry::Point, geometry::Rect,
-    geometry::TextAlign,
-};
 use crate::starbase::ids;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
 use std::ffi::CString;
+use uqm_engine::graphics::{
+    drawable::ContextFrame, font::FontLease, geometry::Extent, geometry::Point, geometry::Rect,
+    geometry::TextAlign,
+};
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
 fn weapon_name(kernel: &Kernel, module: u8) -> CString {
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn equipment_text_preserves_legacy_padding_and_tenths() {
-        let state = crate::engine::Game::new().world.data.flagship;
+        let state = uqm_engine::Game::new().world.data.flagship;
         let stats = crate::ui::flagship_stats::calculate(&state);
         assert_eq!(
             numbers(&stats).map(|text| text.to_bytes().to_vec()),
@@ -168,7 +168,7 @@ mod tests {
         ] {
             strings[ids::FLAGSHIP_STRING_BASE as usize + offset] = label.to_vec();
         }
-        kernel.install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+        kernel.install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             strings,
         ));
         for (module, label) in [

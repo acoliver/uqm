@@ -4,19 +4,19 @@
 //! including C integer promotion and truncation, so battles replay identically.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
         MOVEMENT_STATE_AVOID, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{
         CIRCLE_SHIFT, FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT,
     };
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -70,7 +70,7 @@ pub mod engine {
         (facing & FACING_MASK) as u16
     }
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
         let mut desc = RaceTemplate::default();
         desc.info.ship_flags = FIRES_FORE as u16;
@@ -116,10 +116,8 @@ pub mod engine {
         desc.intelligence.weapon_range = ((MISSILE_SPEED as i32 * MISSILE_LIFE as i32) >> 1) as u16;
         desc.descriptor(&SUPOX)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
-        Concerns, Cx, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
-    };
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{Concerns, Cx, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn};
     pub static SUPOX: Race = Race {
         descriptor,
         preprocess: Some(supox_preprocess),
@@ -140,7 +138,7 @@ pub mod engine {
                 - i32::from(concerns.subject.next.location.x)) as i16;
             let delta_y = (i32::from(cx.element(target).next.location.y)
                 - i32::from(concerns.subject.next.location.y)) as i16;
-            let direction_angle = crate::math::arctan(delta_x, delta_y);
+            let direction_angle = uqm_engine::math::arctan(delta_x, delta_y);
 
             let ship_angle = facing_to_angle(i32::from(cx.ship_state(ss).facing));
             let lined_up = normalize_angle(

@@ -1,7 +1,7 @@
 //! Starbase and Hayes dialogue, ported from the original C script.
 
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use phrases::*;

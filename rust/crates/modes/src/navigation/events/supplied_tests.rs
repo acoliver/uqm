@@ -1,14 +1,14 @@
 use super::*;
-use crate::engine::species::ship::{HUMAN_SHIP, ORZ_SHIP};
-use crate::graphics::geometry::Point;
 use crate::navigation::hyper_units::Geometry;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::ship::{HUMAN_SHIP, ORZ_SHIP};
 
 const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
 const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
 
 fn world() -> World {
     let mut world = World::new();
-    world.story = Some(crate::engine::world::story::StoryState::new());
+    world.story = Some(uqm_engine::world::story::StoryState::new());
     let clock = &mut world.data.game.game_clock;
     clock.year_index = 2155;
     clock.month_index = 2;
@@ -193,7 +193,7 @@ fn victorious_event_postpones_at_samatra_and_after_the_joint_mission() {
         .iter()
         .position(|star| u32::from(star.index) == u32::from(SAMATRA_DEFINED))
         .unwrap();
-    world.current_star = Some(crate::engine::world::StarId(samatra));
+    world.current_star = Some(uqm_engine::world::StarId(samatra));
     world.set_activity(IN_INTERPLANETARY);
     let mut random = || panic!("victory event RNG");
     let mut services = services(&mut random);

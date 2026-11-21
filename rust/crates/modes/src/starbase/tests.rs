@@ -24,7 +24,7 @@ use super::sis_modules::{fuel_bar_layout, ModuleSlots};
 use super::starbase_menu::StarbaseState;
 use super::test_support::{cancel, idle, left, press, right, select, up, Event, RecordingPlatform};
 use super::visit::{entry_time_passage, TimePassage};
-use crate::engine::world::activity::{activity_flags, ActivityValue};
+use uqm_engine::world::activity::{activity_flags, ActivityValue};
 
 fn texts(events: &[Event]) -> Vec<(&str, i16, i16, Align)> {
     events

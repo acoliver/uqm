@@ -1,8 +1,8 @@
 //! Temporary flagship and escort state while rendering a saved-game summary.
 
-use crate::collections::pool::OrderedPool;
-use crate::engine::world::{queues::ShipFragment, SisState};
-use crate::engine::World;
+use uqm_engine::collections::pool::OrderedPool;
+use uqm_engine::world::{queues::ShipFragment, SisState};
+use uqm_engine::World;
 
 pub(super) struct SavedState {
     flagship: SisState,
@@ -25,7 +25,7 @@ impl SavedState {
 
 pub(super) fn with_preview<R>(
     world: &mut World,
-    summary: &crate::engine::save::summary_record::SummaryDesc,
+    summary: &uqm_engine::save::summary_record::SummaryDesc,
     mut random: impl FnMut() -> u32,
     draw: impl FnOnce(&mut World) -> R,
 ) -> R {
@@ -57,20 +57,20 @@ pub(super) fn with_preview<R>(
             .world
             .built_ships()
             .clone_fragment(&template, species, 0, || {
-                crate::ships::queue::pick_captain_name(&mut random)
+                uqm_content::ships::queue::pick_captain_name(&mut random)
             });
     }
     draw(restore.world)
 }
 
 pub(super) fn lander(
-    kernel: &crate::engine::Kernel,
-    summary: &crate::engine::save::summary_record::SummaryDesc,
+    kernel: &uqm_engine::Kernel,
+    summary: &uqm_engine::save::summary_record::SummaryDesc,
 ) {
     if let Some(owner) = &kernel.lander_resources {
         let assets = crate::planet_side::resources::PlanetSideAssets::retain(owner);
         crate::planet_side::init_lander::draw_lander(
-            &crate::graphics::context::ContextLease::require(kernel.radar_context),
+            &uqm_engine::graphics::context::ContextLease::require(kernel.radar_context),
             &assets,
             crate::planet_side::init_lander::LanderStatus::preview(&summary.sis, summary.flags),
         );
@@ -85,7 +85,7 @@ mod tests {
     #[serial_test::serial]
     fn lander_preview_draws_saved_values_without_mutating_the_current_flagship() {
         crate::planet_side::resources::tests::with_packaged_resources(|game| {
-            use crate::graphics::{
+            use uqm_engine::graphics::{
                 context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
                 geometry::Rect,
             };
@@ -99,7 +99,7 @@ mod tests {
                     height: 53,
                 },
             });
-            let mut summary = crate::engine::save::summary_record::SummaryDesc {
+            let mut summary = uqm_engine::save::summary_record::SummaryDesc {
                 sis: game.world.data.flagship,
                 activity: 0,
                 flags: 0,
@@ -116,7 +116,7 @@ mod tests {
             };
             lander(&game.kernel, &summary);
             game.kernel.lander_resources =
-                Some(crate::engine::kernel::lander_resources::LanderResources::load().unwrap());
+                Some(uqm_engine::kernel::lander_resources::LanderResources::load().unwrap());
             let current = game.world.data.flagship;
             let mut saved = current;
             saved.num_landers = 1;
@@ -151,7 +151,7 @@ mod tests {
         world.built_ships().get_mut(original).crew_level = 42;
         world.built_ships().put(original);
         world.data.flagship.crew_enlisted = 17;
-        let mut summary = crate::engine::save::summary_record::SummaryDesc::default();
+        let mut summary = uqm_engine::save::summary_record::SummaryDesc::default();
         summary.sis.crew_enlisted = 9;
         summary.num_ships = 2;
         let mut draws = [4, 4, 5].into_iter();
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn restore_reinstates_the_flagship_and_escorts_without_rewinding_other_state() {
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         world.data.flagship.crew_enlisted = 20;
         let mut ships = world.built_ships();
         let first = ships.alloc().unwrap();

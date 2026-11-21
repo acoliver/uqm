@@ -1,12 +1,13 @@
+#![forbid(unsafe_code)]
 use std::cell::RefCell;
-use uqm_rust::engine::{
+use uqm_engine::{
     battle::{Battle, Cx},
     observe::{Io, Unobserved},
     world::state_file::RANDGRPINFO_FILE,
     Game, StarId,
 };
-use uqm_rust::planets::generate::default::Npcs;
-use uqm_rust::planets::solarsys::site::Site;
+use uqm_modes::planets::generate::default::Npcs;
+use uqm_modes::planets::solarsys::site::Site;
 
 #[test]
 fn solar_host_round_trips_group_order_and_records_in_its_own_state_file() {
@@ -15,8 +16,8 @@ fn solar_host_round_trips_group_order_and_records_in_its_own_state_file() {
     game.world.data.game.game_clock.year_index = 2155;
     game.world.data.game.game_clock.month_index = 2;
     game.world.data.game.game_clock.day_index = 17;
-    let initialize: fn(&mut uqm_rust::engine::World, u32) =
-        uqm_rust::navigation::groups::init_group_info;
+    let initialize: fn(&mut uqm_engine::World, u32) =
+        uqm_modes::navigation::groups::init_group_info;
     initialize(&mut game.world, 1);
     {
         let mut fleets = game.world.avail_races();
@@ -43,13 +44,13 @@ fn solar_host_round_trips_group_order_and_records_in_its_own_state_file() {
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     ));
     let mut observer = Unobserved;
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+    let mut pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
     let mut site = Site::new(&owner, &io, StarId(7), 0, false, &mut pickup, None);
     site.save_ip_groups();
     assert_eq!(

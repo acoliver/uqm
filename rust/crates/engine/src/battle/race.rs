@@ -80,7 +80,7 @@ pub type WeaponOrigin = Subject;
 /// A failed allocation still occupies its original weapon slot.
 pub type WeaponSpawn = Vec<Option<ElementId>>;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Concern {
     pub object: Option<ElementId>,
     pub facing: u16,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::engine::species::conv;
+use uqm_engine::species::conv;
 
 #[test]
 fn conversation_table_preserves_every_first_pass_and_unknown_id() {
@@ -44,7 +44,7 @@ fn conversation_table_preserves_every_first_pass_and_unknown_id() {
 #[serial_test::serial]
 fn host_lifecycle_runs_each_registered_race() {
     crate::comm::with_test_context(|cx| {
-        cx.world.story = Some(crate::engine::world::story::StoryState::new());
+        cx.world.story = Some(uqm_engine::world::story::StoryState::new());
         let mut comm = Comm::new();
         for kind in (0..=25)
             .filter_map(for_conversation)
@@ -76,7 +76,7 @@ fn host_lifecycle_runs_each_registered_race() {
 #[test]
 fn initialization_skips_unknown_ids_without_replacing_the_session() {
     crate::comm::with_test_context(|cx| {
-        cx.world.story = Some(crate::engine::world::story::StoryState::new());
+        cx.world.story = Some(uqm_engine::world::story::StoryState::new());
         let mut comm = Comm::new();
         initialize_conversation(&mut comm, cx, u32::MAX);
         assert!(comm.comm_data().is_none());
@@ -91,7 +91,7 @@ fn initialization_skips_unknown_ids_without_replacing_the_session() {
 #[test]
 fn commander_first_pass_configures_content_before_the_selected_script_pass() {
     crate::comm::with_test_context(|cx| {
-        cx.world.story = Some(crate::engine::world::story::StoryState::new());
+        cx.world.story = Some(uqm_engine::world::story::StoryState::new());
         let mut comm = Comm::new();
         for radios in [0, 1] {
             cx.world

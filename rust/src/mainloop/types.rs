@@ -26,9 +26,7 @@ use std::os::raw::c_int;
 /// @plan PLAN-20260707-MAINLOOP.P03
 pub type CBoolean = c_int;
 
-pub use crate::engine::world::activity::{
-    activity_flags, ActivityFlags, ActivityKind, ActivityValue,
-};
+pub use uqm_engine::world::activity::{activity_flags, ActivityFlags, ActivityKind, ActivityValue};
 
 // ---------------------------------------------------------------------------
 // Unit tests — Tier 1 (pure Rust, no C linkage)

@@ -1,4 +1,5 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;
@@ -8,8 +9,7 @@ mod battle_context;
 #[test]
 fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
     battle_context::run(|_| {
-        let d =
-            battle::descriptor(uqm_rust::engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID);
+        let d = battle::descriptor(uqm_engine::species::species_id::SPECIES_ID_UR_QUAN_PROBE_ID);
         let info = d.ship_info;
         assert_eq!((info.ship_flags, info.ship_cost), (0, 0));
         assert_eq!((info.crew_level, info.max_crew), (1, 1));

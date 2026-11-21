@@ -1,14 +1,14 @@
 use super::*;
-use crate::engine::{
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::{
     battle::{input::InputContext, Battle},
     input::{frames::InputState, Frame, InputControls, InputRuntime},
     observe::{Observer, Unobserved},
     Game,
-};
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
 };
 
 #[derive(Default)]
@@ -79,7 +79,7 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
         },
     };
     context.set_clip(screen);
-    context.set_font(&crate::graphics::font::FontLease::retain(
+    context.set_font(&uqm_engine::graphics::font::FontLease::retain(
         game.kernel.tiny_font.unwrap(),
     ));
     let original_font = context.font_lease().unwrap();
@@ -95,7 +95,7 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
     let mut state = PresentationState::new(
         LoadedTextTable::new(vec![
@@ -215,7 +215,8 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                     height: 240,
                 },
             });
-            let offscreen = crate::graphics::context::LoadedContext::create(c"intro SIS fixture");
+            let offscreen =
+                uqm_engine::graphics::context::LoadedContext::create(c"intro SIS fixture");
             game.kernel.off_screen_context = Some(offscreen.context());
             let driver = Rc::new(Driver::default());
             game.kernel.install_input_runtime(driver.clone());
@@ -232,7 +233,7 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                 &mut battle,
                 &mut game.world,
                 &mut game.kernel,
-                crate::math::random,
+                uqm_engine::math::random,
             );
             let mut state = PresentationState::new(
                 LoadedTextTable::new(vec![
@@ -270,7 +271,7 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                 context.clone(),
                 false,
             );
-            state.fonts[0] = crate::graphics::font::LoadedFont::load(c"fixture.tiny");
+            state.fonts[0] = uqm_engine::graphics::font::LoadedFont::load(c"fixture.tiny");
             assert!(matches!(
                 commands::advance(&mut cx, &mut io, &mut state),
                 commands::Step::Input(true)

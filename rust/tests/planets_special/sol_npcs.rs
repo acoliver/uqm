@@ -1,18 +1,18 @@
 //! Sol's actual ABI against real table queues and in-memory group files.
 
 use super::Harness;
-use uqm_rust::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use uqm_rust::engine::world::queues::IpGroup;
-use uqm_rust::engine::StoryKey;
-use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
-use uqm_rust::planets::generate::special::Story;
-use uqm_rust::state::game_state_keys::get_game_state;
+use uqm_engine::state::game_state_keys::get_game_state;
+use uqm_engine::world::queues::IpGroup;
+use uqm_engine::StoryKey;
+use uqm_modes::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use uqm_modes::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
+use uqm_modes::planets::generate::special::Story;
 
 pub fn check(h: &mut Harness) {
     let keys = [
-        uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
-        uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
-        uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
+        uqm_engine::StoryKey::CHMMR_BOMB_STATE,
+        uqm_engine::StoryKey::PROBE_MESSAGE_DELIVERED,
+        uqm_engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
     ];
     let story = keys.map(|key| crate::battle_context::with(|cx| cx.world.story_state(key)));
     let word = crate::battle_context::with(|cx| cx.world.word(StoryKey::URQUAN_PROBE_GRPOFFS0));
@@ -40,14 +40,14 @@ pub fn check(h: &mut Harness) {
         crate::battle_context::with(|cx| uqm_rust::time::clock_bridge::rust_clock_init(cx.world)),
         0
     );
-    crate::battle_context::with(|cx| uqm_rust::navigation::groups::init_group_info(cx.world, 1));
+    crate::battle_context::with(|cx| uqm_modes::navigation::groups::init_group_info(cx.world, 1));
     h.set_star(0, 0);
     h.state.sys.sun.num_planets = 9;
     let (saved_catalog, saved_star) =
         crate::battle_context::with(|cx| (*cx.world.catalog(), cx.world.current_star));
     crate::battle_context::with(|cx| {
         cx.world.set_catalog(std::borrow::Cow::Borrowed(
-            &uqm_rust::planets::tables::STARMAP_ARRAY,
+            &uqm_modes::planets::tables::STARMAP_ARRAY,
         ));
         let sol = cx
             .world
@@ -55,16 +55,16 @@ pub fn check(h: &mut Harness) {
             .iter()
             .position(|star| star.index == 1)
             .unwrap();
-        cx.world.current_star = Some(uqm_rust::engine::StarId(sol));
+        cx.world.current_star = Some(uqm_engine::StarId(sol));
     });
     crate::battle_context::with(|cx| cx.world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0));
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
+            .set_story_state(uqm_engine::StoryKey::CHMMR_BOMB_STATE, 0)
     });
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
+            .set_story_state(uqm_engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
     });
     assert!(crate::invoke_generation(&mut h.state, |system, host| {
         GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
@@ -93,9 +93,9 @@ pub fn check(h: &mut Harness) {
     assert_eq!((group.loc.x, group.loc.y, group.group_counter), (0, 0, 0));
     let file = || {
         crate::battle_context::with(|cx| {
-            uqm_rust::state::ffi::with_state_files(cx.world, |files| {
+            uqm_engine::state::ffi::with_state_files(cx.world, |files| {
                 files
-                    .get_file(uqm_rust::engine::world::state_file::DEFGRPINFO_FILE)
+                    .get_file(uqm_engine::world::state_file::DEFGRPINFO_FILE)
                     .unwrap()
                     .contents()
                     .to_vec()
@@ -152,7 +152,7 @@ pub fn check(h: &mut Harness) {
     assert_eq!(probe.dest_loc, 0);
     crate::battle_context::with(|cx| {
         cx.world
-            .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
+            .set_story_state(uqm_engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
     assert!(crate::invoke_generation(&mut h.state, |system, host| {
         GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
@@ -168,12 +168,12 @@ pub fn check(h: &mut Harness) {
             cx.world.set_activity(activity);
             cx.world.encounter_group = 17;
             cx.world
-                .set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
+                .set_story_state(uqm_engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
         });
         assert!(crate::invoke_generation(&mut h.state, |view, host| {
             GENERATE_SOL_FUNCTIONS.generate_orbital(
                 view,
-                uqm_rust::engine::world::generation::Body::Moon { planet: 2, moon: 0 },
+                uqm_engine::world::generation::Body::Moon { planet: 2, moon: 0 },
                 host,
             )
         }));
@@ -184,7 +184,7 @@ pub fn check(h: &mut Harness) {
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
                 cx.world,
-                uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA
+                uqm_engine::StoryKey::GLOBAL_FLAGS_AND_DATA
             )),
             255
         );
@@ -205,7 +205,7 @@ pub fn check(h: &mut Harness) {
         cx.world.set_catalog(std::borrow::Cow::Owned(saved_catalog));
         cx.world.current_star = saved_star;
     });
-    crate::battle_context::with(|cx| uqm_rust::navigation::groups::uninit_group_info(cx.world));
+    crate::battle_context::with(|cx| uqm_modes::navigation::groups::uninit_group_info(cx.world));
     assert_ne!(
         crate::battle_context::with(|cx| uqm_rust::time::clock_bridge::rust_clock_uninit(cx.world)),
         0
@@ -222,4 +222,4 @@ pub fn check(h: &mut Harness) {
     println!("Sol NPC ABI: real probe file creation/reload/persistence, queue init/uninit/reinit, starbase save/reset, abort/load bits retained");
 }
 
-use uqm_rust::planets::generate::SystemGenerator;
+use uqm_modes::planets::generate::SystemGenerator;

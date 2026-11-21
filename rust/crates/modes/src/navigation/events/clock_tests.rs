@@ -2,16 +2,16 @@
 //! the status line is redrawn as days pass.
 
 use super::{add_event, advance_days, game_clock_tick};
-use crate::engine::{
+use uqm_engine::time::clock_abi::schedule_event;
+use uqm_engine::{
     battle::{Battle, Cx},
     clock::ARILOU_UMGAH_CHECK,
     Game, StoryKey, World,
 };
-use crate::time::clock_abi::schedule_event;
 
 fn world() -> World {
     let mut world = World::new();
-    world.story = Some(crate::engine::world::story::StoryState::new());
+    world.story = Some(uqm_engine::world::story::StoryState::new());
     world.data.game.game_clock.year_index = 2156;
     world.data.game.game_clock.month_index = 2;
     world.data.game.game_clock.day_index = 28;
@@ -73,10 +73,10 @@ fn supplied_day_passage_and_tick_dispatch_with_real_status_drawing() {
         assert_eq!(cx.world.data.game.game_clock.tick_count, 2);
         assert_eq!(cx.world.clock.events_ref().count(), 0);
     }
-    let context = crate::graphics::context::ContextLease::require(game.kernel.status_context);
+    let context = uqm_engine::graphics::context::ContextLease::require(game.kernel.status_context);
     context.flush();
-    let frame = crate::graphics::drawable::ContextFrame::retain(game.kernel.screen);
-    let pixel = frame.pixel(crate::graphics::geometry::Point { x: 2, y: 130 });
+    let frame = uqm_engine::graphics::drawable::ContextFrame::retain(game.kernel.screen);
+    let pixel = frame.pixel(uqm_engine::graphics::geometry::Point { x: 2, y: 130 });
     assert_eq!((pixel.r, pixel.g, pixel.b), (0, 66, 0));
     display.finish(game);
 }
@@ -88,7 +88,7 @@ fn scheduling_dispatches_immediate_events_even_when_the_pool_is_full() {
     let mut dispatch = super::dispatcher((320, 240), &mut random);
     assert!(schedule_event(&mut world, &mut dispatch, 0, 2, 27, 2156, 99).is_none());
     assert_eq!(world.clock.events_ref().count(), 0);
-    for selector in 0..crate::engine::clock::NUM_EVENTS {
+    for selector in 0..uqm_engine::clock::NUM_EVENTS {
         assert!(schedule_event(&mut world, &mut dispatch, 1, 0, 1, 0, selector as u8).is_some());
     }
     assert!(schedule_event(&mut world, &mut dispatch, 1, 0, 1, 0, 99).is_none());
@@ -105,6 +105,6 @@ fn scheduling_dispatches_immediate_events_even_when_the_pool_is_full() {
     assert_eq!(world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
     assert_eq!(
         world.clock.events_ref().count(),
-        crate::engine::clock::NUM_EVENTS
+        uqm_engine::clock::NUM_EVENTS
     );
 }

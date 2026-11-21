@@ -3,14 +3,14 @@
 use super::{
     generate_planets, init_npcs, reinit_npcs, uninit_npcs, ShofixtiSite, METAL_WORLD, NUM_PLANETS,
 };
-use crate::engine::species::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
-use crate::engine::world::planet::PlanetDesc;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::special::{FleetGroups, Story, SELENIC_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::species::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
+use uqm_engine::world::planet::PlanetDesc;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Call {

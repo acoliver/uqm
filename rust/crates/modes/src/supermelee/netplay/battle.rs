@@ -4,7 +4,7 @@ use super::{
     packet::Packet,
     session::{Selection, SessionCore},
 };
-use crate::engine::battle::net::{
+use uqm_engine::battle::net::{
     BattleNet, NetState, ProtocolDriver, ProtocolNotice, ProtocolNoticeKind,
 };
 
@@ -12,7 +12,7 @@ impl SessionCore {
     pub(crate) fn effect(&self, event: Event, driver: &mut dyn ProtocolDriver) {
         let kind = match event.effect {
             Effect::Seed(seed) => {
-                crate::math::seed_random(seed);
+                uqm_engine::math::seed_random(seed);
                 return;
             }
             Effect::Connected => ProtocolNoticeKind::Connected,
@@ -71,7 +71,7 @@ impl BattleNet for SessionCore {
         &self,
         side: usize,
         input: u8,
-        activity: &crate::engine::world::activity::ActivityControl,
+        activity: &uqm_engine::world::activity::ActivityControl,
         driver: &mut dyn ProtocolDriver,
     ) -> u8 {
         // Replay peers retain AI evaluation (and its RNG draws), but received
@@ -88,7 +88,7 @@ impl BattleNet for SessionCore {
     fn remote_input(
         &self,
         side: usize,
-        activity: &crate::engine::world::activity::ActivityControl,
+        activity: &uqm_engine::world::activity::ActivityControl,
         driver: &mut dyn ProtocolDriver,
     ) -> u8 {
         self.network_battle_input(side, activity, driver)

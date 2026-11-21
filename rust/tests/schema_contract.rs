@@ -1,24 +1,23 @@
 //! Stable values shared by save files, input, rendering, ships and netplay.
+#![forbid(unsafe_code)]
 
 use std::mem::{offset_of, size_of};
-use uqm_rust::engine::input_port::frames as input;
-use uqm_rust::engine::species::ship;
-use uqm_rust::engine::world::story::{
-    GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
-};
-use uqm_rust::engine::StoryKey;
-use uqm_rust::starbase::sis_modules::{ModuleType, NUM_MODULES};
+use uqm_engine::input_port::frames as input;
+use uqm_engine::species::ship;
+use uqm_engine::world::story::{GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES};
+use uqm_engine::StoryKey;
+use uqm_modes::starbase::sis_modules::{ModuleType, NUM_MODULES};
 
 #[test]
 fn story_state_size_and_endpoints_remain_stable() {
     assert_eq!(NUM_GAME_STATE_BITS, 1238);
     assert_eq!(NUM_GAME_STATE_BYTES, 155);
     assert_eq!(
-        uqm_rust::engine::world::story::NUM_GAME_STATE_BITS,
+        uqm_engine::world::story::NUM_GAME_STATE_BITS,
         NUM_GAME_STATE_BITS
     );
     assert_eq!(
-        uqm_rust::engine::world::story::native_bits::NUM_GAME_STATE_BITS as usize,
+        uqm_engine::world::story::native_bits::NUM_GAME_STATE_BITS as usize,
         NUM_GAME_STATE_BITS
     );
     assert_eq!(GAME_STATE_FIELDS.first(), Some(&("SHOFIXTI_VISITS", 0, 2)));
@@ -49,7 +48,7 @@ fn engine_scalar_widths_and_species_ids_remain_stable() {
     assert_eq!(ship::SAMATRA_SHIP, 23);
     assert_eq!(ModuleType::PlanetLander as u32, 0);
     assert_eq!(
-        uqm_rust::starbase::module_chooser::LAST_PURCHASE_MODULE as u32 + 1,
+        uqm_modes::starbase::module_chooser::LAST_PURCHASE_MODULE as u32 + 1,
         14
     );
     assert_eq!(ModuleType::BombModule0 as u32, 14);

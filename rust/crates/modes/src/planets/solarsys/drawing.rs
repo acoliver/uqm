@@ -1,16 +1,16 @@
 use super::*;
-use crate::engine::battle::Cx;
-use crate::engine::kernel::solar_resources::SolarResources;
-use crate::engine::world::planet::PlanetDesc;
-use crate::engine::{Kernel, World};
-use crate::graphics::{
-    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, menu as draw,
-};
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 use crate::planets::render::c_api::NativeOvalGfx;
 use crate::planets::render::draw_star_background;
 use crate::planets::solar_coords::{star_seed, SolarCoordinates};
 use crate::planets::solar_system::{SolarSystem, SystemLocation};
+use uqm_engine::battle::Cx;
+use uqm_engine::graphics::{
+    context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable, menu as draw,
+};
+use uqm_engine::kernel::solar_resources::SolarResources;
+use uqm_engine::world::planet::PlanetDesc;
+use uqm_engine::{Kernel, World};
 
 const MIN_ZOOM_RADIUS: i32 = (128 << 6) >> 3;
 const MAX_ZOOM_RADIUS: i32 = 128 << 6;
@@ -28,15 +28,15 @@ pub(super) fn orbit_rect(
     xn: i32,
     yn: i32,
     den: i32,
-) -> crate::graphics::geometry::Rect {
+) -> uqm_engine::graphics::geometry::Rect {
     let (width, height) = coordinates.dimensions();
     let orbit_width = (i64::from(radius) * i64::from(xn << 1) / i64::from(den)) as i16;
-    crate::graphics::geometry::Rect {
-        corner: crate::graphics::geometry::Point {
+    uqm_engine::graphics::geometry::Rect {
+        corner: uqm_engine::graphics::geometry::Point {
             x: (i64::from(width >> 1) - i64::from(dx) * i64::from(xn) / i64::from(den)) as i16,
             y: (i64::from(height >> 1) - i64::from(dy) * i64::from(yn) / i64::from(den)) as i16,
         },
-        extent: crate::graphics::geometry::Extent {
+        extent: uqm_engine::graphics::geometry::Extent {
             width: orbit_width,
             height: orbit_width >> 1,
         },
@@ -49,7 +49,7 @@ fn planet_orbit_rect(
     xn: i32,
     yn: i32,
     den: i32,
-) -> crate::graphics::geometry::Rect {
+) -> uqm_engine::graphics::geometry::Rect {
     let mut dx = i32::from(planet.radius);
     let mut dy = dx;
     if xn > coordinates.display_factor() {
@@ -64,7 +64,7 @@ fn validate_orbit(
     assets: &SolarResources,
     planet: &mut PlanetDesc,
     moon: bool,
-    origin: crate::graphics::geometry::Point,
+    origin: uqm_engine::graphics::geometry::Point,
     scale: (i32, i32, i32),
 ) {
     let (xn, yn, den) = scale;
@@ -94,7 +94,7 @@ fn validate_orbit(
                 size += 1;
             }
         }
-        let angle = crate::math::arctan(origin.x, origin.y);
+        let angle = uqm_engine::math::arctan(origin.x, origin.y);
         planet.image.frame = resources::frame(
             &assets.orbital,
             ((size << FACING_SHIFT) + u32::from(((angle + 2) >> 2) & 15)) as u16,
@@ -132,7 +132,7 @@ fn draw_orbit(
 pub(super) fn find_radius(
     solar: &mut SolarSystem,
     mut from_radius: i32,
-    ship_loc: crate::graphics::geometry::Point,
+    ship_loc: uqm_engine::graphics::geometry::Point,
 ) -> i32 {
     let coordinates = solar.coordinates();
     loop {
@@ -282,8 +282,8 @@ fn draw_system(world: &World, kernel: &Kernel, solar: &mut SolarSystem, radius: 
         }
     }
     draw::select(old);
-    draw_stamp(&crate::graphics::intersection::Stamp {
-        origin: crate::graphics::geometry::Point { x: 0, y: 0 },
+    draw_stamp(&uqm_engine::graphics::intersection::Stamp {
+        origin: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
         frame: image,
     });
 }
@@ -302,7 +302,7 @@ pub(super) fn create_star_background(
     let context = ContextLease::require(kernel.off_screen_context);
     context.set_frame(frame.lease().context_frame(0));
     context.clear_clip();
-    context.set_background(crate::graphics::geometry::Color {
+    context.set_background(uqm_engine::graphics::geometry::Color {
         r: 0,
         g: 0,
         b: 0,
@@ -314,8 +314,8 @@ pub(super) fn create_star_background(
         .rng
         .reseed(star_seed(world.catalog()[solar.star().0].star_pt));
     let (width, height) = coordinates.dimensions();
-    let mut stamp = crate::graphics::intersection::Stamp {
-        origin: crate::graphics::geometry::Point { x: 0, y: 0 },
+    let mut stamp = uqm_engine::graphics::intersection::Stamp {
+        origin: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
         frame: resources::frame(&assets.junk, 0),
     };
     for pieces in [5, 30] {
@@ -355,8 +355,8 @@ pub(super) fn sort_planet_positions(solar: &mut SolarSystem) {
 }
 
 pub(super) fn point_within_rect(
-    rect: crate::graphics::geometry::Rect,
-    point: crate::graphics::geometry::Point,
+    rect: uqm_engine::graphics::geometry::Rect,
+    point: uqm_engine::graphics::geometry::Point,
 ) -> bool {
     point.x >= rect.corner.x
         && point.y >= rect.corner.y
@@ -386,7 +386,7 @@ fn calc_sun_size(
         }
     }
     let (width, height) = coordinates.dimensions();
-    sun.image.origin = crate::graphics::geometry::Point {
+    sun.image.origin = uqm_engine::graphics::geometry::Point {
         x: (width >> 1) as i16,
         y: (height >> 1) as i16,
     };
@@ -398,8 +398,8 @@ fn draw_inner_planets(assets: &SolarResources, solar: &SolarSystem, index: u8) {
     let planet = &solar.sys.planets[usize::from(index)];
     set_planet_color_map(assets, planet);
     let (width, height) = coordinates.dimensions();
-    let mut stamp = crate::graphics::intersection::Stamp {
-        origin: crate::graphics::geometry::Point {
+    let mut stamp = uqm_engine::graphics::intersection::Stamp {
+        origin: uqm_engine::graphics::geometry::Point {
             x: (width >> 1) as i16,
             y: (height >> 1) as i16,
         },
@@ -442,6 +442,6 @@ pub(super) fn validate_inner_orbits(assets: &SolarResources, solar: &mut SolarSy
     }
 }
 
-fn draw_stamp(stamp: &crate::graphics::intersection::Stamp) {
+fn draw_stamp(stamp: &uqm_engine::graphics::intersection::Stamp) {
     draw::stamp(stamp.frame, stamp.origin);
 }

@@ -1,4 +1,5 @@
 //! Exercise Syreen descriptor registration and callbacks against the linked engine.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;
@@ -6,15 +7,14 @@ mod battle;
 mod battle_context;
 use battle::*;
 
-use std::{ffi::CStr, mem, ptr};
-use uqm_rust::engine::battle::ai_constants::{
-    ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, SPECIAL,
-};
-use uqm_rust::engine::battle::flags::{APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP};
-use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
-use uqm_rust::engine::species::species_id::SPECIES_ID_SYREEN_ID;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::velocity::VelocityDesc;
+use std::ffi::CStr;
+use uqm_engine::battle::ai_constants::{ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, SPECIAL};
+use uqm_engine::battle::flags::{APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP};
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::velocity::VelocityDesc;
+use uqm_engine::species::species_id::SPECIES_ID_SYREEN_ID;
 
 /// The queue holds exactly the elements a test creates, so a test can also
 /// exhaust the allocator.
@@ -37,9 +37,9 @@ fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {
 }
 
 fn velocity_toward(speed: i16, facing: u16) -> [i32; 9] {
-    unsafe {
-        let mut v: VelocityDesc = mem::zeroed();
-        uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
+    {
+        let mut v: VelocityDesc = VelocityDesc::new();
+        uqm_modes::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
 }
@@ -115,24 +115,23 @@ fn descriptor_matches_the_c_race_data() {
 fn dagger_is_launched_with_the_c_missile_block() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
             ship.ship_mut().ship_facing = 4;
             ship.element_mut().next.location = Point { x: 1000, y: 2000 };
             let slots = ship.weapon(1);
-            let daggers = [ship.weapon_record(slots[0]).cast()];
+            let daggers = [slots[0].expect("allocated weapon")];
 
-            let dagger = battle::element(daggers[0]);
-            assert!(!dagger.is_null());
-            assert_eq!((*dagger).life, 10);
-            assert_eq!((*dagger).hits, 1);
-            assert_eq!((*dagger).mass, 2);
-            assert_eq!((*dagger).thrust, 3);
-            assert_ne!((*dagger).state_flags & IGNORE_SIMILAR as u16, 0);
-            assert!((*dagger).preprocess_func.is_none());
+            let dagger = daggers[0];
+            assert_eq!(battle::get(dagger).life, 10);
+            assert_eq!(battle::get(dagger).hits, 1);
+            assert_eq!(battle::get(dagger).mass, 2);
+            assert_eq!(battle::get(dagger).thrust, 3);
+            assert_ne!(battle::get(dagger).state_flags & IGNORE_SIMILAR as u16, 0);
+            assert!(battle::get(dagger).preprocess_func.is_none());
             // DISPLAY_TO_WORLD (30) world units per tick along the ship facing.
             assert_eq!(
-                velocity_fields(&(*dagger).velocity),
+                velocity_fields(&battle::get(dagger).velocity),
                 velocity_toward(120, 4)
             );
             battle_context::dispose(daggers[0]);
@@ -144,18 +143,18 @@ fn dagger_is_launched_with_the_c_missile_block() {
 fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
 
             ship.ship_mut().cur_status_flags = 0;
             ship.postprocess();
-            assert!(battle::tail().is_null());
+            assert!(battle::tail().is_none());
             assert_eq!(ship.ship_mut().special_counter, 0);
 
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 3;
             ship.postprocess();
-            assert!(battle::tail().is_null());
+            assert!(battle::tail().is_none());
             assert_eq!(ship.ship_mut().special_counter, 3);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16);
 
@@ -163,7 +162,7 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
             ship.ship_mut().special_counter = 0;
             ship.descriptor_mut().ship_info.energy_level = 4;
             ship.postprocess();
-            assert!(battle::tail().is_null());
+            assert!(battle::tail().is_none());
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);
         }
@@ -174,7 +173,7 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
 fn song_pays_energy_and_queues_the_deferred_scan() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
             ship.element_mut().next.location = Point { x: 1234, y: 4321 };
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
@@ -182,31 +181,33 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
 
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
             assert_eq!(ship.ship_mut().special_counter, 20);
-            let scan = battle::element(battle::tail());
-            assert!(!scan.is_null());
+            let scan = battle::tail().unwrap();
             assert_eq!(
-                (*scan).state_flags,
+                battle::get(scan).state_flags,
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
-            assert_eq!((*scan).life, 0);
-            assert_eq!((*scan).player_nr, 0);
+            assert_eq!(battle::get(scan).life, 0);
+            assert_eq!(battle::get(scan).player_nr, 0);
             assert_eq!(
-                ((*scan).next.location.x, (*scan).next.location.y),
+                (
+                    battle::get(scan).next.location.x,
+                    battle::get(scan).next.location.y
+                ),
                 (1234, 4321)
             );
-            assert_eq!((*scan).parent, ship.element_mut().parent);
-            assert!((*scan).target.is_none());
-            assert!((*scan).death_func.is_some());
+            assert_eq!(battle::get(scan).parent, ship.element_mut().parent);
+            assert!(battle::get(scan).target.is_none());
+            assert!(battle::get(scan).death_func.is_some());
 
             // The song cannot be restarted during the cooldown.
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
-            assert_eq!(battle::element(battle::tail()), scan);
+            assert_eq!(battle::tail(), Some(scan));
         }
     })
 }
 
-unsafe fn enter_battle(ship: &mut Ship<'_>, location: Point, crew: u16) {
+fn enter_battle(ship: &mut Ship<'_>, location: Point, crew: u16) {
     ship.element_mut().next.location = location;
     ship.element_mut().set_hit_points(crew);
     ship.descriptor_mut().ship_info.crew_level = crew;
@@ -214,20 +215,18 @@ unsafe fn enter_battle(ship: &mut Ship<'_>, location: Point, crew: u16) {
 }
 
 /// The scan the song queues, ready to be run as the element's death function.
-unsafe fn queued_scan(
-    ship: &mut Ship,
-) -> (*mut ElementRecord, uqm_rust::engine::battle::ElementHook) {
+fn queued_scan(ship: &mut Ship) -> (ElementId, uqm_engine::battle::ElementHook) {
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
-    let scan = battle::element(battle::tail());
-    (scan, (*scan).death_func.unwrap())
+    let scan = battle::tail().unwrap_or_else(|| panic!("queued scan"));
+    (scan, battle::get(scan).death_func.unwrap())
 }
 
 #[test]
 fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
             ship.element_mut().next.location = Point { x: 5000, y: 5000 };
             let (scan, run_scan) = queued_scan(&mut ship);
@@ -252,16 +251,16 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             enter_battle(&mut shot, Point { x: 5100, y: 5000 }, 10);
 
             let before = (battle::head(), battle::tail());
-            hooks::invoke_element_pointer(run_scan, scan);
+            hooks::invoke_element(run_scan, scan);
             assert_eq!(
                 (battle::head(), battle::tail()),
                 before,
                 "nothing was queued"
             );
             for handle in walk_queue() {
-                let queued = battle::element(handle);
-                if (*queued).state_flags & PLAYER_SHIP as u16 != 0 {
-                    let crew = (*queued).hits;
+                let queued = handle;
+                if battle::get(queued).state_flags & PLAYER_SHIP as u16 != 0 {
+                    let crew = battle::get(queued).hits;
                     assert!(matches!(crew, 1 | 10), "crew {crew}");
                 }
             }
@@ -269,12 +268,12 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
     })
 }
 
-unsafe fn walk_queue() -> Vec<*mut std::ffi::c_void> {
+fn walk_queue() -> Vec<ElementId> {
     let mut handles = Vec::new();
-    let mut handle = battle::head();
-    while !handle.is_null() {
+    let mut cursor = battle::head();
+    while let Some(handle) = cursor {
         handles.push(handle);
-        handle = battle::succ(handle);
+        cursor = battle::succ(handle);
     }
     handles
 }
@@ -283,7 +282,7 @@ unsafe fn walk_queue() -> Vec<*mut std::ffi::c_void> {
 fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
             ship.element_mut().next.location = Point { x: 5000, y: 5000 };
             let (scan, run_scan) = queued_scan(&mut ship);
@@ -301,20 +300,13 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
                 10,
             );
             let mut ghosts = Vec::new();
-            loop {
-                let handle = crate::battle_context::with(|cx| {
-                    cx.alloc_element()
-                        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
-                });
-                if handle.is_null() {
-                    break;
-                }
+            while let Some(handle) = crate::battle_context::with(|cx| cx.alloc_element()) {
                 ghosts.push(handle);
             }
             let before = walk_queue();
-            hooks::invoke_element_pointer(run_scan, scan);
+            hooks::invoke_element(run_scan, scan);
             assert_eq!(walk_queue(), before);
-            assert_eq!((*battle::element(before[1])).hits, 10);
+            assert_eq!(battle::get(before[1]).hits, 10);
             for handle in ghosts {
                 battle_context::dispose(handle);
             }
@@ -325,32 +317,31 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
 struct Duel<'a> {
     ship: Ship<'a>,
     enemy: Ship<'a>,
-    concerns: [EvaluateRecord; 4],
+    concerns: [Concern; 4],
 }
 
 impl<'a> Duel<'a> {
-    unsafe fn new(_battle: &'a Battle, which_turn: u16) -> Self {
+    fn new(_battle: &'a Battle, which_turn: u16) -> Self {
         let mut duel = Self {
             ship: Ship::bare(_battle, SPECIES_ID_SYREEN_ID, 0),
             enemy: Ship::bare(_battle, SPECIES_ID_SYREEN_ID, 1),
-            concerns: unsafe { mem::zeroed() },
+            concerns: Default::default(),
         };
         duel.enemy.element_mut().hits = 5;
         let slot = &mut duel.concerns[ENEMY_SHIP_INDEX as usize];
-        slot.object_ptr = duel.enemy.el();
+        slot.object = Some(duel.enemy.id);
         slot.which_turn = which_turn;
         duel
     }
 
     fn run(&mut self) {
         // A zero concern count leaves only the Syreen decision to run.
-        unsafe {
-            self.ship
-                .intelligence(&mut *self.ship.ptr(), &mut self.concerns, 0);
+        {
+            self.ship.think(self.ship.id, &mut self.concerns, 0);
         }
     }
 
-    unsafe fn input(&mut self) -> u8 {
+    fn input(&mut self) -> u8 {
         self.ship.ship_mut().ship_input_state
     }
 }
@@ -359,7 +350,7 @@ impl<'a> Duel<'a> {
 fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
-        unsafe {
+        {
             let special = SPECIAL as u8;
 
             let mut duel = Duel::new(&_battle, 14);
@@ -396,7 +387,7 @@ fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
             // Without a target the request is left alone.
             drop(duel);
             let mut duel = Duel::new(&_battle, 14);
-            duel.concerns[ENEMY_SHIP_INDEX as usize].object_ptr = ptr::null_mut();
+            duel.concerns[ENEMY_SHIP_INDEX as usize].object = None;
             duel.ship.ship_mut().ship_input_state = special;
             duel.run();
             assert_eq!(duel.input(), special);

@@ -2,7 +2,7 @@ use super::super::encounter::testing::{Effect, Fake};
 use super::super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use super::descriptor::descriptor;
 use super::*;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 #[test]
 fn offered_callbacks_reach_the_recall_code_from_a_new_game() {

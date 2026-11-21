@@ -8,8 +8,8 @@ use serial_test::serial;
 use tempfile::TempDir;
 
 use super::*;
-use crate::engine::host::Files;
-use crate::io::Vfs;
+use uqm_engine::host::Files;
+use uqm_engine::io::Vfs;
 
 const ENV_KEYS: [&str; 4] = ["HOME", "UQM_CONFIG_DIR", "UQM_SAVE_DIR", "UQM_MELEE_DIR"];
 

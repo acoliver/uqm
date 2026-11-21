@@ -1,5 +1,5 @@
 use super::*;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
 
 fn view(step: bool) -> ViewConfig {
     ViewConfig {

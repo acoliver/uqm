@@ -1,24 +1,24 @@
+#![forbid(unsafe_code)]
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
 use battle::{Battle, Object, Ship};
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_SLYLANDRO_ID};
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_SLYLANDRO_ID};
 
 #[test]
 fn legacy_slylandro_receives_the_fifth_junk_concern() {
     battle_context::run(|_| {
         let battle = Battle::new(16);
-        // SAFETY: the fixture owns both pools, ship descriptor, frames and queued object.
-        unsafe {
+        {
             let mut ship = Ship::new(&battle, SPECIES_ID_SLYLANDRO_ID, 0);
             let mut junk = Object::new(&battle);
             let location = ship.element_mut().current.location;
             {
-                let e = junk.element_mut();
+                let mut e = junk.element_mut();
                 e.player_nr = -1;
                 e.set_mass_points(1);
                 e.set_life_span(1);
@@ -28,7 +28,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
                 };
                 e.next = e.current.clone();
             }
-            battle::put(junk.ptr().cast());
+            battle::put(junk.id);
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().special_counter = 0;
             crate::battle_context::with(|cx| {
@@ -43,8 +43,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
 fn typed_ai_uses_the_supplied_subject_projection() {
     battle_context::run(|_| {
         let battle = Battle::new(32);
-        // SAFETY: the shared fixture retains both pool-backed ships and their frames.
-        unsafe {
+        {
             let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
             let mut target = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 1);
             ship.element_mut().current.location = Point { x: 1000, y: 1000 };

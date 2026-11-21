@@ -5,12 +5,12 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `ULTRON_CONDITION`.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
 use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 /// `GenerateSupox_generatePlanets`.
 pub fn generate_planets(
@@ -75,7 +75,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::Game;
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::Game;
 
 #[test]
 fn records_keep_row_first_column_order_and_bounded_formats() {
@@ -24,19 +24,19 @@ fn records_keep_row_first_column_order_and_bounded_formats() {
     let formats = formats(&parsed.alignment, 320, 8);
     assert_eq!(
         (formats[0].align, formats[0].x),
-        (crate::graphics::geometry::TextAlign::Left, 2)
+        (uqm_engine::graphics::geometry::TextAlign::Left, 2)
     );
     assert_eq!(
         (formats[1].align, formats[1].x),
-        (crate::graphics::geometry::TextAlign::Center, 160)
+        (uqm_engine::graphics::geometry::TextAlign::Center, 160)
     );
     assert_eq!(
         (formats[2].align, formats[2].x),
-        (crate::graphics::geometry::TextAlign::Right, 77)
+        (uqm_engine::graphics::geometry::TextAlign::Right, 77)
     );
     assert_eq!(
         (formats[3].align, formats[3].x),
-        (crate::graphics::geometry::TextAlign::Left, 5)
+        (uqm_engine::graphics::geometry::TextAlign::Left, 5)
     );
     for bytes in [b"".as_slice(), b"0 L A", b"13", b"13 L", b"bad L A"] {
         assert!(record(bytes).is_none());

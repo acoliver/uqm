@@ -4,9 +4,9 @@ use super::{
     packet::{DecodeError, Packet},
     session::SessionCore,
 };
-use crate::engine::battle::net::NetState;
 use crate::supermelee::netplay::READ_BUFFER_SIZE;
 use std::io;
+use uqm_engine::battle::net::NetState;
 
 impl SessionCore {
     pub fn dispatch(

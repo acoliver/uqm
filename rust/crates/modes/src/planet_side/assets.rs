@@ -5,12 +5,12 @@ use super::runtime::{AdapterError, PlanetSideAudio};
 
 /// Every sound clip retains the detached bank acquired with the graphics.
 #[derive(Debug, Clone)]
-pub struct LanderSoundTable(crate::sound::owned_bank::LoadedSoundBank);
+pub struct LanderSoundTable(uqm_engine::sound::owned_bank::LoadedSoundBank);
 impl LanderSoundTable {
-    pub(crate) fn from_bank(bank: crate::sound::owned_bank::LoadedSoundBank) -> Self {
+    pub(crate) fn from_bank(bank: uqm_engine::sound::owned_bank::LoadedSoundBank) -> Self {
         Self(bank)
     }
-    fn clip(&self, index: u16) -> crate::sound::owned_bank::SoundClip {
+    fn clip(&self, index: u16) -> uqm_engine::sound::owned_bank::SoundClip {
         self.0.clip(index)
     }
 }
@@ -19,14 +19,14 @@ impl LanderSoundTable {
 pub struct CffiPlanetSideAudio {
     sounds: LanderSoundTable,
     telemetry: std::rc::Rc<std::cell::RefCell<super::telemetry::TripTelemetry>>,
-    channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::kernel::Channels>>,
+    channels: std::rc::Rc<std::cell::RefCell<uqm_engine::battle::kernel::Channels>>,
 }
 
 impl CffiPlanetSideAudio {
     #[must_use]
     pub(crate) const fn new(
         sounds: LanderSoundTable,
-        channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::kernel::Channels>>,
+        channels: std::rc::Rc<std::cell::RefCell<uqm_engine::battle::kernel::Channels>>,
         telemetry: std::rc::Rc<std::cell::RefCell<super::telemetry::TripTelemetry>>,
     ) -> Self {
         Self {
@@ -38,7 +38,7 @@ impl CffiPlanetSideAudio {
 }
 
 impl PlanetSideAudio for CffiPlanetSideAudio {
-    fn play(&mut self, world: &crate::engine::World, cue: SoundCue) -> Result<(), AdapterError> {
+    fn play(&mut self, world: &uqm_engine::World, cue: SoundCue) -> Result<(), AdapterError> {
         let sound = self.sounds.clip(sound_index(cue));
         {
             let priority = if matches!(cue, SoundCue::Returns | SoundCue::Destroyed) {
@@ -50,7 +50,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
                 world,
                 &mut self.channels.borrow_mut(),
                 &sound,
-                crate::sound::types::SoundPosition::non_positional(),
+                uqm_engine::sound::types::SoundPosition::non_positional(),
                 None,
                 priority,
             );
@@ -82,17 +82,17 @@ const fn sound_index(cue: SoundCue) -> u16 {
 mod tests {
     use super::*;
 
-    fn fixture_bank() -> crate::sound::owned_bank::LoadedSoundBank {
-        crate::sound::owned_bank::LoadedSoundBank::from_samples(
+    fn fixture_bank() -> uqm_engine::sound::owned_bank::LoadedSoundBank {
+        uqm_engine::sound::owned_bank::LoadedSoundBank::from_samples(
             (0..13)
-                .map(|_| crate::sound::types::SoundSample::new())
+                .map(|_| uqm_engine::sound::types::SoundSample::new())
                 .collect(),
         )
     }
 
     #[test]
     fn audio_retains_the_supplied_kernel_channel_state() {
-        let game = crate::engine::Game::new();
+        let game = uqm_engine::Game::new();
         let channels = game.kernel.channels.clone();
         let audio = CffiPlanetSideAudio::new(
             LanderSoundTable::from_bank(fixture_bank()),
@@ -107,22 +107,22 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn lander_audio_retains_its_bank_and_accepts_an_unpublished_world() {
-        let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(
+        let bank = uqm_engine::sound::owned_bank::LoadedSoundBank::from_samples(
             (0..13)
-                .map(|_| crate::sound::types::SoundSample::new())
+                .map(|_| uqm_engine::sound::types::SoundSample::new())
                 .collect(),
         );
         let identity = bank.clip(8).identity();
         let sounds = LanderSoundTable::from_bank(bank.clone());
         let channels = std::rc::Rc::new(std::cell::RefCell::new(
-            crate::engine::battle::kernel::Channels::new(),
+            uqm_engine::battle::kernel::Channels::new(),
         ));
         let mut audio =
             CffiPlanetSideAudio::new(sounds, channels, super::super::telemetry::tests::trip());
         drop(bank);
         assert_eq!(audio.sounds.clip(8).identity(), identity);
         audio
-            .play(&crate::engine::World::new(), SoundCue::Pickup)
+            .play(&uqm_engine::World::new(), SoundCue::Pickup)
             .unwrap();
     }
 
@@ -153,10 +153,10 @@ mod tests {
     fn retained_adapter_accepts_all_cues() {
         let mut audio = CffiPlanetSideAudio::new(
             LanderSoundTable::from_bank(fixture_bank()),
-            crate::engine::Game::new().kernel.channels,
+            uqm_engine::Game::new().kernel.channels,
             super::super::telemetry::tests::trip(),
         );
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         for cue in [
             SoundCue::BiologicalDisaster,
             SoundCue::Earthquake,

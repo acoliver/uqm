@@ -8,10 +8,10 @@
 /// loop. Called by `app::run` after the game loop returns and every worker has
 /// stopped.
 pub fn teardown_subsystems() {
-    crate::input::sdl_input::uninit_input();
-    crate::sound::audio_init::uninit_audio();
-    crate::graphics::present::uninit_graphics();
-    crate::engine::host::dispatch().clear();
-    crate::io::uninstall();
-    crate::threading::uninit_game_thread();
+    uqm_engine::input_port::sdl_input::uninit_input();
+    uqm_engine::sound::audio_init::uninit_audio();
+    uqm_engine::graphics::present::uninit_graphics();
+    uqm_engine::host::dispatch().clear();
+    uqm_engine::io::uninstall();
+    uqm_engine::threading::uninit_game_thread();
 }

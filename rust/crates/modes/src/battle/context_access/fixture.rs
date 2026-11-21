@@ -13,8 +13,8 @@ fn ship_detachment_is_an_explicit_fixture_command() {
     assert_eq!(ship.element, None);
 }
 
-use crate::engine::battle::{record::*, views::*, ElementId, Parent};
-use crate::engine::battle::{Cx, ShipId};
+use uqm_engine::battle::{record::*, views::*, ElementId, Parent};
+use uqm_engine::battle::{Cx, ShipId};
 #[derive(Clone)]
 pub struct Element {
     pub state: ElementState,
@@ -35,16 +35,16 @@ impl std::ops::DerefMut for Element {
 }
 impl Element {
     pub fn is_player_ship(&self) -> bool {
-        self.flags & crate::engine::battle::flags::PLAYER_SHIP as u16 != 0
+        self.flags & uqm_engine::battle::flags::PLAYER_SHIP as u16 != 0
     }
     pub fn has_finite_life(&self) -> bool {
-        self.flags & crate::engine::battle::flags::FINITE_LIFE as u16 != 0
+        self.flags & uqm_engine::battle::flags::FINITE_LIFE as u16 != 0
     }
     pub fn set_appearing(&mut self) {
-        self.flags |= crate::engine::battle::flags::APPEARING as u16;
+        self.flags |= uqm_engine::battle::flags::APPEARING as u16;
     }
     pub fn clear_appearing(&mut self) {
-        self.flags &= !(crate::engine::battle::flags::APPEARING as u16);
+        self.flags &= !(uqm_engine::battle::flags::APPEARING as u16);
     }
 }
 #[derive(Clone)]
@@ -77,9 +77,9 @@ impl Ship {
     }
 }
 
-pub struct Descriptor(Option<crate::engine::battle::RaceDesc>);
+pub struct Descriptor(Option<uqm_engine::battle::RaceDesc>);
 impl Descriptor {
-    pub fn free(self, world: &mut crate::engine::World) {
+    pub fn free(self, world: &mut uqm_engine::World) {
         if let Some(descriptor) = self.0 {
             descriptor.unload(world, true);
         }
@@ -89,9 +89,9 @@ impl Descriptor {
 #[cfg(any(test, feature = "test-support"))]
 impl Element {
     pub fn new() -> Self {
-        let record = crate::engine::battle::record::ElementRecord::default();
+        let record = uqm_engine::battle::record::ElementRecord::default();
         Self {
-            state: crate::engine::battle::access::fixture_element_state(&record),
+            state: uqm_engine::battle::access::fixture_element_state(&record),
             parent: Parent::None,
             target: None,
             pred: None,
@@ -108,23 +108,23 @@ impl Default for Element {
 impl Ship {
     pub fn for_test(s: &ShipRecord, d: &RaceDescriptor, element: ElementId) -> Self {
         Self {
-            state: crate::engine::battle::access::observe_ship_record(s),
+            state: uqm_engine::battle::access::observe_ship_record(s),
             species: s.species_id,
             index: s.index,
             element: Some(element),
             clear_element: false,
-            info: Some(crate::engine::battle::access::observe_descriptor_record(d).ship_info),
+            info: Some(uqm_engine::battle::access::observe_descriptor_record(d).ship_info),
             data: Some(ShipFrames {
                 ship: Frames::shared(
-                    crate::engine::battle::frames::SharedFrames::Fixture(0),
+                    uqm_engine::battle::frames::SharedFrames::Fixture(0),
                     d.ship_data.ship.clone(),
                 ),
                 weapon: Frames::shared(
-                    crate::engine::battle::frames::SharedFrames::Fixture(1),
+                    uqm_engine::battle::frames::SharedFrames::Fixture(1),
                     d.ship_data.weapon.clone(),
                 ),
                 special: Frames::shared(
-                    crate::engine::battle::frames::SharedFrames::Fixture(2),
+                    uqm_engine::battle::frames::SharedFrames::Fixture(2),
                     d.ship_data.special.clone(),
                 ),
                 captain_special: d.ship_data.captain_control.special.clone(),
@@ -147,7 +147,7 @@ pub trait FixtureOps {
     fn fixture_intelligence(
         &mut self,
         element: ElementId,
-        objects: [crate::engine::battle::Concern; 4],
+        objects: [uqm_engine::battle::Concern; 4],
     );
 }
 
@@ -187,7 +187,7 @@ impl FixtureOps for Cx<'_> {
             captain_special: d.ship_data.captain_control.special.clone(),
         });
         view.phoenix = match d.race_state {
-            crate::engine::battle::RaceState::Pkunk {
+            uqm_engine::battle::RaceState::Pkunk {
                 phoenix,
                 saved_pre,
                 saved_post,
@@ -227,24 +227,24 @@ impl FixtureOps for Cx<'_> {
     }
 
     fn fixture_think(&mut self, ship: ShipId, crew: u16) {
-        let input = crate::engine::battle::cyborg::tactical(self, ship);
+        let input = uqm_engine::battle::cyborg::tactical(self, ship);
         self.ship_state_mut(ship).input = crate::battle::battle_native::ship_input(input, crew);
     }
     fn fixture_intelligence(
         &mut self,
         element: ElementId,
-        objects: [crate::engine::battle::Concern; 4],
+        objects: [uqm_engine::battle::Concern; 4],
     ) {
         let ship = self.owner(element);
         let count = objects.len() as u16;
-        let mut scratch = [crate::engine::battle::Concern {
+        let mut scratch = [uqm_engine::battle::Concern {
             object: None,
             facing: 0,
             which_turn: 0,
             movement: 0,
         }; 10];
         scratch[..objects.len()].copy_from_slice(&objects);
-        let mut concerns = crate::engine::battle::Concerns {
+        let mut concerns = uqm_engine::battle::Concerns {
             count,
             objects: scratch,
             subject: self.weapon_origin(element),

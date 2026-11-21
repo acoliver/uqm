@@ -1,12 +1,12 @@
 //! A retained graphics view supplied by the running campaign.
 
 use super::gfx::*;
-use crate::engine::Kernel;
-use crate::graphics::{
+use std::{ffi::CString, rc::Rc};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, font::FontLease, menu as draw,
 };
-use crate::strings::owned_table::LoadedTextTable;
-use std::{ffi::CString, rc::Rc};
+use uqm_engine::strings::owned_table::LoadedTextTable;
+use uqm_engine::Kernel;
 
 pub struct Graphics {
     dimensions: (i32, i32),
@@ -16,7 +16,7 @@ pub struct Graphics {
     play: ContextFrame,
     gradient: ContextFrame,
     text: LoadedTextTable,
-    highlight: Rc<crate::engine::kernel::SisHighlight>,
+    highlight: Rc<uqm_engine::kernel::SisHighlight>,
     pc_menu: bool,
     saved_fonts: std::cell::RefCell<Vec<(usize, Option<FontLease>)>>,
     saved_effects: std::cell::RefCell<Vec<(usize, ContextFrame)>>,
@@ -62,15 +62,15 @@ impl Graphics {
         .unwrap_or_else(|| panic!("menu context is absent"))
     }
 }
-fn color(c: Rgba) -> crate::graphics::geometry::Color {
-    crate::graphics::geometry::Color {
+fn color(c: Rgba) -> uqm_engine::graphics::geometry::Color {
+    uqm_engine::graphics::geometry::Color {
         r: c.r,
         g: c.g,
         b: c.b,
         a: c.a,
     }
 }
-fn rgba(c: crate::graphics::geometry::Color) -> Rgba {
+fn rgba(c: uqm_engine::graphics::geometry::Color) -> Rgba {
     Rgba {
         r: c.r,
         g: c.g,
@@ -78,19 +78,19 @@ fn rgba(c: crate::graphics::geometry::Color) -> Rgba {
         a: c.a,
     }
 }
-fn point(p: Point) -> crate::graphics::geometry::Point {
-    crate::graphics::geometry::Point { x: p.x, y: p.y }
+fn point(p: Point) -> uqm_engine::graphics::geometry::Point {
+    uqm_engine::graphics::geometry::Point { x: p.x, y: p.y }
 }
-fn rect(r: Rect) -> crate::graphics::geometry::Rect {
-    crate::graphics::geometry::Rect {
+fn rect(r: Rect) -> uqm_engine::graphics::geometry::Rect {
+    uqm_engine::graphics::geometry::Rect {
         corner: point(r.corner),
-        extent: crate::graphics::geometry::Extent {
+        extent: uqm_engine::graphics::geometry::Extent {
             width: r.width,
             height: r.height,
         },
     }
 }
-fn rectangle(r: crate::graphics::geometry::Rect) -> Rect {
+fn rectangle(r: uqm_engine::graphics::geometry::Rect) -> Rect {
     Rect {
         corner: Point {
             x: r.corner.x,
@@ -190,13 +190,13 @@ impl Gfx for Graphics {
     }
     fn draw_stamp(&self, s: Stamp) {
         draw::stamp(
-            crate::graphics::drawable::FrameId::from_bits(s.frame),
+            uqm_engine::graphics::drawable::FrameId::from_bits(s.frame),
             point(s.origin),
         );
     }
     fn draw_filled_stamp(&self, s: Stamp) {
         draw::filled_stamp(
-            crate::graphics::drawable::FrameId::from_bits(s.frame),
+            uqm_engine::graphics::drawable::FrameId::from_bits(s.frame),
             point(s.origin),
         );
     }
@@ -207,18 +207,18 @@ impl Gfx for Graphics {
             &text,
             point(t.baseline),
             match t.align {
-                Align::Left => crate::graphics::geometry::TextAlign::Left,
-                Align::Center => crate::graphics::geometry::TextAlign::Center,
-                Align::Right => crate::graphics::geometry::TextAlign::Right,
+                Align::Left => uqm_engine::graphics::geometry::TextAlign::Left,
+                Align::Center => uqm_engine::graphics::geometry::TextAlign::Center,
+                Align::Right => uqm_engine::graphics::geometry::TextAlign::Right,
             },
             u16::MAX,
         );
     }
     fn abs_frame(&self, f: FrameId, i: u16) -> FrameId {
-        draw::frame(crate::graphics::drawable::FrameId::from_bits(f), i).bits()
+        draw::frame(uqm_engine::graphics::drawable::FrameId::from_bits(f), i).bits()
     }
     fn rel_frame(&self, f: FrameId, i: i16) -> FrameId {
-        draw::relative_frame(crate::graphics::drawable::FrameId::from_bits(f), i).bits()
+        draw::relative_frame(uqm_engine::graphics::drawable::FrameId::from_bits(f), i).bits()
     }
     fn inc_frame(&self, f: FrameId) -> FrameId {
         self.rel_frame(f, 1)
@@ -227,10 +227,10 @@ impl Gfx for Graphics {
         self.rel_frame(f, -1)
     }
     fn frame_count(&self, f: FrameId) -> u16 {
-        draw::frame_count(crate::graphics::drawable::FrameId::from_bits(f))
+        draw::frame_count(uqm_engine::graphics::drawable::FrameId::from_bits(f))
     }
     fn frame_index(&self, f: FrameId) -> u16 {
-        draw::frame_index(crate::graphics::drawable::FrameId::from_bits(f))
+        draw::frame_index(uqm_engine::graphics::drawable::FrameId::from_bits(f))
     }
     fn play_frame(&self) -> FrameId {
         self.play.frame().bits()
@@ -264,12 +264,12 @@ impl Gfx for Graphics {
                         &self.highlight,
                         screen,
                         clip,
-                        Some(crate::graphics::geometry::Rect {
-                            corner: crate::graphics::geometry::Point {
+                        Some(uqm_engine::graphics::geometry::Rect {
+                            corner: uqm_engine::graphics::geometry::Point {
                                 x: (self.dimensions.0 - 60) as i16 - clip.corner.x,
                                 y: (self.dimensions.1 - 56) as i16 - clip.corner.y,
                             },
-                            extent: crate::graphics::geometry::Extent {
+                            extent: uqm_engine::graphics::geometry::Extent {
                                 width: 56,
                                 height: 53,
                             },

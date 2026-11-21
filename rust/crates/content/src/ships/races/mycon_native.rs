@@ -1,20 +1,20 @@
 //! Mycon Podship callbacks and descriptor ported from `sc2/src/uqm/ships/mycon/mycon.c`.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, normalize_facing};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, MOVEMENT_STATE_AVOID,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         CHANGING, CREW_OBJECT, FINITE_LIFE, PLAYER_SHIP, SHIP_BEYOND_MAX_SPEED,
         SHIP_IN_GRAVITY_WELL,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::ships::native::{angle_to_facing, normalize_facing};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 40;
@@ -39,7 +39,7 @@ pub mod engine {
     const SPECIAL_ENERGY_COST: u8 = MAX_ENERGY;
     const REGENERATION_AMOUNT: i32 = 4;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE | SEEKING_WEAPON) as u16;
         d.info.ship_cost = 21;
@@ -81,8 +81,8 @@ pub mod engine {
         d.intelligence.weapon_range = 800 << ONE_SHIFT;
         d.descriptor(&MYCON)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static MYCON: Race = Race {
@@ -240,7 +240,7 @@ pub mod engine {
             let dy = (i32::from(cx.element(target).current.location.y)
                 - i32::from(concerns.subject.current.location.y)) as i16;
             let direction =
-                normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))));
             if normalize_facing(
                 i32::from(direction) - i32::from(cx.ship_state(ss).facing)
                     + angle_to_facing(QUADRANT as i32),

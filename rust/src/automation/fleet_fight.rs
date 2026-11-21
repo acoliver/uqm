@@ -4,7 +4,7 @@
 //! picker, preferring live escorts before committing the flagship.
 
 use super::script::MenuKey;
-use crate::pickship::{Cursor, FLAGSHIP_COLUMN};
+use uqm_modes::pickship::{Cursor, FLAGSHIP_COLUMN};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Picker {

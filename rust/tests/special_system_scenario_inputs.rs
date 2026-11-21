@@ -1,4 +1,5 @@
 //! Source contracts for unplayed, player-driven Sol orbit proposals.
+#![forbid(unsafe_code)]
 
 use serde_json::{json, Value};
 use std::path::PathBuf;

@@ -1,7 +1,7 @@
 //! Native-only graphics observations immediately before renderer readback.
 
 use super::*;
-use crate::graphics::presentation_diagnostics::PresentationSample;
+use uqm_engine::graphics::presentation_diagnostics::PresentationSample;
 
 pub(crate) const MAIN_MENU_COMMITTED_OBSERVATION: &str = "committed_non_uniform_menu_frame";
 
@@ -149,7 +149,7 @@ mod tests {
                 script,
                 root.path().into(),
                 native.then_some(16384),
-                crate::engine::World::new().activity_control(),
+                uqm_engine::World::new().activity_control(),
                 Default::default(),
                 Default::default(),
             );

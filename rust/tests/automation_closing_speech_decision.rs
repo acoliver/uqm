@@ -7,6 +7,7 @@
 //! through the farewell.
 //!
 //! Each test owns an observer with its own script and output directory.
+#![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 
@@ -38,8 +39,8 @@ fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
             PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("closing-speech-decision");
         std::fs::create_dir_all(&output_root).expect("evidence root");
         let _application = {
-            let game = uqm_rust::engine::Game::new();
-            let input = uqm_rust::engine::input::InputControls::default();
+            let game = uqm_engine::Game::new();
+            let input = uqm_engine::input::InputControls::default();
             let observer = Some(AutomationObserver::new(
                 script,
                 output_root,

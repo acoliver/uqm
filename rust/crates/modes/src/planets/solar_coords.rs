@@ -1,5 +1,5 @@
 //! Integer coordinate transforms used by interplanetary flight.
-use crate::engine::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
 
 pub(crate) fn star_seed(point: Point) -> u32 {
     (u32::from(point.y as u16) << 16) | u32::from(point.x as u16)
@@ -51,9 +51,9 @@ impl SolarCoordinates {
 }
 
 pub(crate) fn outer_location(
-    solar: &crate::engine::world::generation::SolarSnapshot,
+    solar: &uqm_engine::world::generation::SolarSnapshot,
     planet: u16,
-) -> crate::graphics::geometry::Point {
+) -> uqm_engine::graphics::geometry::Point {
     SolarCoordinates::new(solar.screen).to_location(
         solar.planets[usize::from(planet)].display_origin,
         solar.zoom_radius,
@@ -94,12 +94,12 @@ mod tests {
 
     #[test]
     fn copied_outer_geometry_keeps_its_screen_zoom_and_body() {
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         world.set_catalog(std::borrow::Cow::Borrowed(
             &crate::planets::tables::STARMAP_ARRAY,
         ));
         let mut visit =
-            crate::planets::solar_system::SolarSystem::new(&world, crate::engine::StarId(0));
+            crate::planets::solar_system::SolarSystem::new(&world, uqm_engine::StarId(0));
         visit.sys.sun.radius = 8192;
         visit.sys.planets[2].image.origin = Point { x: -1, y: 3 };
         let observation = visit.snapshot((320, 200));

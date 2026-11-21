@@ -5,12 +5,10 @@
 //!
 //! The callers check the body; everything here is about planet 0.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::generation::SolarSys;
-use crate::engine::StoryKey;
 use crate::planets::generate::special::Story;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::generation::SolarSys;
+use uqm_engine::StoryKey;
 
 /// `GLOBAL_FLAGS_AND_DATA` value that marks the conversation as a home
 /// contact: `1 << 7`.
@@ -47,7 +45,7 @@ pub trait HomeContactSite {
     /// the report skipped to its second entry when `artifact_taken`.
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         artifact_taken: bool,
     );
 }
@@ -117,7 +115,7 @@ pub fn pickup_artifact(
 ) -> bool {
     lander.report(
         system,
-        crate::engine::world::generation::ReportDisposition::Cycle,
+        uqm_engine::world::generation::ReportDisposition::Cycle,
     );
     if lander.flag(artifact_flag) == 0 {
         lander.lander_takeoff();

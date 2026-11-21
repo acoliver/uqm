@@ -9,8 +9,8 @@ use super::session::{PlanetSideSession, SessionOutcome, SessionPhase, ShipDelta}
 use super::simulation::{self, FrameInput, LanderState, Shot, SimulationEffect, TickResult};
 use super::special_effects::SpecialPickupEffects;
 use super::world::{HazardChances, HazardSpawn, WorldStepEffects};
-use crate::engine::battle::Cx;
 use std::cell::RefCell;
+use uqm_engine::battle::Cx;
 
 /// Canonical planet-side simulation cadence.
 pub const PLANET_SIDE_HZ: u32 = 35;
@@ -143,7 +143,7 @@ pub trait PlanetSideGraphics {
 
 /// Audio adapter consuming typed gameplay cues.
 pub trait PlanetSideAudio {
-    fn play(&mut self, _world: &crate::engine::World, cue: SoundCue) -> Result<(), AdapterError>;
+    fn play(&mut self, _world: &uqm_engine::World, cue: SoundCue) -> Result<(), AdapterError>;
 }
 
 /// Monotonic clock adapter. The core never sleeps directly.
@@ -683,11 +683,7 @@ mod tests {
     #[derive(Default)]
     struct Audio(Vec<SoundCue>);
     impl PlanetSideAudio for Audio {
-        fn play(
-            &mut self,
-            _world: &crate::engine::World,
-            cue: SoundCue,
-        ) -> Result<(), AdapterError> {
+        fn play(&mut self, _world: &uqm_engine::World, cue: SoundCue) -> Result<(), AdapterError> {
             self.0.push(cue);
             Ok(())
         }
@@ -755,7 +751,7 @@ mod tests {
         impl PlanetSideAudio for RetainedAudio<'_> {
             fn play(
                 &mut self,
-                world: &crate::engine::World,
+                world: &uqm_engine::World,
                 cue: SoundCue,
             ) -> Result<(), AdapterError> {
                 assert_eq!(std::ptr::from_ref(world) as usize, self.world);
@@ -764,13 +760,13 @@ mod tests {
                 Ok(())
             }
         }
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let game = std::cell::RefCell::new(Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
         let events = std::cell::RefCell::new(Vec::new());
         let mut session = session();
@@ -801,13 +797,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn warmup_transitions_to_launch_and_plays_departs_sound() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = PlanetSideSession::new(
@@ -846,13 +842,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn frame_routes_dangerous_collision_damage_and_sounds_before_render() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -890,13 +886,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn takeoff_enters_takingoff_phase_before_return_sound() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -930,13 +926,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn abort_never_applies_ship_writeback() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -962,13 +958,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn fatal_collision_enters_explosion_phase_and_delays_settlement() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1027,13 +1023,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn special_pickup_effects_update_crew_and_request_takeoff() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1063,13 +1059,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn fatal_pickup_effects_keep_takeoff_before_explosion_order() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let cx = &RefCell::new(Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
         for takeoff_requested in [false, true] {
             let mut session = session();
@@ -1111,13 +1107,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn special_pickup_auto_takeoff_completes_without_input() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1162,13 +1158,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn full_phase_progression_warmup_to_complete_via_takeoff() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = PlanetSideSession::new(
@@ -1278,13 +1274,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn cargo_meters_update_every_active_frame() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1311,13 +1307,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn lifecycle_phases_render_with_animation_frame_and_offset() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = PlanetSideSession::new(
@@ -1369,13 +1365,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn adapter_failure_stops_the_frame_as_a_typed_error() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         struct FailingInput;
@@ -1437,13 +1433,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn spawn_shot_effect_registers_shot_in_collision_adapter() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1477,13 +1473,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn world_step_advances_each_active_frame() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1513,13 +1509,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn begin_explosion_sets_the_phase_resets_the_animation_and_sounds_once() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1568,13 +1564,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn step_surface_world_reports_no_early_exit_while_crew_survive() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();
@@ -1597,13 +1593,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn run_lander_simulation_reports_an_abort_without_presenting_a_frame() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut session = session();

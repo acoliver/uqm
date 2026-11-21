@@ -1,34 +1,33 @@
 //! Retained contact capabilities mutate the supplied campaign, without a published owner.
+#![forbid(unsafe_code)]
 use std::cell::RefCell;
-use uqm_rust::{
-    engine::species::ship,
-    engine::{
-        battle::{Battle, Cx},
-        observe::{Io, Unobserved},
-        world::generation::SolarSys,
-        Game, StoryKey,
+use uqm_engine::species::ship;
+use uqm_engine::{
+    battle::{Battle, Cx},
+    observe::{Io, Unobserved},
+    world::generation::SolarSys,
+    Game, StoryKey,
+};
+use uqm_modes::planets::{
+    generate::{
+        chmmr::ChmmrSite,
+        home_contact::HomeContactSite,
+        identities::*,
+        myc::MyconSite,
+        orz::OrzSite,
+        pet::{TalkingPetSite, UrquanEncounterSite},
+        sam::SamatraSite,
+        special::Story,
+        utw::UtwigSite,
+        vux::VuxSite,
+        yehat::YehatSite,
     },
-    planets::{
-        generate::{
-            chmmr::ChmmrSite,
-            home_contact::HomeContactSite,
-            identities::*,
-            myc::MyconSite,
-            orz::OrzSite,
-            pet::{TalkingPetSite, UrquanEncounterSite},
-            sam::SamatraSite,
-            special::Story,
-            utw::UtwigSite,
-            vux::VuxSite,
-            yehat::YehatSite,
-        },
-        solarsys::site::Site,
-    },
+    solarsys::site::Site,
 };
 
 fn campaign() -> Game {
     let mut game = Game::new();
-    uqm_rust::state::ffi::rust_init_game_state(&mut game.world);
+    uqm_engine::state::ffi::rust_init_game_state(&mut game.world);
     {
         let mut fleets = game.world.avail_races();
         while let Some(id) = fleets.alloc() {
@@ -49,14 +48,14 @@ fn with_site(
     index: u8,
     run: impl FnOnce(&mut Site<'_, '_, '_>, &mut SolarSys<'_>),
 ) {
-    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+    let mut pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
     with_pickup_site(game, index, &mut pickup, run);
 }
 
 fn with_pickup_site(
     game: &mut Game,
     index: u8,
-    pickup: &mut uqm_rust::planet_side::special_effects::PickupContext,
+    pickup: &mut uqm_modes::planet_side::special_effects::PickupContext,
     run: impl FnOnce(&mut Site<'_, '_, '_>, &mut SolarSys<'_>),
 ) {
     let mut battle = Battle::new();
@@ -64,17 +63,22 @@ fn with_pickup_site(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     ));
     let mut observer = Unobserved;
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    let mut system = SolarSys::new(&[], 0, index, uqm_rust::math::RandomContext::with_seed(123));
+    let mut system = SolarSys::new(
+        &[],
+        0,
+        index,
+        uqm_engine::math::RandomContext::with_seed(123),
+    );
     let mut host = Site::new(
         &owner,
         &io,
-        uqm_rust::engine::StarId(0),
+        uqm_engine::StarId(0),
         index,
         false,
         pickup,
@@ -97,7 +101,7 @@ fn race_of_first_npc(game: &Game) -> u8 {
 #[test]
 #[serial_test::serial]
 fn encounter_selection_and_reset_use_only_the_supplied_campaign() {
-    use uqm_rust::planets::generate::sol::orbital::Orbital;
+    use uqm_modes::planets::generate::sol::orbital::Orbital;
     let mut first = campaign();
     let mut second = campaign();
     first.world.last_encounter_group = 123;

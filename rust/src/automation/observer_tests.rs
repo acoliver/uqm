@@ -1,7 +1,7 @@
 use super::observer::Handle;
 use super::{campaign_state, coordinator::AutomationObserver, ending::Ending};
-use crate::engine::observe::{CheckpointView, InputView, Observer};
 use std::sync::Arc;
+use uqm_engine::observe::{CheckpointView, InputView, Observer};
 
 fn observer() -> (tempfile::TempDir, Handle) {
     let source = br#"{"version":1,"name":"owned-observation","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":60}}"#;
@@ -14,7 +14,7 @@ fn observer() -> (tempfile::TempDir, Handle) {
     let observer = AutomationObserver::new(
         script,
         directory.path().into(),
-        crate::engine::World::new().activity_control(),
+        uqm_engine::World::new().activity_control(),
         Default::default(),
         Default::default(),
     );
@@ -34,7 +34,7 @@ fn assert_idle(owner: &AutomationObserver) {
         (0, super::ui_observation::PlanetMenuPhase::Inactive)
     );
     assert_eq!(ui.ship_picker_observation(), (0, false));
-    assert_eq!(ui.ship_picker_cursor(), crate::pickship::Cursor::START);
+    assert_eq!(ui.ship_picker_cursor(), uqm_modes::pickship::Cursor::START);
     assert_eq!(ui.star_map(), None);
     assert_eq!(ui.ship_escape_generation(), 0);
     assert_eq!(*owner.ending.lock(), Ending::default());
@@ -86,7 +86,7 @@ fn checkpoint_observations_belong_to_each_observer() {
     assert_eq!(ui.ship_picker_observation(), (1, true));
     assert_eq!(
         ui.ship_picker_cursor(),
-        crate::pickship::Cursor { x: 1, y: 1 }
+        uqm_modes::pickship::Cursor { x: 1, y: 1 }
     );
     assert_eq!(ui.ship_escape_generation(), 1);
     assert!(first.0.ending.lock().credits_completed);
@@ -235,7 +235,7 @@ fn starting_another_scene_resets_dispatch_and_requires_new_observations() {
 
 #[test]
 fn lander_checkpoints_are_copied_into_the_supplied_observer() {
-    use crate::engine::observe_port::planet_side::{MineralDeposit, PlanetSideSnapshot};
+    use uqm_engine::observe_port::planet_side::{MineralDeposit, PlanetSideSnapshot};
     let (_first_output, mut first) = observer();
     let (_second_output, second) = observer();
     let mut trip = PlanetSideSnapshot::default();
@@ -267,7 +267,7 @@ fn lander_checkpoints_are_copied_into_the_supplied_observer() {
     assert_eq!(mineral.generation, 4);
     assert_eq!(
         mineral.position,
-        crate::planet_side::model::SurfacePoint { x: 30, y: 60 }
+        uqm_modes::planet_side::model::SurfacePoint { x: 30, y: 60 }
     );
     assert_eq!(mineral.facing, 7);
     assert_eq!(mineral.units[6], 5);
@@ -280,7 +280,7 @@ fn lander_checkpoints_are_copied_into_the_supplied_observer() {
 
 #[test]
 fn lander_fixture_requests_belong_to_each_observer() {
-    use crate::engine::observe_port::planet_side::FixtureLayout;
+    use uqm_engine::observe_port::planet_side::FixtureLayout;
     let (_first_output, first) = observer();
     let (_second_output, second) = observer();
     first
@@ -317,7 +317,7 @@ fn lander_fixture_requests_belong_to_each_observer() {
 
 #[test]
 fn lander_admission_consumes_only_its_observers_request_and_sequence() {
-    use crate::engine::observe_port::planet_side::FixtureLayout;
+    use uqm_engine::observe_port::planet_side::FixtureLayout;
     let (_first_output, mut first) = observer();
     let (_second_output, mut second) = observer();
     first
@@ -326,19 +326,19 @@ fn lander_admission_consumes_only_its_observers_request_and_sequence() {
         .lock()
         .queue(FixtureLayout::MineralGallery)
         .unwrap();
-    let first_trip = crate::engine::Game::new()
+    let first_trip = uqm_engine::Game::new()
         .with_context(|cx| first.input_admitted(&InputView::PlanetSideBegin, cx))
         .planet_side
         .unwrap();
     assert_eq!(first_trip.generation, 1);
     assert_eq!(first_trip.fixture, Some(FixtureLayout::MineralGallery));
-    let next_trip = crate::engine::Game::new()
+    let next_trip = uqm_engine::Game::new()
         .with_context(|cx| first.input_admitted(&InputView::PlanetSideBegin, cx))
         .planet_side
         .unwrap();
     assert_eq!(next_trip.generation, 2);
     assert_eq!(next_trip.fixture, None);
-    let other_trip = crate::engine::Game::new()
+    let other_trip = uqm_engine::Game::new()
         .with_context(|cx| second.input_admitted(&InputView::PlanetSideBegin, cx))
         .planet_side
         .unwrap();
@@ -362,8 +362,8 @@ fn report_visibility_belongs_to_the_supplied_observer_and_survives_trip_updates(
 
 #[test]
 fn map_observation_freezes_projection_and_cursor_per_observer_and_clears_on_exit() {
-    use crate::engine::observe_port::starmap::{Projection, StarMapView};
-    use crate::graphics::geometry::Point;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::observe_port::starmap::{Projection, StarMapView};
     let (_first_output, mut first) = observer();
     let (_second_output, second) = observer();
     let mut view = StarMapView {
@@ -382,9 +382,9 @@ fn map_observation_freezes_projection_and_cursor_per_observer_and_clears_on_exit
     assert_ne!(view, published);
     assert_eq!(first.0.ui.star_map(), Some(published));
     assert_eq!(second.0.ui.star_map(), None);
-    let mut world = crate::engine::World::new();
-    world.story = Some(crate::engine::world::story::StoryState::new());
-    let mut campaign = crate::engine::observe::CampaignView::from_world(&world);
+    let mut world = uqm_engine::World::new();
+    world.story = Some(uqm_engine::world::story::StoryState::new());
+    let mut campaign = uqm_engine::observe::CampaignView::from_world(&world);
     campaign.instant_move = true;
     let target = super::star_flight::StarTarget::resolve("Sol").unwrap();
     let observation =

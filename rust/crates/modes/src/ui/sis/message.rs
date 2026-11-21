@@ -1,11 +1,9 @@
 //! Campaign message labels borrowed from their world, catalog and text owners.
-use crate::engine::world::activity::ActivityKind;
+use crate::planets::starmap::naming::cluster_name;
 use crate::starbase::ids;
-use crate::{
-    engine::{Kernel, World},
-    planets::starmap::naming::cluster_name,
-};
 use std::ffi::CString;
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::{Kernel, World};
 
 pub fn default_message_text(kernel: &Kernel, world: &World) -> CString {
     match ActivityKind::from_raw(world.activity() as u8) {

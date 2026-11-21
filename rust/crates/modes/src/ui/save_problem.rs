@@ -1,10 +1,10 @@
 //! Save failure popup, preserving save.c's measurement and screen restoration.
-use crate::engine::{battle::Cx, observe::Io};
-use crate::graphics::{
+use crate::ui::util::{box_rectangles, wait_for_any_button};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::LoadedDrawable, font::FontLease, geometry::Color,
     geometry::Point, geometry::Rect, geometry::TextAlign,
 };
-use crate::ui::util::{box_rectangles, wait_for_any_button};
+use uqm_engine::{battle::Cx, observe::Io};
 
 fn color(v: u8) -> Color {
     super::rgb15(v, v, v)
@@ -36,7 +36,7 @@ pub fn render_save_problem(
         let mut rect = if text.is_empty() {
             Rect {
                 corner: Point { x: 0, y: 0 },
-                extent: crate::graphics::geometry::Extent {
+                extent: uqm_engine::graphics::geometry::Extent {
                     width: 0,
                     height: 0,
                 },
@@ -92,7 +92,7 @@ impl SaveBackground {
 }
 
 pub fn save_confirmation(
-    kernel: &crate::engine::Kernel,
+    kernel: &uqm_engine::Kernel,
     context: &ContextLease,
     saving: bool,
 ) -> Option<SaveBackground> {

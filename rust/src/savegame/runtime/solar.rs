@@ -1,9 +1,9 @@
 //! Save-summary reads from the supplied owning solar session.
 
 use super::summary::{utf8_string_copy, SessionSummary, SA_MATRA_STRING};
-use crate::engine::save::summary as summary_values;
-use crate::engine::world::generation::{Body, SolarSnapshot};
 use crate::savegame::types::SIS_NAME_SIZE;
+use uqm_engine::save::summary as summary_values;
+use uqm_engine::world::generation::{Body, SolarSnapshot};
 
 /// What the solar-system state and the game strings say about the game.
 ///

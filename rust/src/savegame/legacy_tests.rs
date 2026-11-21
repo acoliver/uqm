@@ -25,7 +25,7 @@ fn legacy_summary_skips_both_alignment_words_and_has_no_name() {
 
 #[test]
 fn legacy_state_moves_story_bits_and_each_defined_group_offset() {
-    use crate::state::game_state::{get_state_32_raw, set_state_32_raw, set_state_bits_raw};
+    use uqm_engine::state::game_state::{get_state_32_raw, set_state_32_raw, set_state_bits_raw};
     let mut old = [0; 155];
     for bit in [0, 51, 404, 450, 483, 878, 911, 930, 963, 1237] {
         set_state_bits_raw(&mut old, bit, bit, 1);

@@ -3,12 +3,10 @@ use super::super::{
     resources::{Frame, Resource, StringEntry},
     value, Fields,
 };
-use crate::{
-    automation::parity::Journal,
-    engine::battle::record::{DataRecord, ShipInfoRecord},
-    graphics::drawable::FrameId,
-    resource::ResourceKey,
-};
+use crate::automation::parity::Journal;
+use uqm_engine::battle::record::{DataRecord, ShipInfoRecord};
+use uqm_engine::graphics::drawable::FrameId;
+use uqm_engine::resource::ResourceKey;
 
 pub(super) struct Assets<'a> {
     keys: Vec<(&'static str, Resource<'a>)>,
@@ -16,7 +14,7 @@ pub(super) struct Assets<'a> {
     strings: StringEntry,
     sounds: StringEntry,
     music: usize,
-    sets: [(&'static str, &'a crate::engine::battle::frames::FrameArray); 3],
+    sets: [(&'static str, &'a uqm_engine::battle::frames::FrameArray); 3],
 }
 
 impl<'a> Assets<'a> {
@@ -139,13 +137,13 @@ mod tests {
 
     #[test]
     fn descriptor_registration_distinguishes_absent_arrays_from_present_empty_views() {
-        use crate::engine::battle::{frames::FrameArray, record::RaceDescriptor};
+        use uqm_engine::battle::{frames::FrameArray, record::RaceDescriptor};
         let directory = crate::automation::parity_state::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create frame-source journal: {error}"));
         let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_data.ship =
-            FrameArray::fixture([crate::graphics::drawable::FrameId::NULL; 3], ());
+            FrameArray::fixture([uqm_engine::graphics::drawable::FrameId::NULL; 3], ());
         let assets = Assets::borrow(&descriptor.ship_info, &descriptor.ship_data);
         assets.register(&mut journal, "test");
         assert_eq!(journal.frame_set(0), None);

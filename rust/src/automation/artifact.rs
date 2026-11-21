@@ -52,7 +52,7 @@ pub fn read_regular_relative_nofollow(
             | libc::O_NONBLOCK
             | if is_directory { libc::O_DIRECTORY } else { 0 };
         directory =
-            crate::platform::os::fd::open_at(directory.as_fd(), &name, flags, 0).map(File::from)?;
+            uqm_platform::os::fd::open_at(directory.as_fd(), &name, flags, 0).map(File::from)?;
     }
     let before = directory.metadata()?;
     if !before.is_file() || before.len() > limit {

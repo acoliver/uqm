@@ -1,14 +1,12 @@
 //! Story gating and host effects of `GenerateChmmr_generateOrbital`, checked
 //! against a recording site and a fake game state, and unleashed or sealed.
 
-use crate::engine::StoryKey;
 use std::collections::HashMap;
+use uqm_engine::StoryKey;
 
 use super::{enter_orbit, ChmmrSite, CHMMR_CONTACT_FLAGS, ILWRATH_AMBUSH_FLAGS};
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
 use crate::planets::generate::special::{Body, Story};
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 const IN_INTERPLANETARY: u16 = 4;
 const HOME: Body = Body::Planet(1);
@@ -121,7 +119,7 @@ impl ChmmrSite for RecordingSite {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn visit_starbase(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn visit_starbase(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         self.record(Call::VisitStarbase);
     }
 }

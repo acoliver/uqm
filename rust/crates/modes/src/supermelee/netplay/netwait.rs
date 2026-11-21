@@ -1,7 +1,7 @@
 //! Ordered ready/reset exchanges across the caller's input frames.
 use super::netconnection::ReadyAction;
-use crate::engine::battle::net::NetState;
-use crate::engine::battle::net::ProtocolDriver;
+use uqm_engine::battle::net::NetState;
+use uqm_engine::battle::net::ProtocolDriver;
 const NETWORK_POLL_DELAY: u32 = uqm_engine::time::counter_abi::ONE_SECOND / 24;
 
 impl super::session::SessionCore {

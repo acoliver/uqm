@@ -5,8 +5,8 @@
 //! `gfxlib.h` builds them: `BUILD_COLOR` returns its RGB argument and drops
 //! the legacy palette index, and `MAKE_RGB15` always yields alpha 255.
 
-use crate::graphics::geometry::Color;
-use crate::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT};
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT};
 
 /// `ANGLE_TO_FACING`: rounds an angle to the nearest of sixteen facings.
 const fn angle_to_facing(angle: i32) -> i32 {
@@ -66,25 +66,25 @@ const fn decloak_step(color: Color) -> Option<Color> {
 
 pub mod engine {
     use super::*;
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, ShipId, StoryKey, WeaponOrigin,
         WeaponSpawn, World,
     };
 
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT,
         MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{CHANGING, DISAPPEARING, NONSOLID, STAMPFILL_PRIMITIVE};
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::CollisionHook;
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::ONE_SHIFT;
-    use crate::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::battle::flags::{CHANGING, DISAPPEARING, NONSOLID, STAMPFILL_PRIMITIVE};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::CollisionHook;
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
     // Core characteristics
     const MAX_CREW: u16 = 22;
@@ -306,8 +306,9 @@ pub mod engine {
                 - (i32::from(cx.element(ship).current.location.y) + i32::from(dy1)))
                 as i16;
 
-            cx.ship_state_mut(ss).facing =
-                normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx0, dy0))));
+            cx.ship_state_mut(ss).facing = normalize_facing(angle_to_facing(i32::from(
+                uqm_engine::math::arctan(dx0, dy0),
+            )));
             if cx.element(ship).turn == 0 {
                 cx.element_mut(ship).turn += 1;
             }
@@ -434,8 +435,8 @@ mod tests {
 
     #[test]
     fn precedence_of_the_original_input_mask_clears_only_left() {
-        let mask = (!(crate::engine::battle::ai_constants::LEFT as i32)
-            | crate::engine::battle::ai_constants::RIGHT as i32) as u8;
+        let mask = (!(uqm_engine::battle::ai_constants::LEFT as i32)
+            | uqm_engine::battle::ai_constants::RIGHT as i32) as u8;
         assert_eq!(mask, 0xFE);
     }
 

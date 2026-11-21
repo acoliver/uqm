@@ -31,14 +31,14 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
 /// Queued draw commands hold the resources they draw with; owners call this
 /// before freeing such a resource.
 pub fn drain_committed_draws() {
-    crate::graphics::state::flush_ex(true);
+    uqm_engine::graphics::state::flush_ex(true);
 }
 
 /// Drain every committed draw command, then publish exactly one frame; a
 /// flush alone does not swap when batching already emptied the queue.
 fn present_committed_draws() {
     drain_committed_draws();
-    crate::graphics::present::swap_buffers(crate::graphics::present::Redraw::No);
+    uqm_engine::graphics::present::swap_buffers(uqm_engine::graphics::present::Redraw::No);
 }
 
 /// Present drawing committed before a synchronous `DoInput` loop begins.
@@ -54,9 +54,9 @@ pub fn rust_begin_input_loop() {
 /// Returns the callback's original continue value after presenting its complete
 /// draw transaction in Rust-owned-main builds.
 pub fn rust_complete_input_frame(
-    cx: &crate::engine::battle::Cx<'_>,
+    cx: &uqm_engine::battle::Cx<'_>,
     keep_running: i32,
-    io: &mut crate::engine::observe::Io<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> i32 {
     let result = complete_input_frame(|| keep_running != 0);
 

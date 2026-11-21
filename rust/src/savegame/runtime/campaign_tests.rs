@@ -1,8 +1,8 @@
 use super::{groups, queues, statefiles, *};
 use crate::savegame::{decode_save, encode_save};
-use crate::state::ffi::{rust_init_game_state, with_state_owners};
-use crate::state::game_state_keys::STATE_KEYS;
 use serial_test::serial;
+use uqm_engine::state::ffi::{rust_init_game_state, with_state_owners};
+use uqm_engine::state::game_state_keys::STATE_KEYS;
 
 #[test]
 fn final_fleet_has_eleven_crewed_avatars_and_the_restored_jugger() {
@@ -31,8 +31,8 @@ fn final_fleet_has_eleven_crewed_avatars_and_the_restored_jugger() {
 
 #[test]
 fn utwig_handover_checkpoint_preserves_both_alliances_and_the_mission() {
-    use crate::engine::StoryKey;
-    use crate::state::game_state::get_state_bits_raw;
+    use uqm_engine::state::game_state::get_state_bits_raw;
+    use uqm_engine::StoryKey;
 
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves/utwig-alliance.sav");
@@ -129,7 +129,7 @@ fn paid_lure_preparation_preserves_the_surviving_cruiser() {
 #[test]
 #[serial]
 fn every_committed_campaign_save_restores_and_round_trips_its_state() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
         let mut saves: Vec<_> = std::fs::read_dir(&root)
@@ -151,7 +151,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                 rust_init_game_state(&mut game_owner.world);
             }
             let mut game = super::queue_tests::LiveGame::new();
-            let mut clock = crate::engine::clock::GameClock::new();
+            let mut clock = uqm_engine::clock::GameClock::new();
 
             let restored = {
                 restore_runtime(

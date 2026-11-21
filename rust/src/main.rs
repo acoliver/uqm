@@ -24,7 +24,7 @@ fn main() {
 
     // Every mode after this, the content check included, reads files and time
     // through the platform.
-    uqm_rust::platform::install(parsed.replay.is_some());
+    uqm_platform::install(parsed.replay.is_some());
 
     // Handle early-exit modes (version/usage) that bypass the full init
     match parsed.run_mode {
@@ -54,7 +54,7 @@ fn main() {
     // The frame loop runs on this thread; see threading::qos. Declared after
     // argument handling so --version, --help and --check-content stay inert.
     #[cfg(target_os = "macos")]
-    uqm_rust::platform::qos::declare_game_thread_interactive();
+    uqm_platform::qos::declare_game_thread_interactive();
 
     // Automation setup: validate before run_uqm (REQ-MODE-001)
     let mut auto_opts = uqm_rust::automation::AutomationOptions {
@@ -84,8 +84,8 @@ fn main() {
         }
     }
 
-    let game = uqm_rust::engine::Game::new();
-    let input = uqm_rust::engine::input::InputControls::default();
+    let game = uqm_engine::Game::new();
+    let input = uqm_engine::input::InputControls::default();
     let observer = setup_observer(
         &auto_opts,
         parsed.native_window_proof.as_deref(),
@@ -109,8 +109,8 @@ fn main() {
 fn setup_observer(
     auto_opts: &uqm_rust::automation::AutomationOptions,
     native_window_proof: Option<&str>,
-    activity: uqm_rust::engine::world::activity::ActivityControl,
-    input: uqm_rust::engine::input::InputControls,
+    activity: uqm_engine::world::activity::ActivityControl,
+    input: uqm_engine::input::InputControls,
     configuration: uqm_engine::configuration::Configuration,
 ) -> Option<std::sync::Arc<uqm_rust::automation::AutomationObserver>> {
     // Build capabilities resolved from build.vars at compile time

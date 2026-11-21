@@ -1,14 +1,14 @@
 //! Orbital entry, with system borrows confined to host callbacks.
 
 use super::{PLUTO, STARBASE};
-use crate::engine::save::START_ENCOUNTER;
-use crate::engine::world::planet::{PlanetInfo, SystemInfo};
-use crate::engine::StoryKey;
 use crate::planets::generate::calc;
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{Body, Orbit, Story, EARTH_ATMOSPHERE};
 use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
+use uqm_engine::save::START_ENCOUNTER;
+use uqm_engine::world::planet::{PlanetInfo, SystemInfo};
+use uqm_engine::StoryKey;
 
 /// Queue operations shared by Sol's bomb reset and starbase entry.
 pub trait Queues {
@@ -51,7 +51,7 @@ pub trait Orbital: Queues {
     /// owned by the system until the existing planet/lander cleanup.
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: Scene,
     );
 }
@@ -164,7 +164,7 @@ fn override_info(info: &mut PlanetInfo, body: Body) {
 }
 
 pub fn generate_orbital(
-    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    system: &mut uqm_engine::world::generation::SolarSys<'_>,
     body: Body,
     host: &mut (impl Orbital + Story + super::super::host::PlanetSite + ?Sized),
 ) -> bool {

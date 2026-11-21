@@ -2,11 +2,11 @@
 use super::resources::Frame;
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
-pub(super) use crate::battle::context_access::observe::CustomData as RaceData;
-use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
-use crate::engine::species::species_id::{
+use uqm_engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
+use uqm_engine::species::species_id::{
     SPECIES_ID_ANDROSYNTH_ID, SPECIES_ID_PKUNK_ID, SPECIES_ID_SIS_SHIP_ID,
 };
+pub(super) use uqm_modes::battle::context_access::observe::CustomData as RaceData;
 pub(super) fn write_custom(
     custom: &RaceData<'_>,
     fields: &mut Fields,
@@ -88,14 +88,14 @@ fn hook(
         fields,
         prefix,
         name,
-        crate::battle::hook_registry::name_for_species(hooks, address, species),
+        uqm_modes::battle::hook_registry::name_for_species(hooks, address, species),
     );
 }
 
 fn missile_fields(
     fields: &mut Fields,
     prefix: &str,
-    missile: &crate::engine::battle::race::FlagshipWeapon,
+    missile: &uqm_engine::battle::race::FlagshipWeapon,
     journal: &Journal,
     hooks: &[(usize, &'static str)],
 ) {
@@ -124,7 +124,7 @@ fn missile_fields(
         hooks,
     );
     // Module configuration has no loaded frame array, just as the original launch templates.
-    Frame(crate::graphics::drawable::FrameId::NULL).write(
+    Frame(uqm_engine::graphics::drawable::FrameId::NULL).write(
         fields,
         &format!("{prefix}.farray"),
         journal,
@@ -134,7 +134,7 @@ fn missile_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::record::CharacteristicRecord;
     #[test]
     fn saved_transform_characteristics_are_individual_fields() {
         let directory = super::super::test_directory();

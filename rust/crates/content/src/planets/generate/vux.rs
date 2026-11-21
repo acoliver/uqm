@@ -1,17 +1,15 @@
 //! VUX home, Zex' maidens and Zex' beast, ported from `genvux.c`.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use crate::planets::generate::special::{self, Body, Story, REDUX_WORLD, WATER_WORLD};
 use crate::planets::generate::surface;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WORLD: Body = Body::Planet(0);
 // `units.h`: FULL_CIRCLE=64, HALF_CIRCLE=32, OCTANT=8.
@@ -35,7 +33,7 @@ pub trait VuxSite: HomeContactSite {
     /// Beast loads the font and strings and clears PlanetSideFrame[1].
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: Scene,
     );
 }
@@ -195,7 +193,7 @@ pub fn pickup_energy(
         assert!(lander.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 && which == 0);
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::SHOFIXTI_MAIDENS, 1);
@@ -205,7 +203,7 @@ pub fn pickup_energy(
     if star == VUX_DEFINED && body == WORLD {
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
     }
     false
@@ -222,7 +220,7 @@ pub fn pickup_life(
         assert_eq!(lander.flag(StoryKey::VUX_BEAST), 0);
         lander.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Once,
+            uqm_engine::world::generation::ReportDisposition::Once,
         );
         lander.lander_takeoff();
         lander.set_flag(StoryKey::VUX_BEAST, 1);
@@ -236,7 +234,7 @@ pub(crate) mod tests;
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

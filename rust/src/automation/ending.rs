@@ -12,8 +12,8 @@ pub struct Ending {
 }
 
 impl Ending {
-    pub(crate) fn observe_checkpoint(&mut self, view: crate::engine::observe::CheckpointView<'_>) {
-        use crate::engine::observe::CheckpointView;
+    pub(crate) fn observe_checkpoint(&mut self, view: uqm_engine::observe::CheckpointView<'_>) {
+        use uqm_engine::observe::CheckpointView;
         match view {
             CheckpointView::Won => self.won(),
             CheckpointView::PresentationStarted => self.presentation_started(),

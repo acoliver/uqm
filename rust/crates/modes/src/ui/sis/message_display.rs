@@ -1,11 +1,11 @@
 //! Message editing uses bounded font measurements and retained drawing targets.
 use super::*;
-use crate::graphics::{drawable::ContextFrame, geometry::TextAlign};
 use std::ffi::CStr;
+use uqm_engine::graphics::{drawable::ContextFrame, geometry::TextAlign};
 
 fn draw_cursor(
     context: &ContextLease,
-    measurement: &crate::graphics::font::TextMeasurement,
+    measurement: &uqm_engine::graphics::font::TextMeasurement,
     cursor: i16,
     flags: u16,
     height: i16,
@@ -33,7 +33,7 @@ fn draw_cursor(
 
 fn draw_edit(
     context: &ContextLease,
-    font: &crate::graphics::font::FontLease,
+    font: &uqm_engine::graphics::font::FontLease,
     text: &CStr,
     clip: Rect,
     edit: (i16, i16, u16),
@@ -64,7 +64,7 @@ fn draw_edit(
             .iter()
             .fold(baseline.x, |x, &delta| x.wrapping_add(i16::from(delta)));
         let (prefix, _) =
-            crate::strings::unicode::split_utf8_prefix(text.to_bytes(), extra as usize);
+            uqm_engine::strings::unicode::split_utf8_prefix(text.to_bytes(), extra as usize);
         let suffix = CStr::from_bytes_with_nul(&text.to_bytes_with_nul()[prefix.len()..])
             .unwrap_or_else(|error| panic!("invalid message suffix: {error}"));
         context.draw_text(font, suffix, baseline, TextAlign::Left, rgb15(18, 0, 18));
@@ -175,15 +175,16 @@ pub fn set_menu_flash(kernel: &Kernel, dimensions: (i32, i32), any: bool) {
 
 #[cfg(test)]
 mod tests {
-    use crate::graphics::{
+    use crate::ui;
+    use crate::ui::settings::OPT_PC;
+    use crate::ui::sis::{DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR};
+    use uqm_engine::graphics::{
         context::ContextLease, drawable::ContextFrame, geometry::Color, geometry::Point,
         geometry::TextAlign,
     };
-    use crate::ui::settings::OPT_PC;
-    use crate::ui::sis::{DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR};
-    use crate::{engine::Game, ui};
     use uqm_engine::test_support::campaign_display;
     use uqm_engine::test_support::native_process::own_graphics_process;
+    use uqm_engine::Game;
 
     #[test]
     #[serial_test::serial]
@@ -344,7 +345,7 @@ mod tests {
         ));
         assert_eq!(context.clip_rect().extent.width, 320);
         let screen = game.kernel.screen;
-        game.kernel.screen = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.screen = uqm_engine::graphics::drawable::FrameId::NULL;
         assert!(ui::sis::draw_message(&game.kernel, 320, c"A", -1, -1, 0));
         game.kernel.screen = screen;
         context.set_frame(ContextFrame::retain(screen));

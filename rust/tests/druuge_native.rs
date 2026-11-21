@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -6,15 +7,14 @@ use battle::*;
 
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
-use std::mem;
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MOVEMENT_STATE_PURSUE, SPECIAL, WEAPON,
 };
-use uqm_rust::engine::battle::flags::SHIP_AT_MAX_SPEED;
-use uqm_rust::engine::battle::record::EvaluateRecord;
-use uqm_rust::engine::species::species_id::SPECIES_ID_DRUUGE_ID;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::flags::SHIP_AT_MAX_SPEED;
+use uqm_engine::battle::Concern;
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_DRUUGE_ID;
 
 use battle::Battle as Battlefield;
 
@@ -83,19 +83,18 @@ fn descriptor_matches_druuge_c_data() {
 fn cannon_launch_uses_mass_driver_missile_parameters() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
             ship.ship_mut().ship_facing = 5;
             ship.element_mut().next.location = Point { x: 100, y: 200 };
             let slots = ship.weapon(1);
-            let out = [ship.weapon_record(slots[0]).cast()];
-            let missile = battle::element(out[0]);
-            assert!(!missile.is_null());
-            assert_eq!((*missile).life, 20);
-            assert_eq!((*missile).hits, 4);
-            assert_eq!((*missile).mass, 6);
-            assert_eq!((*missile).thrust, 6);
-            assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
+            let out = [slots[0].expect("allocated weapon")];
+            let missile = out[0];
+            assert_eq!(battle::get(missile).life, 20);
+            assert_eq!(battle::get(missile).hits, 4);
+            assert_eq!(battle::get(missile).mass, 6);
+            assert_eq!(battle::get(missile).thrust, 6);
+            assert_ne!(battle::get(missile).state_flags & IGNORE_SIMILAR as u16, 0);
             battle_context::dispose(out[0]);
         }
     })
@@ -105,16 +104,16 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
 fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
-            (*ship.el()).hits = 2;
+            battle::get_mut(ship.id).hits = 2;
             ship.descriptor_mut().ship_info.energy_level = 15;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             observation::enable();
             observation::drain();
             ship.preprocess();
             assert_eq!(special_hooks::count(&observation::drain(), "druuge"), 1);
-            assert_eq!((*ship.el()).hits, 1);
+            assert_eq!(battle::get(ship.id).hits, 1);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 31);
             assert_eq!(ship.ship_mut().special_counter, 30);
 
@@ -124,7 +123,7 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
             ship.preprocess();
             // Full energy ends the burn before it starts, so nothing activates.
             assert_eq!(special_hooks::count(&observation::drain(), "druuge"), 0);
-            assert_eq!((*ship.el()).hits, 1);
+            assert_eq!(battle::get(ship.id).hits, 1);
             assert_eq!(ship.ship_mut().cur_status_flags & SPECIAL as u16, 0);
         }
     })
@@ -134,21 +133,21 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
 fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
-            let mut enemy = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 1);
+            let enemy = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 1);
             ship.descriptor_mut().ship_info.energy_level = 3;
             ship.element_mut().hits = 14;
-            (*ship.el()).thrust = 0;
-            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
-            concerns[ENEMY_SHIP_INDEX as usize].object_ptr = enemy.el();
+            battle::get_mut(ship.id).thrust = 0;
+            let mut concerns: [Concern; 4] = [Concern::default(); 4];
+            concerns[ENEMY_SHIP_INDEX as usize].object = Some(enemy.id);
             concerns[ENEMY_SHIP_INDEX as usize].which_turn = 10;
-            ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
+            ship.think(ship.id, &mut concerns, 0);
             assert_eq!(
-                concerns[ENEMY_SHIP_INDEX as usize].move_state,
+                concerns[ENEMY_SHIP_INDEX as usize].movement,
                 MOVEMENT_STATE_PURSUE
             );
-            assert_eq!((*ship.el()).thrust, 11);
+            assert_eq!(battle::get(ship.id).thrust, 11);
             assert_ne!(
                 ship.ship_mut().ship_input_state & (WEAPON | SPECIAL) as u8,
                 0
@@ -165,7 +164,7 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
 fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
     battle_context::run(|_| {
         let _battle = Battlefield::new(8);
-        unsafe {
+        {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
             ship.ship_mut().ship_facing = 4;
             ship.ship_mut().cur_status_flags = (WEAPON | SHIP_AT_MAX_SPEED) as u16;

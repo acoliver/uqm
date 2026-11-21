@@ -36,7 +36,7 @@ impl AutomationObserver {
     }
 
     pub(super) fn write_action_phase(&self, inner: &mut CoordInner) {
-        if !crate::engine::host::is_replay() {
+        if !uqm_engine::host::is_replay() {
             return;
         }
         let index = inner.sched_state.step_index;
@@ -62,17 +62,17 @@ impl AutomationObserver {
     pub(super) fn create_parity(
         output: &std::path::Path,
     ) -> std::io::Result<Option<Mutex<super::super::parity::Journal>>> {
-        if !crate::engine::host::is_replay() || std::env::var_os("UQM_PARITY").is_none() {
+        if !uqm_engine::host::is_replay() || std::env::var_os("UQM_PARITY").is_none() {
             return Ok(None);
         }
         let journal = super::super::parity::Journal::create(output)?;
-        crate::collections::observation::enable();
+        uqm_engine::collections::observation::enable();
         Ok(Some(Mutex::new(journal)))
     }
 
     pub(super) fn parity_present(
         &self,
-        frame: &crate::graphics::presented_frame::PresentedFrame,
+        frame: &uqm_engine::graphics::presented_frame::PresentedFrame,
     ) -> std::io::Result<()> {
         if let Some(journal) = &self.parity {
             journal.lock().present(frame)?;
@@ -90,7 +90,7 @@ impl AutomationObserver {
             .try_set(TerminalClass::TraceFailure);
     }
 
-    pub fn parity_checkpoint(&self, cx: &crate::engine::battle::Cx<'_>, boundary: &str) {
+    pub fn parity_checkpoint(&self, cx: &uqm_engine::battle::Cx<'_>, boundary: &str) {
         let coord = self;
         if coord.runtime.mirror.is_terminal() {
             return;
@@ -158,12 +158,12 @@ mod tests {
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
         let _app = {
-            let game = crate::engine::Game::new();
+            let game = uqm_engine::Game::new();
             let observer = Some(AutomationObserver::new(
                 script,
                 directory.path().into(),
                 game.world.activity_control(),
-                crate::engine::input::InputControls::default(),
+                uqm_engine::input::InputControls::default(),
                 Default::default(),
             ));
             crate::app::Application::new(game, observer)

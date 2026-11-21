@@ -1,10 +1,11 @@
 //! Real virtual controls, restart dispatch, input reset and save enumeration.
+#![forbid(unsafe_code)]
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use uqm_rust::input::frames::Target;
+use uqm_engine::input_port::frames::Target;
+use uqm_engine::save::summary_record::SummaryDesc as SUMMARY_DESC;
+use uqm_modes::front_end::gameopt::{picker_action, PickerAction};
 use uqm_rust::{
-    engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
-    front_end::gameopt::{picker_action, PickerAction},
     mainloop::{
         input_abi::{flush_input, update_input_state},
         restart_menu::{
@@ -18,22 +19,18 @@ use uqm_rust::{
 
 struct NoLifecycle;
 impl RestartHost for NoLifecycle {
-    fn melee(
-        &mut self,
-        _: &mut uqm_rust::engine::battle::Cx<'_>,
-        _: &mut uqm_rust::engine::observe::Io<'_>,
-    ) {
+    fn melee(&mut self, _: &mut uqm_engine::battle::Cx<'_>, _: &mut uqm_engine::observe::Io<'_>) {
         panic!("unexpected melee");
     }
     fn credits(
         &mut self,
-        _: &mut uqm_rust::engine::battle::Cx<'_>,
-        _: &mut uqm_rust::engine::observe::Io<'_>,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
         _: bool,
     ) {
         panic!("unexpected credits");
     }
-    fn free_game_data(&mut self, _: &mut uqm_rust::engine::battle::Cx<'_>) {
+    fn free_game_data(&mut self, _: &mut uqm_engine::battle::Cx<'_>) {
         panic!("unexpected cleanup");
     }
 }
@@ -43,7 +40,7 @@ const CANCEL: usize = 10;
 const RETURN: i32 = 13;
 const ESCAPE: i32 = 27;
 
-fn key_event(input: &uqm_rust::engine::input::InputSession, symbol: i32, down: bool, repeat: bool) {
+fn key_event(input: &uqm_engine::input::InputSession, symbol: i32, down: bool, repeat: bool) {
     input.vcontrol(|vc| match (down, repeat) {
         (true, false) => vc.handle_key_down(symbol),
         (true, true) => {}
@@ -58,10 +55,10 @@ struct PickerProbe {
     repeat_pulses: (i32, i32),
 }
 
-unsafe fn picker_frame(
-    cx: &mut uqm_rust::engine::battle::Cx<'_>,
+fn picker_frame(
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &mut PickerProbe,
-    input: &uqm_rust::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
 ) -> u32 {
     let select = input.pulsed().menu[SELECT];
     let cancel = input.pulsed().menu[CANCEL];
@@ -90,16 +87,13 @@ unsafe fn picker_frame(
     }
 }
 
-unsafe fn open_from_restart_while_select_is_held(
-    input: &uqm_rust::engine::input::InputSession,
-    occupied: bool,
-) {
+fn open_from_restart_while_select_is_held(input: &uqm_engine::input::InputSession, occupied: bool) {
     flush_input(input);
     crate::battle_context::with(|cx| cx.world.set_activity(0));
     key_event(input, RETURN, true, false);
     crate::battle_context::with(|cx| update_input_state(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
-    let context = uqm_rust::graphics::context::LoadedContext::create(c"load-picker-restart");
+    let context = uqm_engine::graphics::context::LoadedContext::create(c"load-picker-restart");
     let mut owner = RestartMenu::default();
     let mut host = NoLifecycle;
     let mut menu = DoRestartState {
@@ -111,8 +105,8 @@ unsafe fn open_from_restart_while_select_is_held(
     crate::battle_context::with(|cx| {
         let previous = cx.kernel.screen_context;
         cx.kernel.screen_context = Some(context.context());
-        let mut observer = uqm_rust::engine::observe::Unobserved;
-        let mut io = uqm_rust::engine::observe::Io {
+        let mut observer = uqm_engine::observe::Unobserved;
+        let mut io = uqm_engine::observe::Io {
             observer: &mut observer,
         };
         {
@@ -138,8 +132,8 @@ unsafe fn open_from_restart_while_select_is_held(
     };
     // No key-up for the menu's Select has happened before picker entry.
     crate::battle_context::with(|cx| {
-        let mut observer = uqm_rust::engine::observe::Unobserved;
-        let mut io = uqm_rust::engine::observe::Io {
+        let mut observer = uqm_engine::observe::Unobserved;
+        let mut io = uqm_engine::observe::Io {
             observer: &mut observer,
         };
         cx.run_input(&mut io, true, |cx, _| {
@@ -171,17 +165,17 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             .join("tmp");
         std::fs::create_dir_all(&root).unwrap();
         let profile = tempfile::tempdir_in(root).unwrap();
-        unsafe {
-            uqm_rust::graphics::state::init_headless(Default::default());
-            input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::get_time_counter());
-            uqm_rust::input::sdl_input::attach_controls(input.controls());
+        {
+            uqm_engine::graphics::state::init_headless(Default::default());
+            input.set_default_menu_repeat(uqm_engine::time::counter_abi::get_time_counter());
+            uqm_engine::input_port::sdl_input::attach_controls(input.controls());
             input.vcontrol(|vc| {
                 vc.init();
                 assert!(vc.add_key_binding(RETURN, Target::Menu(SELECT)));
                 assert!(vc.add_key_binding(ESCAPE, Target::Menu(CANCEL)));
             });
 
-            let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
+            let mut summaries = [SUMMARY_DESC::default(); 50];
             assert!(!profile.path().join("save").exists());
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
@@ -189,11 +183,11 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
 
             let saves = profile.path().join("save");
             std::fs::create_dir(&saves).unwrap();
-            let vfs = uqm_rust::io::Vfs::new();
-            vfs.mount_dir("/", &saves, uqm_rust::io::Placement::Top, false);
+            let vfs = uqm_engine::io::Vfs::new();
+            vfs.mount_dir("/", &saves, uqm_engine::io::Placement::Top, false);
             let files = vfs.open_dir(std::path::Path::new("/"));
             vfs.set_save_dir(files.clone());
-            let previous = uqm_rust::io::install(vfs);
+            let previous = uqm_engine::io::install(vfs);
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             let slots = SaveSlots::new(&files);
@@ -247,14 +241,14 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             );
             match previous {
                 Some(previous) => {
-                    uqm_rust::io::install(previous);
+                    uqm_engine::io::install(previous);
                 }
                 None => {
-                    uqm_rust::io::uninstall();
+                    uqm_engine::io::uninstall();
                 }
             }
-            uqm_rust::input::sdl_input::uninit_input();
-            uqm_rust::graphics::state::uninit_headless();
+            uqm_engine::input_port::sdl_input::uninit_input();
+            uqm_engine::graphics::state::uninit_headless();
         }
     });
 }

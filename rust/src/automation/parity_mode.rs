@@ -5,7 +5,7 @@ use crate::savegame::types::GlobalState;
 
 pub(super) fn capture(
     fields: &mut Fields,
-    world: &crate::engine::World,
+    world: &uqm_engine::World,
     journal: &mut super::parity::Journal,
 ) {
     let game = &world.data.game;
@@ -79,7 +79,10 @@ fn velocity(fields: &mut Fields, state: &GlobalState) {
     }
 }
 
-pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state::StoryState>) {
+pub(super) fn story(
+    fields: &mut Fields,
+    state: Option<&uqm_engine::state::game_state::StoryState>,
+) {
     match state {
         Some(state) => {
             let bytes = state.as_bytes();
@@ -92,12 +95,12 @@ pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state
             fields,
             "mode.story",
             "unavailable",
-            crate::state::ffi::GameStateOwnerError::NotInitialized,
+            uqm_engine::state::ffi::GameStateOwnerError::NotInitialized,
         ),
     }
 }
 
-fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
+fn events(fields: &mut Fields, clock: &uqm_engine::clock::GameClock) {
     value(fields, "mode.events", "initialized", clock.initialized());
     if !clock.initialized() {
         return;
@@ -114,7 +117,7 @@ fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
     }
 }
 
-fn groups(fields: &mut Fields, world: &crate::engine::World, journal: &mut super::parity::Journal) {
+fn groups(fields: &mut Fields, world: &uqm_engine::World, journal: &mut super::parity::Journal) {
     let groups = world.ip_groups_ref();
     let mut next = groups.head();
     while let Some(id) = next {
@@ -192,11 +195,11 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn story_reports_the_current_state_owner() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let mut fields = Fields::new();
         story(&mut fields, game.world.story.as_ref());
         assert!(fields.contains_key("mode.story.unavailable"));
-        crate::state::ffi::rust_init_game_state(&mut game.world);
+        uqm_engine::state::ffi::rust_init_game_state(&mut game.world);
         let mut fields = Fields::new();
         story(&mut fields, game.world.story.as_ref());
         assert_eq!(fields["mode.story.initialized"], "true");

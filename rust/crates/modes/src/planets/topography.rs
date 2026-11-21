@@ -5,7 +5,7 @@
 //! generator stream in the same order and count as C, so the planets the
 //! player sees (and everything drawn after them from that stream) stay stable.
 
-use crate::math::RandomContext;
+use uqm_engine::math::RandomContext;
 
 /// One of the two edges of a fault band (`LineDDA0` / `LineDDA1`).
 struct LineDda {

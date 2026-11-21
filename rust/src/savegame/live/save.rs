@@ -1,12 +1,12 @@
 //! Save slots and live session preparation for the owned engine snapshot.
-use crate::engine::battle::Cx;
 use std::ffi::CStr;
+use uqm_engine::battle::Cx;
 
 use super::super::runtime::{self, groups, live};
 use super::super::{SaveFile, SaveSlots};
-use crate::engine::save::summary_record::SummaryDesc;
-use crate::engine::world::generation::SolarSnapshot;
-use crate::navigation::groups::put_group_info;
+use uqm_engine::save::summary_record::SummaryDesc;
+use uqm_engine::world::generation::SolarSnapshot;
+use uqm_modes::navigation::groups::put_group_info;
 use uqm_save::SlotError;
 
 /// Capture the running game for a save; the game thread retains the active
@@ -19,7 +19,7 @@ pub(crate) fn capture(
     let star = live::capture_live_star(cx.world)?;
     let point = cx.world.data.game.ip_location;
     if cx.world.in_hqspace() {
-        crate::engine::save::hyper_save::prepare_hyper_state(cx.world, cx.kernel)?;
+        uqm_engine::save::hyper_save::prepare_hyper_state(cx.world, cx.kernel)?;
     } else if let Some(solar) = solar {
         live::prepare_live_solar_location(cx.world, &solar)?;
     }

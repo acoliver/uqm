@@ -1,7 +1,8 @@
 //! Resource and movie lifecycle through the engine's normal library build.
-use uqm_rust::graphics::present::GraphicsOptions;
-use uqm_rust::strings::owned_table::LoadedTextTable;
-use uqm_rust::video::legacy::*;
+#![forbid(unsafe_code)]
+use uqm_engine::graphics::present::GraphicsOptions;
+use uqm_engine::strings::owned_table::LoadedTextTable;
+use uqm_engine::video::legacy::*;
 
 fn retained_playback_keeps_its_clip_after_descriptor_drop() {
     assert!(LoadedVideo::load(c"fixture.unknown").is_none());
@@ -75,32 +76,33 @@ fixture.broken = 3DOVID:broken.duk
     }
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    uqm_rust::platform::install(true);
+    uqm_platform::install(true);
     // SAFETY: this isolated test owns the repository, graphics state and every loaded resource.
     {
         let mount = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-        let dir = uqm_rust::io::content_dir().unwrap();
+        let dir = uqm_engine::io::content_dir().unwrap();
         retained_string_table_loads_owned_text();
         let options = GraphicsOptions::default();
-        uqm_rust::graphics::present::init_graphics(1, 0, options, 320, 240);
-        uqm_rust::resource::init();
-        uqm_rust::resource::load_index(&dir, c"video.rmp", None);
+        uqm_engine::graphics::present::init_graphics(1, 0, options, 320, 240);
+        uqm_engine::resource::init();
+        uqm_engine::resource::load_index(&dir, c"video.rmp", None);
         retained_playback_keeps_its_clip_after_descriptor_drop();
-        assert!(uqm_rust::graphics::present::present_video(
+        assert!(uqm_engine::graphics::present::present_video(
             &[0xff00_00ff, 0xff00_ff00],
             1,
             2
         ));
-        uqm_rust::sound::audio_device::shutdown();
-        uqm_rust::graphics::present::uninit_graphics();
+        uqm_engine::sound::audio_device::shutdown();
+        uqm_engine::graphics::present::uninit_graphics();
         drop(mount);
     }
     replay_audio_exports_follow_sample_completion_and_transport();
 }
 
 fn replay_audio_exports_follow_sample_completion_and_transport() {
-    use uqm_rust::sound::audio_device::{self as audio, PcmClip};
-    use uqm_rust::{engine::host as source, time::counter_abi::ONE_SECOND};
+    use uqm_engine::host as source;
+    use uqm_engine::sound::audio_device::{self as audio, PcmClip};
+    use uqm_rust::time::counter_abi::ONE_SECOND;
 
     let clip = |looping| {
         PcmClip::from_bytes(&[0u8; 2000], 1000, 1, 16, looping)

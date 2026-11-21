@@ -1,8 +1,8 @@
 //! Runtime options and resource-index loading, ported from options.c.
-use crate::engine::host::Files;
-pub use crate::input::templates::input_templates;
-use crate::io::{Dir, Match};
 use std::{ffi::CString, path::Path};
+use uqm_engine::host::Files;
+pub use uqm_engine::input_port::templates::input_templates;
+use uqm_engine::io::{Dir, Match};
 
 /// Load every `.rmp` resource index in `dir`; returns how many were loaded.
 pub fn load_indices(dir: &Dir) -> usize {
@@ -13,7 +13,7 @@ pub fn load_indices(dir: &Dir) -> usize {
             log::warn!("Skipping resource index '{name}': name contains NUL");
             continue;
         };
-        crate::resource::load_index(dir, &name, None);
+        uqm_engine::resource::load_index(dir, &name, None);
     }
     indices.len()
 }
@@ -49,7 +49,7 @@ pub fn prepare_addons(content: &Dir, addons: &[CString]) {
 }
 
 pub fn set_gamma_correction(gamma: f32) -> bool {
-    let set = crate::graphics::present::set_gamma(gamma);
+    let set = uqm_engine::graphics::present::set_gamma(gamma);
     if set {
         log::info!("Gamma correction set to {gamma:.4}.");
     } else {

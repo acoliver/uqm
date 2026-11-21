@@ -7,6 +7,7 @@
 //! from any other assertion in retained evidence.
 //!
 //! This test owns its observer; its binary isolates production UI observations.
+#![forbid(unsafe_code)]
 
 use std::path::Path;
 
@@ -35,8 +36,8 @@ fn application_started(output_root: &Path) -> uqm_rust::app::Application {
         .expect("the script fixture must parse");
     let script = validate_script(document, "readiness-trace.json").expect("and must validate");
     {
-        let game = uqm_rust::engine::Game::new();
-        let input = uqm_rust::engine::input::InputControls::default();
+        let game = uqm_engine::Game::new();
+        let input = uqm_engine::input::InputControls::default();
         let observer = Some(AutomationObserver::new(
             script,
             output_root.to_path_buf(),

@@ -2,7 +2,7 @@
 pub(crate) use super::alliance::AllianceApi;
 pub(crate) use super::script::GLOBAL_SHIP_NAME;
 pub(crate) use crate::comm::races::descriptor::{Color, CommDescriptor, Point};
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;

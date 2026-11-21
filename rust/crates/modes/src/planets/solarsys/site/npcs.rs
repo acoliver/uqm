@@ -2,15 +2,15 @@
 
 use super::*;
 use crate::comm::dispatch::CPoint;
-use crate::engine::species::ship;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
 use crate::navigation::groups::{
     self as group_storage, build_groups, get_group_info, initialize_solar_groups,
 };
 use crate::planets::c_api::*;
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::FleetGroups;
+use uqm_engine::species::ship;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
 const GROUP_SAVE_IP: u8 = !0;
@@ -210,27 +210,24 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
         // SAFETY: the reference was stored in this world's group files.
         initialize_solar_groups(world, reference, &solar_frame);
     }
-    fn planet_outer_location(&self, planet: u16) -> crate::engine::graphics::geometry::Point {
+    fn planet_outer_location(&self, planet: u16) -> uqm_engine::graphics::geometry::Point {
         let game = self.game.borrow();
         crate::planets::solar_coords::outer_location(game.solar_geometry(), planet)
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         Npcs::for_each_ip_group(self, visit);
     }
-    fn ip_location(&self) -> crate::engine::graphics::geometry::Point {
+    fn ip_location(&self) -> uqm_engine::graphics::geometry::Point {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
         let point = world.data.game.ip_location;
-        crate::engine::graphics::geometry::Point {
+        uqm_engine::graphics::geometry::Point {
             x: point.x,
             y: point.y,
         }
     }
-    fn set_and_transform_ip_location(
-        &mut self,
-        location: crate::engine::graphics::geometry::Point,
-    ) {
+    fn set_and_transform_ip_location(&mut self, location: uqm_engine::graphics::geometry::Point) {
         let mut game = self.game.borrow_mut();
         let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;

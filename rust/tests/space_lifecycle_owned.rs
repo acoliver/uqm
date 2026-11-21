@@ -1,8 +1,9 @@
+#![forbid(unsafe_code)]
 use uqm_engine::test_support::campaign_display;
 
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
-use uqm_rust::engine::world::activity::activity_kinds::SUPER_MELEE;
-use uqm_rust::engine::{
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_engine::{
     battle::{Battle, Cx},
     Game,
 };
@@ -24,7 +25,7 @@ fn battle_ship_lifecycle_uses_the_unpublished_owner_even_when_resources_fail() {
     let display = campaign_display::CampaignDisplay::install(&mut first).unwrap();
     first
         .kernel
-        .install_ship_lifecycle(uqm_rust::engine::battle::services::ShipLifecycle {
+        .install_ship_lifecycle(uqm_engine::battle::services::ShipLifecycle {
             init: init_battle_ships,
             uninit: uninit_ships,
         });
@@ -38,13 +39,13 @@ fn battle_ship_lifecycle_uses_the_unpublished_owner_even_when_resources_fail() {
             &mut first_battle,
             &mut first.world,
             &mut first.kernel,
-            uqm_rust::math::random,
+            uqm_engine::math::random,
         );
         let second = Cx::new(
             &mut second_battle,
             &mut second.world,
             &mut second.kernel,
-            uqm_rust::math::random,
+            uqm_engine::math::random,
         );
         let element = first.alloc_element().unwrap();
         first.put(element);

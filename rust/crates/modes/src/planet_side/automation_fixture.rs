@@ -116,13 +116,13 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
 /// One pending request owned by the automation coordinator.
 #[derive(Debug, Default)]
 pub struct FixtureRequests {
-    pending: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
+    pending: Option<uqm_engine::observe_port::planet_side::FixtureLayout>,
 }
 
 impl FixtureRequests {
     pub fn queue(
         &mut self,
-        layout: crate::engine::observe_port::planet_side::FixtureLayout,
+        layout: uqm_engine::observe_port::planet_side::FixtureLayout,
     ) -> Result<(), AdapterError> {
         if self.pending.is_some() {
             return Err(AdapterError::new("fixture_request_already_pending"));
@@ -131,7 +131,7 @@ impl FixtureRequests {
         Ok(())
     }
 
-    pub fn take(&mut self) -> Option<crate::engine::observe_port::planet_side::FixtureLayout> {
+    pub fn take(&mut self) -> Option<uqm_engine::observe_port::planet_side::FixtureLayout> {
         self.pending.take()
     }
 
@@ -142,14 +142,14 @@ impl FixtureRequests {
 
 impl PlanetSideFixture {
     pub fn from_layout(
-        layout: crate::engine::observe_port::planet_side::FixtureLayout,
+        layout: uqm_engine::observe_port::planet_side::FixtureLayout,
         position: SurfacePoint,
     ) -> Self {
         match layout {
-            crate::engine::observe_port::planet_side::FixtureLayout::CollisionParity => {
+            uqm_engine::observe_port::planet_side::FixtureLayout::CollisionParity => {
                 Self::for_collision_parity(position)
             }
-            crate::engine::observe_port::planet_side::FixtureLayout::MineralGallery => {
+            uqm_engine::observe_port::planet_side::FixtureLayout::MineralGallery => {
                 Self::mineral_gallery(position)
             }
         }
@@ -331,7 +331,6 @@ impl PlanetSideFixture {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe_port::planet_side::FixtureLayout;
     use crate::planet_side::assembly::{share_surface, SurfaceAssembly, WorldVisualPort};
     use crate::planet_side::cargo::{BioCargo, MineralCargo};
     use crate::planet_side::collision::{
@@ -352,6 +351,7 @@ mod tests {
     use crate::planet_side::simulation::{LanderState, Shot};
     use crate::planet_side::world::HazardChances;
     use crate::planet_side::{generation::ScanNodeId, generation::ScanPersistence};
+    use uqm_engine::observe_port::planet_side::FixtureLayout;
 
     fn share_empty() -> SharedSurface {
         share_surface(SurfaceAssembly {
@@ -395,7 +395,7 @@ mod tests {
             };
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: frame,
                 },
                 mask: solid(),
@@ -409,7 +409,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask: brainbox_mask(animation_frame),
@@ -430,7 +430,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -450,7 +450,7 @@ mod tests {
         fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: u16::from(facing),
                 },
                 mask: solid(),
@@ -463,7 +463,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -473,7 +473,7 @@ mod tests {
         fn hazard_visual(&mut self, _kind: HazardKind) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -487,7 +487,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask: brainbox_mask(animation_frame),
@@ -558,11 +558,7 @@ mod tests {
         played: Vec<SoundCue>,
     }
     impl PlanetSideAudio for Audio {
-        fn play(
-            &mut self,
-            _world: &crate::engine::World,
-            cue: SoundCue,
-        ) -> Result<(), AdapterError> {
+        fn play(&mut self, _world: &uqm_engine::World, cue: SoundCue) -> Result<(), AdapterError> {
             self.played.push(cue);
             Ok(())
         }
@@ -1090,13 +1086,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn subsequent_production_shot_step_lands_creature_hit_on_registered_frame_mask() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let anchor = SurfacePoint { x: 50, y: 80 };
@@ -1139,13 +1135,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn brainbox_frame_and_registered_mask_advance_together_after_world_step() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let anchor = SurfacePoint { x: 50, y: 80 };
@@ -1207,7 +1203,7 @@ mod tests {
 
     #[test]
     fn owned_requests_are_isolated_and_consumed_once() {
-        use crate::engine::observe_port::planet_side::FixtureLayout;
+        use uqm_engine::observe_port::planet_side::FixtureLayout;
         let mut first = FixtureRequests::default();
         let mut second = FixtureRequests::default();
         first.queue(FixtureLayout::CollisionParity).unwrap();

@@ -1,20 +1,20 @@
 //! Immutable observations of typed element and ship links for automation.
-use crate::engine::battle::access::observe::ElementObservation;
-use crate::engine::battle::{
+use uqm_engine::battle::access::observe::ElementObservation;
+use uqm_engine::battle::{
     link_queue::{LinkQueue, Starship},
     record::*,
     views::*,
 };
 
 pub fn elements(
-    elements: &crate::engine::battle::ElementTable,
-    parent_address: impl Fn(crate::engine::battle::ElementId) -> usize,
+    elements: &uqm_engine::battle::ElementTable,
+    parent_address: impl Fn(uqm_engine::battle::ElementId) -> usize,
 ) -> Vec<ElementObservation> {
     let mut result = Vec::new();
     let mut next = elements.head();
     while let Some(id) = next {
         next = elements.succ(id);
-        result.push(crate::engine::battle::access::observe::element(
+        result.push(uqm_engine::battle::access::observe::element(
             elements,
             id,
             parent_address(id),
@@ -25,15 +25,15 @@ pub fn elements(
 
 pub struct ShipObservation<'a> {
     pub state: ShipState,
-    pub pick: crate::engine::battle::link_queue::PickShip,
+    pub pick: uqm_engine::battle::link_queue::PickShip,
     pub address: usize,
     pub pred: usize,
     pub succ: usize,
     pub element: usize,
     #[cfg(test)]
     lifetime: std::marker::PhantomData<&'a ()>,
-    pub icons: crate::graphics::drawable::FrameId,
-    pub strings: Option<crate::strings::owned_table::EntryRef>,
+    pub icons: uqm_engine::graphics::drawable::FrameId,
+    pub strings: Option<uqm_engine::strings::owned_table::EntryRef>,
     pub race: Option<DescriptorObservation<'a>>,
 }
 pub struct DescriptorObservation<'a> {
@@ -49,21 +49,21 @@ pub struct DescriptorObservation<'a> {
 }
 pub enum CustomData<'a> {
     None,
-    Androsynth(Option<crate::engine::battle::CollisionHook>),
+    Androsynth(Option<uqm_engine::battle::CollisionHook>),
     NativePkunk {
         phoenix: usize,
-        saved: [Option<crate::engine::battle::ElementHook>; 3],
+        saved: [Option<uqm_engine::battle::ElementHook>; 3],
     },
     NativeUmgah(u16),
     Mmrnmhrm(&'a CharacteristicRecord),
-    Sis(&'a crate::engine::battle::race::SisState),
+    Sis(&'a uqm_engine::battle::race::SisState),
 }
 impl<'a> CustomData<'a> {
     fn decode(
-        state: &'a crate::engine::battle::RaceState,
-        elements: &crate::engine::battle::ElementTable,
+        state: &'a uqm_engine::battle::RaceState,
+        elements: &uqm_engine::battle::ElementTable,
     ) -> Self {
-        use crate::engine::battle::RaceState;
+        use uqm_engine::battle::RaceState;
         match state {
             RaceState::Androsynth { collision } => return Self::Androsynth(*collision),
             RaceState::Mmrnmhrm { alternate } => return Self::Mmrnmhrm(alternate),
@@ -89,17 +89,17 @@ impl<'a> CustomData<'a> {
     }
 }
 pub fn ships<'a>(
-    queue: &'a crate::engine::battle::link_queue::RacePool,
-    elements: &crate::engine::battle::ElementTable,
+    queue: &'a uqm_engine::battle::link_queue::RacePool,
+    elements: &uqm_engine::battle::ElementTable,
 ) -> Vec<ShipObservation<'a>> {
     let ships = LinkQueue::<Starship>::borrow(queue);
     let mut result = Vec::new();
     let mut next = ships.head();
     while let Some(id) = next {
-        let s = crate::engine::battle::access::observe::ship_record(queue, id, elements);
+        let s = uqm_engine::battle::access::observe::ship_record(queue, id, elements);
         next = ships.succ(id);
         let (race, icons, strings) = {
-            let resources = crate::engine::battle::access::observe::ship_resources(queue, id);
+            let resources = uqm_engine::battle::access::observe::ship_resources(queue, id);
             let race = resources.descriptor.map(|d| DescriptorObservation {
                 address: d.address,
                 info: d.info,

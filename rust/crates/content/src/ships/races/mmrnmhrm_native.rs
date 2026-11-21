@@ -1,19 +1,19 @@
 //! Live engine callbacks for the Mmrnmhrm, mirroring `mmrnmhrm.c`.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{cosine, facing_to_angle, normalize_angle, normalize_facing, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, IMMEDIATE_WEAPON, SEEKING_WEAPON, SPECIAL,
         WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_BEYOND_MAX_SPEED,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::CollisionHook;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::ships::native::{cosine, facing_to_angle, normalize_angle, normalize_facing, sine};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::CollisionHook;
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 10;
@@ -57,7 +57,7 @@ pub mod engine {
         ship_mass: SHIP_MASS,
     };
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut desc = RaceTemplate::default();
         desc.info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
         desc.info.ship_cost = 19;
@@ -105,8 +105,8 @@ pub mod engine {
         };
         desc.descriptor(&MMRNMHRM)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static MMRNMHRM: Race = Race {
@@ -160,7 +160,8 @@ pub mod engine {
                     as i16;
                 dy = (other.current.location.y as i32 - concerns.subject.current.location.y as i32)
                     as i16;
-                direction_angle = crate::math::arctan(-i32::from(dx) as _, -i32::from(dy) as _);
+                direction_angle =
+                    uqm_engine::math::arctan(-i32::from(dx) as _, -i32::from(dy) as _);
                 travel_angle = other.velocity.travel_angle;
             }
 
@@ -182,7 +183,7 @@ pub mod engine {
                 let (ship_dx, ship_dy) = (x as i16, y as i16);
                 dx = dx.wrapping_sub(ship_dx);
                 dy = dy.wrapping_sub(ship_dy);
-                travel_angle = crate::math::arctan(dx, dy);
+                travel_angle = uqm_engine::math::arctan(dx, dy);
                 if concerns.objects[enemy_eval].which_turn < 16 {
                     if concerns.objects[enemy_eval].which_turn <= 8
                         || normalize_angle(
@@ -242,7 +243,7 @@ pub mod engine {
             for sign in [1i32, -1] {
                 let bx = x.wrapping_add((i32::from(ox) * sign) as _);
                 let by = y.wrapping_add((i32::from(oy) * sign) as _);
-                let laser = cx.spawn_laser(crate::engine::battle::views::Laser {
+                let laser = cx.spawn_laser(uqm_engine::battle::views::Laser {
                     origin: Point { x: bx, y: by },
                     end: Point {
                         x: ex.wrapping_sub(bx),
@@ -366,8 +367,8 @@ pub mod engine {
         }
     }
     pub fn uninit_mmrnmhrm(
-        _world: &mut crate::engine::battle::World,
-        stats: &mut crate::engine::battle::views::RaceStats,
+        _world: &mut uqm_engine::battle::World,
+        stats: &mut uqm_engine::battle::views::RaceStats,
     ) {
         stats.state = RaceState::None;
     }

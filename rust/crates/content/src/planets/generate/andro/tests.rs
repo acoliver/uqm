@@ -3,16 +3,16 @@
 use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, AndrosynthSite, WORLD,
 };
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::special::{Body, Orbit, Story, TELLURIC_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
@@ -32,7 +32,7 @@ struct Site {
 impl AndrosynthSite for Site {
     fn load_ruins_story(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         visits: u32,
     ) {
         self.stories.push(visits);

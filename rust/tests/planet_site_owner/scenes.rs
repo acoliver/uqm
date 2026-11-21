@@ -1,16 +1,16 @@
 use super::*;
 use std::ffi::CStr;
-use uqm_rust::engine::test_support::native_probe::frame_pixel as GetFramePixel;
-use uqm_rust::graphics::{geometry::Point, geometry::TextAlign, present::GraphicsOptions};
-use uqm_rust::planets::generate::andro::AndrosynthSite;
-use uqm_rust::planets::generate::burv::BurvScenes;
-use uqm_rust::planets::generate::spa::SpathiSite;
-use uqm_rust::planets::generate::thrad::ThraddashSite;
-use uqm_rust::planets::generate::vault::VaultSite;
-use uqm_rust::planets::generate::wreck::WreckSite;
-use uqm_rust::planets::generate::zoq::ZoqFotPikSite;
+use uqm_engine::graphics::{geometry::Point, geometry::TextAlign, present::GraphicsOptions};
+use uqm_engine::test_support::native_probe::frame_pixel as GetFramePixel;
+use uqm_modes::planets::generate::andro::AndrosynthSite;
+use uqm_modes::planets::generate::burv::BurvScenes;
+use uqm_modes::planets::generate::spa::SpathiSite;
+use uqm_modes::planets::generate::thrad::ThraddashSite;
+use uqm_modes::planets::generate::vault::VaultSite;
+use uqm_modes::planets::generate::wreck::WreckSite;
+use uqm_modes::planets::generate::zoq::ZoqFotPikSite;
 #[cfg(feature = "debug-process")]
-use uqm_rust::planets::generate::{slylandro::HomeSite, syreen::StarbaseSite};
+use uqm_modes::planets::generate::{slylandro::HomeSite, syreen::StarbaseSite};
 
 const GRAPHICS: &[&str] = &[
     "ruins",
@@ -148,7 +148,7 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     std::fs::write(directory.path().join("fixture.rmp"), rmp).unwrap();
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
-    uqm_rust::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
+    uqm_engine::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
     let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
     content.init_resources("fixture.rmp");
     let mut game = campaign();
@@ -236,10 +236,10 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     }
     for (scene, key) in [
         (
-            uqm_rust::planets::generate::myc::Scene::SunDevice,
+            uqm_modes::planets::generate::myc::Scene::SunDevice,
             "sundevice",
         ),
-        (uqm_rust::planets::generate::myc::Scene::EggCase, "eggcase"),
+        (uqm_modes::planets::generate::myc::Scene::EggCase, "eggcase"),
     ] {
         check_scene(&mut game, MYCON_DEFINED, Some(key), key, Some(0), |h, s| {
             MyconSite::load_scene(h, s, scene)
@@ -247,17 +247,17 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     }
     for (scene, key, mask) in [
         (
-            uqm_rust::planets::generate::vux::Scene::Maidens,
+            uqm_modes::planets::generate::vux::Scene::Maidens,
             "maidens",
             Some("maidens"),
         ),
         (
-            uqm_rust::planets::generate::vux::Scene::Beast,
+            uqm_modes::planets::generate::vux::Scene::Beast,
             "vuxbeast",
             None,
         ),
         (
-            uqm_rust::planets::generate::vux::Scene::Ruins,
+            uqm_modes::planets::generate::vux::Scene::Ruins,
             "ruins",
             Some("ruins"),
         ),
@@ -285,12 +285,12 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         |host, system| YehatSite::load_ruins_scene(host, system),
     );
     game.kernel
-        .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+        .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
             vec![b"A\0".to_vec(), b"Caller planet\0".to_vec()],
         ));
     with_site(&mut game, SOL_DEFINED, |h, system| {
-        use uqm_rust::engine::world::generation::ReportDisposition;
-        use uqm_rust::planets::generate::{
+        use uqm_engine::world::generation::ReportDisposition;
+        use uqm_modes::planets::generate::{
             default::PlanetNames, host::ReportSite, sol::orbital::Orbital,
         };
         PlanetNames::set_planet_name(h, 1);
@@ -302,15 +302,15 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         Orbital::set_current_activity(h, 0);
         assert!(!ReportSite::report(h, system, ReportDisposition::Once));
     });
-    let previous_seed = uqm_rust::math::seed_random(123);
-    let mut expected_rng = uqm_rust::math::RandomContext::with_seed(123);
+    let previous_seed = uqm_engine::math::seed_random(123);
+    let mut expected_rng = uqm_engine::math::RandomContext::with_seed(123);
     with_site(&mut game, TALKING_PET_DEFINED, |host, _| {
         assert_eq!(
             UrquanEncounterSite::random(host),
             expected_rng.next_random()
         );
     });
-    uqm_rust::math::seed_random(previous_seed);
+    uqm_engine::math::seed_random(previous_seed);
     with_site(&mut game, ZOQFOT_DEFINED, |host, _| {
         ZoqFotPikSite::clone_black_urquan_into_built_queue(host);
     });
@@ -340,9 +340,9 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         });
     }
     assert_eq!(game.world.activity(), 0);
-    uqm_rust::graphics::state::flush();
+    uqm_engine::graphics::state::flush();
     drop(game);
-    uqm_rust::resource::uninit();
+    uqm_engine::resource::uninit();
     drop(content);
-    uqm_rust::graphics::present::uninit_graphics();
+    uqm_engine::graphics::present::uninit_graphics();
 }

@@ -372,7 +372,7 @@ pub fn observe(observations: Observations) -> ModeObservation {
 /// while the Starbase menu or the Outfit screen is the active input loop.
 #[must_use]
 pub fn live(
-    world: &crate::engine::observe::CampaignView,
+    world: &uqm_engine::observe::CampaignView,
     ui: &super::ui_observation::UiObservation,
     scene: Option<super::scenario::AutomationScene>,
 ) -> Observations {
@@ -400,7 +400,7 @@ pub fn live(
 /// Returns the ambiguity description when the observation does not name
 /// exactly one mode.
 pub fn require_live(
-    world: &crate::engine::observe::CampaignView,
+    world: &uqm_engine::observe::CampaignView,
     ui: &super::ui_observation::UiObservation,
     scene: Option<super::scenario::AutomationScene>,
 ) -> Result<GameMode, String> {
@@ -445,10 +445,10 @@ mod tests {
     #[test]
     fn live_activity_comes_from_the_supplied_campaign_view() {
         let ui = super::super::ui_observation::UiObservation::default();
-        let mut world = crate::engine::World::new();
-        let first = crate::engine::observe::CampaignView::from_world(&world);
+        let mut world = uqm_engine::World::new();
+        let first = uqm_engine::observe::CampaignView::from_world(&world);
         world.set_activity(0x4004);
-        let second = crate::engine::observe::CampaignView::from_world(&world);
+        let second = uqm_engine::observe::CampaignView::from_world(&world);
         assert_eq!(live(&first, &ui, None).activity, 0);
         assert_eq!(live(&second, &ui, None).activity, 0x4004);
         assert_eq!(live(&first, &ui, None).activity, 0);

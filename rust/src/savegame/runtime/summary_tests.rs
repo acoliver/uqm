@@ -14,8 +14,8 @@
 //! solar tests runs the real Rust computation (`solar`) over a wired
 //! owning session and checks what ends up in the summary.
 
-use crate::engine::World;
 use std::cell::Cell;
+use uqm_engine::World;
 
 use serial_test::serial;
 
@@ -24,11 +24,11 @@ use super::solar::{SolarError, SolarSummary, SolarSystemOwner};
 use super::solar_tests::{owner, text, System, Table, FLAGSHIP_NAME};
 use super::star::*;
 use super::summary::*;
-use crate::comm::dispatch::{IN_INTERPLANETARY, IN_LAST_BATTLE};
-use crate::comm::locdata::CSisState;
 use crate::savegame::types::{Point, StarDesc};
-use crate::state::ffi::replace_game_state;
-use crate::state::game_state::NUM_GAME_STATE_BYTES;
+use uqm_engine::state::ffi::replace_game_state;
+use uqm_engine::state::game_state::NUM_GAME_STATE_BYTES;
+use uqm_modes::comm::dispatch::{IN_INTERPLANETARY, IN_LAST_BATTLE};
+use uqm_modes::comm::locdata::CSisState;
 
 fn capture_summary(
     world: &World,
@@ -47,12 +47,12 @@ fn capture_summary(
             {
                 if world.story.is_none() {
                     return Err(
-                        crate::engine::world::story::GameStateOwnerError::NotInitialized.into(),
+                        uqm_engine::world::story::GameStateOwnerError::NotInitialized.into(),
                     );
                 }
                 solar.prepare_summary(
                     game.activity(),
-                    world.story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == 255,
+                    world.story_state(uqm_engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == 255,
                 )?
             },
             name,
@@ -94,7 +94,7 @@ fn set_bits(bytes: &mut StateBytes, start: usize, width: usize, value: u8) {
 
 /// Start bit and width in the Rust-owned serialized story-state schema.
 fn key(name: &str) -> (usize, usize) {
-    let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
+    let (start, end) = uqm_engine::state::game_state::lookup_game_state_bits(name)
         .unwrap_or_else(|| panic!("unknown game-state key {name}"));
     (start, end - start + 1)
 }
@@ -207,7 +207,7 @@ fn blank_state() -> StateBytes {
 #[test]
 #[serial]
 fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         assert_eq!(&C_WRITTEN_SAVE[4..8], b"Summ");
         assert_eq!(le32(&C_WRITTEN_SAVE[8..12]), 160);
@@ -276,7 +276,7 @@ fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
 #[test]
 #[serial]
 fn summary_copies_the_flagship_state_field_by_field() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -320,7 +320,7 @@ fn expected_activity(lobyte: u8, arilou_side: u8, starbase: bool, orbit: bool) -
 #[test]
 #[serial]
 fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         for arilou in 0u8..4 {
             for starbase in [false, true] {
@@ -357,7 +357,7 @@ fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
 #[test]
 #[serial]
 fn the_solar_system_owner_is_asked_only_where_prepare_summary_asks_it() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         for activity in [0u16, 1, 2, 3, 4, 5, 6, 7, 8] {
@@ -395,7 +395,7 @@ fn the_solar_system_owner_is_asked_only_where_prepare_summary_asks_it() {
 #[test]
 #[serial]
 fn a_starbase_visit_does_not_ask_whether_the_flagship_is_in_orbit() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut state = blank_state();
         set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
@@ -417,7 +417,7 @@ fn a_starbase_visit_does_not_ask_whether_the_flagship_is_in_orbit() {
 #[test]
 #[serial]
 fn credit_and_lander_flags_come_from_the_singleton_bits() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut state = blank_state();
         set_key(&mut state, "MELNORME_CREDIT0", 0xA5);
@@ -470,7 +470,7 @@ fn the_state_bits_used_here_are_where_globdata_h_puts_them() {
 #[test]
 #[serial]
 fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let game = {
             let mut game = LiveGame::bare();
@@ -517,7 +517,7 @@ fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
 #[test]
 #[serial]
 fn devices_are_listed_in_id_order_and_stop_at_sixteen() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut state = blank_state();
         for (_, name) in DEVICE_FLAGS {
@@ -539,7 +539,7 @@ fn devices_are_listed_in_id_order_and_stop_at_sixteen() {
 
 #[test]
 fn live_device_ids_and_reserved_slots_preserve_the_save_format() {
-    use crate::engine::world::story::StoryState;
+    use uqm_engine::world::story::StoryState;
     assert_eq!(NUM_DEVICES, 28);
     let mut listed = [false; NUM_DEVICES];
     for (id, flag) in DEVICE_FLAGS {
@@ -573,7 +573,7 @@ fn live_device_ids_and_reserved_slots_preserve_the_save_format() {
 #[test]
 #[serial]
 fn escorts_and_date_follow_the_live_queue_and_clock() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -604,7 +604,7 @@ fn escorts_and_date_follow_the_live_queue_and_clock() {
 #[test]
 #[serial]
 fn a_full_hangar_fills_the_ship_list() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -622,7 +622,7 @@ fn a_full_hangar_fills_the_ship_list() {
 #[test]
 #[serial]
 fn a_full_summary_pool_cannot_grow_past_the_ship_list() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -641,7 +641,7 @@ fn a_full_summary_pool_cannot_grow_past_the_ship_list() {
 #[test]
 #[serial]
 fn the_save_name_is_cut_where_strncpy_cuts_it() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -685,7 +685,7 @@ fn utf8_string_copy_terminates_inside_the_buffer() {
 #[test]
 #[serial]
 fn a_changed_owner_changes_the_summary() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -744,7 +744,7 @@ fn summary_over(
 #[test]
 #[serial]
 fn the_summary_names_the_moon_the_flagship_orbits() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let game = interplanetary_game();
@@ -766,7 +766,7 @@ fn the_summary_names_the_moon_the_flagship_orbits() {
 #[test]
 #[serial]
 fn a_changed_solar_system_changes_the_summary() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let game = interplanetary_game();
@@ -810,7 +810,7 @@ fn a_changed_solar_system_changes_the_summary() {
 #[test]
 #[serial]
 fn a_starbase_visit_is_a_starbase_even_in_orbit_and_is_still_named() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut state = blank_state();
         set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
@@ -831,7 +831,7 @@ fn a_starbase_visit_is_a_starbase_even_in_orbit_and_is_still_named() {
 #[test]
 #[serial]
 fn the_final_battle_summary_names_sa_matra_whatever_the_system_holds() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let mut game = LiveGame::bare();
@@ -851,7 +851,7 @@ fn the_final_battle_summary_names_sa_matra_whatever_the_system_holds() {
 #[test]
 #[serial]
 fn the_other_activities_do_not_read_the_solar_system() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         // A state `planet_or_moon_name` would reject.
@@ -881,7 +881,7 @@ fn the_other_activities_do_not_read_the_solar_system() {
 #[test]
 #[serial]
 fn a_broken_solar_system_is_an_error_not_a_guessed_name() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let game = interplanetary_game();
@@ -905,7 +905,7 @@ fn a_broken_solar_system_is_an_error_not_a_guessed_name() {
 #[test]
 #[serial]
 fn no_solar_system_summarises_as_plain_interplanetary_flight() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         install(&mut game_owner.world, &blank_state());
         let game = interplanetary_game();
@@ -922,7 +922,7 @@ fn no_solar_system_summarises_as_plain_interplanetary_flight() {
 
 /// A copy of the real `starmap_array`, so tests can alter entries.
 fn catalog() -> Vec<CStarDesc> {
-    crate::planets::tables::STARMAP_ARRAY.to_vec()
+    uqm_modes::planets::tables::STARMAP_ARRAY.to_vec()
 }
 
 fn wire(star: &CStarDesc) -> StarDesc {

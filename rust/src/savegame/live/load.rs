@@ -1,7 +1,7 @@
 //! Save-slot reads and installation through explicit campaign and battle owners.
 use super::super::{legacy, SaveSlots};
-use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
-use crate::engine::{battle::Cx, save::summary_record::SummaryDesc};
+use uqm_engine::{battle::Cx, save::summary_record::SummaryDesc};
+use uqm_modes::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use uqm_save::SlotError;
 
 pub enum LoadRequest<'a, 'game> {
@@ -10,15 +10,15 @@ pub enum LoadRequest<'a, 'game> {
 }
 
 fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: u16) {
-    crate::planets::c_api::reset_encounter(cx.world);
+    uqm_modes::planets::c_api::reset_encounter(cx.world);
     // A load can run inside a ship callback. Retire the roster after its leases return.
     cx.kernel.request_ship_reset();
-    let point = crate::comm::dispatch::CPoint {
+    let point = uqm_modes::comm::dispatch::CPoint {
         x: star.star_pt.x,
         y: star.star_pt.y,
     };
     cx.world.current_star =
-        crate::planets::starmap::find_star_id(cx.world, cx.world.catalog(), None, point, 0, 0);
+        uqm_modes::planets::starmap::find_star_id(cx.world, cx.world.catalog(), None, point, 0, 0);
     cx.world.next_activity = activity;
     if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
         cx.world.next_activity |= START_INTERPLANETARY;
@@ -43,11 +43,11 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
         };
         let (star, activity) = if slots.read_summary(usize::from(slot)).is_ok() {
             let save = slots.read(usize::from(slot))?;
-            (save.star, crate::engine::save::apply(save, cx.world)?)
+            (save.star, uqm_engine::save::apply(save, cx.world)?)
         } else {
             let decoded = legacy::read_legacy_game(&slots, slot)?;
             let star = decoded.save.star;
-            let activity = crate::engine::save::apply_legacy(
+            let activity = uqm_engine::save::apply_legacy(
                 decoded.save,
                 cx.world,
                 decoded.state_files,

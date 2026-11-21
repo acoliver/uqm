@@ -1,7 +1,7 @@
 //! Effects available to system generators, supplied by the solar-system mode.
 
 use super::special::Story;
-use crate::engine::world::generation::{Body, ReportDisposition, SolarSys};
+use uqm_engine::world::generation::{Body, ReportDisposition, SolarSys};
 
 pub trait PlanetSite {
     fn rainbow_ordinal(&self) -> u8;

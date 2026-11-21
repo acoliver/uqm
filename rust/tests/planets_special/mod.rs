@@ -4,29 +4,29 @@
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 
-use uqm_rust::planets::generate::andro::Generator as generateAndrosynthFunctions;
-use uqm_rust::planets::generate::burv::Generator as generateBurvixeseFunctions;
-use uqm_rust::planets::generate::chmmr::Generator as generateChmmrFunctions;
-use uqm_rust::planets::generate::colony::Generator as generateColonyFunctions;
-use uqm_rust::planets::generate::dru::Generator as generateDruugeFunctions;
-use uqm_rust::planets::generate::ilw::Generator as generateIlwrathFunctions;
-use uqm_rust::planets::generate::myc::Generator as generateMyconFunctions;
-use uqm_rust::planets::generate::orz::Generator as generateOrzFunctions;
-use uqm_rust::planets::generate::pet::Generator as generateTalkingPetFunctions;
-use uqm_rust::planets::generate::pku::Generator as generatePkunkFunctions;
-use uqm_rust::planets::generate::rainbow::Generator as generateRainbowWorldFunctions;
-use uqm_rust::planets::generate::shof::Generator as generateShofixtiFunctions;
-use uqm_rust::planets::generate::slylandro::Generator as generateSlylandroFunctions;
-use uqm_rust::planets::generate::sup::Generator as generateSupoxFunctions;
-use uqm_rust::planets::generate::syreen::Generator as generateSyreenFunctions;
-use uqm_rust::planets::generate::thrad::Generator as generateThraddashFunctions;
-use uqm_rust::planets::generate::trap::Generator as generateTrapFunctions;
-use uqm_rust::planets::generate::utw::Generator as generateUtwigFunctions;
-use uqm_rust::planets::generate::vault::Generator as generateVaultFunctions;
-use uqm_rust::planets::generate::wreck::Generator as generateWreckFunctions;
-use uqm_rust::planets::generate::yehat::Generator as generateYehatFunctions;
-use uqm_rust::planets::generate::zoq::Generator as generateZoqFotPikFunctions;
-use uqm_rust::planets::solar_system::SolarSystem;
+use uqm_modes::planets::generate::andro::Generator as generateAndrosynthFunctions;
+use uqm_modes::planets::generate::burv::Generator as generateBurvixeseFunctions;
+use uqm_modes::planets::generate::chmmr::Generator as generateChmmrFunctions;
+use uqm_modes::planets::generate::colony::Generator as generateColonyFunctions;
+use uqm_modes::planets::generate::dru::Generator as generateDruugeFunctions;
+use uqm_modes::planets::generate::ilw::Generator as generateIlwrathFunctions;
+use uqm_modes::planets::generate::myc::Generator as generateMyconFunctions;
+use uqm_modes::planets::generate::orz::Generator as generateOrzFunctions;
+use uqm_modes::planets::generate::pet::Generator as generateTalkingPetFunctions;
+use uqm_modes::planets::generate::pku::Generator as generatePkunkFunctions;
+use uqm_modes::planets::generate::rainbow::Generator as generateRainbowWorldFunctions;
+use uqm_modes::planets::generate::shof::Generator as generateShofixtiFunctions;
+use uqm_modes::planets::generate::slylandro::Generator as generateSlylandroFunctions;
+use uqm_modes::planets::generate::sup::Generator as generateSupoxFunctions;
+use uqm_modes::planets::generate::syreen::Generator as generateSyreenFunctions;
+use uqm_modes::planets::generate::thrad::Generator as generateThraddashFunctions;
+use uqm_modes::planets::generate::trap::Generator as generateTrapFunctions;
+use uqm_modes::planets::generate::utw::Generator as generateUtwigFunctions;
+use uqm_modes::planets::generate::vault::Generator as generateVaultFunctions;
+use uqm_modes::planets::generate::wreck::Generator as generateWreckFunctions;
+use uqm_modes::planets::generate::yehat::Generator as generateYehatFunctions;
+use uqm_modes::planets::generate::zoq::Generator as generateZoqFotPikFunctions;
+use uqm_modes::planets::solar_system::SolarSystem;
 mod late_abi;
 mod late_gen;
 mod mycon;
@@ -39,25 +39,25 @@ mod sol_resources;
 use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};
 use crate::planets_common::{fresh_node, scan_seeds, write_node};
 use std::fmt::Write as _;
-use uqm_rust::battle::gendef::{
+use uqm_engine::math::RandomContext;
+use uqm_engine::state::ffi::rust_init_game_state;
+use uqm_engine::state::game_state_keys::set_game_state;
+use uqm_modes::battle::gendef::{
     AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
     SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
 };
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::generate::special::Body;
-use uqm_rust::planets::generate::SystemGenerator;
+use uqm_modes::planets::generate::special::Body;
+use uqm_modes::planets::generate::SystemGenerator;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
-use uqm_rust::state::ffi::rust_init_game_state;
-use uqm_rust::state::game_state_keys::set_game_state;
 /// The fixed screen width (C: `ScreenWidth`).
 #[allow(non_upper_case_globals)]
-const ScreenWidth: i32 = uqm_rust::graphics::state::SCREEN_WIDTH;
+const ScreenWidth: i32 = uqm_engine::graphics::state::SCREEN_WIDTH;
 
 struct Harness {
     state: Box<SolarSystem>,
     star: Box<[CStarDesc; CATALOG_LEN]>,
     previous_catalog: [CStarDesc; CATALOG_LEN],
-    previous_star: Option<uqm_rust::engine::StarId>,
+    previous_star: Option<uqm_engine::StarId>,
     /// `CurStarDescPtr->Index` the next `set_star` installs.
     star_index: u8,
 }
@@ -68,8 +68,8 @@ impl Harness {
         crate::battle_context::with(|cx| rust_init_game_state(cx.world));
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
         let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
-        let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
-        star[0] = uqm_rust::engine::world::CStarDesc {
+        let mut star = Box::new(uqm_modes::planets::tables::STARMAP_ARRAY);
+        star[0] = uqm_engine::world::CStarDesc {
             star_pt: Default::default(),
             star_type: 0,
             index: 0,
@@ -79,7 +79,7 @@ impl Harness {
         let state = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_catalog(std::borrow::Cow::Owned(*star));
-            Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
+            Box::new(SolarSystem::new(world, uqm_engine::StarId(0)))
         });
         Self {
             state,
@@ -96,10 +96,10 @@ impl Harness {
         self.star[0].index = self.star_index;
         crate::battle_context::with(|cx| {
             cx.world.set_catalog(std::borrow::Cow::Owned(*self.star));
-            cx.world.current_star = Some(uqm_rust::engine::StarId(0));
+            cx.world.current_star = Some(uqm_engine::StarId(0));
         });
-        let mut next = uqm_rust::engine::world::generation::SolarSys::new(
-            &uqm_rust::planets::tables::PLANET_ARRAY,
+        let mut next = uqm_engine::world::generation::SolarSys::new(
+            &uqm_modes::planets::tables::PLANET_ARRAY,
             self.star[0].star_type,
             self.star[0].index,
             std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),
@@ -253,7 +253,7 @@ impl SpecialOps for Harness {
             crate::battle_context::with(|cx| {
                 set_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
+                    uqm_engine::StoryKey::CHMMR_UNLEASHED,
                     unleashed.parse().expect("0 or 1"),
                 )
             });
@@ -276,7 +276,7 @@ impl SpecialOps for Harness {
             crate::battle_context::with(|cx| {
                 set_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
+                    uqm_engine::StoryKey::BURVIXESE_BROADCASTERS,
                     taken.parse().expect("0 or 1"),
                 )
             });
@@ -285,7 +285,7 @@ impl SpecialOps for Harness {
             crate::battle_context::with(|cx| {
                 set_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::AQUA_HELIX,
+                    uqm_engine::StoryKey::AQUA_HELIX,
                     taken.parse().expect("0 or 1"),
                 )
             });
@@ -294,7 +294,7 @@ impl SpecialOps for Harness {
             crate::battle_context::with(|cx| {
                 set_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::UTWIG_BOMB,
+                    uqm_engine::StoryKey::UTWIG_BOMB,
                     taken.parse().expect("0 or 1"),
                 )
             });
@@ -303,7 +303,7 @@ impl SpecialOps for Harness {
             crate::battle_context::with(|cx| {
                 set_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::SUN_DEVICE,
+                    uqm_engine::StoryKey::SUN_DEVICE,
                     taken.parse().expect("0 or 1"),
                 )
             });
@@ -312,7 +312,7 @@ impl SpecialOps for Harness {
             crate::battle_context::with(|cx| {
                 set_game_state(
                     cx.world,
-                    uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
+                    uqm_engine::StoryKey::TAALO_PROTECTOR,
                     taken.parse().expect("0 or 1"),
                 )
             });
@@ -334,16 +334,16 @@ pub fn special_generators_match_the_c_originals() {
     );
 }
 
-pub fn mycon_matches_the_c_original(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
+pub fn mycon_matches_the_c_original(table: &[uqm_engine::world::planet::PlanetFrame]) {
     mycon::check(table);
 }
 
-pub fn late_generators_match(frames: &[uqm_rust::engine::world::planet::PlanetFrame]) {
+pub fn late_generators_match(frames: &[uqm_engine::world::planet::PlanetFrame]) {
     late_gen::check(frames);
     late_abi::check();
 }
 
-pub fn sol_matches_the_c_original(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
+pub fn sol_matches_the_c_original(table: &[uqm_engine::world::planet::PlanetFrame]) {
     sol::check(table);
     sol_abi::check();
 }

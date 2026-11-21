@@ -1,5 +1,5 @@
 use super::*;
-use crate::graphics::geometry::Rect;
+use uqm_engine::graphics::geometry::Rect;
 
 #[derive(Default)]
 struct Flags {

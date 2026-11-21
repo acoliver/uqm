@@ -1,31 +1,31 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
 pub mod engine {
-    use crate::engine::battle::race::{FlagshipWeapon, SisState};
-    use crate::engine::battle::views::{Laser, Missile};
-    use crate::engine::battle::{
+    use uqm_engine::battle::race::{FlagshipWeapon, SisState};
+    use uqm_engine::battle::views::{Laser, Missile};
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceDesc, RaceState, RaceTemplate, ShipId, StoryKey,
         WeaponOrigin, WeaponSpawn, World,
     };
 
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, normalize_facing};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_AFT, FIRES_FORE, FIRES_LEFT, FIRES_RIGHT,
         IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE, MAX_ENERGY_SIZE, MAX_SHIP_MASS, MEDIUM_SHIP,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, PLAYER_CAPTAIN, POINT_DEFENSE, RIGHT,
         SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, CREW_OBJECT, DISAPPEARING, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
         SHIP_AT_MAX_SPEED, STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::EMPTY_PRIMITIVE;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::math::square_root;
-    use crate::math::velocity::VELOCITY_SHIFT;
-    use crate::ships::native::{angle_to_facing, normalize_facing};
+    use uqm_engine::battle::EMPTY_PRIMITIVE;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::square_root;
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
     const ANTIMISSILE_DEFENSE: u32 = 13;
     const CANNON_WEAPON: u32 = 11;
     const CREW_POD: u32 = 3;
@@ -105,7 +105,7 @@ pub mod engine {
             leave = dx <= 1 && dy <= 1;
             if !leave {
                 let mut facing =
-                    normalize_facing(angle_to_facing(crate::math::arctan(udx, udy) as i32));
+                    normalize_facing(angle_to_facing(uqm_engine::math::arctan(udx, udy) as i32));
                 if cx.ship_state(ss).status & SHIP_AT_MAX_SPEED as u16 != 0 {
                     if normalize_facing(
                         i32::from(cx.ship_state(ss).facing) + angle_to_facing(QUADRANT as i32)
@@ -127,7 +127,7 @@ pub mod engine {
                     }
                     if facing == cx.ship_state(ss).facing {
                         cx.element_mut(e).velocity =
-                            crate::engine::battle::record::VelocityDesc::default();
+                            uqm_engine::battle::record::VelocityDesc::default();
                     }
                 }
                 if !leave {
@@ -479,7 +479,8 @@ pub mod engine {
                 .location
                 .y
                 .wrapping_sub(concerns.subject.current.location.y);
-            let direction = normalize_facing(angle_to_facing(crate::math::arctan(dx, dy) as i32));
+            let direction =
+                normalize_facing(angle_to_facing(uqm_engine::math::arctan(dx, dy) as i32));
             let mut flags = FIRES_FORE as u16;
             let mut facing = cx.ship_state(ss).facing;
             while flags <= FIRES_LEFT as u16 {
@@ -597,7 +598,7 @@ pub mod engine {
         let config = world.flagship_config();
         let mut d = template();
         let race = if config.hyperspace {
-            d.resources = crate::engine::battle::RaceResources::default();
+            d.resources = uqm_engine::battle::RaceResources::default();
             d.resources.ship[0] = Some(c"ship.flagship.graphics.hyperspace");
             d.characteristics.max_thrust -= 4;
             &SIS_HYPER
@@ -637,7 +638,7 @@ pub mod engine {
         d.info.energy_level = d.info.max_energy;
         d.descriptor(race)
     }
-    pub fn uninit_sis(world: &mut World, d: &mut crate::engine::battle::views::RaceStats) {
+    pub fn uninit_sis(world: &mut World, d: &mut uqm_engine::battle::views::RaceStats) {
         if !world.flagship_config().hyperspace {
             let crew = if d.ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0 {
                 d.ship_info.crew_level.wrapping_sub(1)

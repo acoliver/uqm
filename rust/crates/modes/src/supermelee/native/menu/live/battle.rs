@@ -1,10 +1,10 @@
 //! Battle launch and network confirmation.
 use super::*;
-use crate::engine::battle::net::NetState;
-use crate::engine::sound::types::NORMAL_VOLUME;
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
-use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 use crate::starbase::ids::NETMELEE_STRING_BASE;
+use uqm_engine::battle::net::NetState;
+use uqm_engine::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
+use uqm_engine::sound::types::NORMAL_VOLUME;
 pub(super) fn ready(state: &MeleeSession, controls: [u8; 2]) -> isize {
     let mut done = 0;
     for player in [0usize, 1] {
@@ -23,11 +23,11 @@ pub(super) fn ready(state: &MeleeSession, controls: [u8; 2]) -> isize {
     done
 }
 fn prepare_confirmation(
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     state: &mut MeleeSession,
     controls: [u8; 2],
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> Option<u32> {
     let session = state.netplay.clone();
     input.set_paused(false);
@@ -81,7 +81,7 @@ fn prepare_confirmation(
         }
         if conn.unwrap_or_else(|| panic!("connection")).discriminant {
             let seed = get_time_counter();
-            crate::math::seed_random(seed);
+            uqm_engine::math::seed_random(seed);
             netplay_notify_seed_random(state, conn, seed);
         }
     }
@@ -89,10 +89,10 @@ fn prepare_confirmation(
     None
 }
 pub(super) fn confirm(
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> u32 {
     let controls = cx.kernel.player_control;
     if let Some(result) = prepare_confirmation(input, state, controls, cx, io) {
@@ -113,8 +113,8 @@ pub(super) fn confirm(
 }
 pub(super) fn start(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) {
     FadeMusic(0, 840 / 2);
     fade(cx, FADE_ALL_TO_BLACK);
@@ -156,7 +156,7 @@ pub(super) fn start(
     cx.world.set_activity(SUPER_MELEE);
     state.initialized = 0;
 }
-pub(super) fn start_button(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
+pub(super) fn start_button(state: &mut MeleeSession, cx: &mut uqm_engine::battle::Cx<'_>) {
     let controls = cx.kernel.player_control;
     if !state.can_start_battle() {
         crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
@@ -201,9 +201,9 @@ pub(super) fn start_button(state: &mut MeleeSession, cx: &mut crate::engine::bat
 }
 pub(super) fn connecting(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-    input: &crate::engine::input::InputSession,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
+    input: &uqm_engine::input::InputSession,
 ) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
@@ -255,7 +255,7 @@ pub(super) fn connecting(
         1
     }
 }
-pub(super) fn disconnects(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
+pub(super) fn disconnects(state: &mut MeleeSession, cx: &mut uqm_engine::battle::Cx<'_>) {
     for player in [0usize, 1] {
         if cx.kernel.player_control[player] & NETWORK_CONTROL == 0 {
             continue;
@@ -270,8 +270,8 @@ pub(super) fn disconnects(state: &mut MeleeSession, cx: &mut crate::engine::batt
 }
 pub(super) fn next_control(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     side: usize,
 ) {
     let human = HUMAN_CONTROL | 16;

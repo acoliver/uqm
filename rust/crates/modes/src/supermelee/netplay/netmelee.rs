@@ -3,8 +3,8 @@ use super::{
     netconnection::{Effect, Event, NetConnection},
     packet::Packet,
 };
-use crate::engine::battle::net::NetState;
-use crate::engine::battle::net::ProtocolDriver;
+use uqm_engine::battle::net::NetState;
+use uqm_engine::battle::net::ProtocolDriver;
 
 impl super::session::SessionCore {
     pub fn get_num_net_connections(&self) -> usize {
@@ -181,10 +181,10 @@ impl super::session::SessionCore {
     pub fn network_battle_input(
         &self,
         player: usize,
-        activity: &crate::engine::world::activity::ActivityControl,
+        activity: &uqm_engine::world::activity::ActivityControl,
         driver: &mut dyn ProtocolDriver,
     ) -> u8 {
-        use crate::engine::world::activity::activity_flags::CHECK_ABORT;
+        use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
         loop {
             if let Some(input) = self.pop_input(player) {
                 return input;

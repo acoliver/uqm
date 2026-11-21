@@ -1,12 +1,13 @@
+#![forbid(unsafe_code)]
 use std::cell::RefCell;
-use uqm_rust::engine::{
+use uqm_engine::{
     battle::{Battle, Cx},
     observe::{Io, Unobserved},
     Game, StoryKey,
 };
-use uqm_rust::planets::generate::default::Npcs;
-use uqm_rust::planets::generate::special::Story;
-use uqm_rust::planets::solarsys::site::Site;
+use uqm_modes::planets::generate::default::Npcs;
+use uqm_modes::planets::generate::special::Story;
+use uqm_modes::planets::solarsys::site::Site;
 
 fn with_host(game: &mut Game, run: impl FnOnce(&mut Site<'_, '_, '_>)) {
     let mut battle = Battle::new();
@@ -14,17 +15,17 @@ fn with_host(game: &mut Game, run: impl FnOnce(&mut Site<'_, '_, '_>)) {
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     ));
     let mut observer = Unobserved;
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+    let mut pickup = uqm_modes::planet_side::special_effects::PickupContext::NoLander;
     let mut host = Site::new(
         &owner,
         &io,
-        uqm_rust::engine::StarId(0),
+        uqm_engine::StarId(0),
         0,
         false,
         &mut pickup,
@@ -36,7 +37,7 @@ fn with_host(game: &mut Game, run: impl FnOnce(&mut Site<'_, '_, '_>)) {
 #[test]
 fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
     let mut game = Game::new();
-    uqm_rust::state::ffi::rust_init_game_state(&mut game.world);
+    uqm_engine::state::ffi::rust_init_game_state(&mut game.world);
     let (first, second) = {
         let mut groups = game.world.ip_groups();
         let first = groups.alloc().unwrap();
@@ -60,7 +61,7 @@ fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
         host.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0xdeca_fbad);
         assert_eq!(host.word(StoryKey::URQUAN_PROBE_GRPOFFS0), 0xdeca_fbad);
         assert!(
-            uqm_rust::planets::generate::special::FleetGroups::head_ip_group(host, &mut |group| {
+            uqm_modes::planets::generate::special::FleetGroups::head_ip_group(host, &mut |group| {
                 group.group_counter = 17
             })
         );
@@ -74,9 +75,9 @@ fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
 
 #[test]
 fn npc_guard_queue_operations_preserve_escorts_and_invalidate_only_reset_ids() {
-    use uqm_rust::planets::generate::sam::GuardSite;
-    use uqm_rust::planets::generate::sol::orbital::Queues;
-    use uqm_rust::planets::generate::special::FleetGroups;
+    use uqm_modes::planets::generate::sam::GuardSite;
+    use uqm_modes::planets::generate::sol::orbital::Queues;
+    use uqm_modes::planets::generate::special::FleetGroups;
     let mut game = Game::new();
     let (escort, npc, group) = {
         let world = &mut game.world;

@@ -1,5 +1,5 @@
 //! Syreen dialogue, ported from syreenc.c.
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;
@@ -488,7 +488,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 0 => {
                     self.api.npc(HELLO_AFTER_AMBUSH_1);
                     self.api.set_allied(
-                        (crate::engine::species::ship::SYREEN_SHIP as i32) as u16,
+                        (uqm_engine::species::ship::SYREEN_SHIP as i32) as u16,
                         1 != 0,
                     );
                 }

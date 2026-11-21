@@ -42,10 +42,10 @@ pub fn rust_clear_responses(comm: &mut Comm) {
     comm.clear_responses();
 }
 
-pub(crate) fn observe_responses(comm: &mut Comm, io: &mut crate::engine::observe::Io<'_>) {
+pub(crate) fn observe_responses(comm: &mut Comm, io: &mut uqm_engine::observe::Io<'_>) {
     let choices = crate::comm::ffi::response_choices(comm);
     io.observer.checkpoint(
-        &crate::engine::observe::CheckpointView::CommunicationResponses {
+        &uqm_engine::observe::CheckpointView::CommunicationResponses {
             count: comm.responses().count(),
             choices: &choices,
         },
@@ -54,19 +54,17 @@ pub(crate) fn observe_responses(comm: &mut Comm, io: &mut crate::engine::observe
 
 pub(super) fn deliver_selected(
     comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) {
     io.observer.checkpoint(
-        &crate::engine::observe::CheckpointView::CommunicationResponses {
+        &uqm_engine::observe::CheckpointView::CommunicationResponses {
             count: 0,
             choices: &Default::default(),
         },
     );
     io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::ResponsesReady(
-            false,
-        ));
+        .checkpoint(&uqm_engine::observe::CheckpointView::ResponsesReady(false));
     let result = {
         let state = &mut *comm;
         let activity = cx.world.activity();
@@ -86,7 +84,7 @@ pub(super) fn deliver_selected(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
+    use uqm_engine::{
         battle::{Battle, Cx},
         observe::{CheckpointView, Injected, InputView, Io, Observer, Presented},
         Game,
@@ -98,7 +96,7 @@ mod tests {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &mut crate::engine::battle::Cx<'_>,
+            _: &mut uqm_engine::battle::Cx<'_>,
         ) -> Injected {
             Injected::default()
         }
@@ -135,7 +133,7 @@ mod tests {
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         let mut counts = Counts(Vec::new());
         deliver_selected(

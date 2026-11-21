@@ -37,13 +37,13 @@ fn getter_valid_index_returns_zero() {
 
 #[test]
 fn service_without_an_observer_does_not_stop_input() {
-    use crate::engine::observe::{InputView, Io, Unobserved};
+    use uqm_engine::observe::{InputView, Io, Unobserved};
     let mut observer = Unobserved;
     let io = Io {
         observer: &mut observer,
     };
     assert!(
-        !crate::engine::Game::new()
+        !uqm_engine::Game::new()
             .with_context(|cx| io.observer.input_admitted(&InputView::BeforeUpdate, cx))
             .stop
     );
@@ -51,13 +51,13 @@ fn service_without_an_observer_does_not_stop_input() {
 
 #[test]
 fn observation_without_an_observer_does_not_stop_input() {
-    use crate::engine::observe::{InputView, Io, Unobserved};
+    use uqm_engine::observe::{InputView, Io, Unobserved};
     let mut observer = Unobserved;
     let io = Io {
         observer: &mut observer,
     };
     assert!(
-        !crate::engine::Game::new()
+        !uqm_engine::Game::new()
             .with_context(|cx| io.observer.input_admitted(&InputView::AfterUpdate(0), cx))
             .stop
     );

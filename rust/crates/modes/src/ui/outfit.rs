@@ -1,27 +1,27 @@
 //! Outfit installation, fuel transactions and menu callbacks, ported from outfit.c.
 use super::menu_state::PM_FUEL;
 use super::session::{draw_piece, MenuAssets};
-use crate::engine::input::frames::*;
-use crate::engine::observe::Io;
-use crate::engine::world::activity::activity_flags;
-use crate::engine::World;
-use crate::engine::{battle::Cx, input::InputSession, StoryKey};
-use crate::graphics::{
-    drawable::FrameId, drawable::LoadedDrawable, geometry::Color, geometry::Extent,
-    geometry::Point, geometry::Rect, geometry::TextAlign, intersection::Stamp, menu as draw,
-};
 use crate::starbase::ids;
 use crate::starbase::module_guard;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
-use crate::state::game_state_keys::get_game_state;
 use crate::ui::menu::draw_campaign_menu;
 use crate::ui::sis;
 use sis::{
     clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_flagship_name,
     draw_flagship_stats, draw_title, highlight_rect, set_menu_flash,
 };
+use uqm_engine::graphics::{
+    drawable::FrameId, drawable::LoadedDrawable, geometry::Color, geometry::Extent,
+    geometry::Point, geometry::Rect, geometry::TextAlign, intersection::Stamp, menu as draw,
+};
+use uqm_engine::input::frames::*;
+use uqm_engine::observe::Io;
+use uqm_engine::state::game_state_keys::get_game_state;
 use uqm_engine::time::counter_abi::ONE_SECOND;
+use uqm_engine::world::activity::activity_flags;
+use uqm_engine::World;
+use uqm_engine::{battle::Cx, input::InputSession, StoryKey};
 
 const OUTFIT_FUEL: u8 = 0;
 const OUTFIT_MODULES: u8 = 1;
@@ -66,7 +66,7 @@ fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: u8) {
                 - ids::RADAR_HEIGHT) as i16
                 - r.corner.y,
         },
-        frame: crate::graphics::drawable::FrameId::NULL,
+        frame: uqm_engine::graphics::drawable::FrameId::NULL,
     };
     r.corner.x = s.origin.x - 1;
     r.corner.y = s.origin.y - 11;
@@ -262,7 +262,7 @@ fn finish_module_transaction(
         );
         if new_piece > ModuleType::TurningJets as u8 && old_piece > ModuleType::TurningJets as u8 {
             sis::capacity::draw_fuel_bars(
-                &crate::graphics::context::ContextLease::require(cx.kernel.space_context),
+                &uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context),
                 &cx.world.data.flagship,
             );
         }
@@ -457,7 +457,7 @@ fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
             highlight.post_update_flash_rect();
         };
         sis::capacity::draw_fuel_bars(
-            &crate::graphics::context::ContextLease::require(cx.kernel.space_context),
+            &uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context),
             &cx.world.data.flagship,
         );
     }
@@ -470,11 +470,11 @@ fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
     };
 }
 
-fn on_naming_done(kernel: &crate::engine::Kernel, world: &crate::engine::World, width: i32) {
+fn on_naming_done(kernel: &uqm_engine::Kernel, world: &uqm_engine::World, width: i32) {
     sis::gauges::draw_flagship_name(kernel, world, width, false);
 }
 
-fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut OutfitSession) -> u32 {
+fn exit_outfit(kernel: &mut uqm_engine::Kernel, menu: &mut OutfitSession) -> u32 {
     menu.assets.art = None;
     menu.assets.modules = None;
     kernel.naming_callback = None;
@@ -489,7 +489,7 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
     menu.initialized = true;
     cx.kernel.naming_callback = Some(on_naming_done);
     menu.assets.art = LoadedDrawable::load(c"graphics.modulesmenu");
-    menu.assets.music = crate::sound::resource_types::LoadedMusic::load(c"music.outfit");
+    menu.assets.music = uqm_engine::sound::resource_types::LoadedMusic::load(c"music.outfit");
     menu.state = OUTFIT_FUEL;
     menu.assets.modules = LoadedDrawable::load(c"graphics.outfitmodules");
     let background = LoadedDrawable::load(c"graphics.outfit")
@@ -516,7 +516,7 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
     drop(background);
     draw_installed_modules(cx, menu.assets.modules());
     sis::capacity::draw_fuel_bars(
-        &crate::graphics::context::ContextLease::require(cx.kernel.space_context),
+        &uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context),
         &cx.world.data.flagship,
     );
     display_landers(cx, menu);
@@ -670,7 +670,7 @@ pub fn run(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     services: &super::MenuServices,
-) -> Option<crate::sound::resource_types::LoadedMusic> {
+) -> Option<uqm_engine::sound::resource_types::LoadedMusic> {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut menu = OutfitSession::default();

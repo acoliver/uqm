@@ -19,7 +19,7 @@ pub const CRATE_DEPS: &[(&str, &[&str])] = &[
             "uqm-platform",
         ],
     ),
-    ("uqm-xtask", &["uqm", "uqm-save"]),
+    ("uqm-xtask", &["uqm", "uqm-engine", "uqm-modes", "uqm-save"]),
 ];
 
 pub const OS_CRATES: &[&str] = &[
@@ -500,6 +500,8 @@ mod tests {
         assert!(allowed_edge("uqm-modes", "uqm-engine"));
         assert!(allowed_edge("uqm-platform", "uqm-engine"));
         assert!(allowed_edge("uqm-xtask", "uqm-save"));
+        assert!(allowed_edge("uqm-xtask", "uqm-engine"));
+        assert!(!allowed_edge("uqm-xtask", "uqm-platform"));
         assert!(!allowed_edge("uqm-engine", "uqm-modes"));
         assert!(!allowed_edge("uqm-content", "uqm-platform"));
         assert!(!allowed_edge("unknown", "uqm-save"));

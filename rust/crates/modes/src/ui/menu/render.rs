@@ -1,12 +1,12 @@
 //! Campaign menus rendered from retained display and text owners.
 use super::*;
-use crate::engine::World;
-use crate::graphics::{
+use crate::starbase::ids;
+use std::ffi::CString;
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
     geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
-use crate::starbase::ids;
-use std::ffi::CString;
+use uqm_engine::World;
 
 const INACTIVE_COLOR: Color = Color {
     r: 82,
@@ -44,8 +44,8 @@ fn draw_pc_menu(
     rect.extent.width += 1;
     context.fill_rectangle(INACTIVE_COLOR, *rect);
     if i16::from(count) * ITEM_HEIGHT > rect.extent.height {
-        crate::log_abi::log_message(
-            crate::logging::LogLevel::Error as i32,
+        uqm_engine::log_abi::log_message(
+            uqm_engine::logging::LogLevel::Error as i32,
             "Warning, no room for all menu items!",
         );
     } else {

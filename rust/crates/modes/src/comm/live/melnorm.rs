@@ -2,7 +2,7 @@ use crate::comm::host::Host;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::melnorm::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.melnorm.take().unwrap_or_default();
@@ -124,7 +124,7 @@ mod api {
                 runtime.sleep(&mut self.cx.borrow_mut(), ticks);
             }
             fn now(&mut self) -> u32 {
-                crate::engine::time::counter_abi::get_time_counter()
+                uqm_engine::time::counter_abi::get_time_counter()
             }
             fn skip_sale(&mut self) -> bool {
                 let runtime = self.cx.borrow().kernel.input_runtime();

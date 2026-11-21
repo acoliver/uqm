@@ -1,7 +1,7 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
 use crate::comm::Comm;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 use crate::comm::races::descriptor::NumberSpeech;
 
@@ -57,7 +57,7 @@ fn number_phrases(
     Ok(())
 }
 
-pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue: u32) {
+pub fn set_segue(comm: &mut Comm, cx: &mut uqm_engine::battle::Cx<'_>, segue: u32) {
     comm.set_segue(crate::comm::segue::Segue::from(segue));
     let world = &mut cx.world;
     match segue {
@@ -75,7 +75,7 @@ pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue:
         _ => unreachable!("invalid Segue"),
     }
 }
-pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
+pub fn get_segue(cx: &uqm_engine::battle::Cx<'_>) -> u32 {
     let world = &cx.world;
     if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
         u32::from(world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0)
@@ -112,7 +112,7 @@ pub(crate) mod runtime {
         })()
         .unwrap_or_else(|error| panic!("invalid number speech: {error}"));
         if speech.is_some() {
-            assert!(indices.len() < crate::sound::trackplayer::MAX_MULTI_TRACKS);
+            assert!(indices.len() < uqm_engine::sound::trackplayer::MAX_MULTI_TRACKS);
             let tracks: Vec<_> = indices
                 .into_iter()
                 .map_while(|index| {
@@ -123,9 +123,9 @@ pub(crate) mod runtime {
                         .clip
                 })
                 .collect();
-            crate::sound::heart_ffi::splice_multi_track(&tracks, Some(&text));
+            uqm_engine::sound::heart_ffi::splice_multi_track(&tracks, Some(&text));
         } else {
-            crate::sound::heart_ffi::splice_track(None, Some(&text), None, None);
+            uqm_engine::sound::heart_ffi::splice_track(None, Some(&text), None, None);
         }
     }
 }

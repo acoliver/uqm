@@ -1,16 +1,16 @@
 //! Master metadata owns its descriptors in the game lifecycle's typed ship queue.
-use crate::engine::battle::kernel::MasterCatalog;
 use crate::ships::DescriptorLoader;
+use uqm_engine::battle::kernel::MasterCatalog;
 
 #[derive(Clone, Debug)]
 pub struct ShipChoice {
     pub cost: u16,
-    pub icon: crate::engine::battle::frames::FrameSelection,
-    pub melee_icon: crate::engine::battle::frames::FrameSelection,
+    pub icon: uqm_engine::battle::frames::FrameSelection,
+    pub melee_icon: uqm_engine::battle::frames::FrameSelection,
 }
 
 pub fn choices(queue: &MasterCatalog) -> Vec<ShipChoice> {
-    use crate::engine::battle::frames::FrameSelection;
+    use uqm_engine::battle::frames::FrameSelection;
     let mut result = Vec::with_capacity(queue.count());
     let mut next = queue.head();
     while let Some(id) = next {
@@ -44,11 +44,11 @@ pub fn find(queue: &MasterCatalog, species: u32) -> i32 {
 
 pub mod engine {
     use super::*;
-    use crate::engine::battle::{
+    use uqm_engine::battle::{
         kernel::CatalogEntry,
         record::{FleetRecord, ShipInfoRecord},
     };
-    use crate::engine::{Kernel, World};
+    use uqm_engine::{Kernel, World};
 
     #[derive(Clone, Copy)]
     pub struct MasterShip {
@@ -58,10 +58,10 @@ pub mod engine {
     }
 
     pub fn load_entry(world: &mut World, kernel: &mut Kernel, species: u32) {
-        if species == crate::engine::species::species_id::SPECIES_ID_ARILOU_ID {
+        if species == uqm_engine::species::species_id::SPECIES_ID_ARILOU_ID {
             assert_eq!(kernel.master_queue.count(), 0, "catalog already loaded");
         }
-        let descriptor = crate::engine::battle::RaceDesc::load(world, species, false)
+        let descriptor = uqm_engine::battle::RaceDesc::load(world, species, false)
             .unwrap_or_else(|| panic!("master species {species}"));
         let name = descriptor.catalog_name().to_vec();
         let queue = &mut kernel.master_queue;
@@ -90,7 +90,10 @@ pub mod engine {
         queue.reinit();
     }
 
-    fn entry(queue: &MasterCatalog, id: crate::collections::pool::Id<CatalogEntry>) -> MasterShip {
+    fn entry(
+        queue: &MasterCatalog,
+        id: uqm_engine::collections::pool::Id<CatalogEntry>,
+    ) -> MasterShip {
         MasterShip {
             species: queue.get(id).species,
             info: *queue.get(id).descriptor.info(),
@@ -98,7 +101,7 @@ pub mod engine {
         }
     }
 
-    pub fn descriptor_in(kernel: &Kernel, index: u16) -> Option<&crate::engine::battle::RaceDesc> {
+    pub fn descriptor_in(kernel: &Kernel, index: u16) -> Option<&uqm_engine::battle::RaceDesc> {
         let queue = &kernel.master_queue;
         let mut next = queue.head();
         for _ in 0..index {
@@ -130,7 +133,7 @@ pub mod engine {
     pub fn picker_resources(
         kernel: &Kernel,
         species: u32,
-    ) -> crate::engine::battle::link_queue::ShipPickerResources {
+    ) -> uqm_engine::battle::link_queue::ShipPickerResources {
         let queue = &kernel.master_queue;
         let mut next = queue.head();
         while let Some(id) = next {
@@ -160,7 +163,7 @@ pub use engine::{descriptor_in, find_master_ship, master_in};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::{kernel::CatalogEntry, record::RaceDescriptor, RaceDesc};
+    use uqm_engine::battle::{kernel::CatalogEntry, record::RaceDescriptor, RaceDesc};
 
     fn push(queue: &mut MasterCatalog, species: u32, cost: u8) {
         let mut descriptor = RaceDescriptor::EMPTY;
@@ -176,7 +179,7 @@ mod tests {
 
     #[test]
     fn cost_uses_the_owned_catalog_in_queue_order() {
-        let mut kernel = crate::engine::Kernel::new();
+        let mut kernel = uqm_engine::Kernel::new();
         let ships = &mut kernel.master_queue;
         assert_eq!(choice_cost(&choices(ships), 0), 0);
         push(ships, 23, 23);

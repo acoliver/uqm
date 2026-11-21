@@ -4,7 +4,7 @@ use super::{
     packet::Packet,
     session::SessionCore,
 };
-use crate::engine::battle::net::NetState;
+use uqm_engine::battle::net::NetState;
 
 pub(super) fn handle(
     session: &SessionCore,

@@ -1,14 +1,15 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
+#![forbid(unsafe_code)]
 use uqm_engine::test_support::campaign_display;
 use uqm_engine::test_support::native_process;
 #[test]
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
-    let mut game = uqm_rust::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     {
         {
             {
-                uqm_rust::battle::tactrans_native::stop_ditty(&mut game.kernel);
+                uqm_modes::battle::tactrans_native::stop_ditty(&mut game.kernel);
             };
         };
     }
@@ -17,40 +18,37 @@ fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
 #[test]
 #[serial_test::serial]
 fn battle_song_release_uses_the_already_borrowed_kernel() {
-    let mut game = uqm_rust::engine::Game::new();
+    let mut game = uqm_engine::Game::new();
     {
         {
             {
                 let kernel = &mut game.kernel;
-                uqm_rust::battle::battle_native::free_battle_song(kernel);
-                uqm_rust::battle::battle_native::free_battle_song(kernel);
+                uqm_modes::battle::battle_native::free_battle_song(kernel);
+                uqm_modes::battle::battle_native::free_battle_song(kernel);
             };
         };
     }
 }
 
-use std::mem;
-use uqm_rust::engine::battle::ai_constants::MAX_ENERGY_SIZE;
-use uqm_rust::engine::battle::flags::RPG_PLAYER_NUM;
-use uqm_rust::engine::species::ship::SAMATRA_SHIP;
-use uqm_rust::engine::species::species_id::{
+use uqm_engine::battle::ai_constants::MAX_ENERGY_SIZE;
+use uqm_engine::battle::flags::RPG_PLAYER_NUM;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::{MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ZOOM_SHIFT};
+use uqm_engine::species::ship::SAMATRA_SHIP;
+use uqm_engine::species::species_id::{
     SPECIES_ID_EARTHLING_ID, SPECIES_ID_SA_MATRA_ID, SPECIES_ID_SIS_SHIP_ID, SPECIES_ID_VUX_ID,
 };
-use uqm_rust::engine::world::activity::activity_flags::{
-    CHECK_ABORT, IN_BATTLE, START_INTERPLANETARY,
-};
-use uqm_rust::engine::world::IN_HYPERSPACE;
-use uqm_rust::engine::{Game, World};
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::battle_types::{MAX_VIS_REDUCTION, MAX_ZOOM_OUT, ZOOM_SHIFT};
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, IN_BATTLE, START_INTERPLANETARY};
+use uqm_engine::world::IN_HYPERSPACE;
+use uqm_engine::{Game, World};
 const CREW_POD: u32 = 3;
 
 #[test]
 fn public_campaign_copy_does_not_traverse_live_records() {
     use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut world = World::new();
-    world.story = Some(uqm_rust::state::game_state::StoryState::new());
-    world.data.game.ship_stamp.frame = uqm_rust::graphics::drawable::FrameId::from_bits(1 << 16);
+    world.story = Some(uqm_engine::state::game_state::StoryState::new());
+    world.data.game.ship_stamp.frame = uqm_engine::graphics::drawable::FrameId::from_bits(1 << 16);
     let id = world.npc_built_ships().alloc().unwrap();
     world.npc_built_ships().put(id);
     let id = world.built_ships().alloc().unwrap();
@@ -66,9 +64,7 @@ fn public_campaign_copy_does_not_traverse_live_records() {
             world: &view,
             flagship_destroyed: false
         }
-        .read(StateKey::Story(
-            uqm_rust::engine::StoryKey::STARBASE_AVAILABLE
-        )),
+        .read(StateKey::Story(uqm_engine::StoryKey::STARBASE_AVAILABLE)),
         Some(0)
     );
 }
@@ -77,7 +73,7 @@ fn public_campaign_copy_does_not_traverse_live_records() {
 #[serial_test::serial]
 fn empty_npc_phrase_does_not_acquire_an_owner() {
     let game = Game::new();
-    uqm_rust::comm::ffi::npc_phrase(&game.world, &mut uqm_rust::comm::Comm::new(), 0, None);
+    uqm_modes::comm::ffi::npc_phrase(&game.world, &mut uqm_modes::comm::Comm::new(), 0, None);
 }
 
 #[test]
@@ -90,16 +86,16 @@ fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     }
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    let frames = uqm_rust::graphics::drawable::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    let frames = uqm_engine::graphics::drawable::LoadedDrawable::create(8, 64, 140, 100).unwrap();
     game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
     game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
     game.kernel.star_con_font = game.kernel.tiny_font;
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);
     game.world.data.flagship.jet_slots.fill(255);
     game.world.data.flagship.crew_enlisted = 12;
-    uqm_rust::ui::sis::delta_sis_gauges(
+    uqm_modes::ui::sis::delta_sis_gauges(
         &game.kernel,
         &mut game.world,
         i16::MAX,
@@ -139,18 +135,26 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
     }
 }
 
+const EMPTY_STAR: uqm_engine::world::CStarDesc = uqm_engine::world::CStarDesc {
+    star_pt: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
+    star_type: 0,
+    index: 0,
+    prefix: 0,
+    postfix: 0,
+};
+
 #[test]
 #[serial_test::serial]
 fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
-    use uqm_rust::engine::{
+    use uqm_engine::{
         world::{CStarDesc, CATALOG_LEN},
         StoryKey,
     };
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     // SAFETY: zero is valid for catalog descriptors, and the fixture keeps the table live.
-    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { mem::zeroed() });
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new([EMPTY_STAR; CATALOG_LEN]);
     for star in catalog.iter_mut() {
         star.star_pt.y = i16::MAX;
     }
@@ -162,7 +166,7 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
             let point = Point { x: 1752, y: 1450 };
             {
                 let world = &mut game.world;
-                let selected = uqm_rust::planets::starmap::find_star_id(
+                let selected = uqm_modes::planets::starmap::find_star_id(
                     world,
                     world.catalog(),
                     None,
@@ -171,7 +175,7 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
                     0,
                 )
                 .unwrap();
-                assert_eq!(selected, uqm_rust::engine::StarId(0));
+                assert_eq!(selected, uqm_engine::StarId(0));
                 world.current_star = Some(selected);
                 let address = world.star_pointer();
                 assert_eq!(address, world.catalog().as_ptr().cast_mut());
@@ -195,14 +199,14 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
 fn space_queries_use_the_world_of_the_entered_context() {
     let mut game = Game::new();
     game.world.set_activity(IN_HYPERSPACE as u16);
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     {
         {
             game.with_context(|cx| {
                 assert!(cx.world.in_hqspace());
                 assert!(cx.world.in_hyper_space());
                 cx.world
-                    .set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
+                    .set_story_state(uqm_engine::StoryKey::ARILOU_SPACE_SIDE, 2);
                 assert!(cx.world.in_quasi_space());
                 assert!(!cx.world.in_hyper_space());
             });
@@ -214,20 +218,20 @@ fn space_queries_use_the_world_of_the_entered_context() {
 #[serial_test::serial]
 fn status_offsets_use_the_already_borrowed_kernel() {
     let mut game = Game::new();
-    uqm_rust::battle::status_native::init_status_offsets(&mut game.kernel, 240);
+    uqm_modes::battle::status_native::init_status_offsets(&mut game.kernel, 240);
 }
 
 #[cfg(feature = "debug-process")]
 #[test]
 #[serial_test::serial]
 fn starbase_releases_world_before_communication_and_cleanup() {
-    use uqm_rust::engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
+    use uqm_engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
     struct Recording(Vec<String>);
     impl Observer for Recording {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &mut uqm_rust::engine::battle::Cx<'_>,
+            _: &mut uqm_engine::battle::Cx<'_>,
         ) -> Injected {
             Injected::default()
         }
@@ -244,28 +248,30 @@ fn starbase_releases_world_before_communication_and_cleanup() {
             game.kernel.configuration.clone(),
         ),
     ));
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.set_activity(CHECK_ABORT);
     let mut observer = Recording(Vec::new());
     let _quiet = game.kernel.diagnostics.suppress_interaction();
     {
         game.with_context(|cx| {
-            uqm_rust::ui::starbase::run_starbase_visit(
+            uqm_modes::ui::starbase::run_starbase_visit(
                 cx,
                 &mut Io {
                     observer: &mut observer,
                 },
-                &uqm_rust::ui::MenuServices {
+                &uqm_modes::ui::MenuServices {
                     communicate: |cx, io, conversation, options| {
-                        uqm_rust::comm::dispatch::init_communication_with_options(
+                        uqm_modes::comm::dispatch::init_communication_with_options(
                             cx,
                             io,
                             conversation,
                             options,
                         )
                     },
-                    game_options: |cx, io| uqm_rust::front_end::gameopt::game_options(cx, io, None),
-                    ship_spin: uqm_rust::front_end::fmv::do_ship_spin,
+                    game_options: |cx, io| {
+                        uqm_modes::front_end::gameopt::game_options(cx, io, None)
+                    },
+                    ship_spin: uqm_modes::front_end::fmv::do_ship_spin,
                 },
             );
         });
@@ -275,7 +281,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         observer.0,
         [format!(
             "EncounterDispatch({})",
-            uqm_rust::engine::species::conv::COMMANDER
+            uqm_engine::species::conv::COMMANDER
         )]
     );
 }
@@ -283,11 +289,11 @@ fn starbase_releases_world_before_communication_and_cleanup() {
 #[test]
 #[serial_test::serial]
 fn encounter_construction_uses_retained_owners_without_publication() {
-    use uqm_rust::engine::StoryKey;
+    use uqm_engine::StoryKey;
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
-    uqm_rust::battle::encount_native::build_battle(
+    uqm_modes::battle::encount_native::build_battle(
         &mut game.world,
         &mut game.kernel,
         RPG_PLAYER_NUM as u16,
@@ -302,13 +308,13 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
     let mut game = Game::new();
     game.world.retain_fleet_resources(
         SPECIES_ID_VUX_ID,
-        uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
+        uqm_engine::battle::link_queue::ShipPickerResources::new(
             None,
-            uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+            uqm_engine::battle::frames::FrameSelection::ABSENT,
         ),
     );
     game.kernel.reset_ship_capacity(0, 32);
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let mut npc = game.world.npc_built_ships();
     let id = npc.alloc().unwrap();
     npc.put(id);
@@ -318,15 +324,15 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
         let fragment = fragments.get_mut(id);
         fragment.race_id = SAMATRA_SHIP;
         fragment.species_id = SPECIES_ID_VUX_ID;
-        fragment.race_strings = Some(uqm_rust::strings::owned_table::EntryRef::new(1, 0));
-        fragment.icons = uqm_rust::graphics::drawable::FrameId::from_bits(1 << 16);
+        fragment.race_strings = Some(uqm_engine::strings::owned_table::EntryRef::new(1, 0));
+        fragment.icons = uqm_engine::graphics::drawable::FrameId::from_bits(1 << 16);
         fragment.index = index;
         fragment.crew_level = crew;
         fragment.max_crew = 19;
         fragment.captains_name_index = 3;
         fragments.put(id);
     }
-    uqm_rust::battle::encount_native::build_battle(
+    uqm_modes::battle::encount_native::build_battle(
         &mut game.world,
         &mut game.kernel,
         RPG_PLAYER_NUM as u16,
@@ -362,18 +368,16 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
 fn encounter_teardown_uses_retained_owners_without_reacquisition() {
     let mut game = Game::new();
     game.world.set_activity(CHECK_ABORT);
-    let input = uqm_rust::engine::input::InputSession::new(
-        Default::default(),
-        game.kernel.configuration.clone(),
-    );
+    let input =
+        uqm_engine::input::InputSession::new(Default::default(), game.kernel.configuration.clone());
     {
         {
             game.with_context(|cx| {
                 assert_eq!(
-                    uqm_rust::battle::encount_native::uninit_encounter(
+                    uqm_modes::battle::encount_native::uninit_encounter(
                         cx,
-                        &mut uqm_rust::engine::observe::Io {
-                            observer: &mut uqm_rust::engine::observe::Unobserved
+                        &mut uqm_engine::observe::Io {
+                            observer: &mut uqm_engine::observe::Unobserved
                         },
                         &input
                     ),
@@ -390,7 +394,7 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
 fn campaign_star_observation_releases_world_between_field_reads() {
     use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let view = CampaignView::from_world(&game.world);
     {
         {
@@ -412,25 +416,25 @@ fn campaign_star_observation_releases_world_between_field_reads() {
 #[test]
 #[serial_test::serial]
 fn lander_status_releases_world_before_gauge_and_lander_drawing() {
-    use uqm_rust::planet_side::{
+    use uqm_modes::planet_side::{
         adapters::CffiShipStatus, runtime::ShipStatusPort, session::ShipDelta,
     };
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    let frames = uqm_rust::graphics::drawable::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    let frames = uqm_engine::graphics::drawable::LoadedDrawable::create(8, 64, 140, 100).unwrap();
     game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
     game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.module_slots[0] = CREW_POD as u8;
     game.world.data.flagship.crew_enlisted = 12;
     game.world.data.flagship.num_landers = 2;
-    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut battle = uqm_engine::battle::Battle::new();
     {
-        let retained = std::cell::RefCell::new(uqm_rust::engine::battle::Cx::new(
+        let retained = std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            uqm_rust::math::random,
+            uqm_engine::math::random,
         ));
         let mut status = CffiShipStatus { game: &retained };
         assert_eq!(status.snapshot().crew_enlisted, 12);
@@ -451,17 +455,17 @@ fn lander_status_releases_world_before_gauge_and_lander_drawing() {
 #[serial_test::serial]
 fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world
-        .set_story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER, 1);
-    uqm_rust::navigation::hyperspace::check_hyperspace_encounter(
+        .set_story_state(uqm_engine::StoryKey::USED_BROADCASTER, 1);
+    uqm_modes::navigation::hyperspace::check_hyperspace_encounter(
         &mut game.world,
-        uqm_rust::navigation::hyper_units::Geometry::new((320, 240)),
+        uqm_modes::navigation::hyper_units::Geometry::new((320, 240)),
         &mut || panic!("empty fleets drew RNG"),
     );
     assert_eq!(
         game.world
-            .story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER),
+            .story_state(uqm_engine::StoryKey::USED_BROADCASTER),
         0
     );
 }
@@ -470,23 +474,23 @@ fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
 #[serial_test::serial]
 fn hyperspace_movement_releases_world_before_fuel_queries() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.data.flagship.log_x = 1000;
     game.world.data.flagship.log_y = 1000;
     game.world.data.flagship.fuel_on_board = 100;
     let (mut dx, mut dy) = (-4, -8);
-    let mut battle = uqm_rust::engine::battle::Battle::new();
-    let mut cx = uqm_rust::engine::battle::Cx::new(
+    let mut battle = uqm_engine::battle::Battle::new();
+    let mut cx = uqm_engine::battle::Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
-    uqm_rust::navigation::hyperspace::move_sis(
+    uqm_modes::navigation::hyperspace::move_sis(
         &mut cx,
         &mut dx,
         &mut dy,
-        uqm_rust::navigation::hyper_units::Geometry::new((320, 240)),
+        uqm_modes::navigation::hyper_units::Geometry::new((320, 240)),
         |_, _| panic!("small displacement must not debit fuel"),
     );
     assert_eq!((dx, dy), (-4, -8));
@@ -505,19 +509,19 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     ) {
         return;
     }
-    use uqm_rust::engine::clock::{ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK};
-    use uqm_rust::engine::{
+    use uqm_engine::clock::{ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK};
+    use uqm_engine::{
         battle::{Battle, Cx},
         StoryKey,
     };
-    use uqm_rust::navigation::events::{add_event, game_clock_tick};
-    use uqm_rust::navigation::{
+    use uqm_modes::navigation::events::{add_event, game_clock_tick};
+    use uqm_modes::navigation::{
         events::{dispatch_event, EventServices},
         hyper_units::Geometry,
     };
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     let clock = &mut game.world.data.game.game_clock;
     clock.year_index = 2155;
     clock.month_index = 1;
@@ -566,7 +570,7 @@ fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
         {
             for step in [false, true] {
                 let zoom = game.with_context(|cx| {
-                    uqm_rust::battle::process_native::init_display_list(cx, step);
+                    uqm_modes::battle::process_native::init_display_list(cx, step);
                     assert!(cx.elements().head().is_none());
                     (cx.b.zoom_out, cx.b.max_zoom_out)
                 });
@@ -587,7 +591,7 @@ fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
 #[test]
 #[serial_test::serial]
 fn fleet_infinity_reads_the_supplied_world_without_publication() {
-    use uqm_rust::battle::encount_native::fleet_is_infinite;
+    use uqm_modes::battle::encount_native::fleet_is_infinite;
     let mut world = World::new();
     assert_eq!(fleet_is_infinite(&world, 0), 0);
     assert_eq!(fleet_is_infinite(&world, 1), 0);
@@ -604,12 +608,12 @@ fn fleet_infinity_reads_the_supplied_world_without_publication() {
 #[test]
 #[serial_test::serial]
 fn instant_move_selects_a_star_with_the_retained_world() {
-    use uqm_rust::engine::{
+    use uqm_engine::{
         world::{CStarDesc, CATALOG_LEN},
         StoryKey,
     };
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    game.world.story = Some(uqm_engine::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);
     game.world.set_activity(IN_HYPERSPACE as u16 | IN_BATTLE);
@@ -618,13 +622,13 @@ fn instant_move_selects_a_star_with_the_retained_world() {
     game.world.data.game.ip_planet = 2;
     game.world.data.game.in_orbit = 1;
     // SAFETY: zero is valid for the catalog's scalar records, retained through the call.
-    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { mem::zeroed() });
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new([EMPTY_STAR; CATALOG_LEN]);
     for star in catalog.iter_mut() {
         star.star_pt.y = i16::MAX;
     }
     catalog[0].star_pt = Point { x: 1752, y: 1450 };
     game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
-    uqm_rust::front_end::uqmdebug::move_flagship(&mut game.world, (320, 240));
+    uqm_modes::front_end::uqmdebug::move_flagship(&mut game.world, (320, 240));
     assert_eq!(
         game.world.star_pointer(),
         game.world.catalog().as_ptr().cast_mut()

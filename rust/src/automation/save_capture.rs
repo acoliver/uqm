@@ -19,7 +19,7 @@ impl Request {
         let output = std::env::var_os("UQM_SAVE_CAPTURE_OUT")
             .unwrap_or_else(|| panic!("UQM_SAVE_CAPTURE_SOURCE requires UQM_SAVE_CAPTURE_OUT"));
         assert!(
-            crate::engine::host::is_replay(),
+            uqm_engine::host::is_replay(),
             "save capture requires --replay"
         );
         let source = PathBuf::from(source);
@@ -67,7 +67,7 @@ impl Request {
 
 impl Request {
     /// The caller is the post-game-initialization hook on the game thread.
-    pub fn load(&mut self, cx: &mut crate::engine::battle::Cx<'_>) -> anyhow::Result<()> {
+    pub fn load(&mut self, cx: &mut uqm_engine::battle::Cx<'_>) -> anyhow::Result<()> {
         anyhow::ensure!(
             std::mem::take(&mut self.load_admitted),
             "save load has no admission"
@@ -85,7 +85,7 @@ impl Request {
         anyhow::ensure!(loaded != 0, "LoadGame failed for {}", self.source.display());
         let activity = cx.world.next_activity;
         self.loaded_activity = Some(activity);
-        self.loaded_tick = crate::engine::host::now_ms();
+        self.loaded_tick = uqm_engine::host::now_ms();
         // Preserve NextActivity for the production main-loop load resolution.
         cx.world.set_activity(0x1000);
         cx.kernel.last_activity = 0x1000;
@@ -93,7 +93,7 @@ impl Request {
     }
 
     /// Capture at the first non-button mode admission, before consuming input.
-    pub fn capture(&mut self, cx: &mut crate::engine::battle::Cx<'_>) -> anyhow::Result<()> {
+    pub fn capture(&mut self, cx: &mut uqm_engine::battle::Cx<'_>) -> anyhow::Result<()> {
         let input_admission = self
             .pending_admission
             .take()
@@ -103,12 +103,12 @@ impl Request {
             self.admits_capture(activity, false),
             "invalid save capture boundary"
         );
-        let tick = crate::engine::host::now_ms();
+        let tick = uqm_engine::host::now_ms();
         // The main loop has resolved CHECK_LOAD to NextActivity and initialized
         // the mode; its first admitted input has not been consumed.
         let save = crate::savegame::live::save::capture(cx, cx.solar_frame, b"runtime-capture")?;
         anyhow::ensure!(
-            tick == crate::engine::host::now_ms(),
+            tick == uqm_engine::host::now_ms(),
             "capture advanced replay clock"
         );
         let bytes = crate::savegame::encode_save(&save)?;

@@ -4,15 +4,13 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`,
 //! `generateEnergy`, `pickupEnergy`. Story flags: `ZOQFOT_DISTRESS`.
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default::{self, Npcs};
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::special::{self, Body, Story, REDUX_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WORLD: Body = Body::Planet(0);
 
@@ -144,7 +142,7 @@ pub fn pickup_energy(
     if body == WORLD {
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
     }
     false
@@ -152,7 +150,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

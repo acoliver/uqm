@@ -5,20 +5,20 @@
 //! `load.c`, not produced by the code under test. The seed save is a file the
 //! C game wrote; its chunk values below were decoded with a separate script.
 
-use crate::engine::World;
 use serial_test::serial;
+use uqm_engine::World;
 
 use super::statefiles::*;
-use crate::comm::locdata::CGameState;
-use crate::engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{
     BattleFleet, BattleGroup, BattleShip, GroupListEntry, IpGroup, Point, GAME_STATE_BYTES,
 };
-use crate::state::ffi::{
+use uqm_engine::state::ffi::{
     replace_game_state, rust_init_game_state, snapshot_game_state, with_state_files,
 };
-use crate::state::game_state::{get_state_32_raw, set_state_32_raw};
+use uqm_engine::state::game_state::{get_state_32_raw, set_state_32_raw};
+use uqm_engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
+use uqm_modes::comm::locdata::CGameState;
 
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 
@@ -124,7 +124,7 @@ fn seed_defined_image() -> Vec<u8> {
 #[test]
 #[serial]
 fn seed_restores_to_the_images_the_c_loader_builds() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
         replace_game_state(&mut game_owner.world, &seed().game_state).unwrap();
@@ -156,7 +156,7 @@ fn seed_restores_to_the_images_the_c_loader_builds() {
 #[test]
 #[serial]
 fn capture_after_restore_gives_back_the_seed_sections() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
         replace_game_state(&mut game_owner.world, &seed().game_state).unwrap();
@@ -381,7 +381,7 @@ fn random_group(fleets: usize) -> BattleGroup {
 #[test]
 #[serial]
 fn rejected_restore_leaves_files_and_state_alone() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
         replace_game_state(&mut game_owner.world, &seed().game_state).unwrap();
@@ -515,7 +515,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
 #[test]
 #[serial]
 fn repeated_loads_start_from_the_initial_group_files() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
         replace_game_state(&mut game_owner.world, &seed().game_state).unwrap();
@@ -607,7 +607,7 @@ fn repeated_loads_start_from_the_initial_group_files() {
 #[test]
 #[serial]
 fn several_defined_groups_get_their_own_offsets() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
         replace_game_state(&mut game_owner.world, &[0; GAME_STATE_BYTES]).unwrap();
@@ -656,7 +656,7 @@ fn several_defined_groups_get_their_own_offsets() {
 #[test]
 #[serial]
 fn init_group_info_matches_the_c_initialiser() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
         replace_game_state(&mut game_owner.world, &seed().game_state).unwrap();
@@ -702,7 +702,7 @@ fn init_group_info_matches_the_c_initialiser() {
 #[test]
 #[serial]
 fn deleted_files_capture_as_empty_storage() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let game = fresh_game(&mut game_owner.world);
         {
@@ -729,10 +729,10 @@ fn deleted_files_capture_as_empty_storage() {
 #[test]
 #[serial]
 fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
-    let mut game_owner = crate::engine::Game::new();
+    let mut game_owner = uqm_engine::Game::new();
     {
         let mut game = fresh_game(&mut game_owner.world);
-        let node = crate::engine::world::planet_info::CannedNode {
+        let node = uqm_engine::world::planet_info::CannedNode {
             star: 1,
             planet: 2,
             moon: 1,

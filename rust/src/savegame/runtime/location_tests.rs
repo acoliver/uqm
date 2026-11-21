@@ -16,13 +16,13 @@
 use super::location::{prepare_solar_location, LocationError};
 use super::solar::SolarError;
 use super::solar_tests::System;
-use crate::comm::locdata::CGameState;
-use crate::engine::world::generation::Body;
-use crate::engine::world::state_file::{StateFileError, STARINFO_FILE};
-use crate::engine::World;
-use crate::graphics::{drawable::FrameId, geometry::Point};
-use crate::state::ffi::{replace_game_state, rust_init_game_state, snapshot_game_state};
 use std::ops::{Deref, DerefMut};
+use uqm_engine::graphics::{drawable::FrameId, geometry::Point};
+use uqm_engine::state::ffi::{replace_game_state, rust_init_game_state, snapshot_game_state};
+use uqm_engine::world::generation::Body;
+use uqm_engine::world::state_file::{StateFileError, STARINFO_FILE};
+use uqm_engine::World;
+use uqm_modes::comm::locdata::CGameState;
 
 fn save_solar_location(
     world: &mut World,
@@ -30,9 +30,9 @@ fn save_solar_location(
     star_index: usize,
 ) -> Result<(), LocationError> {
     let mut snapshot = state.snapshot((320, 240));
-    snapshot.star = crate::engine::StarId(star_index);
+    snapshot.star = uqm_engine::StarId(star_index);
     let location = prepare_solar_location(&world.data.game, &snapshot)?;
-    crate::engine::save::location::apply_solar_location(world, location)
+    uqm_engine::save::location::apply_solar_location(world, location)
 }
 
 /// The frame at `index` of a drawable; only the index is read.

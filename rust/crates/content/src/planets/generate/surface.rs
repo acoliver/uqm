@@ -4,10 +4,10 @@
 //! the same order and count as C so node lists (and the scan-retrieved masks
 //! saved against them) stay stable.
 
-use crate::engine::graphics::geometry::Point;
-use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
-use crate::math::RandomContext;
 use crate::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
 
 /// `PlanetScanTypes`.
 pub const MINERAL_SCAN: usize = 0;
@@ -199,7 +199,7 @@ pub fn generate_random_nodes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::world::planet::PlanetInfo;
+    use uqm_engine::world::planet::PlanetInfo;
 
     fn info() -> SystemInfo {
         SystemInfo {

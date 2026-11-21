@@ -1,26 +1,26 @@
 //! Chenjesu callbacks and descriptor translated from `sc2/src/uqm/ships/chenjesu/chenjesu.c`.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, MEDIUM_SHIP,
         MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, SEEKING_SPECIAL, SEEKING_WEAPON, SLOW_SHIP,
         SPECIAL, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, DEFY_PHYSICS, DISAPPEARING, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
     };
-    use crate::engine::battle::hooks::animation_preprocess;
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::battle::{
+    use uqm_engine::battle::hooks::animation_preprocess;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::VelocityDesc;
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::VelocityDesc;
     const COLLISION_THRUST_WAIT: u32 = 3;
 
     const MAX_CREW: u16 = 36;
@@ -57,7 +57,7 @@ pub mod engine {
     const LONG_RANGE_WEAPON: u32 = 1000 << ONE_SHIFT;
     const FRAGMENT_RANGE: i32 = FRAGMENT_LIFE as i32 * MISSILE_SPEED as i32;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE | SEEKING_SPECIAL | SEEKING_WEAPON) as u16;
         d.info.ship_cost = 28;
@@ -198,7 +198,8 @@ pub mod engine {
                     - i32::from(cx.element(e).current.location.x)) as i16;
                 let dy = (i32::from(cx.element(target).current.location.y)
                     - i32::from(cx.element(e).current.location.y)) as i16;
-                facing = normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                facing =
+                    normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))));
                 let delta_facing = normalize_facing(
                     i32::from(facing)
                         - i32::from(cx.frame_number(cx.element(target).current.image.frame.view())),
@@ -242,7 +243,7 @@ pub mod engine {
         b: ElementId,
         pb: &mut Point,
     ) {
-        crate::engine::battle::motion::collision(cx, a, pa, b, pb);
+        uqm_engine::battle::motion::collision(cx, a, pa, b, pb);
         if cx.element(b).flags & PLAYER_SHIP as u16 != 0
             && cx.element(a).player != cx.element(b).player
         {

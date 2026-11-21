@@ -79,7 +79,7 @@ impl SpeechGraphics {
         comm.speech_graphics_mut().last_update_ms = 0;
 
         let activity =
-            crate::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame);
+            uqm_engine::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame);
         super::oscill_abi::runtime::init_oscilloscope(comm, activity.wrapped_frame(9));
         super::oscill_abi::runtime::init_slider(
             comm,
@@ -96,7 +96,7 @@ impl SpeechGraphics {
         comm.speech_graphics_mut().slider_state = state;
 
         let frame =
-            crate::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame)
+            uqm_engine::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame)
                 .wrapped_frame(state.frame_index() as u16);
         super::oscill_abi::runtime::set_slider_image(comm, frame);
     }

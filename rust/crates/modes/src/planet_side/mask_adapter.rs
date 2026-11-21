@@ -1,7 +1,7 @@
 //! Collision masks from retained native frames.
 
 use super::{geometry::CollisionMask, model::SurfacePoint, runtime::AdapterError};
-use crate::graphics::drawable::ContextFrame;
+use uqm_engine::graphics::drawable::ContextFrame;
 
 pub fn extract_frame_mask(frame: &ContextFrame) -> Result<CollisionMask, AdapterError> {
     let occupancy = frame
@@ -29,7 +29,7 @@ pub fn extract_lander_masks(base: &ContextFrame) -> Result<Vec<CollisionMask>, A
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::HotSpot};
+    use uqm_engine::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::HotSpot};
 
     #[test]
     #[serial_test::serial]
@@ -40,7 +40,7 @@ mod tests {
         )) {
             return;
         }
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn retained_mask_uses_normal_alpha_and_hotspot_after_owner_release() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();

@@ -9,18 +9,18 @@ use super::{
 use crate::battle::context_access::links;
 use crate::comm::dispatch::production_captain_name;
 use crate::comm::locdata::{CColor, CPoint, CRect};
-use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-use crate::engine::{
+use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
+use std::ffi::c_int;
+use uqm_engine::input_port::frames::{
+    KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
+};
+use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
+use uqm_engine::{
     battle::{Cx, ShipId},
     observe::Io,
     world::activity::ActivityControl,
     Kernel as KernelOwner,
 };
-use crate::input::frames::{
-    KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
-};
-use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
-use std::ffi::c_int;
 
 /// `RPG_PLAYER_NUM`.
 const RPG_PLAYER_NUM: usize = 0;
@@ -36,8 +36,8 @@ const MENU_SOUND_SELECT: u16 = 1 << 4;
 const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
 use crate::battle::encount_native::engine::fleet_is_infinite;
-use crate::engine::world::IN_HYPERSPACE;
-use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
+use uqm_engine::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
+use uqm_engine::world::IN_HYPERSPACE;
 
 fn color(color: Rgba) -> CColor {
     CColor {
@@ -48,8 +48,8 @@ fn color(color: Rgba) -> CColor {
     }
 }
 
-fn rectangle(area: Area) -> crate::graphics::geometry::Rect {
-    use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+fn rectangle(area: Area) -> uqm_engine::graphics::geometry::Rect {
+    use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
     Rect {
         corner: Point {
             x: area.x,
@@ -72,9 +72,9 @@ struct PickerState {
     chosen: Option<ShipId>,
     frame: (i16, i16),
     /// `MENU_STATE.flash_rect0`, which `SetFlashRect` keeps pointing at.
-    context: crate::graphics::context::ContextLease,
-    screen: crate::graphics::context::ContextLease,
-    font: crate::graphics::font::FontLease,
+    context: uqm_engine::graphics::context::ContextLease,
+    screen: uqm_engine::graphics::context::ContextLease,
+    font: uqm_engine::graphics::font::FontLease,
 }
 
 /// Every `STARSHIP` of the player's queue before the flagship, which is the
@@ -97,7 +97,7 @@ fn escort_links(kernel: &KernelOwner) -> Vec<(ShipId, Escort)> {
         .collect()
 }
 
-fn pulsed_directions(input: &crate::engine::input::InputSession) -> (Direction, bool) {
+fn pulsed_directions(input: &uqm_engine::input::InputSession) -> (Direction, bool) {
     // SAFETY: the input state is updated by `DoInput` on this thread.
     let menu = input.pulsed().menu;
     let pressed = |key: u32| menu[key as usize] != 0;
@@ -126,7 +126,7 @@ fn selected_ship(kernel: &KernelOwner, cursor: Cursor) -> Option<ShipId> {
 fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
     let kernel = &*cx.kernel;
     io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::ShipPickerCursor {
+        .checkpoint(&uqm_engine::observe::CheckpointView::ShipPickerCursor {
             x: state.cursor.x,
             y: state.cursor.y,
         });
@@ -137,7 +137,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
     context.fill_rectangle(color(Rgba::BLACK), rectangle(name));
     let (crew, max_crew) = if let Some(chosen) = state.chosen {
         context.set_font(&state.font);
-        let baseline = crate::graphics::geometry::Point {
+        let baseline = uqm_engine::graphics::geometry::Point {
             x: name.x + (name.width >> 1),
             y: name.y + name.height - 1,
         };
@@ -148,7 +148,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
                 &state.font,
                 c"",
                 baseline,
-                crate::graphics::geometry::TextAlign::Center,
+                uqm_engine::graphics::geometry::TextAlign::Center,
                 color(Rgba::rgb15(20, 10, 0)),
                 0,
             );
@@ -169,7 +169,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
                     &state.font,
                     text,
                     baseline,
-                    crate::graphics::geometry::TextAlign::Center,
+                    uqm_engine::graphics::geometry::TextAlign::Center,
                     color(Rgba::rgb15(20, 10, 0)),
                     count,
                 );
@@ -189,11 +189,11 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
         context.draw_text(
             &state.font,
             &text,
-            crate::graphics::geometry::Point {
+            uqm_engine::graphics::geometry::Point {
                 x: crew_area.x + (crew_area.width >> 1),
                 y: name.y + name.height - 1,
             },
-            crate::graphics::geometry::TextAlign::Center,
+            uqm_engine::graphics::geometry::TextAlign::Center,
             color(Rgba::rgb15(0, 20, 0)),
         );
     }
@@ -207,7 +207,7 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
 fn do_pick_battle_ship(
     cx: &mut Cx<'_>,
     state: &mut PickerState,
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     io: &mut Io<'_>,
 ) -> c_int {
     if base_activity_aborted(&state.activity) {
@@ -223,7 +223,7 @@ fn do_pick_battle_ship(
         // The flagship selection below is made in this same call, so a Select
         // injected after this observation confirms a real choice.
         io.observer
-            .checkpoint(&crate::engine::observe::CheckpointView::ShipPicker(true));
+            .checkpoint(&uqm_engine::observe::CheckpointView::ShipPicker(true));
         // SAFETY: `state` is the running picker.
         change_selection(cx, state, io);
     } else {
@@ -252,10 +252,10 @@ fn base_activity_aborted(activity: &ActivityControl) -> bool {
 
 fn get_armada_star_ship(
     cx: &mut Cx<'_>,
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     activity: ActivityControl,
 ) -> Option<ShipId> {
-    use crate::graphics::context::ContextLease;
+    use uqm_engine::graphics::context::ContextLease;
 
     if cx.b.counters[1] == 0 {
         return None;
@@ -295,7 +295,7 @@ fn get_armada_star_ship(
             do_pick_battle_ship(cx, &mut state, input, io) != 0
         });
         io.observer
-            .checkpoint(&crate::engine::observe::CheckpointView::ShipPicker(false));
+            .checkpoint(&uqm_engine::observe::CheckpointView::ShipPicker(false));
         crate::ui::sis::set_flash_rect(
             &cx.kernel.sis_highlight,
             &state.screen,
@@ -319,7 +319,7 @@ pub use crate::battle::context_access::reader_legacy::{
 /// Select from the caller's live fleet, lending the same owner to the blocking picker.
 pub(crate) fn encounter_ship(
     cx: &mut Cx<'_>,
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     last: Option<ShipId>,
     which_player: u16,
     activity: ActivityControl,
@@ -388,12 +388,12 @@ pub(crate) fn encounter_ship(
 /// `pick_rect` is valid for writing; game thread only.
 pub(crate) fn draw_armada_pick_ship_in(
     kernel: &KernelOwner,
-    world: &crate::engine::World,
+    world: &uqm_engine::World,
     draw_salvage_frame: c_int,
     pick_rect: &mut CRect,
 ) {
-    use crate::graphics::{context::ContextLease, drawable::LoadedDrawable, font::FontLease};
     use std::ffi::CStr;
+    use uqm_engine::graphics::{context::ContextLease, drawable::LoadedDrawable, font::FontLease};
     let (context, font, status_frame) = {
         (
             ContextLease::retain(
@@ -406,17 +406,18 @@ pub(crate) fn draw_armada_pick_ship_in(
                     .star_con_font
                     .unwrap_or_else(|| panic!("missing picker font")),
             ),
-            crate::graphics::drawable::retain_frames(&[kernel.status_frame])[0].context_frame(3),
+            uqm_engine::graphics::drawable::retain_frames(&[kernel.status_frame])[0]
+                .context_frame(3),
         )
     };
     let owner = LoadedDrawable::load(c"graphics.pickship")
         .unwrap_or_else(|| panic!("missing picker graphic"));
     let frames = owner.lease();
     let frame = frames.context_frame(0);
-    frame.replace_hotspot(crate::graphics::geometry::Point { x: 0, y: 0 });
+    frame.replace_hotspot(uqm_engine::graphics::geometry::Point { x: 0, y: 0 });
     let mut pick = frame.rect();
     let result = context.draw_batch(|| {
-        use crate::graphics::geometry::Point;
+        use uqm_engine::graphics::geometry::Point;
         let clip = context.clip_rect();
         pick.corner.x = (clip.extent.width >> 1) - (pick.extent.width >> 1);
         pick.corner.y = (clip.extent.height >> 1) - (pick.extent.height >> 1);
@@ -449,7 +450,7 @@ pub(crate) fn draw_armada_pick_ship_in(
                 x: pick.corner.x + (pick.extent.width >> 1),
                 y: pick.corner.y + pick.extent.height - 5,
             },
-            crate::graphics::geometry::TextAlign::Center,
+            uqm_engine::graphics::geometry::TextAlign::Center,
             color(Rgba::rgb15(0x12, 0x12, 0x12)),
         );
         for id in links::all_links(kernel) {
@@ -469,12 +470,12 @@ pub(crate) fn draw_armada_pick_ship_in(
 
 fn draw_escort_icon(
     kernel: &KernelOwner,
-    context: &crate::graphics::context::ContextLease,
-    status: &crate::graphics::drawable::ContextFrame,
+    context: &uqm_engine::graphics::context::ContextLease,
+    status: &uqm_engine::graphics::drawable::ContextFrame,
     id: ShipId,
-    pick: crate::graphics::geometry::Rect,
+    pick: uqm_engine::graphics::geometry::Rect,
 ) {
-    use crate::graphics::{
+    use uqm_engine::graphics::{
         drawable::ContextFrame, geometry::Extent, geometry::Point, geometry::Rect,
     };
     let ship = links::ship_value(kernel, id);

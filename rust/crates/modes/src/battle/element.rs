@@ -55,7 +55,7 @@ impl Point {
 pub use super::velocity::Extent;
 
 /// Frame handle (opaque pointer to graphics frame)
-pub type FrameHandle = crate::graphics::drawable::FrameId;
+pub type FrameHandle = uqm_engine::graphics::drawable::FrameId;
 
 /// Stamp (visual representation with position and frame)
 #[derive(Debug, Clone, Copy)]
@@ -81,8 +81,8 @@ pub struct IntersectControl {
 #[derive(Debug, Clone)]
 pub struct ElementVisualState {
     pub location: Point,
-    pub frame: crate::engine::battle::frames::FrameSelection,
-    pub frames: crate::engine::battle::frames::Frames,
+    pub frame: uqm_engine::battle::frames::FrameSelection,
+    pub frames: uqm_engine::battle::frames::Frames,
 }
 
 impl Default for ElementVisualState {
@@ -95,8 +95,8 @@ impl ElementVisualState {
     pub const fn new() -> Self {
         ElementVisualState {
             location: Point::zero(),
-            frame: crate::engine::battle::frames::FrameSelection::ABSENT,
-            frames: crate::engine::battle::frames::Frames::ABSENT,
+            frame: uqm_engine::battle::frames::FrameSelection::ABSENT,
+            frames: uqm_engine::battle::frames::Frames::ABSENT,
         }
     }
 }
@@ -121,10 +121,10 @@ pub struct Element {
     // -- Link fields (must be first for QUEUE compatibility) --
 
     // -- Callbacks --
-    pub preprocess_func: Option<crate::engine::battle::ElementHook>,
-    pub postprocess_func: Option<crate::engine::battle::ElementHook>,
-    pub collision_func: Option<crate::engine::battle::CollisionHook>,
-    pub death_func: Option<crate::engine::battle::ElementHook>,
+    pub preprocess_func: Option<uqm_engine::battle::ElementHook>,
+    pub postprocess_func: Option<uqm_engine::battle::ElementHook>,
+    pub collision_func: Option<uqm_engine::battle::CollisionHook>,
+    pub death_func: Option<uqm_engine::battle::ElementHook>,
 
     // -- Owner identity --
     pub player_nr: i16, // -1=neutral, 0=bottom/human, 1=top/NPC
@@ -167,19 +167,19 @@ pub struct Element {
     pub next: ElementVisualState,
 
     // -- Parent reference --
-    pub parent: crate::engine::battle::Parent,
+    pub parent: uqm_engine::battle::Parent,
 
     // -- Tracking target reference --
-    pub target: Option<crate::engine::battle::ElementId>,
-    pub intersect_frame: crate::engine::battle::frames::FrameSelection,
+    pub target: Option<uqm_engine::battle::ElementId>,
+    pub intersect_frame: uqm_engine::battle::frames::FrameSelection,
 }
 
-impl From<&crate::engine::battle::record::ElementRecord> for Element {
-    fn from(record: &crate::engine::battle::record::ElementRecord) -> Self {
-        fn point(p: crate::graphics::geometry::Point) -> Point {
+impl From<&uqm_engine::battle::record::ElementRecord> for Element {
+    fn from(record: &uqm_engine::battle::record::ElementRecord) -> Self {
+        fn point(p: uqm_engine::graphics::geometry::Point) -> Point {
             Point::new(p.x, p.y)
         }
-        fn visual(s: &crate::engine::battle::record::ElementVisual) -> ElementVisualState {
+        fn visual(s: &uqm_engine::battle::record::ElementVisual) -> ElementVisualState {
             ElementVisualState {
                 location: point(s.location),
                 frame: s.image.frame.clone(),
@@ -240,16 +240,16 @@ impl Element {
                 last_time_val: 0,
                 intersect_stamp: Stamp {
                     origin: Point::zero(),
-                    frame: crate::graphics::drawable::FrameId::NULL,
+                    frame: uqm_engine::graphics::drawable::FrameId::NULL,
                 },
                 end_point: Point::zero(),
             },
             prim_index: 0,
             current: ElementVisualState::new(),
             next: ElementVisualState::new(),
-            parent: crate::engine::battle::Parent::None,
+            parent: uqm_engine::battle::Parent::None,
             target: None,
-            intersect_frame: crate::engine::battle::frames::FrameSelection::ABSENT,
+            intersect_frame: uqm_engine::battle::frames::FrameSelection::ABSENT,
         }
     }
 
@@ -385,7 +385,7 @@ impl Element {
     /// Copies next state → current state
     /// Used at end of each frame to commit the next frame state
     pub fn commit_state(&mut self) {
-        crate::collections::observation::image!(copy; self.current, self.next);
+        uqm_engine::collections::observation::image!(copy; self.current, self.next);
     }
 
     /// Safe accessor for stamp visual (when using STAMP primitive)
@@ -604,8 +604,7 @@ mod tests {
         e0.mass_points = 1;
         e1.mass_points = 1;
 
-        let parent =
-            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 0, 0));
+        let parent = uqm_engine::battle::Parent::Ship(uqm_engine::battle::ShipId::fixture(0, 0, 0));
         e0.parent = parent;
         e1.parent = parent;
 
@@ -773,8 +772,7 @@ mod tests {
         e1.mass_points = 3;
 
         // Set same parent
-        let parent =
-            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 0, 0));
+        let parent = uqm_engine::battle::Parent::Ship(uqm_engine::battle::ShipId::fixture(0, 0, 0));
         e0.parent = parent;
         e1.parent = parent;
 
@@ -796,9 +794,9 @@ mod tests {
 
         // Different parents
         let parent0 =
-            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 0, 0));
+            uqm_engine::battle::Parent::Ship(uqm_engine::battle::ShipId::fixture(0, 0, 0));
         let parent1 =
-            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 1, 0));
+            uqm_engine::battle::Parent::Ship(uqm_engine::battle::ShipId::fixture(0, 1, 0));
         e0.parent = parent0;
         e1.parent = parent1;
 
@@ -969,11 +967,12 @@ mod tests {
 
     #[test]
     fn live_intersection_fields_are_read_at_their_native_offsets() {
-        let mut native = crate::engine::battle::record::ElementRecord::default();
+        let mut native = uqm_engine::battle::record::ElementRecord::default();
         native.intersect_control.last_time_val = 17;
-        native.intersect_control.end_point = crate::graphics::geometry::Point { x: 31, y: -47 };
+        native.intersect_control.end_point =
+            uqm_engine::graphics::geometry::Point { x: 31, y: -47 };
         native.intersect_control.intersect_stamp.origin =
-            crate::graphics::geometry::Point { x: -3, y: 91 };
+            uqm_engine::graphics::geometry::Point { x: -3, y: 91 };
         let model = Element::from(&native);
         assert_eq!(model.intersect_control.last_time_val, 17);
         assert_eq!(model.intersect_control.end_point, Point::new(31, -47));
@@ -985,7 +984,7 @@ mod tests {
 
     #[test]
     fn snapshot_preserves_native_state_without_layout_aliasing() {
-        let native = crate::engine::battle::record::ElementRecord {
+        let native = uqm_engine::battle::record::ElementRecord {
             player_nr: 1,
             state_flags: 0x1234,
             life: 12,

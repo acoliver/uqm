@@ -1,25 +1,25 @@
 use super::{landing_fuel, move_cursor};
 use crate::battle::element::ElementFlags;
 use crate::comm::locdata::{CColor, CPoint, CRect};
-use crate::engine::battle::views::FrameSelection;
-use crate::engine::graphics::{context::ContextLease, drawable::ContextFrame};
-use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::engine::{
-    battle::Cx,
-    input::InputSession,
-    observe::{CheckpointView, Io},
-    StoryKey,
-};
-use crate::graphics::menu as drawing;
-use crate::input::frames::{
-    KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
-};
 use crate::planet_side::ffi::{run_session, TripError, TripInput};
 use crate::planets::orbit::OrbitServices;
 use crate::planets::solar_system::SolarSystem;
 use crate::starbase::gfx::{Gfx, Rgba};
 use crate::starbase::graphics::Graphics;
 use std::ffi::CString;
+use uqm_engine::battle::views::FrameSelection;
+use uqm_engine::graphics::menu as drawing;
+use uqm_engine::graphics::{context::ContextLease, drawable::ContextFrame};
+use uqm_engine::input_port::frames::{
+    KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
+};
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use uqm_engine::{
+    battle::Cx,
+    input::InputSession,
+    observe::{CheckpointView, Io},
+    StoryKey,
+};
 
 const TEXT_COLORS: [Rgba; 3] = [
     Rgba::rgb15(19, 0, 0),
@@ -35,8 +35,6 @@ const TINT_COLORS: [Rgba; 3] = [
 mod display;
 
 use super::state::ScanState;
-use crate::engine::graphics::drawable::LoadedDrawable;
-use crate::graphics::font::FontLease;
 use crate::planet_side::init_lander::{draw_lander, LanderStatus};
 use crate::planets::orbit::live::draw_scanned_objects;
 use crate::planets::orbit::live::redraw_planet_orbit_display;
@@ -45,6 +43,8 @@ use crate::planets::sphere::live::draw_default_planet_sphere;
 use crate::planets::sphere::live::draw_planet;
 use crate::ui::settings::play_menu_sound;
 use crate::ui::util::wait_for_any_button_until;
+use uqm_engine::graphics::drawable::LoadedDrawable;
+use uqm_engine::graphics::font::FontLease;
 use uqm_engine::time::counter_abi::get_time_counter;
 
 impl ScanState {
@@ -73,7 +73,7 @@ fn width(screen_width: i32) -> i16 {
     (screen_width - 78) as i16
 }
 fn draw(frame: FrameSelection, point: CPoint, filled: bool) {
-    let point = crate::graphics::geometry::Point {
+    let point = uqm_engine::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     };
@@ -105,7 +105,7 @@ fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
 
 fn save_location_image(scan: &ScanState) {
     let corner = cursor_frame(scan).rect().corner;
-    let hot = crate::graphics::geometry::HotSpot {
+    let hot = uqm_engine::graphics::geometry::HotSpot {
         x: corner.x.wrapping_neg(),
         y: corner.y.wrapping_neg(),
     };
@@ -116,12 +116,12 @@ fn save_location_image(scan: &ScanState) {
     rect.corner.y -= hot.y;
     let saved = LoadedDrawable::capture(
         &scan.context(),
-        Some(crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point {
+        Some(uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point {
                 x: rect.corner.x,
                 y: rect.corner.y,
             },
-            extent: crate::graphics::geometry::Extent {
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: rect.width,
                 height: rect.height,
             },
@@ -139,7 +139,7 @@ fn restore_location_image(scan: &ScanState) {
         .unwrap_or_else(|| panic!("saved landing cursor background"));
     scan.context().draw_stamp(
         &saved.lease().context_frame(0),
-        crate::graphics::geometry::Point {
+        uqm_engine::graphics::geometry::Point {
             x: cursor.rect.corner.x,
             y: cursor.rect.corner.y,
         },
@@ -148,7 +148,7 @@ fn restore_location_image(scan: &ScanState) {
 fn draw_cursor(scan: &ScanState, filled: bool) {
     let context = scan.context();
     let point = scan.cursor.borrow().rect.corner;
-    let point = crate::graphics::geometry::Point {
+    let point = uqm_engine::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     };
@@ -169,7 +169,7 @@ fn set_location(scan: &ScanState, point: CPoint, restore_old: bool) {
 
 fn flash_location(
     scan: &ScanState,
-    animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+    animation: &uqm_engine::kernel::planet_animation::PlanetAnimation,
 ) {
     let now = get_time_counter();
     let position = scan.cursor.borrow().rect.corner;
@@ -214,7 +214,7 @@ fn fuel(solar: &SolarSystem) -> u16 {
     landing_fuel(solar.sys.info.planet_info.gravity)
 }
 
-fn spawn_fwiffo(world: &mut crate::engine::World, services: &OrbitServices) {
+fn spawn_fwiffo(world: &mut uqm_engine::World, services: &OrbitServices) {
     world.encounter_group = 0;
     (services.store_groups)(world);
     world.ip_groups().reinit();
@@ -222,12 +222,12 @@ fn spawn_fwiffo(world: &mut crate::engine::World, services: &OrbitServices) {
     let fleets = world.avail_races_ref();
     let template = *fleets.get(
         fleets
-            .at(crate::engine::species::ship::SPATHI_SHIP as usize)
+            .at(uqm_engine::species::ship::SPATHI_SHIP as usize)
             .unwrap_or_else(|| panic!("Spathi fleet")),
     );
     if let Some(id) = world.npc_built_ships().clone_fragment(
         &template,
-        crate::engine::species::ship::SPATHI_SHIP,
+        uqm_engine::species::ship::SPATHI_SHIP,
         1,
         crate::comm::dispatch::production_captain_name,
     ) {
@@ -269,15 +269,15 @@ fn dispatch_lander(
     );
     match reply {
         Ok(_) => {}
-        Err(TripError::Adapter(error)) => crate::log_abi::log_message(
-            crate::logging::LogLevel::Error.as_i32(),
+        Err(TripError::Adapter(error)) => uqm_engine::log_abi::log_message(
+            uqm_engine::logging::LogLevel::Error.as_i32(),
             &format!(
                 "Rust PlanetSide adapter failed ({}); returning to orbit",
                 error.operation
             ),
         ),
-        Err(TripError::FrameBudgetExceeded) => crate::log_abi::log_message(
-            crate::logging::LogLevel::Error.as_i32(),
+        Err(TripError::FrameBudgetExceeded) => uqm_engine::log_abi::log_message(
+            uqm_engine::logging::LogLevel::Error.as_i32(),
             "Rust PlanetSide frame budget exhausted; returning to orbit",
         ),
     }
@@ -315,7 +315,7 @@ fn prepare_lander(scan: &ScanState, misc_data: ContextFrame, solar: &SolarSystem
             x: i32::from(scan.cursor.borrow().location.x),
             y: i32::from(scan.cursor.borrow().location.y),
         },
-        facing: crate::math::random() as u8,
+        facing: uqm_engine::math::random() as u8,
         tick_period: std::num::NonZeroU32::new(840 / 35).unwrap_or_else(|| unreachable!()),
         frame_budget: std::num::NonZeroU32::MAX,
         tectonics_rating: solar.sys.info.planet_info.tectonics as u8,
@@ -332,7 +332,7 @@ fn pick_input(
     cx: &mut Cx<'_>,
     scan: &ScanState,
     input: &InputSession,
-    animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+    animation: &uqm_engine::kernel::planet_animation::PlanetAnimation,
     state: &mut PickState,
 ) -> u32 {
     let time_in = get_time_counter();
@@ -456,7 +456,7 @@ fn prepare_pick_side(
     };
 }
 
-fn scanned_stuff(solar: &SolarSystem, cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
+fn scanned_stuff(solar: &SolarSystem, cx: &mut uqm_engine::battle::Cx<'_>, y: u16, scan: u16) {
     let g = Graphics::new(cx.kernel, cx.screen_dimensions());
     let old_color = g.set_fg_color(Rgba::BLACK);
     {
@@ -503,7 +503,9 @@ fn scanned_stuff(solar: &SolarSystem, cx: &mut crate::engine::battle::Cx<'_>, y:
                 }
                 let frame = g.rel_frame((cx.element(element).current.image.frame.raw()).bits(), dy);
                 draw(
-                    FrameSelection::retain(crate::graphics::drawable::FrameId::from_bits(frame)),
+                    FrameSelection::retain(uqm_engine::graphics::drawable::FrameId::from_bits(
+                        frame,
+                    )),
                     point,
                     true,
                 );

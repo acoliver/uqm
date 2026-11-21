@@ -66,12 +66,6 @@ pub struct ShipRecord {
     pub control: u8,
 }
 
-impl ShipRecord {
-    pub fn descriptor_ptr(&mut self) -> *mut RaceDescriptor {
-        let descriptor = self.descriptor.as_deref_mut();
-        descriptor.map_or(ptr::null_mut(), ptr::from_mut)
-    }
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SoundSampleRecord {
@@ -89,17 +83,6 @@ pub struct CaptainRecord {
     pub thrust: FrameId,
     pub weapon: FrameId,
     pub special: crate::battle::frames::FrameSelection,
-}
-
-pub type MovementState = ::std::os::raw::c_uint;
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct EvaluateRecord {
-    pub object_ptr: *mut ElementRecord,
-    pub facing: u16,
-    pub which_turn: u16,
-    pub move_state: MovementState,
 }
 
 #[repr(C)]
@@ -367,24 +350,10 @@ impl Cx<'_> {
         std::ptr::from_ref(self.ship(id)).cast_mut()
     }
     pub fn ship(&self, id: ShipId) -> &ShipRecord {
-        let pool = &self.kernel.races[usize::from(id.side)];
-        let key = pool
-            .pool
-            .id_at(usize::from(id.slot))
-            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
-        assert_eq!(id.owner, pool.pool.storage_identity(), "foreign ship owner");
-        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
-        pool.pool.get(key)
+        self.kernel.races[usize::from(id.side)].ship(id)
     }
     pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut ShipRecord {
-        let pool = &mut self.kernel.races[usize::from(id.side)];
-        let key = pool
-            .pool
-            .id_at(usize::from(id.slot))
-            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
-        assert_eq!(id.owner, pool.pool.storage_identity(), "foreign ship owner");
-        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
-        pool.pool.get_mut(key)
+        self.kernel.races[usize::from(id.side)].ship_mut(id)
     }
     pub fn desc(&self, id: ShipId) -> &RaceDescriptor {
         self.ship(id)
@@ -400,10 +369,6 @@ impl Cx<'_> {
     }
     pub fn captain_controls(&self, id: ShipId) -> &CaptainRecord {
         &self.desc(id).ship_data.captain_control
-    }
-    /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
-    pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
-        self.kernel.elements.raw(id).cast()
     }
     pub(super) fn primitive(&mut self, id: ElementId) -> &mut crate::battle::DisplayPrimitive {
         let index = usize::from(self.kernel.elements[id].prim_index);
@@ -463,6 +428,10 @@ impl RaceDesc {
     pub fn info(&self) -> &ShipInfoRecord {
         &self.raw.ship_info
     }
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn fixture_info_mut(&mut self) -> &mut ShipInfoRecord {
+        &mut self.raw.ship_info
+    }
     pub fn race(&self) -> Option<&'static crate::battle::Race> {
         self.raw.race
     }
@@ -511,8 +480,6 @@ impl RaceDescriptor {
         }
     }
 }
-
-use std::ptr;
 
 impl ElementState {
     fn encode(self) -> ElementRecord {

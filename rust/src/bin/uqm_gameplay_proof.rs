@@ -201,7 +201,7 @@ struct RunEvidence {
 }
 
 fn main() {
-    uqm_rust::platform::install(false);
+    uqm_platform::install(false);
     if let Err(error) = run() {
         eprintln!("uqm-gameplay-proof: {error}");
         std::process::exit(1);

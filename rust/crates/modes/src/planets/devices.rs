@@ -2,11 +2,6 @@
 
 use super::device_effects::{effect_state, repair_ultron, ULTRON_COMPONENTS};
 use crate::comm::locdata::{CColor, CRect};
-use crate::engine::species::ship;
-use crate::engine::world::activity::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
-use crate::engine::{battle::Cx, observe::Io};
-use crate::engine::{StoryKey, World};
-use crate::graphics::context::ContextLease;
 use crate::planets::generate::identities::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::starbase::gfx::Align;
 use crate::starbase::gfx::ContextId;
@@ -17,26 +12,31 @@ use crate::starbase::gfx::Rect;
 use crate::starbase::gfx::Rgba;
 use crate::starbase::gfx::TextDraw;
 use crate::starbase::graphics::Graphics;
-use crate::state::game_state_keys::{get_game_state as get, set_game_state as set};
+use uqm_engine::graphics::context::ContextLease;
+use uqm_engine::species::ship;
+use uqm_engine::state::game_state_keys::{get_game_state as get, set_game_state as set};
+use uqm_engine::world::activity::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
+use uqm_engine::{battle::Cx, observe::Io};
+use uqm_engine::{StoryKey, World};
 
-fn publish(kernel: &crate::engine::Kernel, io: &mut Io<'_>) {
+fn publish(kernel: &uqm_engine::Kernel, io: &mut Io<'_>) {
     io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::Devices(
+        .checkpoint(&uqm_engine::observe::CheckpointView::Devices(
             &kernel.device_observation,
         ));
 }
 
-use crate::engine::world::fleet::start_sphere_tracking;
-use crate::engine::world::generation::Body;
 use crate::navigation::groups::put_group_info;
 use crate::navigation::hyper_transition::save_sis_hyper_state;
 use crate::planets::solar_system::SolarSystem;
+use uqm_engine::world::fleet::start_sphere_tracking;
+use uqm_engine::world::generation::Body;
 
 /// The solar visit a device acts in, with its owner's location save.
 #[derive(Clone, Copy)]
 pub struct SolarVisit<'a> {
     pub system: &'a SolarSystem,
-    pub save_location: fn(&mut crate::engine::World, &crate::engine::Kernel, &SolarSystem),
+    pub save_location: fn(&mut uqm_engine::World, &uqm_engine::Kernel, &SolarSystem),
 }
 
 impl SolarVisit<'_> {
@@ -48,8 +48,8 @@ impl SolarVisit<'_> {
 use crate::ui::util::draw_starcon_box;
 
 struct Menu {
-    icons: crate::graphics::drawable::ContextFrame,
-    context: crate::graphics::context::ContextLease,
+    icons: uqm_engine::graphics::drawable::ContextFrame,
+    context: uqm_engine::graphics::context::ContextLease,
     list: Vec<u8>,
     selected: usize,
     top: usize,
@@ -108,9 +108,9 @@ fn draw(menu: &Menu, g: &Graphics, old: Option<usize>, refresh: bool) {
         };
         draw_starcon_box(
             &menu.context,
-            crate::graphics::geometry::Rect {
+            uqm_engine::graphics::geometry::Rect {
                 corner: rect.corner,
-                extent: crate::graphics::geometry::Extent {
+                extent: uqm_engine::graphics::geometry::Extent {
                     width: rect.width,
                     height: rect.height,
                 },
@@ -130,7 +130,7 @@ fn draw(menu: &Menu, g: &Graphics, old: Option<usize>, refresh: bool) {
         for (pos, id) in menu.list.iter().skip(menu.top).take(5).enumerate() {
             menu.context.draw_stamp(
                 &menu.icons.indexed_frame(77 + usize::from(*id)),
-                crate::graphics::geometry::Point {
+                uqm_engine::graphics::geometry::Point {
                     x: 4,
                     y: 34 + pos as i16 * 18,
                 },
@@ -284,7 +284,7 @@ fn invoke(cx: &mut Cx<'_>, visit: Option<SolarVisit<'_>>, id: u8, next_activity:
 fn frame(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     visit: Option<SolarVisit<'_>>,
     menu: &mut Menu,
     next_activity: &mut u16,
@@ -391,8 +391,8 @@ fn prepare_devices_menu(cx: &mut Cx<'_>) -> Option<Menu> {
         return None;
     }
     let menu = Menu {
-        icons: crate::graphics::drawable::ContextFrame::retain(cx.kernel.misc_data_frame),
-        context: crate::graphics::context::ContextLease::require(cx.kernel.status_context),
+        icons: uqm_engine::graphics::drawable::ContextFrame::retain(cx.kernel.misc_data_frame),
+        context: uqm_engine::graphics::context::ContextLease::require(cx.kernel.status_context),
         list,
         selected: 0,
         top: 0,

@@ -11,15 +11,15 @@ mod encounter;
 pub(super) use encounter::finish_callbacks;
 mod routing;
 use crate::comm::Comm;
-use crate::engine::battle::link_queue::LinkId;
-use crate::engine::battle::Cx;
-use crate::engine::observe::{CheckpointView, Io};
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::world::queues::Fragment;
-use crate::engine::StoryKey;
-use crate::engine::World;
 use routing::conversation_setup;
 use std::os::raw::c_void;
+use uqm_engine::battle::link_queue::LinkId;
+use uqm_engine::battle::Cx;
+use uqm_engine::observe::{CheckpointView, Io};
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::world::queues::Fragment;
+use uqm_engine::StoryKey;
+use uqm_engine::World;
 use uqm_save::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ use uqm_save::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
 
 /// C: `typedef struct point { COORD x, y; } POINT;`
 /// COORD is `SIZE` which is `SWORD` = `i16`.
-pub use crate::graphics::geometry::Point as CPoint;
+pub use uqm_engine::graphics::geometry::Point as CPoint;
 
 /// C: `typedef void* STRING` (STRING_TABLE_ENTRY_DESC*)
 pub type CStringHandle = *mut c_void;
@@ -36,7 +36,7 @@ pub type CStringHandle = *mut c_void;
 /// C: `typedef FRAME_DESC* FRAME`
 pub type CFrameHandle = *mut c_void;
 
-pub use crate::engine::world::queues::BriefShipInfo;
+pub use uqm_engine::world::queues::BriefShipInfo;
 pub const MAX_HYPER_SHIPS: usize = 7;
 
 const _: () = assert!(MAX_HYPER_SHIPS == ENCOUNTER_SHIP_CAPACITY);
@@ -72,7 +72,7 @@ pub const INFINITE_FLEET: u16 = !0;
 // Activity flags (from globdata.h)
 // ---------------------------------------------------------------------------
 
-pub use crate::engine::world::activity::activity_flags::{
+pub use uqm_engine::world::activity::activity_flags::{
     CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
 };
 
@@ -89,7 +89,7 @@ pub const CYBORG_ENABLED: u8 = 1 << 5;
 // Conversation IDs (from commglue.h enum)
 // ---------------------------------------------------------------------------
 
-use crate::engine::species::{conv, ship};
+use uqm_engine::species::{conv, ship};
 
 /// C: `NPC_PLAYER_NUM`
 pub const NPC_PLAYER_NUM: u16 = 1;
@@ -171,7 +171,7 @@ pub const RACE_SHIP_FOR_COMM: [u8; 27] = [
 /// where NUM_CAPTAINS_NAMES=16, NAME_OFFSET=5. Ported to pure Rust.
 #[inline]
 fn pick_captain_name() -> u8 {
-    ((crate::math::random() & 0x0F) + 5) as u8
+    ((uqm_engine::math::random() & 0x0F) + 5) as u8
 }
 
 /// C: `LOBYTE(x)` — extract low byte of a u16.
@@ -331,7 +331,7 @@ pub fn init_communication_with_options(
                 crate::ui::sis::draw_hyper_coords(
                     cx.kernel,
                     dimensions.0,
-                    crate::graphics::geometry::Point {
+                    uqm_engine::graphics::geometry::Point {
                         x: point.x,
                         y: point.y,
                     },
@@ -350,7 +350,7 @@ pub fn init_communication_with_options(
                 crate::ui::sis::draw_hyper_coords(
                     cx.kernel,
                     dimensions.0,
-                    crate::graphics::geometry::Point {
+                    uqm_engine::graphics::geometry::Point {
                         x: point.x,
                         y: point.y,
                     },
@@ -379,7 +379,7 @@ fn run_encounter(
     options: crate::comm::CommOptions,
 ) -> u16 {
     if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
-        crate::engine::world::fleet::start_sphere_tracking(cx.world, ship_type);
+        uqm_engine::world::fleet::start_sphere_tracking(cx.world, ship_type);
         let build = which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
                 && (cx.world.story_state(StoryKey::TALKING_PET_ON_SHIP) == 0
@@ -464,10 +464,10 @@ pub fn prepare_automation_sol_probe_encounter(world: &mut World) -> Result<(), &
 /// Development-only fleet setup, before the normal final encounter dispatch.
 /// This grants fixture equipment and escorts, so it cannot establish campaign progress.
 pub fn prepare_samatra_dev_fixture(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
 ) -> Result<(), &'static str> {
     cx.world.built_ships().reinit();
-    let added = crate::engine::world::fleet::add_escort_ships(cx.world, 4, 12, pick_captain_name);
+    let added = uqm_engine::world::fleet::add_escort_ships(cx.world, 4, 12, pick_captain_name);
     if added.is_some() {
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
     }
@@ -735,7 +735,7 @@ mod tests {
 #[test]
 fn selected_session_rechecks_variants_and_preserves_each_initialization_pass() {
     crate::comm::with_test_context(|cx| {
-        cx.world.story = Some(crate::engine::world::story::StoryState::new());
+        cx.world.story = Some(uqm_engine::world::story::StoryState::new());
         let mut comm = crate::comm::Comm::new();
         for (unlocked, phrases) in [
             (0, c"comm.commander.dialogue"),
@@ -743,35 +743,32 @@ fn selected_session_rechecks_variants_and_preserves_each_initialization_pass() {
             (0, c"comm.commander.dialogue"),
         ] {
             cx.world
-                .set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, unlocked);
+                .set_story_state(uqm_engine::StoryKey::STARBASE_AVAILABLE, unlocked);
             cx.world
-                .set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 1);
+                .set_story_state(uqm_engine::StoryKey::BATTLE_SEGUE, 1);
             let descriptor = race_descriptor(&mut comm, cx, conv::COMMANDER);
             assert_eq!(
                 descriptor.definition.conversation_phrases_res,
                 Some(phrases)
             );
-            assert_eq!(
-                cx.world.story_state(crate::engine::StoryKey::BATTLE_SEGUE),
-                0
-            );
+            assert_eq!(cx.world.story_state(uqm_engine::StoryKey::BATTLE_SEGUE), 0);
         }
         cx.world
-            .set_story_state(crate::engine::StoryKey::FOUND_PLUTO_SPATHI, 1);
+            .set_story_state(uqm_engine::StoryKey::FOUND_PLUTO_SPATHI, 1);
         for (flags, phrases, battle) in [
             (0, c"comm.spathi.dialogue", 0),
             (128, c"comm.safeones.dialogue", 1),
             (0, c"comm.spathi.dialogue", 0),
         ] {
             cx.world
-                .set_story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
+                .set_story_state(uqm_engine::StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
             let descriptor = race_descriptor(&mut comm, cx, conv::SPATHI);
             assert_eq!(
                 descriptor.definition.conversation_phrases_res,
                 Some(phrases)
             );
             assert_eq!(
-                cx.world.story_state(crate::engine::StoryKey::BATTLE_SEGUE),
+                cx.world.story_state(uqm_engine::StoryKey::BATTLE_SEGUE),
                 battle
             );
             assert!(comm
@@ -780,11 +777,11 @@ fn selected_session_rechecks_variants_and_preserves_each_initialization_pass() {
         }
         for (has_ultron, battle) in [(0, 1), (1, 0), (0, 1)] {
             cx.world
-                .set_story_state(crate::engine::StoryKey::UTWIG_HAVE_ULTRON, has_ultron);
+                .set_story_state(uqm_engine::StoryKey::UTWIG_HAVE_ULTRON, has_ultron);
             let descriptor = race_descriptor(&mut comm, cx, conv::UTWIG);
             assert_eq!(descriptor.definition.alien_song_flags & 1, has_ultron);
             assert_eq!(
-                cx.world.story_state(crate::engine::StoryKey::BATTLE_SEGUE),
+                cx.world.story_state(uqm_engine::StoryKey::BATTLE_SEGUE),
                 battle
             );
         }

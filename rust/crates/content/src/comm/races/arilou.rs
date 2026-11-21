@@ -1,6 +1,6 @@
 //! Arilou dialogue, ported from arilouc.c.
 pub(crate) use super::alliance::AllianceApi;
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -2,12 +2,12 @@
 
 use crate::battle::element::PLAYER_SHIP;
 use crate::comm::dispatch::ONE_SHOT_ENCOUNTER;
-use crate::engine::graphics::geometry::Point;
-use crate::engine::species::ship::{MELNORME_SHIP, SLYLANDRO_SHIP};
-use crate::engine::world::activity::activity_flags::IN_BATTLE;
-use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-use crate::engine::StoryKey;
-use crate::math::square_root;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::square_root;
+use uqm_engine::species::ship::{MELNORME_SHIP, SLYLANDRO_SHIP};
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
+use uqm_engine::StoryKey;
 
 fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     *position -= delta as i32;
@@ -26,8 +26,8 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
 
 pub(crate) mod live {
 
-    pub(crate) fn debit_sis_fuel(cx: &mut crate::engine::battle::Cx<'_>, amount: i16) {
-        let _context = crate::graphics::context::ContextLease::retain(
+    pub(crate) fn debit_sis_fuel(cx: &mut uqm_engine::battle::Cx<'_>, amount: i16) {
+        let _context = uqm_engine::graphics::context::ContextLease::retain(
             cx.kernel
                 .status_context
                 .unwrap_or_else(|| panic!("fuel debit requires the status context")),
@@ -41,11 +41,11 @@ pub(crate) mod live {
 }
 
 pub fn move_sis(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     dx: &mut i16,
     dy: &mut i16,
     geometry: super::hyper_units::Geometry,
-    mut debit: impl FnMut(&mut crate::engine::battle::Cx<'_>, i16),
+    mut debit: impl FnMut(&mut uqm_engine::battle::Cx<'_>, i16),
 ) {
     let maximum_x = geometry.log_x(10000) - (geometry.log_x(1) >> 1) - 1;
     let maximum_y = geometry.log_y(-1) - (geometry.log_y(9998) >> 1) - 1;
@@ -103,7 +103,7 @@ const PERCENT: [u16; 24] = [
 ];
 
 pub fn check_hyperspace_encounter(
-    world: &mut crate::engine::World,
+    world: &mut uqm_engine::World,
     geometry: super::hyper_units::Geometry,
     random: &mut impl FnMut() -> u32,
 ) {
@@ -196,9 +196,9 @@ mod tests {
         assert_eq!(position, 93);
     }
 
-    fn movement_game(fuel: u32, side: u32) -> crate::engine::Game {
-        let mut game = crate::engine::Game::new();
-        game.world.story = Some(crate::engine::world::story::StoryState::new());
+    fn movement_game(fuel: u32, side: u32) -> uqm_engine::Game {
+        let mut game = uqm_engine::Game::new();
+        game.world.story = Some(uqm_engine::world::story::StoryState::new());
         game.world
             .set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
         game.world.data.flagship.fuel_on_board = fuel;
@@ -209,13 +209,13 @@ mod tests {
     }
 
     fn move_retained(
-        game: &mut crate::engine::Game,
+        game: &mut uqm_engine::Game,
         mut dx: i16,
         mut dy: i16,
     ) -> Vec<(i16, u16, u16, u16, u8)> {
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let mut cx =
-            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+            uqm_engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
                 panic!("movement RNG")
             });
         let mut debit = Vec::new();
@@ -310,9 +310,9 @@ mod tests {
         game.world.data.flagship.log_x = 2;
         game.world.data.flagship.log_y = 3;
         game.kernel.reset_element_capacity(2);
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let mut cx =
-            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+            uqm_engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
                 panic!("movement RNG")
             });
         let ship = cx.alloc_element().unwrap();

@@ -1,16 +1,17 @@
+#![forbid(unsafe_code)]
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
 use battle::{Battle, Ship};
-use uqm_rust::collections::observation::{self, Event};
-use uqm_rust::engine::battle::flags::PLAYER_SHIP;
-use uqm_rust::engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
-use uqm_rust::engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_VUX_ID};
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
-use uqm_rust::engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::flags::PLAYER_SHIP;
+use uqm_engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
+use uqm_engine::collections::observation::{self, Event};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::{SPECIES_ID_ARILOU_ID, SPECIES_ID_VUX_ID};
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::activity::activity_kinds::{IN_ENCOUNTER, SUPER_MELEE};
 
 #[test]
 fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
@@ -25,7 +26,7 @@ fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.elements().head(), Some(element));
                 assert_eq!(cx.world.activity(), SUPER_MELEE);
-                uqm_rust::battle::sounds::engine::unlink(cx, element);
+                uqm_modes::battle::sounds::engine::unlink(cx, element);
                 cx.dispose(element);
 
                 cx.world.set_activity(IN_ENCOUNTER | IN_BATTLE);
@@ -54,7 +55,7 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
         let view = original.view(0).to_owned();
         drop(original);
         drop(resource);
-        let retained = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
+        let retained = uqm_engine::battle::frames::FrameArray::retain([view.view(); 3]);
         let raw = view.raw();
         drop(view);
         {
@@ -64,7 +65,7 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
         }
         drop(retained);
         assert!(std::panic::catch_unwind(|| {
-            uqm_rust::graphics::drawable::retain_frames(&[raw]);
+            uqm_engine::graphics::drawable::retain_frames(&[raw]);
         })
         .is_err());
     });
@@ -130,7 +131,7 @@ fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
                 assert_eq!(cx.elements().pred(a), Some(c));
                 assert_eq!(cx.elements().pred(c), Some(b));
                 for id in [b, c, a] {
-                    uqm_rust::battle::sounds::engine::unlink(cx, id);
+                    uqm_modes::battle::sounds::engine::unlink(cx, id);
                     cx.dispose(id);
                     assert!(!cx.elements().contains(id));
                 }
@@ -149,8 +150,7 @@ fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
 fn projected_autoaim_uses_both_positions_without_mutating_live_target() {
     battle_context::run(|_| {
         let owner = Battle::new(8);
-        // SAFETY: fixtures retain the frame and descriptor resources for these hook calls.
-        unsafe {
+        {
             let ship = Ship::new(&owner, SPECIES_ID_ARILOU_ID, 0);
             let enemy = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             crate::battle_context::with(|cx| {
@@ -276,49 +276,49 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
     }
     let probes = [
         ("control", "fn probe(cx: &mut Cx<'_>, ship: ShipId, id: ElementId) { cx.ship_state_mut(ship).crew = 1; cx.element_mut(id).life = 1; }", ""),
-        ("context_free_world_read", "fn probe() { let _ = crate::battle::flagship_config(); }", "E0425"),
-        ("context_free_world_write", "fn probe() { crate::battle::set_flagship_crew(1); }", "E0425"),
+        ("context_free_world_read", "fn probe() { let _ = uqm_modes::battle::flagship_config(); }", "E0425"),
+        ("context_free_world_write", "fn probe() { uqm_modes::battle::set_flagship_crew(1); }", "E0425"),
         ("untyped_story", "fn probe(cx: &mut Cx<'_>) { let _ = cx.story_state(\"SHOFIXTI_RECRUITED\"); }", "E0308"),
         ("ship_record", "fn probe(cx: &mut Cx<'_>, ship: ShipId) { cx.ship_state_mut(ship).record.descriptor = None; let _ = cx.race_stats(ship); }", "E0616"),
-        ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.parent = crate::engine::battle::Parent::None; let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
+        ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.parent = uqm_engine::battle::Parent::None; let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
         ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.kernel.elements[id].next.image.frames = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
-        ("frame", "fn probe() { let _ = crate::engine::battle::views::FrameRef { raw: crate::graphics::drawable::FrameId::NULL, owner: &crate::engine::battle::frames::FrameArray::EMPTY, resolution: 0, identity: crate::engine::battle::frames::FrameOwner::Drawable }; }", "E0451"),
-        ("frames", "fn probe() { let _ = crate::engine::battle::views::Frames(None); }", "E0423"),
-        ("descriptor", "fn probe() { let _ = crate::engine::battle::RaceDesc::from_storage(Box::new(crate::engine::battle::record::RaceDescriptor::EMPTY)); }", "E0624"),
+        ("frame", "fn probe() { let _ = uqm_engine::battle::views::FrameRef { raw: uqm_engine::graphics::drawable::FrameId::NULL, owner: &uqm_engine::battle::frames::FrameArray::EMPTY, resolution: 0, identity: uqm_engine::battle::frames::FrameOwner::Drawable }; }", "E0451"),
+        ("frames", "fn probe() { let _ = uqm_engine::battle::views::Frames(None); }", "E0423"),
+        ("descriptor", "fn probe() { let _ = uqm_engine::battle::RaceDesc::from_storage(Box::new(uqm_engine::battle::record::RaceDescriptor::EMPTY)); }", "E0624"),
         ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { let _ = cx.project(p); }", "E0599"),
         ("primitive", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.primitive(id).kind = 0; }", "E0624"),
         ("raw_frame", "fn probe(cx: &mut Cx<'_>) { cx.abs_frame(std::ptr::NonNull::dangling().as_ptr(), 0); }", "E0624"),
-        ("element_operand", "fn probe() { let _ = crate::engine::battle::record::ElementOperand(std::ptr::null_mut::<u8>()); }", "E0425"),
-        ("collision_operands", "fn probe() { let _ = crate::engine::battle::record::CollisionOperands(std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>()); }", "E0425"),
-        ("decoder", "fn probe(raw: &crate::engine::battle::record::ElementRecord) { let _ = crate::engine::battle::views::ElementState::decode(raw); }", "E0624"),
-        ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = crate::engine::battle::views::Frames::ABSENT; }", "E0599"),
-        ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &crate::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
+        ("element_operand", "fn probe() { let _ = uqm_engine::battle::record::ElementOperand(std::ptr::null_mut::<u8>()); }", "E0425"),
+        ("collision_operands", "fn probe() { let _ = uqm_engine::battle::record::CollisionOperands(std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>()); }", "E0425"),
+        ("decoder", "fn probe(raw: &uqm_engine::battle::record::ElementRecord) { let _ = uqm_engine::battle::views::ElementState::decode(raw); }", "E0624"),
+        ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = uqm_engine::battle::views::Frames::ABSENT; }", "E0599"),
+        ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &uqm_engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
         ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0599"),
-        ("sound_operations", "use crate::engine::battle::race_ops;", "E0603"),
-        ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.intersect_stamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
+        ("sound_operations", "use uqm_engine::battle::race_ops;", "E0603"),
+        ("subject", "fn probe(mut subject: uqm_engine::battle::Subject) { subject.intersect.intersect_stamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
     ];
     let probes = probes.into_iter().chain([
-        ("escaped_frame", "fn probe(a: crate::engine::battle::frames::FrameArray) { let frame = a.view(0); drop(a); let _ = crate::engine::battle::frames::FrameArray::retain([frame; 3]); }", "E0505"),
-        ("pool_id_fields", "fn probe() { let _=crate::collections::pool::Id::<u8> { ix:0, generation:0, owner:0, token:0, marker:std::marker::PhantomData }; }", "E0451"),
-        ("production_fixture", "fn probe(f: crate::engine::battle::views::FrameRef) { let _=crate::engine::battle::frames::FrameArray::fixture([f;3], ()); }", "E0599"),
-        ("picker_icons", "fn probe(b: &mut crate::engine::Kernel) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.icons=1; q.set(id,v); }", "E0609"),
-        ("picker_strings", "fn probe(b: &mut crate::engine::Kernel) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.strings=1; q.set(id,v); }", "E0609"),
-        ("picker_backing", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let _=&mut q.queue; }", "E0616"),
-        ("picker_get_mut", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); q.get_mut(id).icons=std::ptr::NonNull::dangling().as_ptr(); }", "E0599"),
-        ("picker_into_record_mut", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); q.into_record_mut(id).race_strings=std::ptr::NonNull::dangling().as_ptr(); }", "E0599"),
-        ("mutable_table", "fn probe(t: &mut crate::engine::battle::ElementTable, id: ElementId) { t[id].current.image.frame=crate::engine::battle::frames::FrameSelection::ABSENT; }", "E0594"),
-        ("raw_subject", "fn probe(r: &crate::engine::battle::record::ElementRecord) { let _=crate::engine::battle::Subject::from(r); }", "E0308"),
-        ("lease_free_array", "fn probe(f: crate::engine::battle::views::FrameRef) { let _=crate::engine::battle::frames::FrameArray::retain([f;3], ()); }", "E0061"),
-        ("unchecked_array", "fn probe(a: &crate::engine::battle::frames::FrameArray, f: crate::engine::battle::views::FrameRef) { a.set_view(0,f); }", "E0624"),
+        ("escaped_frame", "fn probe(a: uqm_engine::battle::frames::FrameArray) { let frame = a.view(0); drop(a); let _ = uqm_engine::battle::frames::FrameArray::retain([frame; 3]); }", "E0505"),
+        ("pool_id_fields", "fn probe() { let _=uqm_engine::collections::pool::Id::<u8> { ix:0, generation:0, owner:0, token:0, marker:std::marker::PhantomData }; }", "E0451"),
+        ("production_fixture", "fn probe(f: uqm_engine::battle::views::FrameRef) { let _=uqm_engine::battle::frames::FrameArray::fixture([f;3], ()); }", "E0599"),
+        ("picker_icons", "fn probe(b: &mut uqm_engine::Kernel) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.icons=1; q.set(id,v); }", "E0609"),
+        ("picker_strings", "fn probe(b: &mut uqm_engine::Kernel) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.strings=1; q.set(id,v); }", "E0609"),
+        ("picker_backing", "fn probe(b: &mut uqm_engine::Kernel) { let mut q=b.ships(0); let _=&mut q.queue; }", "E0616"),
+        ("picker_get_mut", "fn probe(b: &mut uqm_engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); q.get_mut(id).icons=std::ptr::NonNull::dangling().as_ptr(); }", "E0599"),
+        ("picker_into_record_mut", "fn probe(b: &mut uqm_engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); q.into_record_mut(id).race_strings=std::ptr::NonNull::dangling().as_ptr(); }", "E0599"),
+        ("mutable_table", "fn probe(t: &mut uqm_engine::battle::ElementTable, id: ElementId) { t[id].current.image.frame=uqm_engine::battle::frames::FrameSelection::ABSENT; }", "E0594"),
+        ("raw_subject", "fn probe(r: &uqm_engine::battle::record::ElementRecord) { let _=uqm_engine::battle::Subject::from(r); }", "E0308"),
+        ("lease_free_array", "fn probe(f: uqm_engine::battle::views::FrameRef) { let _=uqm_engine::battle::frames::FrameArray::retain([f;3], ()); }", "E0061"),
+        ("unchecked_array", "fn probe(a: &uqm_engine::battle::frames::FrameArray, f: uqm_engine::battle::views::FrameRef) { a.set_view(0,f); }", "E0624"),
         ("element_id_fields", "fn probe() { let _=ElementId { slot:0, gen:0, owner:0, token:0 }; }", "E0451"),
         ("ship_id_fields", "fn probe() { let _=ShipId { side:0, slot:0, gen:0, owner:0 }; }", "E0451"),
-        ("link_id_fields", "fn probe() { let _=crate::engine::battle::link_queue::LinkId::<crate::engine::battle::link_queue::Starship> { slot:0, pool:123, generation:0, marker:std::marker::PhantomData }; }", "E0451"),
-        ("caller_selected_side", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); let _=q.ship_id(id,9); }", "E0061"),
+        ("link_id_fields", "fn probe() { let _=uqm_engine::battle::link_queue::LinkId::<uqm_engine::battle::link_queue::Starship> { slot:0, pool:123, generation:0, marker:std::marker::PhantomData }; }", "E0451"),
+        ("caller_selected_side", "fn probe(b: &mut uqm_engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); let _=q.ship_id(id,9); }", "E0061"),
     ]);
     for (name, probe, error) in probes {
         let input = scratch.path().join(format!("{name}.rs"));
         let output = scratch.path().join(format!("{name}.rmeta"));
-        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use crate::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
+        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use uqm_engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
         let mut command = Command::new("rustc");
         command
             .args([

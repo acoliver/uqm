@@ -1,4 +1,5 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
+#![forbid(unsafe_code)]
 
 #[path = "support/battle.rs"]
 mod battle;
@@ -6,9 +7,10 @@ mod battle;
 mod battle_context;
 use battle::*;
 
-use uqm_rust::engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
-use uqm_rust::engine::species::species_id::SPECIES_ID_MYCON_ID;
-use uqm_rust::graphics::geometry::Point;
+use uqm_engine::battle::ai_constants::{FIRES_FORE, SEEKING_WEAPON, SPECIAL};
+use uqm_engine::battle::ElementId;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::species::species_id::SPECIES_ID_MYCON_ID;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
@@ -70,42 +72,41 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
 
 #[test]
 fn plasma_launch_and_postprocess_boundaries_match_c() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         let mut fixture = Ship::bare(&_battle, SPECIES_ID_MYCON_ID, 0);
-        let ship = fixture.ptr();
-        (*ship).next.location = Point { x: 100, y: 200 };
+        let ship = fixture.id;
+        battle::get_mut(ship).next.location = Point { x: 100, y: 200 };
         let slots = fixture.weapon(1);
-        let handles: [*mut std::ffi::c_void; 1] = [fixture.weapon_record(slots[0]).cast()];
-        assert!(!handles[0].is_null());
-        let plasma = battle::element(handles[0]);
-        assert_eq!((*plasma).life, 143);
-        assert_eq!((*plasma).hits, 10);
-        assert_eq!((*plasma).mass, 10);
-        assert_eq!((*plasma).turn, 3);
-        assert_eq!((*plasma).thrust, 0);
-        (*plasma).next = (*plasma).current.clone();
-        (*plasma).life = 100;
-        hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
-        assert_eq!((*plasma).hits, 7);
-        assert_eq!((*plasma).mass, 7);
-        assert_eq!((*plasma).turn, 2);
-        (*plasma).hits = 3;
-        hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
-        assert_eq!((*plasma).life, 39);
-        assert_eq!((*plasma).mass, 3);
-        assert_eq!((*plasma).turn, 1);
-        (*ship).hits = 17;
+        let handles: [ElementId; 1] = [slots[0].expect("allocated weapon")];
+        let plasma = handles[0];
+        assert_eq!(battle::get(plasma).life, 143);
+        assert_eq!(battle::get(plasma).hits, 10);
+        assert_eq!(battle::get(plasma).mass, 10);
+        assert_eq!(battle::get(plasma).turn, 3);
+        assert_eq!(battle::get(plasma).thrust, 0);
+        battle::get_mut(plasma).next = battle::get(plasma).current.clone();
+        battle::get_mut(plasma).life = 100;
+        hooks::invoke_element(battle::get(plasma).preprocess_func.unwrap(), plasma);
+        assert_eq!(battle::get(plasma).hits, 7);
+        assert_eq!(battle::get(plasma).mass, 7);
+        assert_eq!(battle::get(plasma).turn, 2);
+        battle::get_mut(plasma).hits = 3;
+        hooks::invoke_element(battle::get(plasma).preprocess_func.unwrap(), plasma);
+        assert_eq!(battle::get(plasma).life, 39);
+        assert_eq!(battle::get(plasma).mass, 3);
+        assert_eq!(battle::get(plasma).turn, 1);
+        battle::get_mut(ship).hits = 17;
         fixture.ship_mut().cur_status_flags = SPECIAL as u16;
         fixture.postprocess();
-        assert_eq!((*ship).hits, 20);
+        assert_eq!(battle::get(ship).hits, 20);
         assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 0);
         assert_eq!(fixture.ship_mut().special_counter, 0);
 
-        (*ship).hits = 10;
+        battle::get_mut(ship).hits = 10;
         fixture.descriptor_mut().ship_info.energy_level = 39;
         fixture.postprocess();
-        assert_eq!((*ship).hits, 10);
+        assert_eq!(battle::get(ship).hits, 10);
         assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 39);
         battle_context::dispose(handles[0]);
     })

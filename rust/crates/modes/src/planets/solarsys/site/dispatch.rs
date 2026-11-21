@@ -1,12 +1,12 @@
 //! Disjoint campaign/effect and generation loans for one content invocation.
 
 use super::Site;
-use crate::engine::battle::Cx;
-use crate::engine::observe::Io;
-use crate::engine::world::generation::SolarSys;
 use crate::planets::generate::{generator, SiteHost, SystemGenerator};
 use crate::planets::solar_system::SolarSystem;
 use std::cell::RefCell;
+use uqm_engine::battle::Cx;
+use uqm_engine::observe::Io;
+use uqm_engine::world::generation::SolarSys;
 
 impl Site<'_, '_, '_> {
     pub fn invoke<R>(

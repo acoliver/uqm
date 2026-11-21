@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 
 impl<S: Story, H: crate::planets::generate::special::FleetGroups, R, L, F>
     crate::planets::generate::special::FleetGroups for Effects<'_, S, H, R, L, F>

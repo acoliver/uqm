@@ -4,16 +4,14 @@
 //! including C integer promotion and truncation, so battles replay identically.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, FIRES_FORE, IGNORE_SIMILAR, MAX_CREW_SIZE, SPECIAL,
     };
-    use crate::engine::battle::flags::{
-        APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP,
-    };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::ElementHook;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::ONE_SHIFT;
+    use uqm_engine::battle::flags::{APPEARING, CREW_IMMUNE, FINITE_LIFE, NONSOLID, PLAYER_SHIP};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -48,7 +46,7 @@ pub mod engine {
     const ABANDONER_RANGE_SQUARED: u32 = (ABANDONER_RANGE * ABANDONER_RANGE) as u32;
     const MAX_ABANDONERS: i32 = 8;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
         let mut desc = RaceTemplate::default();
         desc.info.ship_flags = FIRES_FORE as u16;
@@ -94,8 +92,8 @@ pub mod engine {
             (MISSILE_SPEED as i32 * MISSILE_LIFE as i32 * 2 / 3) as u16;
         desc.descriptor(&SYREEN)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static SYREEN: Race = Race {
@@ -180,7 +178,8 @@ pub mod engine {
                     let d_squared = square(dx).wrapping_add(square(dy));
                     if d_squared <= ABANDONER_RANGE_SQUARED {
                         let mut crew_loss = ((MAX_ABANDONERS
-                            * (ABANDONER_RANGE - i32::from(crate::math::square_root(d_squared))))
+                            * (ABANDONER_RANGE
+                                - i32::from(uqm_engine::math::square_root(d_squared))))
                             / ABANDONER_RANGE
                             + 1) as u16;
                         if crew_loss >= cx.element(object).hits {

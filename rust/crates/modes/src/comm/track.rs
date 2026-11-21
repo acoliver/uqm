@@ -8,7 +8,7 @@
 //! @requirement TP-REQ-001, TP-REQ-003, TP-REQ-007, TP-REQ-008, TP-REQ-009
 
 #[cfg(not(test))]
-use crate::sound::heart_ffi::{
+use uqm_engine::sound::heart_ffi::{
     fast_forward_page as FastForward_Page, fast_forward_smooth as FastForward_Smooth,
     fast_reverse_page as FastReverse_Page, fast_reverse_smooth as FastReverse_Smooth,
     get_track_position as GetTrackPosition, jump_track as JumpTrack, pause_track as PauseTrack,
@@ -30,7 +30,7 @@ impl CTrackBridge {
 
     /// Get the current subtitle from the C trackplayer.
     pub fn current_subtitle() -> Option<String> {
-        crate::sound::trackplayer::subtitle_snapshot().map(|subtitle| {
+        uqm_engine::sound::trackplayer::subtitle_snapshot().map(|subtitle| {
             subtitle
                 .text
                 .into_string()
@@ -40,7 +40,7 @@ impl CTrackBridge {
 
     /// Enumerate all subtitle history entries from the C trackplayer.
     pub fn enumerate_subtitle_history() -> Vec<String> {
-        crate::sound::trackplayer::subtitle_history()
+        uqm_engine::sound::trackplayer::subtitle_history()
             .into_iter()
             .filter(|subtitle| !subtitle.text.is_empty())
             .map(|subtitle| {

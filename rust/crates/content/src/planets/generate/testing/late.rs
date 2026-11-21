@@ -20,7 +20,7 @@ impl<S: Story, H: crate::planets::generate::utw::UtwigSite, R, L, F>
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         bomb: bool,
     ) {
         crate::planets::generate::utw::UtwigSite::load_scene(&mut *self.site, _system, bomb)
@@ -97,7 +97,7 @@ impl<S: Story, H: crate::planets::generate::andro::AndrosynthSite, R, L, F>
 {
     fn load_ruins_story(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         visits: u32,
     ) {
         crate::planets::generate::andro::AndrosynthSite::load_ruins_story(
@@ -114,7 +114,7 @@ impl<S: Story, H: crate::planets::generate::thrad::ThraddashSite, R, L, F>
     fn repair_sis_border(&mut self) {
         crate::planets::generate::thrad::ThraddashSite::repair_sis_border(&mut *self.site)
     }
-    fn load_aqua_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_aqua_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         crate::planets::generate::thrad::ThraddashSite::load_aqua_scene(&mut *self.site, _system)
     }
 }
@@ -130,7 +130,7 @@ impl<S: Story, H: crate::planets::generate::orz::OrzSite, R, L, F>
     }
     fn load_taalo_device_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     ) {
         crate::planets::generate::orz::OrzSite::load_taalo_device_scene(&mut *self.site, _system)
     }
@@ -170,7 +170,7 @@ impl<S: Story, H: crate::planets::generate::myc::MyconSite, R, L, F>
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: crate::planets::generate::myc::Scene,
     ) {
         crate::planets::generate::myc::MyconSite::load_scene(&mut *self.site, _system, scene)
@@ -232,7 +232,7 @@ impl<S: Story, H: crate::planets::generate::home_contact::HomeContactSite, R, L,
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         artifact_taken: bool,
     ) {
         crate::planets::generate::home_contact::HomeContactSite::load_ruins_scene(
@@ -288,7 +288,7 @@ impl<S: Story, H: crate::planets::generate::vux::VuxSite, R, L, F>
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: crate::planets::generate::vux::Scene,
     ) {
         crate::planets::generate::vux::VuxSite::load_scene(&mut *self.site, _system, scene)
@@ -298,12 +298,12 @@ impl<S: Story, H: crate::planets::generate::vux::VuxSite, R, L, F>
 impl<S: Story, H: crate::planets::generate::burv::BurvScenes, R, L, F>
     crate::planets::generate::burv::BurvScenes for Effects<'_, S, H, R, L, F>
 {
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         crate::planets::generate::burv::BurvScenes::load_ruins_scene(&mut *self.site, _system)
     }
     fn load_broadcasters_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
     ) {
         crate::planets::generate::burv::BurvScenes::load_broadcasters_scene(
             &mut *self.site,
@@ -317,7 +317,7 @@ impl<S: Story, H: crate::planets::generate::vault::VaultSite, R, L, F>
 {
     fn load_vault_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         first_report: u16,
     ) {
         crate::planets::generate::vault::VaultSite::load_vault_scene(
@@ -367,7 +367,7 @@ impl<S: Story, H: crate::planets::generate::sol::orbital::Orbital, R, L, F>
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: crate::planets::generate::sol::orbital::Scene,
     ) {
         crate::planets::generate::sol::orbital::Orbital::load_scene(&mut *self.site, _system, scene)

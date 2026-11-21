@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::encounter::*;
 
-use crate::engine::world::fleet;
+use uqm_engine::world::fleet;
 
 impl<H> EncounterApi<H> for Host<'_, '_, H> {
     fn segue(&mut self, segue: u32) {
@@ -35,7 +35,7 @@ impl<H> EncounterApi<H> for Host<'_, '_, H> {
         }
     }
     fn fwiffo_crew(&mut self) {
-        use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
+        use uqm_content::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
         fleet::set_escort_crew(
             self.cx.borrow_mut().world,
             6,

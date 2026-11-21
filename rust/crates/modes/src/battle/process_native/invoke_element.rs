@@ -1,6 +1,6 @@
 //! One observation per native element callback.
 
-use crate::engine::battle::{Cx, ElementHook, ElementId};
+use uqm_engine::battle::{Cx, ElementHook, ElementId};
 
 pub fn invoke_element(cx: &mut Cx<'_>, hook: ElementHook, element: ElementId) {
     match hook {

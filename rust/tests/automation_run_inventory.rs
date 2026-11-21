@@ -3,6 +3,7 @@
 //! The per-session receipt says the child exited. It does not say whether the
 //! run still owns anything, which is the question that matters before a
 //! supervisor claims a clean teardown.
+#![forbid(unsafe_code)]
 
 use std::process::Command;
 use std::time::Duration;
@@ -16,7 +17,7 @@ fn process_is_live(pid: u32) -> bool {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
         return false;
     };
-    uqm_rust::platform::os::process::exists(pid).unwrap_or(false)
+    uqm_platform::os::process::exists(pid).unwrap_or(false)
 }
 
 #[test]

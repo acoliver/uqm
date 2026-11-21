@@ -10,7 +10,7 @@
 
 use crate::automation::mode::GameMode;
 use crate::automation::script::ShipElementAssertion;
-use crate::planet_side::cargo::NUM_ELEMENT_CATEGORIES;
+use uqm_modes::planet_side::cargo::NUM_ELEMENT_CATEGORIES;
 
 /// `SIS_STATE.element_amounts`, indexed by element category.
 pub type ElementAmounts = [u16; NUM_ELEMENT_CATEGORIES];
@@ -106,7 +106,7 @@ pub(crate) fn live_amounts(world: &super::campaign_state::CampaignView) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planet_side::cargo::ElementCategory;
+    use uqm_modes::planet_side::cargo::ElementCategory;
 
     fn radioactive(minimum: u16) -> ShipElementAssertion {
         ShipElementAssertion {

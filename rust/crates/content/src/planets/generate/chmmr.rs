@@ -5,18 +5,16 @@
 //! flags: `CHMMR_UNLEASHED`, `CHMMR_BOMB_STATE`, `SUN_DEVICE_ON_SHIP`,
 //! `ILWRATH_DECEIVED`.
 
-use crate::engine::math::battle_types::normalize_angle;
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, Story, HIERARCHY_STARBASE, MIN_MOON_RADIUS, SAPPHIRE_WORLD,
 };
+use uqm_engine::math::battle_types::normalize_angle;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame};
+use uqm_engine::StoryKey;
 
 /// `END_INTERPLANETARY` is `START_INTERPLANETARY` (`planets.h`).
 const END_INTERPLANETARY: u16 = START_INTERPLANETARY;
@@ -58,7 +56,7 @@ pub trait ChmmrSite {
     fn load_ip_groups(&mut self);
     /// The starbase visit: lander font, `CHMMR_BASE_STRTAB` report, and the
     /// release of both.
-    fn visit_starbase(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
+    fn visit_starbase(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>);
 }
 
 /// `GenerateChmmr_generatePlanets`.
@@ -182,7 +180,7 @@ fn ambush_by_ilwrath(site: &mut (impl ChmmrSite + ?Sized)) {
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

@@ -1,13 +1,13 @@
 use uqm_engine::test_support::campaign_display;
 
 use super::*;
-use uqm_rust::engine::world::generation::Body;
-use uqm_rust::planet_side::{
+use uqm_engine::world::generation::Body;
+use uqm_modes::planet_side::{
     generation::{ScanNodeId, ScanType, SurfaceGenerator},
     generation_adapter::CffiSurfaceGenerator,
     special_effects::{PickupContext, SpecialPickupEffects},
 };
-use uqm_rust::planets::generate::{
+use uqm_modes::planets::generate::{
     home_contact::LanderTakeoff, sol, vault::VaultSite, wreck::WreckSite,
 };
 
@@ -107,31 +107,31 @@ fn real_sol_site_preserves_pluto_fatal_survivor_and_luna_acceptance() {
 #[test]
 #[serial_test::serial]
 fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes() {
-    let _queue = uqm_rust::engine::test_support::native_probe::DrawQueue::init();
+    let _queue = uqm_engine::test_support::native_probe::DrawQueue::init();
 
     let mut game = campaign();
     game.world.set_catalog(std::borrow::Cow::Borrowed(
-        &uqm_rust::planets::tables::STARMAP_ARRAY,
+        &uqm_modes::planets::tables::STARMAP_ARRAY,
     ));
-    game.world.current_star = Some(uqm_rust::engine::StarId(0));
+    game.world.current_star = Some(uqm_engine::StarId(0));
     let mut battle = Battle::new();
     let owner = RefCell::new(Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     ));
     let mut observer = Unobserved;
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    let mut solar = uqm_rust::planets::solar_system::SolarSystem::new(
+    let mut solar = uqm_modes::planets::solar_system::SolarSystem::new(
         owner.borrow().world,
-        uqm_rust::engine::StarId(82),
+        uqm_engine::StarId(82),
     );
     solar.sys.sun.num_planets = 9;
     solar.sys.planets[2].num_planets = 2;
-    let scan = uqm_rust::engine::graphics::context::LoadedContext::create(c"pickup-provider-test");
+    let scan = uqm_engine::graphics::context::LoadedContext::create(c"pickup-provider-test");
     for (pluto, crew) in [(true, 3), (true, 12), (false, 12)] {
         let target = if pluto {
             Body::Planet(8)
@@ -144,7 +144,7 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
             &owner,
             &io,
             &mut solar,
-            uqm_rust::planets::report::typography::ReportContext {
+            uqm_modes::planets::report::typography::ReportContext {
                 context: scan.lease(),
                 resources: Default::default(),
             },
@@ -155,7 +155,7 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
                 .generate(ScanType::Energy, ScanNodeId::new(0).unwrap())
                 .unwrap()
                 .kind,
-            uqm_rust::planet_side::generation::GeneratedNodeKind::Energy
+            uqm_modes::planet_side::generation::GeneratedNodeKind::Energy
         );
         let mut pickup = PickupContext::lander(crew);
         assert_eq!(
@@ -183,11 +183,11 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
 #[test]
 #[serial_test::serial]
 fn production_site_keeps_its_report_when_typography_is_missing() {
-    use uqm_rust::engine::{
+    use uqm_engine::{
         strings::owned_table::LoadedTextTable,
         world::generation::{ReportDisposition, ReportSlot},
     };
-    use uqm_rust::planets::generate::host::ReportSite;
+    use uqm_modes::planets::generate::host::ReportSite;
     let mut game = campaign();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     with_site(&mut game, SOL_DEFINED, |host, system| {
@@ -213,11 +213,11 @@ fn production_site_keeps_its_report_when_typography_is_missing() {
 #[test]
 #[serial_test::serial]
 fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() {
-    use uqm_rust::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
-    use uqm_rust::graphics::{
+    use uqm_engine::graphics::{
         context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
     };
-    use uqm_rust::planets::{
+    use uqm_engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
+    use uqm_modes::planets::{
         generate::host::ReportSite,
         report::typography::{ReportContext, ReportResources},
     };
@@ -230,7 +230,7 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
     let context = ContextLease::require(game.kernel.space_context);
     context.set_frame(ContextFrame::retain(game.kernel.screen));
     game.kernel.solar_presentation.assets =
-        Some(uqm_rust::engine::kernel::solar_resources::SolarResources {
+        Some(uqm_engine::kernel::solar_resources::SolarResources {
             flagship: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
             sun: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
             sun_palettes: vec![vec![0, 0]],
@@ -262,7 +262,7 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
         let mut host = Site::new(
             &owner,
             &io,
-            uqm_rust::engine::StarId(0),
+            uqm_engine::StarId(0),
             SOL_DEFINED,
             true,
             &mut pickup,
@@ -275,7 +275,7 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
             &[],
             0,
             SOL_DEFINED,
-            uqm_rust::math::RandomContext::with_seed(123),
+            uqm_engine::math::RandomContext::with_seed(123),
         );
         let table = LoadedTextTable::new(vec![c"".to_owned()]);
         system.report = ReportSlot::new(table.entry(0));
@@ -283,7 +283,7 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
         assert!(ReportSite::report(
             &mut host,
             &mut system,
-            uqm_rust::engine::world::generation::ReportDisposition::Once
+            uqm_engine::world::generation::ReportDisposition::Once
         ));
         assert!(system.report.current().is_none());
         assert_eq!(context.batch_depth(), 0);

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-use uqm_rust::battle::hook_registry;
-use uqm_rust::collections::observation::Event;
+use uqm_engine::collections::observation::Event;
+use uqm_modes::battle::hook_registry;
 
 /// Counts the `special` activations of `race` among observed events. The
 /// callback is resolved through the registry name the parity trace records.

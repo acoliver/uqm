@@ -1,11 +1,11 @@
 //! Super Melee menu rendering and selection feedback.
 use super::*;
-use crate::engine::battle::net::NetState;
-use crate::graphics::{
-    geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
-};
 use crate::starbase::ids::{
     NETMELEE_STRING_BASE, SAFE_X, SAFE_Y, SHIP_INFO_HEIGHT, STATUS_WIDTH, TINY_TEXT_HEIGHT,
+};
+use uqm_engine::battle::net::NetState;
+use uqm_engine::graphics::{
+    geometry::Color, geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
 };
 
 pub(super) fn rgb(r: u8, g: u8, b: u8) -> Color {
@@ -23,7 +23,7 @@ pub(crate) fn draw_melee_icon(state: &MeleeSession, index: u16) {
         .unwrap_or_else(|| panic!("menu context not admitted"))
         .draw_stamp(
             &state.menu_frames().context_frame(usize::from(index)),
-            crate::graphics::geometry::Point { x: 0, y: 0 },
+            uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
         );
 }
 pub(super) fn slot_rect(side: u16, row: u16, col: u16) -> Rect {
@@ -57,10 +57,10 @@ pub(super) fn ship_box(state: &MeleeSession, side: u16, index: usize, ship: u32,
             let frame = state
                 .catalog
                 .get(ship as usize)
-                .map_or(crate::graphics::drawable::FrameId::NULL, |ship| {
+                .map_or(uqm_engine::graphics::drawable::FrameId::NULL, |ship| {
                     ship.melee_icon.raw()
                 });
-            let icon = crate::graphics::drawable::ContextFrame::retain(frame);
+            let icon = uqm_engine::graphics::drawable::ContextFrame::retain(frame);
             context.draw_stamp(
                 &icon,
                 Point {
@@ -72,7 +72,7 @@ pub(super) fn ship_box(state: &MeleeSession, side: u16, index: usize, ship: u32,
     });
 }
 pub(super) fn controls(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &MeleeSession,
     side: usize,
     highlight: bool,
@@ -95,7 +95,7 @@ pub(super) fn controls(
     };
     draw_melee_icon(state, icon);
 }
-pub(super) fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+pub(super) fn teams(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession) {
     for side in [0usize, 1] {
         controls(cx, state, side, false);
         for index in 0..14 {
@@ -113,7 +113,7 @@ pub(super) fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession
 }
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, rect: &Rect) {
+pub fn repair_frame(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession, rect: &Rect) {
     let mut r = *rect;
     r.corner.x += SAFE_X;
     r.corner.y += SAFE_Y;
@@ -146,7 +146,7 @@ pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession
         )
     });
 }
-pub(super) fn redraw(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+pub(super) fn redraw(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession) {
     let extent = state
         .menu_target
         .as_ref()
@@ -175,7 +175,7 @@ pub(super) fn name_rect(side: u16) -> Rect {
     }
 }
 pub(super) fn worth(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &MeleeSession,
     side: u16,
     highlight: u16,
@@ -220,7 +220,7 @@ pub(super) fn worth(
     );
 }
 pub(super) fn name(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &MeleeSession,
     side: u16,
     highlight: u16,
@@ -293,7 +293,7 @@ pub(super) fn name(
     })
 }
 pub(super) fn status(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &MeleeSession,
     message: &std::ffi::CStr,
 ) {
@@ -352,15 +352,11 @@ pub(super) fn status(
         });
     });
 }
-pub(super) fn status_game(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    state: &MeleeSession,
-    index: usize,
-) {
+pub(super) fn status_game(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession, index: usize) {
     let message = cx.kernel.game_text(index).to_owned();
     status(cx, state, &message);
 }
-pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kernel, server: bool) {
+pub(super) fn connection_box(state: &MeleeSession, kernel: &uqm_engine::Kernel, server: bool) {
     let context = state
         .menu_context
         .as_ref()
@@ -371,7 +367,7 @@ pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kerne
         .unwrap_or_else(|| panic!("menu target not admitted"))
         .rect()
         .extent;
-    let font = crate::graphics::font::FontLease::retain(
+    let font = uqm_engine::graphics::font::FontLease::retain(
         kernel
             .star_con_font
             .unwrap_or_else(|| panic!("connection dialog font not admitted")),
@@ -409,7 +405,7 @@ pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kerne
 }
 
 pub(super) fn status_player(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &MeleeSession,
     player: isize,
 ) {
@@ -440,7 +436,7 @@ pub(super) fn status_player(
     }
 }
 pub(super) fn highlight(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     state: &MeleeSession,
     option: u8,
     on: bool,
@@ -490,7 +486,7 @@ pub(super) fn highlight(
 }
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub fn flash_selection(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
+pub fn flash_selection(cx: &mut uqm_engine::battle::Cx<'_>, state: &mut MeleeSession) {
     let now = get_time_counter();
     if let Some(selected) = state.selection_flash(now) {
         let context = state
@@ -500,7 +496,7 @@ pub fn flash_selection(cx: &mut crate::engine::battle::Cx<'_>, state: &mut Melee
         context.with_selected(|| highlight(cx, state, state.melee_option, selected));
     }
 }
-pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+pub(super) fn init_screen(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession) {
     let context = state
         .menu_context
         .as_ref()
@@ -512,19 +508,19 @@ pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeS
     let extent = target.rect().extent;
     context.set_frame(target.clone());
     context.clear_clip();
-    context.set_background(crate::graphics::geometry::Color {
+    context.set_background(uqm_engine::graphics::geometry::Color {
         r: 0,
         g: 0,
         b: 0,
         a: 255,
     });
     context.clear();
-    context.set_clip(crate::graphics::geometry::Rect {
-        corner: crate::graphics::geometry::Point {
+    context.set_clip(uqm_engine::graphics::geometry::Rect {
+        corner: uqm_engine::graphics::geometry::Point {
             x: SAFE_X,
             y: SAFE_Y,
         },
-        extent: crate::graphics::geometry::Extent {
+        extent: uqm_engine::graphics::geometry::Extent {
             width: extent.width - 2 * SAFE_X,
             height: extent.height - 2 * SAFE_Y,
         },
@@ -533,7 +529,7 @@ pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeS
 }
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, ship: u32) {
+pub fn draw_ship_strings(cx: &mut uqm_engine::battle::Cx<'_>, state: &MeleeSession, ship: u32) {
     let context = ContextLease::retain(
         cx.kernel
             .status_context
@@ -578,13 +574,13 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
                     }
                 } else {
                     let descriptor =
-                        crate::ships::master_native::descriptor_in(cx.kernel, ship as u16)
+                        uqm_content::ships::master_native::descriptor_in(cx.kernel, ship as u16)
                             .unwrap_or_else(|| panic!("melee master ship {ship}"));
                     let mut info = *descriptor.info();
                     let graphics =
                         crate::ui::shipstat::StatusGraphics::new(cx.kernel, font.clone());
-                    let portrait =
-                        crate::graphics::drawable::ContextFrame::retain(info.icons).next_frame();
+                    let portrait = uqm_engine::graphics::drawable::ContextFrame::retain(info.icons)
+                        .next_frame();
                     let (name, name_count) = descriptor.label(1);
                     let cost = std::ffi::CString::new(info.ship_cost.to_string())
                         .unwrap_or_else(|error| panic!("ship cost caption: {error}"));
@@ -604,7 +600,7 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
         });
     });
 }
-pub(super) fn current(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
+pub(super) fn current(cx: &mut uqm_engine::battle::Cx<'_>, state: &mut MeleeSession) {
     state.current_ship = if state.row == 2 {
         255
     } else {

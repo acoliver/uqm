@@ -7,15 +7,15 @@
 //! `planets::c_api` implements over the C globals and tests implement with
 //! fakes.
 
-use crate::engine::save::summary::PLANET_NUMBER_BASE;
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
 use crate::planets::generate::consts::{planet_size, PLANET_SHIELDED};
 use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, ENERGY_SCAN, MINERAL_SCAN};
+use uqm_engine::math::RandomContext;
+use uqm_engine::save::summary::PLANET_NUMBER_BASE;
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 
 /// `GENERATE_ALL`: count every node instead of fetching one.
 pub const GENERATE_ALL: u16 = !0;
@@ -310,7 +310,7 @@ fn present(
 }
 
 use super::generator::SystemGenerator;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

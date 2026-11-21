@@ -14,7 +14,7 @@
 //! completed.
 
 use super::input::MenuPulses;
-use crate::engine::world::activity::{activity_flags, ActivityValue};
+use uqm_engine::world::activity::{activity_flags, ActivityValue};
 
 /// `STARBASE_STATE` (`starbase.h:28-33`).
 #[repr(u8)]

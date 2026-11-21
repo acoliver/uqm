@@ -1,7 +1,7 @@
 //! Incremental UTF-8 matching and typed callbacks owned by the map visit.
 use super::*;
-use crate::strings::unicode::{case_prefix_matches, count_utf8_bytes, split_utf8_prefix};
 use crate::ui::getchar::{edit_text, TextEntryCallbacks, TextEntryView};
+use uqm_engine::strings::unicode::{case_prefix_matches, count_utf8_bytes, split_utf8_prefix};
 
 #[derive(Default)]
 struct Query {
@@ -345,7 +345,7 @@ pub(super) fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::input::InputRuntime;
+    use uqm_engine::input::InputRuntime;
     fn star(prefix: u8, postfix: u8) -> CStarDesc {
         CStarDesc {
             star_pt: Point { x: 0, y: 0 },
@@ -496,8 +496,9 @@ mod tests {
             table[10] = b"Centauri\0".to_vec();
             table[361] = b"Alpha\0".to_vec();
             table[362] = b"Beta\0".to_vec();
-            cx.kernel
-                .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(table));
+            cx.kernel.install_game_text(
+                uqm_engine::strings::owned_table::LoadedTextTable::fixture(table),
+            );
             let mut stars = *cx.world.catalog();
             for star in &mut stars[..NUM_SOLAR_SYSTEMS] {
                 star.prefix = 0;
@@ -508,7 +509,7 @@ mod tests {
             stars[1].prefix = 2;
             stars[1].postfix = 10;
             cx.world.set_catalog(std::borrow::Cow::Owned(stars));
-            cx.world.current_star = Some(crate::engine::StarId(0));
+            cx.world.current_star = Some(uqm_engine::StarId(0));
             let mut search = Search {
                 map,
                 model: SearchModel::new(sorted_stars(
@@ -517,7 +518,7 @@ mod tests {
                 )),
             };
             let input = driver.input();
-            let mut observer = crate::engine::observe::Unobserved;
+            let mut observer = uqm_engine::observe::Unobserved;
             let mut io = Io {
                 observer: &mut observer,
             };

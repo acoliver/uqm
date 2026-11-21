@@ -1,8 +1,8 @@
 use super::*;
-use crate::engine::StoryKey;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::vux::tests::{record, with_orbit, Calls, Pickup, Site};
 use std::rc::Rc;
+use uqm_engine::StoryKey;
 
 #[test]
 fn moon_contact_shield_broadcaster_and_abort_matrix() {

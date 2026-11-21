@@ -2,14 +2,14 @@
 
 use crate::battle::context_access::ContextOps;
 use crate::battle::context_access::StatusOps;
-use crate::engine::battle::ai_constants::{
+use uqm_engine::battle::ai_constants::{
     LEFT, MAX_CREW_SIZE, PLAYER_CAPTAIN, RIGHT, SPECIAL, THRUST, WEAPON,
 };
-use crate::engine::battle::flags::{LOW_ON_ENERGY, RPG_PLAYER_NUM};
-use crate::engine::battle::record::CaptainRecord;
-use crate::graphics::geometry::{Color, Extent, Point, Rect, TextAlign};
+use uqm_engine::battle::flags::{LOW_ON_ENERGY, RPG_PLAYER_NUM};
+use uqm_engine::battle::record::CaptainRecord;
+use uqm_engine::graphics::geometry::{Color, Extent, Point, Rect, TextAlign};
 
-pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
+pub fn init_status_offsets(kernel: &mut uqm_engine::Kernel, height_pixels: i32) {
     kernel.status_offsets = [(height_pixels >> 1) as i16, 0];
 }
 
@@ -242,8 +242,8 @@ fn captain_border(y: i16, height: i16, mut fill: impl FnMut(Color, Rect)) {
 }
 
 pub(crate) fn draw_battle_crew_amount(
-    context: &crate::graphics::context::ContextLease,
-    font: &crate::graphics::font::FontLease,
+    context: &uqm_engine::graphics::context::ContextLease,
+    font: &uqm_engine::graphics::font::FontLease,
     crew: u16,
     y_offs: i16,
     pc_menu: bool,
@@ -258,11 +258,11 @@ pub(crate) fn draw_battle_crew_amount(
 
 pub mod engine {
     use super::*;
-    use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
+    use uqm_engine::battle::{views::FrameSelection, Cx, ElementId};
 
     pub(crate) fn captains_window(
         cx: &Cx<'_>,
-        ship: crate::engine::battle::ShipId,
+        ship: uqm_engine::battle::ShipId,
         y: i16,
         delta: u16,
         current: u16,
@@ -296,7 +296,7 @@ pub mod engine {
         }
     }
 
-    fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CaptainRecord {
+    fn prepare_captain(cx: &mut Cx<'_>, ship: uqm_engine::battle::ShipId) -> CaptainRecord {
         let mut captain = cx.captain_controls(ship).clone();
         let background = FrameSelection::retain(captain.background);
         if !background.is_absent() {
@@ -316,8 +316,8 @@ pub mod engine {
 
     pub fn draw_captains_window(
         cx: &mut Cx<'_>,
-        ship: crate::engine::battle::ShipId,
-        context: Option<&crate::graphics::context::ContextLease>,
+        ship: uqm_engine::battle::ShipId,
+        context: Option<&uqm_engine::graphics::context::ContextLease>,
         height: i16,
         pc_menu: bool,
     ) {
@@ -329,7 +329,8 @@ pub mod engine {
             let y = cx.status_offset(ship);
             captain_border(y, height, |color, r| context.fill_rectangle(color, r));
             let cy = y.wrapping_add(69);
-            let background = crate::graphics::drawable::ContextFrame::retain(captain.background);
+            let background =
+                uqm_engine::graphics::drawable::ContextFrame::retain(captain.background);
             context.draw_stamp(&background, Point { x: 4, y: cy });
             if cx.ship(ship).captains_name_index == 0
                 && cx.ship(ship).player_nr == RPG_PLAYER_NUM as i16
@@ -420,7 +421,7 @@ pub use engine::{draw_captains_window, post_process_status, preprocess_status};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::flags::CREW_IMMUNE;
+    use uqm_engine::battle::flags::CREW_IMMUNE;
 
     #[test]
     fn captain_name_borrows_only_the_bounded_name_before_its_terminator() {
@@ -440,7 +441,7 @@ mod tests {
 
     #[test]
     fn offsets_put_player_zero_at_bottom() {
-        let mut kernel = crate::engine::Kernel::new();
+        let mut kernel = uqm_engine::Kernel::new();
         init_status_offsets(&mut kernel, 240);
         assert_eq!(kernel.status_offsets, [120, 0]);
         init_status_offsets(&mut kernel, 481);

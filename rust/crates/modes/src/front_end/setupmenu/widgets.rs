@@ -1,5 +1,5 @@
 //! Owned menu tree, focus, selection and event policy.
-use crate::engine::input::InputSession;
+use uqm_engine::input::InputSession;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Widget {

@@ -5,7 +5,7 @@
 //! so a mismatch names the exact input and field.
 
 use std::fmt::Write as _;
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 
 pub mod default_gen;
 pub mod late_gen;

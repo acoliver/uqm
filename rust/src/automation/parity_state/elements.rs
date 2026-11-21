@@ -1,8 +1,8 @@
 //! Scalar element observation, shared by the live journal and checksum.
 use super::{value, Fields};
 use crate::automation::parity::Journal;
-use crate::battle::velocity::VelocityDesc;
-use crate::engine::battle::access::observe::ElementObservation;
+use uqm_engine::battle::access::observe::ElementObservation;
+use uqm_modes::battle::velocity::VelocityDesc;
 
 pub(super) fn element(
     fields: &mut Fields,
@@ -40,7 +40,7 @@ pub(super) fn element(
             fields,
             prefix,
             name,
-            crate::battle::hook_registry::name_for_species(
+            uqm_modes::battle::hook_registry::name_for_species(
                 hooks,
                 address,
                 journal.species(e.parent),
@@ -89,7 +89,7 @@ pub(super) fn velocity(fields: &mut Fields, prefix: &str, v: &VelocityDesc) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::ElementTable;
+    use uqm_engine::battle::ElementTable;
 
     #[test]
     fn links_and_targets_keep_their_element_identity_domain() {
@@ -112,7 +112,7 @@ mod tests {
             .fixture_record_mut(first)
             .intersect_control
             .last_time_val = 19;
-        let mut view = crate::engine::battle::access::observe::element(&elements, first, 0);
+        let mut view = uqm_engine::battle::access::observe::element(&elements, first, 0);
         let mut fields = Fields::new();
         element(&mut fields, "first", &view, &journal, &[]);
         assert_eq!(fields["first.identity"], "0:1");
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(fields["first.target"], "1:1");
         assert_eq!(fields["first.velocity.error.width"], "-23");
         assert_eq!(fields["first.intersect.time"], "19");
-        let second_view = crate::engine::battle::access::observe::element(&elements, second, 0);
+        let second_view = uqm_engine::battle::access::observe::element(&elements, second, 0);
         element(&mut fields, "second", &second_view, &journal, &[]);
         assert_eq!(fields["second.pred"], "0:1");
         view.target = 0;

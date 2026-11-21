@@ -19,7 +19,7 @@ use super::platform::{
     SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
 };
 use super::sis_modules::{ModuleSlots, EMPTY_MODULE_SLOT};
-use crate::engine::world::activity::ActivityValue;
+use uqm_engine::world::activity::ActivityValue;
 
 /// Everything a screen asked the platform to do, in order.
 #[derive(Debug, Clone, PartialEq)]
@@ -136,7 +136,7 @@ pub struct RecordingPlatform {
 
 /// Starting crew from the ported race descriptors.
 fn source_max_crew(ship_dir: &str) -> u16 {
-    use crate::ships::{registry::descriptor_template_for_species, types::SpeciesId};
+    use uqm_content::ships::{registry::descriptor_template_for_species, types::SpeciesId};
     let species = match ship_dir {
         "human" => SpeciesId::Earthling,
         "spathi" => SpeciesId::Spathi,
@@ -820,7 +820,7 @@ impl Platform for RecordingPlatform {
             self.consumed.set(consumed);
             if self.abort_after_pulses.get() == Some(consumed) {
                 self.activity.set(ActivityValue::new(
-                    crate::engine::world::activity::activity_flags::CHECK_ABORT,
+                    uqm_engine::world::activity::activity_flags::CHECK_ABORT,
                 ));
             }
             if !frame() {

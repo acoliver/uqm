@@ -49,12 +49,14 @@ pub(super) fn save_label(date: &CStr, name: &CStr) -> SaveLabel {
 
 use super::layout::{self, BLACK_COLOR, CAPTAIN_NAME_TEXT_COLOR};
 use super::picker::{MAX_SAVED_GAMES, SAVES_PER_PAGE};
-use crate::engine::Kernel;
-use crate::engine::World;
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign};
 use crate::starbase::ids::MONTHS_STRING_BASE;
 use crate::starbase::ids::SAFE_X;
 use crate::ui::rgb15;
+use uqm_engine::graphics::{
+    geometry::Extent, geometry::Point, geometry::Rect, geometry::TextAlign,
+};
+use uqm_engine::Kernel;
+use uqm_engine::World;
 const SAVE_NAME_SIZE: usize = uqm_save::types::SAVE_NAME_SIZE;
 const DDSHS_EDIT: u16 = 1;
 const DDSHS_BLOCKCUR: u16 = 2;
@@ -66,7 +68,7 @@ pub(super) fn draw_name_string(
     cursor: usize,
     state: u16,
 ) -> bool {
-    use crate::graphics::{context::ContextLease, font::FontLease};
+    use uqm_engine::graphics::{context::ContextLease, font::FontLease};
     let context = ContextLease::require(kernel.status_context);
     context.select();
     if state & DDSHS_EDIT == 0 {
@@ -131,7 +133,7 @@ pub(super) fn draw_save_name_string(
     state: u16,
     game_index: u16,
 ) -> bool {
-    use crate::graphics::context::ContextLease;
+    use uqm_engine::graphics::context::ContextLease;
     let context = ContextLease::require(kernel.space_context);
     let (month, day, year) = world.data.calendar_date();
     let date = crate::ui::sis::format_date(
@@ -215,9 +217,9 @@ mod tests {
     #[serial_test::serial]
     fn owned_name_renderers_measure_and_draw_without_published_campaign_owners() {
         if !uqm_engine::test_support::native_process::own_graphics_process("front_end::gameopt::naming::tests::owned_name_renderers_measure_and_draw_without_published_campaign_owners") { return; }
-        use crate::engine::Game;
-        use crate::graphics::{context::ContextLease, drawable::ContextFrame};
+        use uqm_engine::graphics::{context::ContextLease, drawable::ContextFrame};
         use uqm_engine::test_support::campaign_display::CampaignDisplay;
+        use uqm_engine::Game;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("naming display: {error}"));

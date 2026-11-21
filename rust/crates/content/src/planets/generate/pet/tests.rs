@@ -1,27 +1,27 @@
 //! The talking pet system's conversation flow, the Ur-Quan abduction and the
 //! ruins against recording fakes.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::rc::Rc;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, zap_to_urquan_encounter,
     TalkingPetSite, UrquanEncounterSite, TALK_FLAGS, URQUAN_LOC, WORLD,
 };
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
-};
-use crate::engine::world::activity::ActivityKind;
-use crate::engine::world::generation::ReportDisposition;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::special::{Body, Orbit, TELLURIC_WORLD};
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
+};
+use uqm_engine::world::activity::ActivityKind;
+use uqm_engine::world::generation::ReportDisposition;
 
 const OTHER_BODIES: [Body; 3] = [
     Body::Planet(1),
@@ -157,7 +157,7 @@ impl HomeContactSite for Site {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         artifact_taken: bool,
     ) {
         self.record(Call::LoadRuinsScene(artifact_taken));

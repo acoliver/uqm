@@ -2,7 +2,7 @@
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
 
-use crate::engine::world::SisState;
+use uqm_engine::world::SisState;
 
 #[derive(Debug, PartialEq)]
 pub(super) struct Stats {
@@ -54,7 +54,7 @@ mod tests {
     use super::*;
 
     fn sis() -> SisState {
-        let mut sis = crate::engine::World::new().data.flagship;
+        let mut sis = uqm_engine::World::new().data.flagship;
         sis.module_slots.fill(equipment::NUM_MODULES as u8);
         sis
     }

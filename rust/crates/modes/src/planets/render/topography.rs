@@ -1,8 +1,8 @@
 //! Colored surface batches from `plangen.c::RenderTopography`.
 
 use crate::comm::locdata::{CPoint, CRect};
-use crate::graphics::geometry::Color;
 use crate::planets::generate::consts::{GAS_GIANT_ALGO, PLAN_ALGO_MASK};
+use uqm_engine::graphics::geometry::Color;
 
 pub const NUM_BATCH_POINTS: usize = 64;
 

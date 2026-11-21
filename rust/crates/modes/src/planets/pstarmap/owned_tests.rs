@@ -1,14 +1,14 @@
 use super::*;
-use crate::engine::{
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::{
     battle::{input::InputContext, Battle},
     input::{frames::InputState, InputControls, InputRuntime},
     observe::{Observer, Presented, Unobserved},
     Game,
-};
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
 };
 
 pub(super) struct Driver {
@@ -63,9 +63,9 @@ impl InputRuntime for Driver {
             assert_eq!(self.input.repeat_config(), (70, 420, 70, false));
         }
         let cancel = if reset {
-            crate::engine::input::frames::KEY_MENU_EDIT_CANCEL
+            uqm_engine::input::frames::KEY_MENU_EDIT_CANCEL
         } else {
-            crate::engine::input::frames::KEY_MENU_CANCEL
+            uqm_engine::input::frames::KEY_MENU_CANCEL
         } as usize;
         for keys in [&[][..], &[cancel][..]] {
             self.press(keys);
@@ -80,7 +80,7 @@ impl InputRuntime for Driver {
 #[derive(Default)]
 struct Recorded(Vec<Option<StarMapView>>);
 impl Observer for Recorded {
-    fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+    fn input_admitted(&mut self, _: &InputView, _: &mut uqm_engine::battle::Cx<'_>) -> Injected {
         Injected::default()
     }
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {
@@ -95,7 +95,7 @@ pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)
     let mut game = Game::new();
     let display =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    let misc = crate::graphics::drawable::LoadedDrawable::create(8, 1, 1, 70).unwrap();
+    let misc = uqm_engine::graphics::drawable::LoadedDrawable::create(8, 1, 1, 70).unwrap();
     game.kernel.misc_data_frame = misc.lease().frame(0).unwrap();
     game.kernel.space_context = game.kernel.off_screen_context;
     game.kernel.screen_context = game.kernel.off_screen_context;
@@ -108,11 +108,11 @@ pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)
             height: 227,
         },
     });
-    game.world.story = Some(crate::engine::world::story::StoryState::new());
+    game.world.story = Some(uqm_engine::world::story::StoryState::new());
     game.world.set_catalog(std::borrow::Cow::Borrowed(
         &crate::planets::tables::STARMAP_ARRAY,
     ));
-    game.world.current_star = Some(crate::engine::StarId(0));
+    game.world.current_star = Some(uqm_engine::StarId(0));
     game.world.set_activity(4);
     game.world.data.game.autopilot = Point { x: -1, y: -1 };
     let driver = Rc::new(Driver {
@@ -248,15 +248,16 @@ fn instant_select_uses_the_owned_option_and_campaign() {
             }
         ));
         assert_eq!(cx.world.data.game.autopilot, Point { x: -1, y: -1 });
-        assert_eq!(cx.world.current_star, Some(crate::engine::StarId(0)));
+        assert_eq!(cx.world.current_star, Some(uqm_engine::StarId(0)));
     });
 }
 
 fn install_fleets(world: &mut World) -> Vec<LinkId<Fleet>> {
-    let labels = crate::strings::owned_table::LoadedTextTable::fixture(vec![b"A\0".to_vec(); 2]);
-    let resources = crate::engine::battle::link_queue::ShipPickerResources::new(
+    let labels =
+        uqm_engine::strings::owned_table::LoadedTextTable::fixture(vec![b"A\0".to_vec(); 2]);
+    let resources = uqm_engine::battle::link_queue::ShipPickerResources::new(
         labels.entry(0),
-        crate::engine::battle::frames::FrameSelection::ABSENT,
+        uqm_engine::battle::frames::FrameSelection::ABSENT,
     );
     world.retain_fleet_resources(0, resources);
     let mut queue = world.avail_races();

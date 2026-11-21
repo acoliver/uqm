@@ -3,9 +3,9 @@
 //!
 //! Overridden: `generatePlanets`, `generateOrbital`. No story flags.
 
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
-use crate::math::RandomContext;
 use crate::planets::generate::special::{self, Body, RED_GAS_GIANT};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame};
 
 /// `GenerateSlylandro_generatePlanets`.
 pub fn generate_planets(
@@ -42,7 +42,7 @@ pub fn generate_orbital(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

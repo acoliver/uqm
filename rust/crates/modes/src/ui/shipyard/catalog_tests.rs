@@ -1,7 +1,7 @@
 //! Exercise the real roster helpers against independent owned campaigns.
 
 use super::shipyard_catalog as catalog;
-use crate::engine::{world::queues::FleetInfo, Game, World};
+use uqm_engine::{world::queues::FleetInfo, Game, World};
 const GOOD_GUY: u32 = 1;
 
 fn with_roster(states: &[u16], check: impl FnOnce(&World)) {

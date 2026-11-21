@@ -1,8 +1,8 @@
 //! Shofixti dialogue, ported from shofixt.c.
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 pub(crate) use crate::comm::races::descriptor::Point;
-use crate::engine::world::activity::ActivityKind;
-pub(crate) use crate::engine::StoryKey;
+use uqm_engine::world::activity::ActivityKind;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;

@@ -3,8 +3,9 @@
 //! Analysis, scan and layout views must reproduce the full domains and frozen
 //! fixtures captured from the C originals in `tests/fixtures/planets/*`.
 //! Native resource and rendering fixtures share the serialized host below.
+#![forbid(unsafe_code)]
 
-use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 #[path = "planets_render/oval.rs"]
 mod oval_parity;
 mod planets_common;
@@ -29,16 +30,16 @@ use planets_common::{
 };
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use uqm_rust::engine::world::generation::Body;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::generate::{calc, orbits, surface};
-use uqm_rust::planets::solar_system::SolarSystem;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::generation::Body;
+use uqm_modes::planets::generate::{calc, orbits, surface};
+use uqm_modes::planets::solar_system::SolarSystem;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
 /// The fixed screen width (C: `ScreenWidth`).
 #[allow(non_upper_case_globals)]
-const ScreenWidth: i32 = uqm_rust::graphics::state::SCREEN_WIDTH;
+const ScreenWidth: i32 = uqm_engine::graphics::state::SCREEN_WIDTH;
 
 /// Cells past the map the C side gets, so an overrun reads as a mismatch
 /// instead of corrupting memory.
@@ -52,7 +53,7 @@ impl Topography for OwnedTopography {
         let mut padded = map.to_vec();
         padded.resize(map.len() + GUARD_CELLS, 0);
         let mut rng = RandomContext::with_seed(case.seed);
-        uqm_rust::planets::topography::delta_topography(
+        uqm_modes::planets::topography::delta_topography(
             &mut rng,
             case.iterations,
             &mut padded,
@@ -88,7 +89,7 @@ struct SuppliedGenerators {
     /// The fixture star occupies slot zero of this retained catalog.
     star: Box<[CStarDesc; CATALOG_LEN]>,
     previous_catalog: [CStarDesc; CATALOG_LEN],
-    previous_star: Option<uqm_rust::engine::StarId>,
+    previous_star: Option<uqm_engine::StarId>,
 }
 
 impl SuppliedGenerators {
@@ -99,8 +100,8 @@ impl SuppliedGenerators {
         );
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
         let previous_star = crate::battle_context::with(|cx| cx.world.current_star);
-        let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
-        star[0] = uqm_rust::engine::world::CStarDesc {
+        let mut star = Box::new(uqm_modes::planets::tables::STARMAP_ARRAY);
+        star[0] = uqm_engine::world::CStarDesc {
             star_pt: Default::default(),
             star_type: 0,
             index: 0,
@@ -110,7 +111,7 @@ impl SuppliedGenerators {
         let state = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_catalog(std::borrow::Cow::Owned(*star));
-            Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
+            Box::new(SolarSystem::new(world, uqm_engine::StarId(0)))
         });
         Self {
             state,
@@ -125,10 +126,10 @@ impl SuppliedGenerators {
         self.star[0].star_type = star_type;
         crate::battle_context::with(|cx| {
             cx.world.set_catalog(std::borrow::Cow::Owned(*self.star));
-            cx.world.current_star = Some(uqm_rust::engine::StarId(0));
+            cx.world.current_star = Some(uqm_engine::StarId(0));
         });
-        let mut next = uqm_rust::engine::world::generation::SolarSys::new(
-            &uqm_rust::planets::tables::PLANET_ARRAY,
+        let mut next = uqm_engine::world::generation::SolarSys::new(
+            &uqm_modes::planets::tables::PLANET_ARRAY,
             self.star[0].star_type,
             self.star[0].index,
             std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),
@@ -144,7 +145,7 @@ impl SuppliedGenerators {
 
     fn select_info(&mut self, info: &SystemInfo) {
         self.state.sys.info = *info;
-        let Some(index) = uqm_rust::planets::tables::PLANET_ARRAY
+        let Some(index) = uqm_modes::planets::tables::PLANET_ARRAY
             .iter()
             .zip(0u8..)
             .find_map(|(frame, index)| {
@@ -289,7 +290,7 @@ impl DefaultOps for SuppliedGenerators {
         let rng = {
             self.state.sys.rng.reseed(seed);
             assert!(crate::invoke_generation(&mut self.state, |system, host| {
-                uqm_rust::planets::generate::generator(0).generate_planets(system, host)
+                uqm_modes::planets::generate::generator(0).generate_planets(system, host)
             }));
             self.state.sys.rng.seed()
         };
@@ -311,7 +312,7 @@ impl DefaultOps for SuppliedGenerators {
         let rng = {
             self.state.sys.rng.reseed(seed);
             assert!(crate::invoke_generation(&mut self.state, |system, host| {
-                uqm_rust::planets::generate::generator(0).generate_moons(system, 0, host)
+                uqm_modes::planets::generate::generator(0).generate_moons(system, 0, host)
             }));
             self.state.sys.rng.seed()
         };
@@ -334,8 +335,8 @@ impl DefaultOps for SuppliedGenerators {
     ) -> (u16, u32) {
         self.select_info(info);
         let count = crate::invoke_generation(&mut self.state, |system, host| {
-            use uqm_rust::planets::generate::{default, generator};
-            let body = uqm_rust::planets::generate::special::Body::Planet(0);
+            use uqm_modes::planets::generate::{default, generator};
+            let body = uqm_modes::planets::generate::special::Body::Planet(0);
             match kind {
                 NodeKind::Minerals => {
                     generator(0).generate_minerals(system, body, which, node, host)
@@ -411,7 +412,7 @@ fn check_fixture(name: &str, text: &str) {
 #[test]
 fn supplied_views_reproduce_the_c_fixtures() {
     battle_context::run(|_| {
-        let table = uqm_rust::planets::tables::PLANET_ARRAY.as_slice();
+        let table = uqm_modes::planets::tables::PLANET_ARRAY.as_slice();
         let mut exports = SuppliedGenerators::new();
         let base = table.as_ptr() as usize;
         gravity_and_random_locations_agree();
@@ -439,8 +440,8 @@ fn supplied_views_reproduce_the_c_fixtures() {
         assert!(crate::invoke_generation(
             &mut exports.state,
             |system, host| {
-                let generator = uqm_rust::planets::generate::generator(0);
-                let body = uqm_rust::planets::generate::special::Body::Planet(0);
+                let generator = uqm_modes::planets::generate::generator(0);
+                let body = uqm_modes::planets::generate::special::Body::Planet(0);
                 generator.pickup_minerals(system, body, 0, host)
                     && generator.pickup_life(system, body, 0, host)
             }
@@ -526,7 +527,7 @@ fn render_plan_resources(table: &[PlanetFrame]) -> String {
 /// field for field, including their resource names.
 #[test]
 fn plandata_tables_equal_the_c_originals() {
-    use uqm_rust::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY, STARMAP_ARRAY};
+    use uqm_modes::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY, STARMAP_ARRAY};
     let stars = &STARMAP_ARRAY;
     let frames = &PLANET_ARRAY;
     let elements = &ELEMENT_ARRAY;
@@ -554,17 +555,17 @@ impl Drop for SuppliedGenerators {
 fn invoke_generation<R>(
     solar: &mut SolarSystem,
     run: impl FnOnce(
-        &mut uqm_rust::engine::world::generation::SolarSys<'_>,
-        &mut dyn uqm_rust::planets::generate::SiteHost,
+        &mut uqm_engine::world::generation::SolarSys<'_>,
+        &mut dyn uqm_modes::planets::generate::SiteHost,
     ) -> R,
 ) -> R {
     {
         crate::battle_context::with(|cx| {
-            let mut observer = uqm_rust::engine::observe::Unobserved;
-            let mut io = uqm_rust::engine::observe::Io {
+            let mut observer = uqm_engine::observe::Unobserved;
+            let mut io = uqm_engine::observe::Io {
                 observer: &mut observer,
             };
-            uqm_rust::planets::solarsys::site::dispatch::invoke(
+            uqm_modes::planets::solarsys::site::dispatch::invoke(
                 cx,
                 &mut io,
                 solar,
@@ -580,7 +581,7 @@ type GenerationData = (
     [PlanetDesc; 16],
     [PlanetDesc; 4],
     SystemInfo,
-    [Option<uqm_rust::graphics::drawable::FrameId>; 6],
+    [Option<uqm_engine::graphics::drawable::FrameId>; 6],
     Option<usize>,
 );
 

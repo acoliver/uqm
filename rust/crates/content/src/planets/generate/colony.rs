@@ -4,16 +4,16 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`. Story flags:
 //! `COLONY_GRPOFFS0` (32-bit group reference).
 
-use crate::engine::world::planet::PlanetDesc;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::special::{
     self, Body, FleetGroups, Story, EARTH_ATMOSPHERE, URQUAN_SHIP, WATER_WORLD,
 };
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::PlanetDesc;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
 
 /// `GenerateColony_initNpcs`.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
@@ -83,7 +83,7 @@ pub fn generate_orbital(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

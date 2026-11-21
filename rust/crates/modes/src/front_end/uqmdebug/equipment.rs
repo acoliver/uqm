@@ -1,7 +1,6 @@
 //! Typed debug equipment changes, independent of rendering and live publication.
 
 use super::*;
-use crate::engine::{world::SisState, StoryKey, World};
 use crate::planet_side::hazards::HazardKind;
 use crate::starbase::ids::{
     IP_SHIP_THRUST_INCREMENT, IP_SHIP_TURN_DECREMENT, IP_SHIP_TURN_WAIT, MAX_LANDERS,
@@ -11,6 +10,7 @@ use crate::starbase::shipyard::CREW_POD_CAPACITY;
 use crate::starbase::sis_modules::{
     ModuleType, FUEL_RESERVE, FUEL_TANK_CAPACITY, HEFUEL_TANK_CAPACITY,
 };
+use uqm_engine::{world::SisState, StoryKey, World};
 
 const FUSION_THRUSTER: u8 = ModuleType::FusionThruster as u8;
 const TURNING_JETS: u8 = ModuleType::TurningJets as u8;
@@ -96,7 +96,7 @@ pub(super) fn equip_flagship(world: &mut World) -> bool {
 
 pub(super) fn update_flight(
     sis: &SisState,
-    system: &mut crate::engine::world::generation::SolarFlight,
+    system: &mut uqm_engine::world::generation::SolarFlight,
 ) {
     system.max_ship_speed = 5 * IP_SHIP_THRUST_INCREMENT;
     for i in 0..NUM_DRIVE_SLOTS {
@@ -113,7 +113,7 @@ pub(super) fn update_flight(
     }
 }
 
-pub(super) fn clear_escorts(world: &mut crate::engine::World) {
+pub(super) fn clear_escorts(world: &mut uqm_engine::World) {
     let mut ships = world.built_ships();
     let mut next = ships.head();
     while let Some(id) = next {
@@ -151,10 +151,10 @@ pub(super) fn activate_fleets(world: &mut World) {
 #[cfg(test)]
 mod equipment_tests {
     use super::*;
-    use crate::engine::{StoryKey, World};
+    use uqm_engine::{StoryKey, World};
     fn world() -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world.set_activity(ActivityKind::InInterplanetary as u16);
         world
     }
@@ -196,7 +196,7 @@ mod equipment_tests {
     #[test]
     fn flight_updates_preserve_the_original_boolean_drive_subscript() {
         let mut world = world();
-        let mut system = crate::engine::world::generation::SolarFlight::default();
+        let mut system = uqm_engine::world::generation::SolarFlight::default();
         world.data.flagship.drive_slots.fill(0);
         world.data.flagship.drive_slots[2] = 255;
         world.data.flagship.jet_slots.fill(255);

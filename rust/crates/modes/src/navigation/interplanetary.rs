@@ -2,8 +2,8 @@
 
 use crate::battle::context_access::navigation::NavigationOps;
 use crate::battle::sounds::engine::unlink;
-use crate::engine::StoryKey;
 pub use live::{do_missions, notify_others};
+use uqm_engine::StoryKey;
 
 const MAX_ZOOM: i16 = 128 << 6;
 const MIN_ZOOM: i16 = MAX_ZOOM >> 3;
@@ -26,36 +26,36 @@ pub mod live {
         APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DISAPPEARING, FINITE_LIFE,
         IGNORE_VELOCITY, NONSOLID, NORMAL_LIFE,
     };
-    use crate::engine::battle::EMPTY_PRIMITIVE;
-    use crate::engine::battle::STAMP_PRIMITIVE;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::graphics::geometry::Point;
-    use crate::engine::math::battle_types::{FACING_SHIFT, HALF_CIRCLE};
-    use crate::engine::save::START_ENCOUNTER;
-    use crate::engine::species::ship::URQUAN_DRONE_SHIP;
-    use crate::engine::world::queues::IpGroup as IP_GROUP;
-    use crate::engine::world::queues::{MAX_REVOLUTIONS, ORBIT_RADIUS, STATION_RADIUS};
-    use crate::math::arctan as ARCTAN;
-    use crate::math::{cosine, sine};
     use crate::navigation::{get, set};
     use crate::planets::solar_coords::SolarCoordinates;
+    use uqm_engine::battle::EMPTY_PRIMITIVE;
+    use uqm_engine::battle::STAMP_PRIMITIVE;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::arctan as ARCTAN;
+    use uqm_engine::math::battle_types::{FACING_SHIFT, HALF_CIRCLE};
+    use uqm_engine::math::{cosine, sine};
+    use uqm_engine::save::START_ENCOUNTER;
+    use uqm_engine::species::ship::URQUAN_DRONE_SHIP;
+    use uqm_engine::world::queues::IpGroup as IP_GROUP;
+    use uqm_engine::world::queues::{MAX_REVOLUTIONS, ORBIT_RADIUS, STATION_RADIUS};
 
     const IP_SPEED: [i16; 24] = [
         80, 54, 48, 80, 80, 70, 96, 80, 56, 60, 42, 60, 80, 40, 50, 54, 120, 36, 60, 80, 72, 60,
         60, 180,
     ];
 
-    fn radius(cx: &crate::engine::battle::Cx<'_>, location: u8) -> i16 {
+    fn radius(cx: &uqm_engine::battle::Cx<'_>, location: u8) -> i16 {
         if location == 0 {
             cx.solar_geometry().zoom_radius
         } else {
             MAX_ZOOM
         }
     }
-    fn flagship_location(cx: &crate::engine::battle::Cx<'_>) -> u8 {
+    fn flagship_location(cx: &uqm_engine::battle::Cx<'_>) -> u8 {
         cx.flagship_location()
     }
-    fn world(cx: &crate::engine::battle::Cx<'_>, point: Point) -> Point {
+    fn world(cx: &uqm_engine::battle::Cx<'_>, point: Point) -> Point {
         let (screen_width, screen_height) = cx.screen_dimensions();
         let width = (screen_width - 64) << 5;
         let height = screen_height << 5;
@@ -64,10 +64,10 @@ pub mod live {
             y: (((point.y as i32) << 2) + (height >> 1) - (height >> 4)) as i16,
         }
     }
-    fn display(cx: &crate::engine::battle::Cx<'_>, point: Point, radius: i16) -> Point {
+    fn display(cx: &uqm_engine::battle::Cx<'_>, point: Point, radius: i16) -> Point {
         SolarCoordinates::new(cx.screen_dimensions()).to_display(point, radius)
     }
-    pub fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
+    pub fn notify_others(cx: &mut uqm_engine::battle::Cx<'_>, race: u16, target: u8) {
         let mut next = cx.world.ip_groups_ref().head();
         while let Some(id) = next {
             let mut group = *cx.world.ip_groups_ref().get(id);
@@ -102,8 +102,8 @@ pub mod live {
     }
 
     fn pursuit_target(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        element: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        element: uqm_engine::battle::ElementId,
         location: u8,
         flagship: u8,
         mut task: u8,
@@ -153,8 +153,8 @@ pub mod live {
     }
 
     pub fn group_preprocess(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        element: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        element: uqm_engine::battle::ElementId,
     ) {
         begin_group_step(cx, element);
         let mut location = cx.ip_group_mut(element).sys_loc;
@@ -358,8 +358,8 @@ pub mod live {
     }
 
     fn begin_group_step(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        element: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        element: uqm_engine::battle::ElementId,
     ) {
         cx.element_mut(element).flags &= !(DISAPPEARING | NONSOLID);
         let life = cx.element(element).life.wrapping_add(1);
@@ -367,8 +367,8 @@ pub mod live {
     }
 
     fn reform_group(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        element: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        element: uqm_engine::battle::ElementId,
     ) -> u8 {
         let mut task = cx.ip_group_mut(element).task;
         if task & IP_GROUP::REFORM_GROUP != 0 {
@@ -394,9 +394,9 @@ pub mod live {
     }
 
     fn collide_flagship(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        first: crate::engine::battle::ElementId,
-        second: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        first: uqm_engine::battle::ElementId,
+        second: uqm_engine::battle::ElementId,
     ) {
         if cx.element(second).flags & COLLISION == 0 {
             cx.element_mut(first).flags |= COLLISION | NONSOLID;
@@ -406,10 +406,10 @@ pub mod live {
         }
     }
     pub fn flagship_collision(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        first: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        first: uqm_engine::battle::ElementId,
         _: &mut Point,
-        second: crate::engine::battle::ElementId,
+        second: uqm_engine::battle::ElementId,
         _: &mut Point,
     ) {
         if cx.world.activity() & START_ENCOUNTER == 0 {
@@ -417,16 +417,16 @@ pub mod live {
         }
     }
     pub fn group_collision(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        first: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        first: uqm_engine::battle::ElementId,
         _: &mut Point,
-        second: crate::engine::battle::ElementId,
+        second: uqm_engine::battle::ElementId,
         _: &mut Point,
     ) {
         if cx.world.activity() & START_ENCOUNTER != 0 {
             return;
         }
-        if cx.parent(second) != crate::engine::battle::Parent::None {
+        if cx.parent(second) != uqm_engine::battle::Parent::None {
             let state = cx.element(second);
             if cx.element(first).flags & COLLISION != 0
                 || (state.current.location.x == state.next.location.x
@@ -452,8 +452,8 @@ pub mod live {
         }
     }
     fn spawn_group(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        group: uqm_engine::battle::link_queue::LinkId<uqm_engine::world::queues::Group>,
     ) {
         let Some(element) = cx.alloc_element() else {
             return;
@@ -481,8 +481,8 @@ pub mod live {
         cx.put(element);
     }
     pub fn flagship_preprocess(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        element: crate::engine::battle::ElementId,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        element: uqm_engine::battle::ElementId,
     ) {
         let wait = cx.element(element).thrust.wrapping_sub(1);
         cx.element_mut(element).thrust = wait;
@@ -526,7 +526,7 @@ pub mod live {
         }
         cx.element_mut(element).flags |= CHANGING;
     }
-    fn spawn_flagship(cx: &mut crate::engine::battle::Cx<'_>) {
+    fn spawn_flagship(cx: &mut uqm_engine::battle::Cx<'_>) {
         let Some(element) = cx.alloc_element() else {
             return;
         };
@@ -551,7 +551,7 @@ pub mod live {
 
     /// # Safety
     /// The live solar system and display/group queues must be initialized on the game thread.
-    pub fn do_missions(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub fn do_missions(cx: &mut uqm_engine::battle::Cx<'_>) {
         spawn_flagship(cx);
         if cx.world.encounter_race >= 0 {
             notify_others(cx, cx.world.encounter_race as u16, 0);
@@ -569,7 +569,7 @@ pub mod live {
     #[cfg(test)]
     mod pursuit_tests {
         use super::*;
-        use crate::engine::{
+        use uqm_engine::{
             battle::{Battle, Cx, ElementId},
             Game,
         };
@@ -711,15 +711,15 @@ mod tests {
 
     #[test]
     fn real_interplanetary_hooks_compile_in_the_library_test_target() {
-        let _: fn(&mut crate::engine::battle::Cx<'_>, u16, u8) = live::notify_others;
-        let _: fn(&mut crate::engine::battle::Cx<'_>) = live::do_missions;
-        let _: fn(&mut crate::engine::battle::Cx<'_>, crate::engine::battle::ElementId) =
+        let _: fn(&mut uqm_engine::battle::Cx<'_>, u16, u8) = live::notify_others;
+        let _: fn(&mut uqm_engine::battle::Cx<'_>) = live::do_missions;
+        let _: fn(&mut uqm_engine::battle::Cx<'_>, uqm_engine::battle::ElementId) =
             live::flagship_preprocess;
     }
 
     #[test]
     fn broadcasts_update_only_the_matching_race_and_preserve_reforming_counters() {
-        use crate::engine::{
+        use uqm_engine::{
             battle::{Battle, Cx},
             world::queues::IpGroup,
             Game,

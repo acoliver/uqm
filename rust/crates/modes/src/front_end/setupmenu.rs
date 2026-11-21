@@ -1,7 +1,7 @@
 //! Owned setup session and persistent options, ported from uqm/setupmenu.c.
-use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::ui::getchar::{edit_text, TextEntryCallbacks, TextEntryView};
 use std::ffi::{CStr, CString};
+use uqm_engine::{battle::Cx, input::InputSession, observe::Io};
 use uqm_engine::{
     configuration::runtime::RuntimeSettings,
     input_port::{sdl_input, templates},

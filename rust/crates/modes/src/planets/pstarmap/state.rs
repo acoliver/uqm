@@ -1,5 +1,5 @@
 use super::*;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
 
 pub(super) struct MapState {
     pub cursor: Point,
@@ -97,10 +97,10 @@ impl MapState {
         }
     }
 
-    pub fn snap_cursor(&mut self, world: &World) -> Option<crate::engine::StarId> {
+    pub fn snap_cursor(&mut self, world: &World) -> Option<uqm_engine::StarId> {
         let screen = self.screen_cursor();
         let mut last = None;
-        let mut best: Option<crate::engine::StarId> = None;
+        let mut best: Option<uqm_engine::StarId> = None;
         while let Some(id) =
             super::super::starmap::find_star_id(world, world.catalog(), last, self.cursor, 75, 75)
         {

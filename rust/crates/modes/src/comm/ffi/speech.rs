@@ -2,14 +2,14 @@
 
 use crate::comm::talk_segue;
 use crate::comm::Comm;
-use crate::engine::{
+use uqm_engine::{
     battle::Cx,
     observe::{CheckpointView, InputView, Io},
 };
 
 pub(super) fn run_pending(
     comm: &mut Comm,
-    _input: &crate::engine::input::InputSession,
+    _input: &uqm_engine::input::InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
 ) -> bool {
@@ -50,7 +50,7 @@ pub(super) fn run_pending(
                 .stop
             || comm.admit_observer(io, &InputView::ClosingSpeech, cx).stop;
         if semantic_skip {
-            let _ = crate::sound::trackplayer::jump_track(0);
+            let _ = uqm_engine::sound::trackplayer::jump_track(0);
         }
 
         // Run talk segue via Rust DoInput — NO Rust lock held

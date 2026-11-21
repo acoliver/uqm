@@ -2,15 +2,15 @@
 //! the story flags they read, the way several of them re-place planet 0, and
 //! the ship-group bookkeeping of the systems with a fixed fleet.
 
-use crate::engine::math::battle_types::{arctan, cosine, sine};
-use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
-use crate::engine::World;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::{EARTH_RADIUS, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, Npcs};
+use uqm_engine::math::battle_types::{arctan, cosine, sine};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
+use uqm_engine::World;
 
 /// `planets.h`/`plandata.h` values the generators use.
 pub const RAINBOW_WORLD: u8 = 32;
@@ -34,7 +34,7 @@ pub const ZOQFOTPIK_SHIP: u8 = 19;
 /// The world a hook is asked about, as `matchWorld (system, world, planetI,
 /// moonI)` tests it: `matchWorld (.., p, MATCH_PLANET)` is `Planet(p)` and
 /// `matchWorld (.., p, m)` is `Moon { planet: p, moon: m }`.
-pub use crate::engine::world::generation::Body;
+pub use uqm_engine::world::generation::Body;
 
 /// The story flags and 32-bit group references in the game state.
 pub trait Story {
@@ -48,7 +48,7 @@ pub trait Story {
     fn set_word(&mut self, name: StoryKey, value: u32);
 }
 
-impl Story for crate::engine::world::story::StoryState {
+impl Story for uqm_engine::world::story::StoryState {
     fn flag(&self, key: StoryKey) -> u32 {
         u32::from(self.get_state(key.start(), key.end()))
     }
@@ -190,7 +190,7 @@ pub fn planets_then(
 mod tests;
 
 pub fn with_orbit<R>(
-    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    system: &mut uqm_engine::world::generation::SolarSys<'_>,
     body: Body,
     run: impl FnOnce(&mut Orbit<'_>) -> R,
 ) -> R {
@@ -213,7 +213,7 @@ pub fn with_orbit<R>(
 }
 
 pub fn default_orbital(
-    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    system: &mut uqm_engine::world::generation::SolarSys<'_>,
     body: Body,
     site: &mut (impl super::host::PlanetSite + ?Sized),
 ) -> bool {

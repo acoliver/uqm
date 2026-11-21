@@ -23,7 +23,7 @@ fn offer(
 
 static CHOSEN: AtomicU16 = AtomicU16::new(0);
 
-fn remember_choice(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, reference: u16) {
+fn remember_choice(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, reference: u16) {
     CHOSEN.store(reference, Ordering::SeqCst);
 }
 
@@ -539,15 +539,15 @@ fn the_speech_graphics_and_subtitle_display_refresh_on_the_real_renderer() {
     comm.subtitle_display_mut().check_subtitle(current.as_deref());
     crate::comm::subtitle_display::SubtitleDisplay::redraw(
         comm,
-        crate::engine::input::InputSession::default().preferences().subtitles != 0,
+        uqm_engine::input::InputSession::default().preferences().subtitles != 0,
     );
     rust_clear_subtitles(comm);
     crate::comm::subtitle_display::SubtitleDisplay::redraw(
         comm,
-        crate::engine::input::InputSession::default().preferences().subtitles != 0,
+        uqm_engine::input::InputSession::default().preferences().subtitles != 0,
     );
     offer(comm, "Choice", 1, None);
-    comm.refresh_response_ui(crate::engine::World::new().activity());
+    comm.refresh_response_ui(uqm_engine::World::new().activity());
     assert_eq!(
         comm.responses().count() as c_int,
         1,
@@ -562,16 +562,16 @@ fn the_conversation_summary_pages_through_what_was_said() {
     let comm = &mut owner;
     assert!(comm.init().is_ok());
     let line = CString::new("Something the alien said").unwrap();
-    let mut game = crate::engine::Game::new();
-    let mut battle = crate::engine::battle::Battle::new();
-    let mut cx = crate::engine::battle::Cx::new(
+    let mut game = uqm_engine::Game::new();
+    let mut battle = uqm_engine::battle::Battle::new();
+    let mut cx = uqm_engine::battle::Cx::new(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
-    let mut observer = crate::engine::observe::Unobserved;
-    let mut io = crate::engine::observe::Io {
+    let mut observer = uqm_engine::observe::Unobserved;
+    let mut io = uqm_engine::observe::Io {
         observer: &mut observer,
     };
     assert_eq!(
@@ -589,7 +589,7 @@ fn the_conversation_summary_pages_through_what_was_said() {
 #[test]
 fn state_accessors_use_safe_rust_signatures() {
     let _: fn(&Comm) -> Option<&str> = Comm::current_subtitle;
-    let _: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16 = rust_execute_response;
+    let _: fn(&mut Comm, &mut uqm_engine::battle::Cx<'_>) -> u16 = rust_execute_response;
     let _: fn(&mut Comm) = rust_init_speech_graphics;
     let _: fn(&mut Comm) = rust_update_speech_graphics;
     let _: fn(&mut Comm) = rust_clear_subtitles;

@@ -5,15 +5,15 @@ use super::flight::*;
 use super::site::dispatch::invoke;
 use super::*;
 use crate::comm::locdata::CPoint;
-use crate::engine::world::generation::Body;
-use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World};
-use crate::graphics::{context::BatchGuard, context::ContextLease, drawable::ContextFrame};
 use crate::planets::devices::{devices_menu, SolarVisit};
 use crate::planets::generate::calc::preview_body;
 use crate::planets::{
     solar_coords::star_seed,
     solar_system::{SolarSystem, SystemLocation},
 };
+use uqm_engine::graphics::{context::BatchGuard, context::ContextLease, drawable::ContextFrame};
+use uqm_engine::world::generation::Body;
+use uqm_engine::{battle::Cx, observe::Io, Kernel, StoryKey, World};
 
 // globdata.h activity flags occupy the high byte of ACTIVITY.
 const START_ENCOUNTER: u16 = 1 << 10;
@@ -45,7 +45,6 @@ const KEY_MENU_CANCEL: usize = 10;
 const FADE_ALL_TO_COLOR: u32 = 253;
 
 use super::planet_info::{get_planet_info, put_planet_info};
-use crate::engine::time::counter_abi::get_time_counter;
 use crate::front_end::gameopt::runtime::game_options;
 use crate::navigation::interplanetary::do_missions;
 use crate::planets::cargo::live::cargo_menu;
@@ -53,10 +52,11 @@ use crate::planets::orbit::live::{free_planet, planet_orbit_menu};
 use crate::planets::pstarmap::star_map;
 use crate::planets::roster::live::roster_menu;
 use crate::ui::settings::stop_music;
+use uqm_engine::time::counter_abi::get_time_counter;
 
 #[inline]
-const fn rgb15(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
-    crate::graphics::geometry::Color {
+const fn rgb15(r: u8, g: u8, b: u8) -> uqm_engine::graphics::geometry::Color {
+    uqm_engine::graphics::geometry::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),
         b: (b << 3) | (b >> 2),
@@ -65,15 +65,15 @@ const fn rgb15(r: u8, g: u8, b: u8) -> crate::graphics::geometry::Color {
 }
 
 #[inline]
-fn c_point(point: CPoint) -> crate::graphics::geometry::Point {
-    crate::graphics::geometry::Point {
+fn c_point(point: CPoint) -> uqm_engine::graphics::geometry::Point {
+    uqm_engine::graphics::geometry::Point {
         x: point.x,
         y: point.y,
     }
 }
 
 #[inline]
-fn saved_point(point: crate::graphics::geometry::Point) -> CPoint {
+fn saved_point(point: uqm_engine::graphics::geometry::Point) -> CPoint {
     CPoint {
         x: point.x,
         y: point.y,
@@ -116,8 +116,8 @@ pub(super) fn init_solar_sys_sis_characteristics(world: &World, solar: &mut Sola
     }
 }
 
-fn temperature_color(temperature: i16) -> crate::graphics::geometry::Color {
-    const TEMP_COLORS: [crate::graphics::geometry::Color; 5] = [
+fn temperature_color(temperature: i16) -> uqm_engine::graphics::geometry::Color {
+    const TEMP_COLORS: [uqm_engine::graphics::geometry::Color; 5] = [
         rgb15(0x00, 0x00, 0x0e),
         rgb15(0x00, 0x06, 0x08),
         rgb15(0x00, 0x0b, 0x00),
@@ -141,7 +141,7 @@ pub(super) fn load_solar_sys(
     let sun_type = (star.star_type & 0x18) >> 3;
     solar.sys.sun.rand_seed = solar.sys.rng.next_random();
     solar.sys.sun.data_index = sun_type;
-    solar.sys.sun.location = crate::graphics::geometry::Point { x: 0, y: 0 };
+    solar.sys.sun.location = uqm_engine::graphics::geometry::Point { x: 0, y: 0 };
     solar.sys.sun.image.origin = solar.sys.sun.location;
     solar.sys.sun.image.frame =
         resources::frame(&resources::retained(cx.kernel).sun, u16::from(sun_type));
@@ -156,7 +156,7 @@ pub(super) fn load_solar_sys(
     for i in 0..solar.sys.planets.len() {
         solar.sys.planets[i].image.origin = solar.sys.planets[i].location;
         if i >= usize::from(solar.sys.sun.num_planets) {
-            solar.sys.planets[i].image.frame = crate::graphics::drawable::FrameId::NULL;
+            solar.sys.planets[i].image.frame = uqm_engine::graphics::drawable::FrameId::NULL;
         } else {
             let info = invoke(cx, io, solar, |_, system, _| {
                 preview_body(system, Body::Planet(i as u8))
@@ -251,10 +251,10 @@ pub(super) fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, next_act
     do_missions(cx);
     check_intersect(cx.world, cx.kernel, solar);
     solar.in_ip_flight = true;
-    if !crate::sound::music::plr_playing_current()
+    if !uqm_engine::sound::music::plr_playing_current()
         && (cx.kernel.last_activity != CHECK_LOAD || next_activity != 0)
     {
-        crate::sound::music::remember_music(
+        uqm_engine::sound::music::remember_music(
             resources::retained(cx.kernel).music_request(),
             true,
             1,
@@ -388,12 +388,12 @@ fn prepare_solar_sys(
     solar: &mut SolarSystem,
     next_activity: u16,
 ) -> SolarSystemStart {
-    crate::engine::kernel::solar_resources::SolarResources::retain(
+    uqm_engine::kernel::solar_resources::SolarResources::retain(
         &mut cx.kernel.solar_presentation.assets,
     );
     if cx.kernel.lander_resources.is_none() {
         cx.kernel.lander_resources = Some(
-            crate::engine::kernel::lander_resources::LanderResources::load()
+            uqm_engine::kernel::lander_resources::LanderResources::load()
                 .unwrap_or_else(|key| panic!("missing lander resource {key}")),
         );
     }
@@ -478,7 +478,7 @@ pub(super) fn end_interplanetary(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut S
 
 pub(super) fn closest_planet_interplanetary(
     solar: &SolarSystem,
-    point: crate::graphics::geometry::Point,
+    point: uqm_engine::graphics::geometry::Point,
 ) -> Body {
     let mut best_distance_squared = u32::MAX;
     let mut best_planet = None;
@@ -550,16 +550,13 @@ pub fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     uninit_solar_sys(cx, io, &mut solar);
     cx.solar_frame = None;
     io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::Solar(None));
+        .checkpoint(&uqm_engine::observe::CheckpointView::Solar(None));
 }
 
-fn prepare_explore_solar_sys(
-    world: &mut World,
-    screen: (i32, i32),
-) -> crate::engine::world::StarId {
+fn prepare_explore_solar_sys(world: &mut World, screen: (i32, i32)) -> uqm_engine::world::StarId {
     let (log_units_x, log_units_y) = hyperspace_unit_factors(screen);
     if world.current_star.is_none() {
-        let universe = crate::graphics::geometry::Point {
+        let universe = uqm_engine::graphics::geometry::Point {
             x: ((world.data.flagship.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as _,
             y: (9999 - (world.data.flagship.log_y * 625 + (log_units_y >> 1)) / log_units_y) as _,
         };

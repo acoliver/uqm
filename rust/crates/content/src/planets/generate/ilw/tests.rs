@@ -2,10 +2,10 @@
 //! a recording report. The contact flow is `home_contact`'s and tested there.
 
 use super::{pickup_energy, set_home_climate};
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::planet::SystemInfo;
 use crate::planets::generate::special::Body;
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::planet::SystemInfo;
 
 #[test]
 fn the_home_world_alone_gets_the_fixed_climate() {

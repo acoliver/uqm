@@ -1,14 +1,14 @@
 //! Fixed-width collision response on borrowed live ABI records.
 
 use super::*;
-use crate::engine::battle::ai_constants::MAX_SHIP_MASS;
-use crate::graphics::geometry::Point;
-use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, QUADRANT, SIN_SHIFT};
-use crate::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
-use crate::math::{arctan as ARCTAN, square_root};
+use uqm_engine::battle::ai_constants::MAX_SHIP_MASS;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, OCTANT, QUADRANT, SIN_SHIFT};
+use uqm_engine::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+use uqm_engine::math::{arctan as ARCTAN, square_root};
 
 fn sine(angle: i32, magnitude: i32) -> i16 {
-    let value = crate::math::SINE_TABLE[(angle & (FULL_CIRCLE as i32 - 1)) as usize];
+    let value = uqm_engine::math::SINE_TABLE[(angle & (FULL_CIRCLE as i32 - 1)) as usize];
     ((i64::from(value) * i64::from(magnitude)) >> SIN_SHIFT) as i16
 }
 

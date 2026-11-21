@@ -1,17 +1,16 @@
 #![cfg(feature = "debug-process")]
+#![forbid(unsafe_code)]
 
 use std::{borrow::Cow, io};
-use uqm_rust::{
-    engine::{
-        battle::{Battle, Cx},
-        observe::{Io, Unobserved},
-        world::{CStarDesc, NUM_SOLAR_SYSTEMS},
-        Game, StarId,
-    },
-    front_end::uqmdebug::{dump_universe, tally_resources},
-    planets::solarsys::site::dispatch::DebugGeneration,
-    strings::owned_table::LoadedTextTable,
+use uqm_engine::strings::owned_table::LoadedTextTable;
+use uqm_engine::{
+    battle::{Battle, Cx},
+    observe::{Io, Unobserved},
+    world::{CStarDesc, NUM_SOLAR_SYSTEMS},
+    Game, StarId,
 };
+use uqm_modes::front_end::uqmdebug::{dump_universe, tally_resources};
+use uqm_modes::planets::solarsys::site::dispatch::DebugGeneration;
 
 struct Broken;
 impl io::Write for Broken {
@@ -27,12 +26,12 @@ impl io::Write for Broken {
 #[serial_test::serial]
 fn full_diagnostics_use_the_live_site_and_restore_the_unpublished_campaign() {
     let mut game = Game::new();
-    uqm_rust::state::ffi::rust_init_game_state(&mut game.world);
+    uqm_engine::state::ffi::rust_init_game_state(&mut game.world);
     game.kernel
         .install_game_text(LoadedTextTable::fixture(vec![b"Name\0".to_vec(); 600]));
-    let mut catalog = uqm_rust::planets::tables::STARMAP_ARRAY;
+    let mut catalog = uqm_modes::planets::tables::STARMAP_ARRAY;
     catalog[..NUM_SOLAR_SYSTEMS].fill(CStarDesc {
-        star_pt: uqm_rust::graphics::geometry::Point { x: 1000, y: 2000 },
+        star_pt: uqm_engine::graphics::geometry::Point { x: 1000, y: 2000 },
         star_type: 0,
         index: 0,
         prefix: 0,

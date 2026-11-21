@@ -1,5 +1,5 @@
 use super::picker::{PickerAction, PickerState, MAX_SAVED_GAMES};
-use crate::engine::save::summary_record::SummaryDesc;
+use uqm_engine::save::summary_record::SummaryDesc;
 
 #[test]
 fn independent_pickers_use_prepared_summaries_and_remember_only_the_supplied_slot() {

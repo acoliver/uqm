@@ -6,14 +6,12 @@
 //! `pickupEnergy`. Everything else is the default. Story flags: none; the
 //! conversation sequence is a host effect.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, Body, WATER_WORLD};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 /// `GLOBAL_FLAGS_AND_DATA` value that marks the Yehat conversation as a
 /// capital contact: `1 << 7`.
@@ -48,13 +46,13 @@ pub trait YehatSite {
     /// `GetGroupInfo (GROUPS_RANDOM, GROUP_LOAD_IP)`.
     fn load_ip_groups(&mut self);
     /// `LoadStdLanderFont`, the ruins mask and the ruins report strings.
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>);
 }
 
 /// `GenerateYehat_generatePlanets`.
 pub fn generate_planets(
     rng: &mut RandomContext,
-    plan_data: &[crate::engine::world::planet::PlanetFrame],
+    plan_data: &[uqm_engine::world::planet::PlanetFrame],
     star_size: u8,
     star_color: u8,
     planets: &mut [PlanetDesc],
@@ -152,7 +150,7 @@ pub fn pickup_energy(
     if body == Body::Planet(0) {
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
     }
     false
@@ -160,7 +158,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

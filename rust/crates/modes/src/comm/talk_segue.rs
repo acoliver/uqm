@@ -16,10 +16,10 @@
 use super::response::ResponseFunc;
 use super::response_ui::{refresh_responses, select_conversation_summary};
 use super::state::Comm;
-use crate::engine::input::InputSession;
-use crate::engine::observe::CheckpointView;
-use crate::engine::{battle::Cx, observe::Io, World};
 use std::ffi::c_int;
+use uqm_engine::input::InputSession;
+use uqm_engine::observe::CheckpointView;
+use uqm_engine::{battle::Cx, observe::Io, World};
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -66,19 +66,19 @@ pub(super) mod c_bridge {
     pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
     pub use crate::comm::commanim_abi::runtime::init_comm_animations;
     pub use crate::comm::commanim_abi::runtime::process_comm_animations;
-    pub use crate::sound::heart_ffi::fade_music as FadeMusic;
-    pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
-    pub use crate::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
-    pub use crate::sound::heart_ffi::fast_reverse_page as FastReverse_Page;
-    pub use crate::sound::heart_ffi::fast_reverse_smooth as FastReverse_Smooth;
-    pub use crate::sound::heart_ffi::jump_track as JumpTrack;
-    pub use crate::sound::heart_ffi::play_track as PlayTrack;
-    pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
-    #[cfg(not(test))]
-    pub use crate::sound::heart_ffi::stop_track as StopTrack;
-    use crate::sound::music::{remember_music, MusicRequest};
     use std::ffi::c_int;
     pub use uqm_engine::host as clock;
+    pub use uqm_engine::sound::heart_ffi::fade_music as FadeMusic;
+    pub use uqm_engine::sound::heart_ffi::fast_forward_page as FastForward_Page;
+    pub use uqm_engine::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
+    pub use uqm_engine::sound::heart_ffi::fast_reverse_page as FastReverse_Page;
+    pub use uqm_engine::sound::heart_ffi::fast_reverse_smooth as FastReverse_Smooth;
+    pub use uqm_engine::sound::heart_ffi::jump_track as JumpTrack;
+    pub use uqm_engine::sound::heart_ffi::play_track as PlayTrack;
+    pub use uqm_engine::sound::heart_ffi::playing_track as PlayingTrack;
+    #[cfg(not(test))]
+    pub use uqm_engine::sound::heart_ffi::stop_track as StopTrack;
+    use uqm_engine::sound::music::{remember_music, MusicRequest};
 
     pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
         input.pulsed().menu[key_index as usize]
@@ -114,7 +114,7 @@ pub(super) mod c_bridge {
     ) {
         super::super::sis_graphics::select_conversation_summary(comm, cx, io);
     }
-    pub fn call_update_comm_graphics(comm: &mut Comm, input: &crate::engine::input::InputSession) {
+    pub fn call_update_comm_graphics(comm: &mut Comm, input: &uqm_engine::input::InputSession) {
         super::do_update_animations(comm, input, false)
     }
     pub fn call_feedback_player_phrase(comm: &mut Comm, cx: &mut super::Cx<'_>) {
@@ -143,7 +143,7 @@ pub mod dinput {
         c_bridge, c_int, CheckpointView, InputSession, KEY_MENU_CANCEL, KEY_MENU_LEFT,
         KEY_MENU_RIGHT,
     };
-    use crate::engine::{battle::Cx, observe::Io};
+    use uqm_engine::{battle::Cx, observe::Io};
 
     const MENU_SOUND_NONE: u16 = 0;
     const OPT_PC: c_int = 0x02;
@@ -339,7 +339,7 @@ pub mod dinput {
             let speech = cx.kernel.using_speech;
             c_bridge::FadeMusic(
                 super::communication_background_volume(
-                    crate::sound::types::NORMAL_VOLUME as u8,
+                    uqm_engine::sound::types::NORMAL_VOLUME as u8,
                     speech,
                 ),
                 c_bridge::ONE_SECOND_TICKS as i16,
@@ -351,7 +351,7 @@ pub mod dinput {
             let speech = cx.kernel.using_speech;
             c_bridge::FadeMusic(
                 super::communication_background_volume(
-                    crate::sound::types::NORMAL_VOLUME as u8,
+                    uqm_engine::sound::types::NORMAL_VOLUME as u8,
                     speech,
                 ),
                 c_bridge::ONE_SECOND_TICKS as i16,
@@ -528,7 +528,7 @@ pub fn do_talk_segue(
     // Matches C DoTalkSegue: SleepThreadUntil(NextTime) with ONE_SECOND/60 rate.
     #[cfg(not(test))]
     {
-        crate::threading::pacing::GameThreadPacer::new(comm.animation_context()).sleep_for(14);
+        uqm_engine::threading::pacing::GameThreadPacer::new(comm.animation_context()).sleep_for(14);
         // ONE_SECOND / 60
     }
 
@@ -948,8 +948,8 @@ pub fn won_last_battle_external(world: &World) -> bool {
 #[cfg(not(test))]
 pub fn run_last_replay_bridge(
     comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     timeout: i32,
 ) {
     dinput::run_last_replay_dinput(comm, cx, io, timeout);
@@ -965,8 +965,8 @@ pub fn fade_music_to_background_bridge() {
 #[cfg(test)]
 pub fn run_last_replay_bridge(
     _comm: &mut Comm,
-    _cx: &mut crate::engine::battle::Cx<'_>,
-    _io: &mut crate::engine::observe::Io<'_>,
+    _cx: &mut uqm_engine::battle::Cx<'_>,
+    _io: &mut uqm_engine::observe::Io<'_>,
     _timeout: i32,
 ) {
 }
@@ -1119,8 +1119,9 @@ fn init_speech_graphics(comm: &mut Comm) {
 }
 
 fn set_slider_image_frame(comm: &mut Comm, index: u16) {
-    let frame = crate::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame)
-        .wrapped_frame(index);
+    let frame =
+        uqm_engine::graphics::drawable::ContextFrame::retain(comm.presentation.activity_frame)
+            .wrapped_frame(index);
     super::oscill_abi::runtime::set_slider_image(comm, frame);
 }
 
@@ -1136,7 +1137,7 @@ fn set_slider_image(comm: &mut Comm, img: SliderImage) {
     }
 }
 
-fn update_animations(_input: &crate::engine::input::InputSession, comm: &mut Comm, seeking: bool) {
+fn update_animations(_input: &uqm_engine::input::InputSession, comm: &mut Comm, seeking: bool) {
     #[cfg(not(test))]
     {
         let _ = comm;
@@ -1146,7 +1147,7 @@ fn update_animations(_input: &crate::engine::input::InputSession, comm: &mut Com
     {
         if !seeking {
             let now = comm.animation_runtime.last_time.wrapping_add(1);
-            super::commanim_abi::runtime::advance_at(comm, now, &mut crate::math::random);
+            super::commanim_abi::runtime::advance_at(comm, now, &mut uqm_engine::math::random);
         }
     }
 }
@@ -1154,11 +1155,7 @@ fn update_animations(_input: &crate::engine::input::InputSession, comm: &mut Com
 /// Ported from c_UpdateAnimations — processes communication animations with
 /// context switching, batched graphics, and subtitle redraw.
 ///
-fn do_update_animations(
-    comm: &mut Comm,
-    input: &crate::engine::input::InputSession,
-    seeking: bool,
-) {
+fn do_update_animations(comm: &mut Comm, input: &uqm_engine::input::InputSession, seeking: bool) {
     comm.apply_phrase_events();
     let do_clear = c_bridge::clear_subtitles_pending(comm);
     let context = comm.animation_context();
@@ -1176,12 +1173,13 @@ fn do_update_animations(
 
 /// Ported from c_RunCommAnimFrame — one animation frame + sleep.
 ///
-fn do_run_comm_anim_frame(comm: &mut Comm, input: &crate::engine::input::InputSession) {
+fn do_run_comm_anim_frame(comm: &mut Comm, input: &uqm_engine::input::InputSession) {
     do_update_animations(comm, input, false);
-    crate::threading::pacing::GameThreadPacer::new(comm.animation_context()).sleep_for(840 / 40);
+    uqm_engine::threading::pacing::GameThreadPacer::new(comm.animation_context())
+        .sleep_for(840 / 40);
 }
 
-fn update_comm_graphics(_input: &crate::engine::input::InputSession, comm: &mut Comm) {
+fn update_comm_graphics(_input: &uqm_engine::input::InputSession, comm: &mut Comm) {
     #[cfg(not(test))]
     {
         let _ = comm;
@@ -1228,7 +1226,7 @@ fn running_talking_anim(comm: &Comm) -> bool {
     comm.data.definition.alien_talk_desc.anim_flags & 8 != 0
 }
 
-fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, comm: &mut Comm) {
+fn run_comm_anim_frame(_input: &uqm_engine::input::InputSession, comm: &mut Comm) {
     #[cfg(not(test))]
     {
         let _ = comm;
@@ -1238,7 +1236,7 @@ fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, comm: &mut C
     {
         // Advance animations by one tick
         let now = comm.animation_runtime.last_time.wrapping_add(1);
-        super::commanim_abi::runtime::advance_at(comm, now, &mut crate::math::random);
+        super::commanim_abi::runtime::advance_at(comm, now, &mut uqm_engine::math::random);
     }
 }
 
@@ -1371,12 +1369,12 @@ fn comm_intro_transition(_comm: &mut Comm) {
                 drop(intro_batch);
             }
             IntroTransition::CrossfadeSpace => {
-                let rect = crate::graphics::geometry::Rect {
+                let rect = uqm_engine::graphics::geometry::Rect {
                     corner: crate::comm::locdata::CPoint {
                         x: sis_org_x as i16,
                         y: sis_org_y as i16,
                     },
-                    extent: crate::graphics::geometry::Extent {
+                    extent: uqm_engine::graphics::geometry::Extent {
                         width: sis_screen_width as i16,
                         height: sis_screen_height as i16,
                     },
@@ -1386,9 +1384,9 @@ fn comm_intro_transition(_comm: &mut Comm) {
             }
             IntroTransition::CrossfadeWindow => {
                 let window = _comm.display.window;
-                context.transition(Some(crate::graphics::geometry::Rect {
+                context.transition(Some(uqm_engine::graphics::geometry::Rect {
                     corner: window.corner,
-                    extent: crate::graphics::geometry::Extent {
+                    extent: uqm_engine::graphics::geometry::Extent {
                         width: window.width,
                         height: window.height,
                     },
@@ -1431,8 +1429,8 @@ mod tests {
 
     #[test]
     fn external_activity_checks_follow_the_supplied_world() {
-        let mut world = crate::engine::World::new();
-        let other = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
+        let other = uqm_engine::World::new();
         assert!(!check_abort_external(&world));
         assert!(!won_last_battle_external(&world));
 
@@ -1451,10 +1449,15 @@ mod tests {
     }
 
     fn with_world<R>(mut world: World, call: impl FnOnce(&mut Cx<'_>, &mut Io<'_>) -> R) -> R {
-        let mut kernel = crate::engine::Kernel::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random);
-        let mut observer = crate::engine::observe::Unobserved;
+        let mut kernel = uqm_engine::Kernel::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let mut cx = Cx::new(
+            &mut battle,
+            &mut world,
+            &mut kernel,
+            uqm_engine::math::random,
+        );
+        let mut observer = uqm_engine::observe::Unobserved;
         call(
             &mut cx,
             &mut Io {
@@ -1497,7 +1500,7 @@ mod tests {
     #[test]
     fn test_do_talk_segue_cancel_ends() {
         let input = InputSession::default();
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
@@ -1513,7 +1516,7 @@ mod tests {
     #[test]
     fn test_do_talk_segue_continues_while_playing() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
@@ -1528,7 +1531,7 @@ mod tests {
     #[test]
     fn test_do_talk_segue_ends_when_not_playing() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = finished_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
@@ -1542,7 +1545,7 @@ mod tests {
     #[test]
     fn test_do_talk_segue_seek_mode_stops_when_seeking() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
@@ -1561,7 +1564,7 @@ mod tests {
     #[test]
     fn test_talk_segue_ends_when_not_playing() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         // No track spliced → playing_track() returns 0 immediately
@@ -1580,7 +1583,7 @@ mod tests {
     #[test]
     fn test_talk_segue_rewind_mode() {
         let input = InputSession::default();
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         let mut s = playing_state();
         // wait_track = 0 → rewind mode, ts.rewind set to true
         // Since track is playing and rewind is set, fast_reverse is called once
@@ -1599,7 +1602,7 @@ mod tests {
     #[serial]
     fn test_alien_talk_segue_skips_if_finished() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         s.set_talking_finished(true);
@@ -1616,7 +1619,7 @@ mod tests {
     #[serial]
     fn test_alien_talk_segue_skips_if_abort() {
         let input = InputSession::default();
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         world.set_activity(0x4000);
@@ -1639,7 +1642,7 @@ mod tests {
         s.track_mut().splice_track(1, Some("Hi"), 0.0, 2.0);
         s.track_mut().start();
 
-        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
+        fn noop(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, _: u16) {}
         s.add_response(1, "Option A", Some(noop));
         s.add_response(2, "Option B", Some(noop));
         s.responses_mut().start_display();
@@ -1667,7 +1670,7 @@ mod tests {
         let comm = &mut owner;
         use std::sync::atomic::{AtomicU16, Ordering};
         static CALLED_WITH: AtomicU16 = AtomicU16::new(0);
-        fn marker(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, r: u16) {
+        fn marker(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, r: u16) {
             CALLED_WITH.store(r, Ordering::SeqCst);
         }
 
@@ -1709,7 +1712,7 @@ mod tests {
     #[serial]
     fn test_player_input_initializes_top_response() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         s.add_response(1, "A", None);
@@ -1729,7 +1732,7 @@ mod tests {
     #[serial]
     fn test_player_input_navigate() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         // up/down navigation is driven by check_up/down_input which return false
         // in test mode; verify that calling player_response_input is a no-op
         // (Continue result, no panic)
@@ -1751,7 +1754,7 @@ mod tests {
     #[serial]
     fn test_communication_exits_no_responses() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         s.set_talking_finished(true);
@@ -1764,7 +1767,7 @@ mod tests {
     #[serial]
     fn test_communication_shows_responses_when_ready() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         s.set_talking_finished(true);
@@ -1832,7 +1835,7 @@ mod tests {
     #[serial]
     fn test_do_comm_abort_exit_p10() {
         let input = InputSession::default();
-        let mut world = crate::engine::World::new();
+        let mut world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         s.set_talking_finished(true);
@@ -1857,7 +1860,7 @@ mod tests {
     #[serial]
     fn test_do_comm_no_responses_done_p10() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         let mut s = Comm::new();
         s.init().unwrap();
         s.set_talking_finished(true);
@@ -1882,8 +1885,8 @@ mod tests {
     #[serial]
     fn test_do_comm_response_continue_p10() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
-        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
+        let world = uqm_engine::World::new();
+        fn noop(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, _: u16) {}
 
         let mut s = Comm::new();
         s.init().unwrap();
@@ -1910,10 +1913,10 @@ mod tests {
     #[serial]
     fn test_do_comm_selected_p10() {
         let input = InputSession::default();
-        let world = crate::engine::World::new();
+        let world = uqm_engine::World::new();
         use std::sync::atomic::{AtomicBool, Ordering};
         static CALLED: AtomicBool = AtomicBool::new(false);
-        fn marker(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {
+        fn marker(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, _: u16) {
             CALLED.store(true, Ordering::SeqCst);
         }
 
@@ -1947,7 +1950,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns None).
     #[test]
     fn test_select_response_returns_tuple_p10() {
-        fn noop(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u16) {}
+        fn noop(_comm: &mut Comm, _cx: &mut uqm_engine::battle::Cx<'_>, _: u16) {}
 
         let mut s = Comm::new();
         s.init().unwrap();
@@ -2012,11 +2015,17 @@ mod tests {
     #[test]
     fn communication_background_volume_matches_speech_mode() {
         assert_eq!(
-            super::communication_background_volume(crate::sound::types::NORMAL_VOLUME as u8, 0),
+            super::communication_background_volume(
+                uqm_engine::sound::types::NORMAL_VOLUME as u8,
+                0
+            ),
             160
         );
         assert_eq!(
-            super::communication_background_volume(crate::sound::types::NORMAL_VOLUME as u8, 1),
+            super::communication_background_volume(
+                uqm_engine::sound::types::NORMAL_VOLUME as u8,
+                1
+            ),
             80
         );
     }

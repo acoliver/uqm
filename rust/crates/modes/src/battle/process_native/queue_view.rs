@@ -1,7 +1,7 @@
 //! View calculations for the observed element queue, independent of hook invocation.
 
 use super::*;
-use crate::graphics::geometry::Point;
+use uqm_engine::graphics::geometry::Point;
 
 pub(super) fn render_scale(mode: i32, zoom: i16) -> i32 {
     if mode == SCALE_STEP {

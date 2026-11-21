@@ -13,18 +13,18 @@ pub(crate) mod runtime {
     use crate::comm::locdata::CPoint;
     use crate::comm::locdata::CRect;
     use crate::comm::CommOptions;
-    use crate::engine::battle::Cx;
-    use crate::engine::observe::CheckpointView;
-    use crate::engine::observe::Io;
-    use crate::engine::world::activity::activity_flags::CHECK_ABORT;
-    use crate::graphics::{context::ContextLease, geometry::Point};
-    use crate::sound::music;
-    use crate::sound::music::MusicRequest;
-    use crate::sound::resource_types::LoadedMusic;
     use std::{
         cell::{Cell, RefCell},
         rc::Rc,
     };
+    use uqm_engine::battle::Cx;
+    use uqm_engine::graphics::{context::ContextLease, geometry::Point};
+    use uqm_engine::observe::CheckpointView;
+    use uqm_engine::observe::Io;
+    use uqm_engine::sound::music;
+    use uqm_engine::sound::music::MusicRequest;
+    use uqm_engine::sound::resource_types::LoadedMusic;
+    use uqm_engine::world::activity::activity_flags::CHECK_ABORT;
     use uqm_engine::{species::conv, time::counter_abi::get_time_counter};
 
     fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>, window: &Rc<Cell<CRect>>) {
@@ -132,7 +132,7 @@ pub(crate) mod runtime {
             });
         }
         drop(hook);
-        crate::sound::heart_ffi::fade_music(0, (ONE_SECOND / 2) as i16);
+        uqm_engine::sound::heart_ffi::fade_music(0, (ONE_SECOND / 2) as i16);
         drop(session);
         context.select();
         runtime.sleep_until(cx, context.fade_screen(252, (ONE_SECOND / 2) as i16));
@@ -141,7 +141,7 @@ pub(crate) mod runtime {
             music::stop_requested_music();
             drop(music);
         }
-        crate::sound::heart_ffi::fade_music(160, 0);
+        uqm_engine::sound::heart_ffi::fade_music(160, 0);
         drop(resources);
     }
 }

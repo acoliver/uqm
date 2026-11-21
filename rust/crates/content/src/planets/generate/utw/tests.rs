@@ -1,21 +1,15 @@
 //! The Utwig systems' story gating, guard conversations and pickup against
 //! recording fakes.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::rc::Rc;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_engine::StoryKey;
 
 use super::{
     generate_energy, generate_orbital, generate_planets, init_npcs, pickup_energy, UtwigSite,
     BOMB_MOON, BOMB_TALK_FLAGS, HOME, HOME_TALK_FLAGS,
 };
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
-use crate::engine::world::generation::ReportDisposition;
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default::Npcs;
@@ -24,6 +18,10 @@ use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::planets::generate::special::{Body, Orbit, Story, WATER_WORLD};
 use crate::planets::generate::testing::RecordReport;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use uqm_engine::world::generation::ReportDisposition;
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
 
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
 const IN_INTERPLANETARY: u16 = 4;
@@ -161,7 +159,7 @@ impl HomeContactSite for Site {
     }
     fn load_ruins_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         _artifact_taken: bool,
     ) {
         panic!("the Utwig load their own scene");
@@ -190,7 +188,7 @@ impl UtwigSite for Site {
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         bomb: bool,
     ) {
         self.record(Call::LoadScene(bomb));

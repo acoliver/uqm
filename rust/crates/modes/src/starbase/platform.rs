@@ -11,7 +11,7 @@ use super::gfx::{FrameId, Gfx};
 use super::input::MenuPulses;
 use super::module_chooser::ModuleChooserError;
 use super::sis_modules::{FuelLayoutError, ModuleSlotsError};
-use crate::engine::world::activity::ActivityValue;
+use uqm_engine::world::activity::ActivityValue;
 
 /// Opaque `MUSIC_REF`.
 pub type MusicId = usize;

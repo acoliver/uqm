@@ -1,13 +1,12 @@
 //! Real queue pools, element fields and the no-journal fighter path.
 use super::*;
-use uqm_rust::collections::observation;
-use uqm_rust::collections::observation::Event;
-use uqm_rust::engine::battle::record::RaceDescriptor;
-use uqm_rust::engine::species::species_id::SPECIES_ID_EARTHLING_ID;
-use uqm_rust::engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::battle::record::RaceDescriptor;
+use uqm_engine::collections::observation;
+use uqm_engine::collections::observation::Event;
+use uqm_engine::species::species_id::SPECIES_ID_EARTHLING_ID;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
 
-pub(super) unsafe fn clear_queues() {
-    // SAFETY: the caller owns the idle global queues and detaches all test
+pub(super) fn clear_queues() {
     // records before releasing their stack storage; there are no active readers.
     {
         crate::battle_context::with(|cx| {
@@ -18,70 +17,55 @@ pub(super) unsafe fn clear_queues() {
         });
         crate::battle_context::with(|cx| {
             let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
-            uqm_rust::battle::process_native::init_display_list(cx, scaled);
+            uqm_modes::battle::process_native::init_display_list(cx, scaled);
         });
     }
 }
 
 pub(super) fn unregistered_hook(
-    _: &mut uqm_rust::engine::battle::Cx<'_>,
-    _: uqm_rust::engine::battle::ElementId,
+    _: &mut uqm_engine::battle::Cx<'_>,
+    _: uqm_engine::battle::ElementId,
 ) {
 }
 
 pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &Path) {
     let mut pool = std::array::from_fn::<_, 3, _>(|_| ElementRecord::new());
-    // SAFETY: the local contiguous pool stays live until the queues are detached.
-    unsafe {
+    {
         attach_elements(&mut pool);
     }
     let [first, second, neutral] = &mut pool;
-    // SAFETY: STARSHIP contains integers, pointers and optional callbacks.
-    let mut owner = unsafe { battle::PoolShip::new(0) };
-    owner.species_id = SPECIES_ID_EARTHLING_ID;
-    owner.ship_facing = 31;
-    first.player_nr = 0;
-    first.state_flags = ElementFlags::PLAYER_SHIP.bits();
-    first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
-    first.current.location.x = 17;
-    first.hits = 11;
+    let mut owner = battle::PoolShip::new(0);
+    owner.record().species_id = SPECIES_ID_EARTHLING_ID;
+    owner.record().ship_facing = 31;
+    first.record().player_nr = 0;
+    first.record().state_flags = ElementFlags::PLAYER_SHIP.bits();
+    first.record().parent = uqm_engine::battle::Parent::Ship(owner.ship_id);
+    first.record().current.location.x = 17;
+    first.record().hits = 11;
 
-    second.player_nr = 0;
-    second.state_flags = (ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT).bits();
-    second.parent = first.parent;
-    second.current.location.x = -91;
-    second.current.location.y = 43;
-    second.hits = 7;
-    second.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-        unregistered_hook,
-    ));
+    second.record().player_nr = 0;
+    second.record().state_flags =
+        (ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT).bits();
+    second.record().parent = first.get().parent;
+    second.record().current.location.x = -91;
+    second.record().current.location.y = 43;
+    second.record().hits = 7;
+    second.record().preprocess_func =
+        Some(uqm_engine::battle::ElementHook::Native(unregistered_hook));
 
-    neutral.player_nr = -1;
-    {
-        crate::battle_context::with(|cx| {
-            let source = cx
-                .elements()
-                .id(std::ptr::NonNull::new(neutral.pointer().cast()))
-                .unwrap_or_else(|| panic!("fixture source"));
-            let target = cx
-                .elements()
-                .id(std::ptr::NonNull::new(first.pointer().cast()))
-                .unwrap_or_else(|| panic!("fixture target"));
-            cx.set_target(source, Some(target));
-        });
-    }
-    // SAFETY: stack graph remains live; no renderer or pool allocator is running.
-    let campaign = unsafe {
+    neutral.record().player_nr = -1;
+    crate::battle_context::with(|cx| cx.set_target(neutral.id, Some(first.id)));
+    let campaign = {
         install_ship(&mut owner);
         crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_activity(IN_BATTLE);
-            uqm_rust::engine::observe::CampaignView::from_world(world)
+            uqm_engine::observe::CampaignView::from_world(world)
         })
     };
-    uqm_rust::math::seed_random(654321);
+    uqm_engine::math::seed_random(654321);
     let fighters = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
-    assert_eq!(uqm_rust::math::seed_random(654321), 654321);
+    assert_eq!(uqm_engine::math::seed_random(654321), 654321);
     let player = fighters
         .player
         .unwrap_or_else(|| panic!("missing live player ship"));
@@ -89,15 +73,15 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
     assert_eq!(player.facing, 15);
     assert_eq!(player.crew, 7);
     assert!(fighters.enemy.is_none());
-    second.preprocess_func = None;
-    for element in [&mut *first, &mut *second, &mut *neutral] {
-        observation::record(Event::Allocate(element.pointer() as usize));
+    second.record().preprocess_func = None;
+    for element in [&*first, &*second, &*neutral] {
+        observation::record(Event::Allocate(element.address()));
     }
     let (before, line) = snapshot(observer, directory);
     let mut expected = CrcState::new();
     expected.process_u32(123456);
-    for element in [&**first, &**second, &**neutral] {
-        expected.process_element(&Element::from(element));
+    for element in [&*first, &*second, &*neutral] {
+        expected.process_element(&Element::from(&*element.get()));
     }
     assert_eq!(
         line.split_whitespace()
@@ -118,8 +102,7 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
         &mut *neutral,
         &before,
     );
-    // SAFETY: detach all stack graph nodes before returning.
-    unsafe {
+    {
         clear_queues();
     }
 }
@@ -132,28 +115,28 @@ pub(super) fn element_mutations(
     neutral: &mut ElementRecord,
     before: &Fields,
 ) {
-    first.life = 19;
-    first.mass = 3;
-    first.turn = 4;
-    first.thrust = 5;
-    first.color_cycle_index = 6;
-    first.prim_index = 7;
-    first.next.location.x = -13;
-    first.next.location.y = 29;
-    first.intersect_control.last_time_val = 17;
-    first.intersect_control.intersect_stamp.origin.x = -23;
-    first.intersect_control.intersect_stamp.origin.y = 31;
-    first.intersect_control.end_point.x = -37;
-    first.intersect_control.end_point.y = 41;
-    first.velocity.travel_angle = 43;
-    first.velocity.vector.width = -47;
-    first.velocity.vector.height = 53;
-    first.velocity.fract.width = -59;
-    first.velocity.fract.height = 61;
-    first.velocity.error.width = -67;
-    first.velocity.error.height = 71;
-    first.velocity.incr.width = -73;
-    first.velocity.incr.height = 79;
+    first.record().life = 19;
+    first.record().mass = 3;
+    first.record().turn = 4;
+    first.record().thrust = 5;
+    first.record().color_cycle_index = 6;
+    first.record().prim_index = 7;
+    first.record().next.location.x = -13;
+    first.record().next.location.y = 29;
+    first.record().intersect_control.last_time_val = 17;
+    first.record().intersect_control.intersect_stamp.origin.x = -23;
+    first.record().intersect_control.intersect_stamp.origin.y = 31;
+    first.record().intersect_control.end_point.x = -37;
+    first.record().intersect_control.end_point.y = 41;
+    first.record().velocity.travel_angle = 43;
+    first.record().velocity.vector.width = -47;
+    first.record().velocity.vector.height = 53;
+    first.record().velocity.fract.width = -59;
+    first.record().velocity.fract.height = 61;
+    first.record().velocity.error.width = -67;
+    first.record().velocity.error.height = 71;
+    first.record().velocity.incr.width = -73;
+    first.record().velocity.incr.height = 79;
     let (after, _) = snapshot(observer, directory);
     assert_eq!(changed(before, &after).len(), 22);
     assert_eq!(after["elements.0.velocity.incr.width"], "-73");
@@ -171,10 +154,10 @@ pub(super) fn frame_fields(
     let native = battle::NativeFrameSet::new(8);
     let pointer = native.frame(7);
     let drawable = pointer.drawable().map_or(0, |drawable| drawable.bits());
-    let view = uqm_rust::engine::battle::views::FrameSelection::retain(pointer);
-    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
-    let set = uqm_rust::engine::battle::frames::Frames::shared(
-        uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+    let view = uqm_engine::battle::views::FrameSelection::retain(pointer);
+    let array = uqm_engine::battle::frames::FrameArray::retain([view.view(); 3]);
+    let set = uqm_engine::battle::frames::Frames::shared(
+        uqm_engine::battle::frames::SharedFrames::Fixture(0),
         array.clone(),
     );
     observation::record(Event::Drawable(drawable));
@@ -188,11 +171,14 @@ pub(super) fn frame_fields(
         frames: vec![pointer.bits(); 3],
         role: "test-views".into(),
     });
-    observation::assign_frame(&mut first.current.image.frame, view.clone());
-    observation::assign_set(&mut first.current.image.frames, set.clone(), None);
-    observation::assign_frame(&mut first.next.image.frame, view.clone());
-    observation::assign_set(&mut first.next.image.frames, set.clone(), None);
-    observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
+    observation::assign_frame(&mut first.record().current.image.frame, view.clone());
+    observation::assign_set(&mut first.record().current.image.frames, set.clone(), None);
+    observation::assign_frame(&mut first.record().next.image.frame, view.clone());
+    observation::assign_set(&mut first.record().next.image.frames, set.clone(), None);
+    observation::assign_frame(
+        &mut first.record().intersect_control.intersect_stamp.frame,
+        pointer,
+    );
     let (fields, _) = snapshot(observer, directory);
     for name in [
         "current.frame",
@@ -210,58 +196,53 @@ pub(super) fn frame_fields(
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
     assert_eq!(fields["elements.2.current.farray.index"], "0");
     observation::assign_frame(
-        &mut first.current.image.frame,
-        uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+        &mut first.record().current.image.frame,
+        uqm_engine::battle::frames::FrameSelection::ABSENT,
     );
     observation::assign_set(
-        &mut first.current.image.frames,
-        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        &mut first.record().current.image.frames,
+        uqm_engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(
-        &mut first.next.image.frame,
-        uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+        &mut first.record().next.image.frame,
+        uqm_engine::battle::frames::FrameSelection::ABSENT,
     );
     observation::assign_set(
-        &mut first.next.image.frames,
-        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        &mut first.record().next.image.frames,
+        uqm_engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(
-        &mut first.intersect_control.intersect_stamp.frame,
-        uqm_rust::graphics::drawable::FrameId::NULL,
+        &mut first.record().intersect_control.intersect_stamp.frame,
+        uqm_engine::graphics::drawable::FrameId::NULL,
     );
-    // SAFETY: both fixture owners retain their slots throughout this read.
-    let successor = unsafe { battle::succ(second.pointer()) };
-    assert_eq!(successor, neutral.pointer().cast());
+    assert_eq!(battle::succ(second.id), Some(neutral.id));
 }
 
 pub(super) fn fighters_without_journal(directory: &Path) {
     let mut element = ElementRecord::new();
-    // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
-    let mut ship = unsafe { battle::PoolShip::new(0) };
-    ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
-    ship.ship_facing = 31;
-    element.state_flags = ElementFlags::PLAYER_SHIP.bits();
-    element.player_nr = 0;
-    element.hits = 19;
-    element.current.location.x = -9;
-    element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-    element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-        unregistered_hook,
-    ));
-    // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
-    let campaign = unsafe {
+    let mut ship = battle::PoolShip::new(0);
+    ship.record().descriptor = Some(Box::new(RaceDescriptor::EMPTY));
+    ship.record().ship_facing = 31;
+    element.record().state_flags = ElementFlags::PLAYER_SHIP.bits();
+    element.record().player_nr = 0;
+    element.record().hits = 19;
+    element.record().current.location.x = -9;
+    element.record().parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
+    element.record().preprocess_func =
+        Some(uqm_engine::battle::ElementHook::Native(unregistered_hook));
+    let campaign = {
         let campaign = crate::battle_context::with(|cx| {
             let world = &mut cx.world;
             world.set_activity(IN_BATTLE);
-            uqm_rust::engine::observe::CampaignView::from_world(world)
+            uqm_engine::observe::CampaignView::from_world(world)
         });
         install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
         campaign
     };
-    uqm_rust::math::seed_random(56789);
+    uqm_engine::math::seed_random(56789);
     let snapshot = crate::battle_context::with(|cx| {
         uqm_rust::automation::battle_fight::BattleSnapshot::live(cx, &campaign)
     });
@@ -272,23 +253,22 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     assert_eq!(player.crew, 19);
     assert_eq!(player.x, -9);
     assert!(snapshot.enemy.is_none());
-    assert_eq!(uqm_rust::math::seed_random(56789), 56789);
+    assert_eq!(uqm_engine::math::seed_random(56789), 56789);
     assert!(!directory.join("parity.fields").exists());
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
-        element.player_nr = side;
-        element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
+        element.record().player_nr = side;
+        element.record().parent = uqm_engine::battle::Parent::Ship(ship.ship_id);
         let snapshot = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());
     }
-    // SAFETY: detach the stack graph before subsequent tests create a coordinator.
-    unsafe {
+    {
         clear_queues();
     }
 }
 
-pub(super) unsafe fn attach_elements(elements: &mut [ElementRecord]) {
+pub(super) fn attach_elements(elements: &mut [ElementRecord]) {
     for element in elements {
         {
             crate::battle_context::with(|cx| cx.put(element.id));
@@ -296,64 +276,46 @@ pub(super) unsafe fn attach_elements(elements: &mut [ElementRecord]) {
     }
 }
 
+/// An element slot this test resets to an empty record and links by hand.
 pub(super) struct ElementRecord {
-    id: uqm_rust::engine::battle::ElementId,
-    pointer: *mut uqm_rust::engine::battle::record::ElementRecord,
+    pub(super) id: uqm_engine::battle::ElementId,
     primitive: u16,
 }
 impl ElementRecord {
     pub(super) fn new() -> Self {
-        // SAFETY: the fixture owns the published context and every allocated operand.
-        unsafe {
-            crate::battle_context::with(|cx| {
-                let id = cx
-                    .alloc_element()
-                    .unwrap_or_else(|| panic!("fixture capacity"));
-                let pointer = cx
-                    .elements()
-                    .raw(id)
-                    .cast::<uqm_rust::engine::battle::record::ElementRecord>();
-                let primitive = (*pointer).prim_index;
-                pointer.write(uqm_rust::engine::battle::record::ElementRecord::default());
-                (*pointer).player_nr = -1;
-                (*pointer).prim_index = primitive;
-                Self {
-                    id,
-                    pointer,
-                    primitive,
-                }
-            })
-        }
+        let id = crate::battle_context::with(|cx| cx.alloc_element())
+            .unwrap_or_else(|| panic!("fixture capacity"));
+        let mut record = battle::get_mut(id);
+        let primitive = record.prim_index;
+        *record = uqm_engine::battle::record::ElementRecord::default();
+        record.player_nr = -1;
+        record.prim_index = primitive;
+        Self { id, primitive }
     }
-    pub(super) fn pointer(&self) -> *mut uqm_rust::engine::battle::record::ElementRecord {
-        self.pointer
+    /// Lend the live record until the guard drops.
+    pub(super) fn record(
+        &mut self,
+    ) -> std::cell::RefMut<'static, uqm_engine::battle::record::ElementRecord> {
+        battle::get_mut(self.id)
     }
-}
-impl std::ops::Deref for ElementRecord {
-    type Target = uqm_rust::engine::battle::record::ElementRecord;
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: this fixture owner retains its slot, and the projection ends before a callback.
-        unsafe { &*self.pointer }
+    pub(super) fn get(&self) -> battle::Snapshot<uqm_engine::battle::record::ElementRecord> {
+        battle::get(self.id)
     }
-}
-impl std::ops::DerefMut for ElementRecord {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: fixture edits and context callbacks do not overlap.
-        unsafe { &mut *self.pointer }
+    /// The pool address the parity observer identifies this element by.
+    pub(super) fn address(&self) -> usize {
+        std::ptr::from_ref(&*battle::get_mut(self.id)) as usize
     }
 }
 impl Drop for ElementRecord {
     fn drop(&mut self) {
-        // SAFETY: the owning serialized fixture outlives its allocated operands.
-        unsafe {
+        let live = crate::battle_context::with(|cx| cx.elements().contains(self.id));
+        if live {
+            battle::get_mut(self.id).prim_index = self.primitive;
             crate::battle_context::with(|cx| {
-                if cx.elements().contains(self.id) {
-                    (*self.pointer).prim_index = self.primitive;
-                    if cx.elements().linked(self.id) {
-                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
-                    }
-                    cx.dispose(self.id);
+                if cx.elements().linked(self.id) {
+                    uqm_modes::battle::sounds::engine::unlink(cx, self.id);
                 }
+                cx.dispose(self.id);
             });
         }
     }
@@ -396,8 +358,7 @@ pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path
 
 pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &Path) {
     let mut element = ElementRecord::new();
-    // SAFETY: no game loop is running; this test owns both queues and the group pool.
-    unsafe {
+    {
         let (group_id, handle) = crate::battle_context::with(|cx| {
             let mut queue = cx.world.ip_groups();
             let id = queue
@@ -412,10 +373,10 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
             queue.put(id);
             (id, queue.raw(id))
         });
-        element.parent = uqm_rust::engine::battle::Parent::IpGroup(group_id);
+        element.record().parent = uqm_engine::battle::Parent::IpGroup(group_id);
         attach_elements(std::slice::from_mut(&mut element));
-        observation::record(Event::Allocate(element.pointer() as usize));
-        let callback = uqm_rust::battle::hook_registry::hooks()
+        observation::record(Event::Allocate(element.address()));
+        let callback = uqm_modes::battle::hook_registry::hooks()
             .into_iter()
             .find(|(_, name)| *name == "battle::ship_native::collision")
             .unwrap_or_else(|| panic!("collision callback is absent from the registry"))
@@ -429,7 +390,7 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
         assert_eq!(fields["mode.groups.31.counter"], "123");
         assert_eq!(fields["mode.groups.31.x"], "-71");
         assert!(line.contains("[hook 5 battle::ship_native::collision]"));
-        (*handle.cast::<uqm_rust::engine::world::queues::IpGroup>()).group_id = 32;
+        crate::battle_context::with(|cx| cx.world.ip_groups().get_mut(group_id).group_id = 32);
         let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["elements.0.parent"], "group:32");
         assert_eq!(fields["mode.groups.32.counter"], "123");

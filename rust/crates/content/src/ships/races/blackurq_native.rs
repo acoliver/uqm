@@ -1,21 +1,21 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, normalize_facing, wrap_delta};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, LEFT, MAX_CREW_SIZE,
         MAX_ENERGY_SIZE, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT, SPECIAL, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, CREW_OBJECT, DISAPPEARING, NONSOLID, PLAYER_SHIP, POST_PROCESS,
         PRE_PROCESS,
     };
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, ONE_SHIFT};
-    use crate::math::velocity::VelocityDesc;
-    use crate::ships::native::{angle_to_facing, normalize_facing, wrap_delta};
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, ONE_SHIFT};
+    use uqm_engine::math::velocity::VelocityDesc;
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (FIRES_FORE as i32) as _;
         d.info.ship_cost = 30;
@@ -60,8 +60,8 @@ pub mod engine {
         d.intelligence.weapon_range = (50 << ONE_SHIFT) as u16;
         d.descriptor(&BLACKURQ)
     }
-    use crate::engine::battle::views::Missile;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Missile;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static BLACKURQ: Race = Race {
@@ -131,7 +131,8 @@ pub mod engine {
                         .wrapping_sub(cx.element(e).current.location.y),
                     cx.screen_dimensions().1 << (ONE_SHIFT + 3),
                 );
-                facing = normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                facing =
+                    normalize_facing(angle_to_facing(i32::from(uqm_engine::math::arctan(dx, dy))));
                 if dx < 0 {
                     dx = dx.wrapping_neg();
                 }

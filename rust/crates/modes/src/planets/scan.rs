@@ -2,7 +2,7 @@
 
 pub mod state;
 
-use crate::engine::world::planet::{NodeInfo, PlanetInfo};
+use uqm_engine::world::planet::{NodeInfo, PlanetInfo};
 fn scan_value(value: i64, suffix: &str) -> String {
     if value >= 1000 {
         format!("{}.{}{}", value / 100, (value / 10) % 10, suffix)
@@ -45,8 +45,8 @@ fn move_cursor(position: (i16, i16), dx: i16, dy: i16, width: i16) -> (i16, i16)
     (x, y)
 }
 
-use crate::engine::world::generation::{Body, SolarSys};
 use crate::planets::generate::{SiteHost, SystemGenerator};
+use uqm_engine::world::generation::{Body, SolarSys};
 
 pub fn generate(
     generator: &dyn SystemGenerator,
@@ -99,16 +99,16 @@ fn set_node_not_retrieved(info: &mut PlanetInfo, scan: u8, node: u8) {
 pub(crate) mod live;
 
 pub(crate) fn repair_back_rect(
-    context: &crate::graphics::context::ContextLease,
+    context: &uqm_engine::graphics::context::ContextLease,
     rect: &crate::comm::locdata::CRect,
 ) {
     let old = context.clip_rect();
-    let mut new = crate::graphics::geometry::Rect {
-        corner: crate::graphics::geometry::Point {
+    let mut new = uqm_engine::graphics::geometry::Rect {
+        corner: uqm_engine::graphics::geometry::Point {
             x: rect.corner.x + old.corner.x,
             y: rect.corner.y + old.corner.y,
         },
-        extent: crate::graphics::geometry::Extent {
+        extent: uqm_engine::graphics::geometry::Extent {
             width: rect.width,
             height: rect.height,
         },

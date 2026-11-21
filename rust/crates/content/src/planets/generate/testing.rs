@@ -2,10 +2,10 @@
 
 use super::host::{PlanetSite, ReportSite};
 use super::special::{Orbit, Story};
-use crate::engine::world::generation::{Body, ReportDisposition, SolarSys};
-use crate::engine::world::planet::PlanetInfo;
-use crate::engine::StoryKey;
 use crate::planets::tables::PLANET_ARRAY;
+use uqm_engine::world::generation::{Body, ReportDisposition, SolarSys};
+use uqm_engine::world::planet::PlanetInfo;
+use uqm_engine::StoryKey;
 
 mod contacts;
 mod npcs;
@@ -114,7 +114,7 @@ pub fn with_empty<R>(run: impl FnOnce(&mut SolarSys<'_>) -> R) -> R {
         &PLANET_ARRAY,
         0,
         0,
-        crate::math::RandomContext::with_seed(1),
+        uqm_engine::math::RandomContext::with_seed(1),
     );
     run(&mut system)
 }
@@ -215,7 +215,7 @@ impl<S: Story, H: crate::planets::generate::sol::orbital::Orbital>
     }
     fn load_scene(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         scene: crate::planets::generate::sol::orbital::Scene,
     ) {
         crate::planets::generate::sol::orbital::Orbital::load_scene(&mut *self.1, _system, scene)
@@ -234,7 +234,7 @@ impl<T: super::home_contact::LanderTakeoff + ?Sized> super::home_contact::Lander
 
 /// Keep the recording fixture's readable event labels while its storage uses typed keys.
 pub fn story_label(key: StoryKey) -> &'static str {
-    crate::engine::world::story::GAME_STATE_FIELDS
+    uqm_engine::world::story::GAME_STATE_FIELDS
         .iter()
         .find(|(_, start, end)| *start == key.start() && *end == key.end())
         .map_or_else(|| panic!("named recording story key"), |(name, _, _)| *name)

@@ -1,10 +1,10 @@
 use super::{lifecycle, Application};
-use crate::engine::battle::{Battle, Cx};
-use crate::engine::observe::{CheckpointView, Io, Observer};
 use crate::mainloop::state_machine::{self, ActivityDecision, BreakAction};
 use crate::mainloop::types::{activity_flags, ActivityValue};
 use crate::mainloop::MainLoopError;
 use std::sync::Arc;
+use uqm_engine::battle::{Battle, Cx};
+use uqm_engine::observe::{CheckpointView, Io, Observer};
 
 /// Run initialization, the campaign loop and subsystem teardown on the game thread.
 pub fn run(
@@ -33,7 +33,7 @@ pub fn run(
 }
 
 fn run_game(
-    game: &mut crate::engine::Game,
+    game: &mut uqm_engine::Game,
     observer: Option<Arc<crate::automation::AutomationObserver>>,
 ) -> Result<(), MainLoopError> {
     let mut battle = Battle::new();
@@ -41,9 +41,9 @@ fn run_game(
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        crate::math::random,
+        uqm_engine::math::random,
     );
-    crate::sound::audio_init::init_audio();
+    uqm_engine::sound::audio_init::init_audio();
     if crate::game_init::kernel_abi::load_kernel(cx.kernel, cx.world) == 0 {
         return Err(MainLoopError::LoadKernelFailed);
     }
@@ -65,9 +65,9 @@ fn run_game(
         run_campaign(&mut cx, &mut io, observer.as_ref());
     }
     crate::game_init::cleanup::uninit_game_kernel(&mut cx);
-    crate::ships::master_native::engine::free(cx.world, cx.kernel);
+    uqm_content::ships::master_native::engine::free(cx.world, cx.kernel);
     crate::game_init::cleanup::free_kernel(cx.kernel);
-    crate::log_abi::log_show_box(false, false);
+    uqm_engine::log_abi::log_show_box(false, false);
     Ok(())
 }
 
@@ -75,12 +75,12 @@ struct RestartServices;
 
 impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        let config = crate::engine::io::config_dir().unwrap_or_else(|| panic!("config directory"));
-        let teams = crate::engine::io::melee_dir().unwrap_or_else(|| panic!("melee directory"));
-        crate::supermelee::native::menu::live::melee(cx, io, config, teams);
+        let config = uqm_engine::io::config_dir().unwrap_or_else(|| panic!("config directory"));
+        let teams = uqm_engine::io::melee_dir().unwrap_or_else(|| panic!("melee directory"));
+        uqm_modes::supermelee::native::menu::live::melee(cx, io, config, teams);
     }
     fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool) {
-        crate::front_end::credits::credits(cx, io, victory);
+        uqm_modes::front_end::credits::credits(cx, io, victory);
     }
     fn free_game_data(&mut self, cx: &mut Cx<'_>) {
         crate::game_init::cleanup::free_game_data(cx);
@@ -89,14 +89,14 @@ impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices
 
 fn initialize_campaign(cx: &mut Cx<'_>) {
     cx.kernel.install_player_inputs();
-    crate::navigation::globals::init_game_structures(cx);
+    uqm_modes::navigation::globals::init_game_structures(cx);
     crate::time::clock_bridge::rust_clock_init(cx.world);
     let mut random = cx.rng;
-    let mut services = crate::navigation::events::EventServices {
-        geometry: crate::navigation::hyper_units::Geometry::new(cx.screen_dimensions()),
+    let mut services = uqm_modes::navigation::events::EventServices {
+        geometry: uqm_modes::navigation::hyper_units::Geometry::new(cx.screen_dimensions()),
         random: &mut random,
     };
-    crate::navigation::events::schedule_initial_events(cx.world, &mut services);
+    uqm_modes::navigation::events::schedule_initial_events(cx.world, &mut services);
 }
 
 fn activate_start_scene(
@@ -137,7 +137,7 @@ fn run_campaign(
         let decision = lifecycle::prepare_dispatch(cx.world);
         dispatch(cx, io, decision);
         lifecycle::complete_encounter(cx.world, decision);
-        crate::ui::sis::clear_flash(cx.kernel);
+        uqm_modes::ui::sis::clear_flash(cx.kernel);
         let action = lifecycle::finish_dispatch(cx.world, cx.kernel);
         if action != BreakAction::Continue && cx.world.data.flagship.crew_enlisted == u16::MAX {
             if let Some(observer) = observer {
@@ -148,7 +148,7 @@ fn run_campaign(
         match action {
             BreakAction::Continue => {}
             BreakAction::InitBlackUrqCommunication => {
-                crate::comm::dispatch::init_communication(cx, io, 21);
+                uqm_modes::comm::dispatch::init_communication(cx, io, 21);
                 break;
             }
             BreakAction::ClearRestart => {
@@ -162,37 +162,39 @@ fn run_campaign(
             break;
         }
     }
-    crate::sound::heart_ffi::stop_sound();
+    uqm_engine::sound::heart_ffi::stop_sound();
     crate::time::clock_bridge::rust_clock_uninit(cx.world);
-    crate::navigation::globals::uninit_game_structures(cx);
+    uqm_modes::navigation::globals::uninit_game_structures(cx);
     cx.kernel.clear_player_inputs();
 }
 
 fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
     match decision {
         ActivityDecision::InstallBombAtEarth => {
-            crate::ui::starbase::install_bomb_at_earth(cx);
+            uqm_modes::ui::starbase::install_bomb_at_earth(cx);
         }
         ActivityDecision::VisitStarBase => {
-            crate::ui::starbase::run_starbase_visit(
+            uqm_modes::ui::starbase::run_starbase_visit(
                 cx,
                 io,
-                &crate::ui::MenuServices {
+                &uqm_modes::ui::MenuServices {
                     communicate: |cx, io, conversation, options| {
-                        crate::comm::dispatch::init_communication_with_options(
+                        uqm_modes::comm::dispatch::init_communication_with_options(
                             cx,
                             io,
                             conversation,
                             options,
                         )
                     },
-                    game_options: |cx, io| crate::front_end::gameopt::game_options(cx, io, None),
-                    ship_spin: crate::front_end::fmv::do_ship_spin,
+                    game_options: |cx, io| {
+                        uqm_modes::front_end::gameopt::game_options(cx, io, None)
+                    },
+                    ship_spin: uqm_modes::front_end::fmv::do_ship_spin,
                 },
             );
         }
         ActivityDecision::RaceCommunication => {
-            crate::comm::dispatch::race_communication(cx, io);
+            uqm_modes::comm::dispatch::race_communication(cx, io);
         }
         ActivityDecision::ExploreSolarSystem | ActivityDecision::Battle => {
             cx.kernel.pilot_flash.borrow_mut().reset();
@@ -203,7 +205,7 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
             };
             crate::time::clock_bridge::rust_clock_set_rate(cx.world, rate);
             if decision == ActivityDecision::ExploreSolarSystem {
-                crate::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io);
+                uqm_modes::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io);
             } else {
                 crate::mainloop::lifecycle_abi::battle_with_frame_callback(cx, io);
             }

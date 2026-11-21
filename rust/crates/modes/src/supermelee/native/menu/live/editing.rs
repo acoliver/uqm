@@ -1,14 +1,14 @@
 //! Fleet-slot and team-name editing.
 use super::*;
-use crate::engine::input_port::frames::{KEY_MENU_DELETE, KEY_MENU_RIGHT, KEY_MENU_SPECIAL};
+use uqm_engine::input_port::frames::{KEY_MENU_DELETE, KEY_MENU_RIGHT, KEY_MENU_SPECIAL};
 struct NameCallbacks<'a>(&'a mut MeleeSession);
 
 impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
     fn changed(
         &mut self,
         entry: crate::ui::getchar::TextEntryView<'_>,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        _input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        _input: &uqm_engine::input::InputSession,
     ) -> bool {
         self.0.cur_index =
             u16::try_from(entry.cursor).unwrap_or_else(|error| panic!("team name cursor: {error}"));
@@ -27,9 +27,9 @@ impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
     fn frame(
         &mut self,
         _entry: crate::ui::getchar::TextEntryView<'_>,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-        _input: &crate::engine::input::InputSession,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
+        _input: &uqm_engine::input::InputSession,
     ) -> bool {
         poll_menu(self.0, cx, io, 0);
         true
@@ -41,9 +41,9 @@ fn advance(state: &mut MeleeSession) {
 fn edit_name(
     state: &mut MeleeSession,
     side: u16,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-    input: &crate::engine::input::InputSession,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
+    input: &uqm_engine::input::InputSession,
 ) {
     state.cur_index = 0;
     name(cx, state, side, 1, None);
@@ -71,9 +71,9 @@ fn edit_name(
 }
 pub(super) fn edit(
     state: &mut MeleeSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-    input: &crate::engine::input::InputSession,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
+    input: &uqm_engine::input::InputSession,
 ) -> u32 {
     let time = get_time_counter();
     input.set_paused(false);

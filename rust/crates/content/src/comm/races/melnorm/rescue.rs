@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
+use uqm_engine::math::RandomContext;
+use uqm_engine::StoryKey;
 
 fn position(s: &CSisState) -> (i16, i16) {
     // units.h, original hyperspace speed factors (not normalized).
@@ -197,7 +197,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         let dx = x.wrapping_sub(1752);
         let dy = y.wrapping_sub(1450);
         let distance = (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32;
-        let fuel = crate::math::square_root(distance).wrapping_add(200);
+        let fuel = uqm_engine::math::square_root(distance).wrapping_add(200);
         if self.strip_ship(fuel) {
             self.api.response(TAKE_IT, Handler::ExitConversation, &[]);
             self.api.response(LEAVE_IT, Handler::ExitConversation, &[]);

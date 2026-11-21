@@ -3,9 +3,9 @@
 use super::runtime::{AdapterError, PlanetSideClock, PlanetSideInput, ShipStatusPort, Tick};
 use super::session::{ShipDelta, ShipStatus};
 use super::simulation::FrameInput;
-use crate::engine::battle::Cx;
-use crate::engine::{input::InputControls, world::activity::ActivityControl};
 use std::cell::RefCell;
+use uqm_engine::battle::Cx;
+use uqm_engine::{input::InputControls, world::activity::ActivityControl};
 
 /// Input adapter retaining the resolved player-one controls and activity signal.
 pub struct CffiPlanetSideInput {
@@ -20,10 +20,10 @@ impl CffiPlanetSideInput {
 
     pub fn poll_observed(
         &mut self,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
+        cx: &mut uqm_engine::battle::Cx<'_>,
+        io: &mut uqm_engine::observe::Io<'_>,
     ) -> Result<FrameInput, AdapterError> {
-        use crate::engine::observe::InputView;
+        use uqm_engine::observe::InputView;
         if io
             .observer
             .input_admitted(&InputView::BeforeUpdate, cx)
@@ -77,7 +77,7 @@ fn read_player_one_input(input: &InputControls, activity: &ActivityControl) -> F
 }
 
 /// Main-thread clock adapter preserving the established pump-and-flush sleep path.
-pub struct CffiPlanetSideClock(pub crate::threading::pacing::GameThreadPacer);
+pub struct CffiPlanetSideClock(pub uqm_engine::threading::pacing::GameThreadPacer);
 impl PlanetSideClock for CffiPlanetSideClock {
     fn now(&self) -> Tick {
         Tick(self.0.now())
@@ -89,12 +89,12 @@ impl PlanetSideClock for CffiPlanetSideClock {
 }
 
 pub(super) fn publish_trip(
-    io: &RefCell<crate::engine::observe::Io<'_>>,
+    io: &RefCell<uqm_engine::observe::Io<'_>>,
     trip: &super::telemetry::TripTelemetry,
 ) {
     io.borrow_mut()
         .observer
-        .checkpoint(&crate::engine::observe::CheckpointView::PlanetSide(
+        .checkpoint(&uqm_engine::observe::CheckpointView::PlanetSide(
             trip.snapshot(),
         ));
 }
@@ -103,7 +103,7 @@ pub(super) fn publish_trip(
 pub struct ObservedClock<'a, 'observer, K> {
     pub clock: K,
     pub telemetry: std::rc::Rc<RefCell<super::telemetry::TripTelemetry>>,
-    pub io: &'a RefCell<crate::engine::observe::Io<'observer>>,
+    pub io: &'a RefCell<uqm_engine::observe::Io<'observer>>,
 }
 
 impl<K: PlanetSideClock> PlanetSideClock for ObservedClock<'_, '_, K> {
@@ -194,8 +194,8 @@ mod tests {
         )) {
             return;
         }
-        let owner = crate::graphics::context::LoadedContext::create(c"uninitialized pacing");
-        let mut pacer = crate::threading::pacing::GameThreadPacer::new(owner.lease());
+        let owner = uqm_engine::graphics::context::LoadedContext::create(c"uninitialized pacing");
+        let mut pacer = uqm_engine::threading::pacing::GameThreadPacer::new(owner.lease());
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             pacer.sleep_until(0);
         }))
@@ -206,10 +206,10 @@ mod tests {
     #[serial_test::serial]
     fn nonzero_settlement_updates_only_the_supplied_campaign_and_draws_real_gauges() {
         super::super::resources::tests::with_packaged_resources(|owners| {
-            use crate::graphics::{
+            use crate::starbase::sis_modules::ModuleType;
+            use uqm_engine::graphics::{
                 context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
             };
-            use crate::starbase::sis_modules::ModuleType;
             let frames = LoadedDrawable::load(c"graphics.flagshipstatus").unwrap();
             owners.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
             let context = ContextLease::require(owners.kernel.status_context);
@@ -222,14 +222,14 @@ mod tests {
             sis.total_element_mass = 10;
             sis.element_amounts[0] = 10;
             sis.total_bio_mass = 4;
-            let untouched = crate::engine::Game::new();
-            let mut battle = crate::engine::battle::Battle::new();
+            let untouched = uqm_engine::Game::new();
+            let mut battle = uqm_engine::battle::Battle::new();
             {
                 let game = RefCell::new(Cx::new(
                     &mut battle,
                     &mut owners.world,
                     &mut owners.kernel,
-                    crate::math::random,
+                    uqm_engine::math::random,
                 ));
                 let mut ship = CffiShipStatus { game: &game };
                 assert_eq!(ship.storage_capacity(), 500);
@@ -262,18 +262,16 @@ mod tests {
 
     #[test]
     fn copied_observation_is_published_before_the_clock_pumps_presentations() {
-        use crate::engine::observe::{
-            CheckpointView, Injected, InputView, Io, Observer, Presented,
-        };
-        use crate::engine::observe_port::planet_side::PlanetSideSnapshot;
         use std::rc::Rc;
+        use uqm_engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
+        use uqm_engine::observe_port::planet_side::PlanetSideSnapshot;
 
         struct Recording(Rc<RefCell<Vec<PlanetSideSnapshot>>>);
         impl Observer for Recording {
             fn input_admitted(
                 &mut self,
                 _: &InputView,
-                _: &mut crate::engine::battle::Cx<'_>,
+                _: &mut uqm_engine::battle::Cx<'_>,
             ) -> Injected {
                 Default::default()
             }
@@ -319,7 +317,7 @@ mod tests {
     #[test]
     fn non_linked_input_is_neutral() {
         let input = InputControls::default();
-        let game = crate::engine::Game::new();
+        let game = uqm_engine::Game::new();
         assert_eq!(
             read_player_one_input(&input, &game.world.activity_control()),
             FrameInput::default()
@@ -329,14 +327,15 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn clock_uses_the_actual_counter_and_pumps_an_elapsed_deadline() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
-        let context = crate::graphics::context::ContextLease::require(game.kernel.status_context);
+        let context =
+            uqm_engine::graphics::context::ContextLease::require(game.kernel.status_context);
         let mut clock =
-            CffiPlanetSideClock(crate::threading::pacing::GameThreadPacer::new(context));
-        let before = crate::time::counter_abi::get_time_counter();
+            CffiPlanetSideClock(uqm_engine::threading::pacing::GameThreadPacer::new(context));
+        let before = uqm_engine::time::counter_abi::get_time_counter();
         assert!(clock.now().0 >= before);
         clock.sleep_until(Tick(before)).unwrap();
         assert!(clock.now().0 >= before);
@@ -350,15 +349,15 @@ mod tests {
 
     #[test]
     fn storage_capacity_uses_the_retained_campaign_without_a_published_owner() {
-        let mut owners = crate::engine::Game::new();
+        let mut owners = uqm_engine::Game::new();
         owners.world.data.flagship.module_slots[7] =
             crate::starbase::sis_modules::ModuleType::StorageBay as u8;
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let game = RefCell::new(Cx::new(
             &mut battle,
             &mut owners.world,
             &mut owners.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
         let ship = CffiShipStatus { game: &game };
         assert_eq!(ship.storage_capacity(), 500);
@@ -369,13 +368,13 @@ mod tests {
 
     #[test]
     fn non_linked_ship_snapshot_is_neutral() {
-        let mut owners = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut owners = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let game = RefCell::new(Cx::new(
             &mut battle,
             &mut owners.world,
             &mut owners.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
         let mut ship = CffiShipStatus { game: &game };
         assert_eq!(
@@ -395,7 +394,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn observed_input_uses_the_supplied_campaign_and_honors_both_stop_boundaries() {
-        use crate::engine::{
+        use uqm_engine::{
             battle::{Battle, Cx},
             observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
             Game,
@@ -432,7 +431,7 @@ mod tests {
                 &mut battle,
                 &mut game.world,
                 &mut game.kernel,
-                crate::math::random,
+                uqm_engine::math::random,
             );
             cx.world.set_activity(0x1234);
             let mut observer = Recording {

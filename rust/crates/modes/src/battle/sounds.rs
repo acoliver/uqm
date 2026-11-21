@@ -1,13 +1,13 @@
 //! Battle sound queue, effect-channel reuse and positional-object tracking.
 
-use crate::engine::battle::Cx;
-use crate::engine::battle::ElementId;
+use uqm_engine::battle::Cx;
+use uqm_engine::battle::ElementId;
 
-use crate::engine::battle::kernel::Channels;
+use uqm_engine::battle::kernel::Channels;
 #[cfg(test)]
-use crate::engine::battle::kernel::SoundQueue;
+use uqm_engine::battle::kernel::SoundQueue;
 
-use crate::sound::heart_ffi::{
+use uqm_engine::sound::heart_ffi::{
     get_positional_object, set_positional_object, update_sound_position,
 };
 
@@ -24,13 +24,13 @@ pub mod engine {
     pub(crate) fn position(
         cx: &mut Cx<'_>,
         object: Option<ElementId>,
-    ) -> crate::sound::types::SoundPosition {
+    ) -> uqm_engine::sound::types::SoundPosition {
         let Some(id) = object.filter(|id| cx.elements().contains(*id)) else {
-            return crate::sound::types::SoundPosition::non_positional();
+            return uqm_engine::sound::types::SoundPosition::non_positional();
         };
         let point = cx.sound_point(id);
         let (width, height) = cx.screen_dimensions();
-        crate::sound::types::SoundPosition {
+        uqm_engine::sound::types::SoundPosition {
             positional: true,
             x: i32::from(point.x) - ((width - 64) >> 1),
             y: i32::from(point.y) - (height >> 1),
@@ -39,7 +39,7 @@ pub mod engine {
 
     pub(crate) fn update_positions(cx: &mut Cx<'_>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if crate::sound::heart_ffi::channel_playing(i) == 0 {
+            if uqm_engine::sound::heart_ffi::channel_playing(i) == 0 {
                 continue;
             }
             if let Some(object) = cx.elements().sound_source(get_positional_object(i)) {
@@ -54,15 +54,15 @@ pub mod engine {
     }
 
     pub(crate) fn play_sound(
-        world: &crate::engine::World,
+        world: &uqm_engine::World,
         channels: &mut Channels,
-        sound: &crate::sound::owned_bank::SoundClip,
-        pos: crate::sound::types::SoundPosition,
+        sound: &uqm_engine::sound::owned_bank::SoundClip,
+        pos: uqm_engine::sound::types::SoundPosition,
         object: Option<ElementId>,
         priority: u8,
     ) {
         let channel = channels.select(sound.identity(), |c| {
-            crate::sound::heart_ffi::channel_playing(c as u32 + MIN_FX_CHANNEL) != 0
+            uqm_engine::sound::heart_ffi::channel_playing(c as u32 + MIN_FX_CHANNEL) != 0
         });
         world.play_sound_effect(
             sound,
@@ -94,7 +94,7 @@ pub mod engine {
         }
     }
 
-    pub fn unlink(cx: &mut crate::engine::battle::Cx<'_>, id: crate::engine::battle::ElementId) {
+    pub fn unlink(cx: &mut uqm_engine::battle::Cx<'_>, id: uqm_engine::battle::ElementId) {
         assert!(cx.elements().linked(id), "element is not linked");
         if cx.kernel.configuration.preferences().stereo_sfx != 0 {
             remove_sounds(cx.kernel, Some(id));
@@ -102,7 +102,7 @@ pub mod engine {
         cx.unlink_storage(id);
     }
 
-    pub(crate) fn remove_sounds(kernel: &mut crate::engine::Kernel, object: Option<ElementId>) {
+    pub(crate) fn remove_sounds(kernel: &mut uqm_engine::Kernel, object: Option<ElementId>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
             if kernel.element_sound_source(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
@@ -114,11 +114,11 @@ pub mod engine {
     #[cfg(test)]
     mod unlink_tests {
         use super::FIRST_SFX_CHANNEL;
-        use crate::engine::{
+        use uqm_engine::sound::heart_ffi::{get_positional_object, set_positional_object};
+        use uqm_engine::{
             battle::{Battle, Cx},
             Game,
         };
-        use crate::sound::heart_ffi::{get_positional_object, set_positional_object};
 
         #[test]
         #[serial_test::serial]
@@ -133,15 +133,15 @@ pub mod engine {
                     &mut battle,
                     &mut game.world,
                     &mut game.kernel,
-                    crate::math::random,
+                    uqm_engine::math::random,
                 );
                 let first = cx.alloc_element().unwrap();
                 let second = cx.alloc_element().unwrap();
                 cx.put(first);
                 cx.put(second);
-                let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(vec![
-                    crate::sound::types::SoundSample::new(),
-                    crate::sound::types::SoundSample::new(),
+                let bank = uqm_engine::sound::owned_bank::LoadedSoundBank::from_samples(vec![
+                    uqm_engine::sound::types::SoundSample::new(),
+                    uqm_engine::sound::types::SoundSample::new(),
                 ]);
                 cx.kernel.sounds.push(Some(bank.clip(0)), Some(first));
                 cx.kernel.sounds.push(Some(bank.clip(1)), Some(second));
@@ -183,7 +183,7 @@ pub mod engine {
                 &mut battle,
                 &mut game.world,
                 &mut game.kernel,
-                crate::math::random,
+                uqm_engine::math::random,
             );
             let id = cx.alloc_element().unwrap();
             super::unlink(&mut cx, id);
@@ -199,10 +199,10 @@ fn encode_object(object: Option<ElementId>) -> usize {
 mod tests {
     use super::*;
 
-    fn fixture_bank() -> crate::sound::owned_bank::LoadedSoundBank {
-        crate::sound::owned_bank::LoadedSoundBank::from_samples(
+    fn fixture_bank() -> uqm_engine::sound::owned_bank::LoadedSoundBank {
+        uqm_engine::sound::owned_bank::LoadedSoundBank::from_samples(
             (0..12)
-                .map(|_| crate::sound::types::SoundSample::new())
+                .map(|_| uqm_engine::sound::types::SoundSample::new())
                 .collect(),
         )
     }
@@ -210,13 +210,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn real_sound_queue_operations_accept_an_empty_unpublished_campaign() {
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut game = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let mut cx = Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         assert!(!engine::position(&mut cx, None).positional);
         engine::update_positions(&mut cx);
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn positional_tokens_keep_generation_and_owner_without_pointer_identity() {
-        let mut elements = crate::engine::battle::ElementTable::with_capacity(1);
+        let mut elements = uqm_engine::battle::ElementTable::with_capacity(1);
         assert_eq!(elements.sound_source(encode_object(None)), None);
         let old = elements.alloc().unwrap();
         let token = encode_object(Some(old));
@@ -237,7 +237,7 @@ mod tests {
         let replacement = elements.alloc().unwrap();
         assert_eq!(elements.sound_source(token), None);
         assert_ne!(encode_object(Some(replacement)), token);
-        let mut other = crate::engine::battle::ElementTable::with_capacity(1);
+        let mut other = uqm_engine::battle::ElementTable::with_capacity(1);
         other.alloc().unwrap();
         assert_eq!(other.sound_source(token), None);
     }
@@ -277,8 +277,8 @@ mod tests {
     }
     #[test]
     fn queued_clip_retains_its_allocation_after_admission_owner_drops() {
-        let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(vec![
-            crate::sound::types::SoundSample::new(),
+        let bank = uqm_engine::sound::owned_bank::LoadedSoundBank::from_samples(vec![
+            uqm_engine::sound::types::SoundSample::new(),
         ]);
         let clip = bank.clip(0);
         let identity = clip.identity();

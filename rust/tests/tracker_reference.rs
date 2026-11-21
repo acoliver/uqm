@@ -1,7 +1,8 @@
 //! @plan PLAN-20260314-SOUND.P34
 //! Decoder regressions against installed libopenmpt, not player-generated expectations.
-use uqm_rust::sound::decoder::{DecodeError, Decoder};
-use uqm_rust::sound::mod_decoder::ModDecoder;
+#![forbid(unsafe_code)]
+use uqm_engine::sound::decoder::{DecodeError, Decoder};
+use uqm_engine::sound::mod_decoder::ModDecoder;
 
 fn fixture(name: &str, extension: &str) -> Vec<u8> {
     std::fs::read(

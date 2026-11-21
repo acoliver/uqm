@@ -1,7 +1,7 @@
 //! Campaign-owned rendering resources borrowed for a synchronous conversation.
 
-use crate::engine::Kernel;
-use crate::graphics::{context::ContextId, drawable::FrameId, font::FontId};
+use uqm_engine::graphics::{context::ContextId, drawable::FrameId, font::FontId};
+use uqm_engine::Kernel;
 
 #[derive(Default)]
 pub(crate) struct Presentation {
@@ -13,7 +13,7 @@ pub(crate) struct Presentation {
     pub tiny_font: Option<FontId>,
     pub using_speech: u32,
     pub scope_buffer:
-        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable::LoadedDrawable>>>,
+        std::rc::Rc<std::cell::OnceCell<Option<uqm_engine::graphics::drawable::LoadedDrawable>>>,
 }
 
 impl Presentation {
@@ -21,9 +21,11 @@ impl Presentation {
         &self,
         width: i16,
         height: i16,
-    ) -> crate::graphics::drawable::ContextFrame {
+    ) -> uqm_engine::graphics::drawable::ContextFrame {
         self.scope_buffer
-            .get_or_init(|| crate::graphics::drawable::LoadedDrawable::create(6, width, height, 1))
+            .get_or_init(|| {
+                uqm_engine::graphics::drawable::LoadedDrawable::create(6, width, height, 1)
+            })
             .as_ref()
             .unwrap_or_else(|| panic!("oscilloscope buffer allocation failed"))
             .lease()

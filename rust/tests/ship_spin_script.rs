@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_rust::automation::script::{parse_script, validate_script, Action, MenuKey};
 
 #[test]

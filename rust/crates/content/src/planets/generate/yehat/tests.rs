@@ -2,10 +2,8 @@
 //! recording site: every host call and state write, in order.
 
 use super::{enter_orbit, YehatSite, CAPITAL_CONTACT_FLAGS};
-use crate::engine::world::activity::activity_flags::{
-    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
-};
 use crate::planets::generate::special::Body;
+use uqm_engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 const IN_INTERPLANETARY: u16 = 4;
 
@@ -94,7 +92,7 @@ impl YehatSite for RecordingSite {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
+    fn load_ruins_scene(&mut self, _system: &mut uqm_engine::world::generation::SolarSys<'_>) {
         self.record(Call::LoadRuinsScene);
     }
 }

@@ -1,5 +1,5 @@
 //! Umgah dialogue, ported from umgahc.c.
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use uqm_engine::StoryKey;
 mod phrases;
 use phrases::*;
 pub mod api;
@@ -50,10 +50,8 @@ impl<A: UmgahApi> Dialogue<'_, A> {
         } else if r == BYE_POST_ZOMBIE {
             self.api.npc(FUNNY_IDEA);
             self.api.talk_segue((!0_u16 as i32) as u16);
-            self.api.add_escorts(
-                (crate::engine::species::ship::UMGAH_SHIP as i32) as u16,
-                4_i16,
-            );
+            self.api
+                .add_escorts((uqm_engine::species::ship::UMGAH_SHIP as i32) as u16, 4_i16);
             self.api.set(StoryKey::UMGAH_HOSTILE, 1_u8);
         }
     }

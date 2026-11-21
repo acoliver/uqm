@@ -1,6 +1,6 @@
 use super::RACE_SHIP_FOR_COMM;
-use crate::engine::species::{conv, ship};
-use crate::engine::{StoryKey, World};
+use uqm_engine::species::{conv, ship};
+use uqm_engine::{StoryKey, World};
 
 pub(super) fn restored_conversation(world: &World) -> u32 {
     let flags = world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA);
@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn restored_conversation_preserves_pluto_and_global_flag_precedence() {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         for (pluto, flags, expected) in [
             (1, 0, conv::SPATHI),
             (1, 0x30, conv::SPATHI),

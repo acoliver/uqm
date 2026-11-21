@@ -1,19 +1,20 @@
 //! Game kernel start-up: the display, the resources and the status display.
 
-use crate::engine::battle::access::lifecycle;
 use crate::mainloop::options_abi::{load_addon, load_indices, prepare_addons};
+use uqm_engine::battle::access::lifecycle;
 const MAX_DISPLAY_ELEMENTS: u32 = 150;
 const MAX_SHIPS_PER_SIDE: u32 = 14;
 const OPT_3DO: u32 = 1;
-use crate::{battle::status_native::init_status_offsets, graphics::font::LoadedFont};
+use uqm_engine::graphics::font::LoadedFont;
+use uqm_modes::battle::status_native::init_status_offsets;
 
 /// Load the display, the resource indices and addons the preferences ask for,
 /// and the main colour map. Returns zero when the kernel could not load.
-pub fn load_kernel(kernel: &mut crate::engine::Kernel, world: &mut crate::engine::World) -> u32 {
+pub fn load_kernel(kernel: &mut uqm_engine::Kernel, world: &mut uqm_engine::World) -> u32 {
     if !kernel.open_screen() || !kernel.init_resources() {
         return 0;
     }
-    let Some(content) = crate::io::content_dir() else {
+    let Some(content) = uqm_engine::io::content_dir() else {
         return 0;
     };
     if load_indices(&content) == 0 {
@@ -41,11 +42,11 @@ pub fn load_kernel(kernel: &mut crate::engine::Kernel, world: &mut crate::engine
     1
 }
 
-fn init_contexts(kernel: &mut crate::engine::Kernel) -> bool {
+fn init_contexts(kernel: &mut uqm_engine::Kernel) -> bool {
     kernel.create_contexts() && lifecycle::init_elements(&mut *kernel, MAX_DISPLAY_ELEMENTS as u16)
 }
 
-fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> bool {
+fn init_kernel(kernel: &mut uqm_engine::Kernel, activity: u16) -> bool {
     kernel.reset_race_capacities(MAX_SHIPS_PER_SIDE as usize);
     let Some(font) = LoadedFont::load(c"font.starcon") else {
         return false;
@@ -58,7 +59,8 @@ fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> bool {
     if !kernel.load_status_frames() {
         return false;
     }
-    let Some(text) = crate::strings::owned_table::LoadedTextTable::load(c"text.starcon") else {
+    let Some(text) = uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.starcon")
+    else {
         return false;
     };
     kernel.install_game_text(text);
@@ -66,7 +68,7 @@ fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> bool {
         return false;
     };
     kernel.install_micro_font(font);
-    let Some(bank) = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.menu") else {
+    let Some(bank) = uqm_engine::sound::owned_bank::LoadedSoundBank::load(c"sounds.menu") else {
         return false;
     };
     kernel.install_menu_sounds(bank);
@@ -76,7 +78,7 @@ fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> bool {
 
 /// Load the fonts, frames, text and sounds the game needs and create the
 /// drawing contexts, unless a previous call already did.
-pub fn init_game_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
+pub fn init_game_kernel(kernel: &mut uqm_engine::Kernel, activity: u16) -> u32 {
     let needs_init = kernel.activity_frame.is_null();
     if needs_init && !(init_kernel(kernel, activity) && init_contexts(kernel)) {
         return 0;

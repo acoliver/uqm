@@ -42,7 +42,7 @@ pub fn confine_candidate(
         (deny mach-priv-task-port)
         {shared_rule}");
     let profile = std::ffi::CString::new(profile).map_err(|error| error.to_string())?;
-    crate::platform::macos::sandbox::restrict_candidate(command, profile);
+    uqm_platform::macos::sandbox::restrict_candidate(command, profile);
     Ok(())
 }
 

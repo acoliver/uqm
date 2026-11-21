@@ -385,7 +385,7 @@ impl SharedInputs {
             relative_parent(&scenario, logical).map_err(|error| error.to_string())?;
         let source = std::ffi::CString::new(source_name).map_err(|error| error.to_string())?;
         let target = std::ffi::CString::new(target_name).map_err(|error| error.to_string())?;
-        crate::platform::os::fs::link_at(
+        uqm_platform::os::fs::link_at(
             source_parent.as_fd(),
             &source,
             target_parent.as_fd(),
@@ -525,7 +525,7 @@ fn create_relative(directory: &File, relative: &str) -> io::Result<File> {
 fn open_at(directory: &File, name: &str, flags: i32) -> io::Result<File> {
     use std::os::fd::AsFd as _;
     let name = std::ffi::CString::new(name).map_err(io::Error::other)?;
-    crate::platform::os::fd::open_at(
+    uqm_platform::os::fd::open_at(
         directory.as_fd(),
         &name,
         flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,

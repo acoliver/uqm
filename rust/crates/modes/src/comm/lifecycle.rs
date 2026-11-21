@@ -6,7 +6,7 @@ use crate::comm::{
     locdata::{session_view, SessionData},
     races, Comm,
 };
-use crate::engine::{battle::Cx, StoryKey};
+use uqm_engine::{battle::Cx, StoryKey};
 
 struct Lifecycle {
     definition: fn(&Cx<'_>) -> CommDescriptor,

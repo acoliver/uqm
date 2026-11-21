@@ -1,19 +1,19 @@
 //! Scoped live records and fixture phases. No record borrow crosses an engine call.
 
 use super::*;
-use crate::battle::context_access::fixture::FixtureOps;
-use crate::battle::context_access::fixture::{Element, Phoenix, Ship};
-use crate::battle::element::ElementFlags;
-use crate::engine::battle::ai_constants::{SPECIAL, WEAPON};
-use crate::engine::battle::views::{FrameSelection, Frames};
-use crate::engine::battle::Cx;
-use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
-use crate::engine::world::activity::activity_flags::IN_BATTLE;
-use crate::engine::world::activity::activity_kinds::IN_INTERPLANETARY;
-use crate::engine::world::StarId;
-use crate::graphics::geometry::Point;
-use crate::math::battle_types::ONE_SHIFT;
 use std::mem;
+use uqm_engine::battle::ai_constants::{SPECIAL, WEAPON};
+use uqm_engine::battle::views::{FrameSelection, Frames};
+use uqm_engine::battle::Cx;
+use uqm_engine::battle::{Concern, ElementId, Parent, ShipId};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::battle_types::ONE_SHIFT;
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::activity::activity_kinds::IN_INTERPLANETARY;
+use uqm_engine::world::StarId;
+use uqm_modes::battle::context_access::fixture::FixtureOps;
+use uqm_modes::battle::context_access::fixture::{Element, Phoenix, Ship};
+use uqm_modes::battle::element::ElementFlags;
 
 #[path = "combat.rs"]
 mod combat;
@@ -110,15 +110,15 @@ fn place(element: &mut Element, x: i16, y: i16) {
 
 struct Hooks {
     blazer_collision: usize,
-    satellite: Option<crate::engine::battle::ElementHook>,
+    satellite: Option<uqm_engine::battle::ElementHook>,
     defense: usize,
-    limpets: Option<crate::engine::battle::ElementHook>,
-    fighters: Option<crate::engine::battle::ElementHook>,
+    limpets: Option<uqm_engine::battle::ElementHook>,
+    fighters: Option<uqm_engine::battle::ElementHook>,
     fighter_preprocess: usize,
-    pkunk: Option<crate::engine::battle::race::ShipFn>,
+    pkunk: Option<uqm_engine::battle::race::ShipFn>,
     intercept: usize,
     rebirth: usize,
-    ship_death: Option<crate::engine::battle::ElementHook>,
+    ship_death: Option<uqm_engine::battle::ElementHook>,
     star_collision: usize,
     unhyper: usize,
 }
@@ -126,8 +126,8 @@ struct Hooks {
 /// Only operations that invalidate live borrows leave the safe phase logic.
 enum Effect {
     RaceProcess(bool, ElementId),
-    NativeShip(crate::engine::battle::race::ShipFn, ElementId),
-    Invoke(Option<crate::engine::battle::ElementHook>, ElementId),
+    NativeShip(uqm_engine::battle::race::ShipFn, ElementId),
+    Invoke(Option<uqm_engine::battle::ElementHook>, ElementId),
     Death(ElementId),
     Weapon(ElementId),
     Collide(ElementId, ElementId),
@@ -169,7 +169,7 @@ struct Battle {
     wait: u16,
     phoenix: Option<Phoenix>,
     star: Option<StarId>,
-    velocity: crate::battle::velocity::VelocityDesc,
+    velocity: uqm_modes::battle::velocity::VelocityDesc,
     captain: FrameSelection,
 }
 
@@ -217,7 +217,7 @@ impl Battle {
             wait: 0,
             phoenix: None,
             star: None,
-            velocity: crate::battle::velocity::VelocityDesc::new(),
+            velocity: uqm_modes::battle::velocity::VelocityDesc::new(),
             captain: FrameSelection::ABSENT,
         }
     }
@@ -411,7 +411,7 @@ impl<'a> Task<'a> {
 
 #[cfg(test)]
 struct Collision {
-    callback: Option<crate::engine::battle::CollisionHook>,
+    callback: Option<uqm_engine::battle::CollisionHook>,
     points: [Point; 2],
     parent: Parent,
 }

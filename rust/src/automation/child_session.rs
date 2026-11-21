@@ -23,13 +23,13 @@
 use std::path::PathBuf;
 
 #[cfg(unix)]
-use crate::platform::os as sys;
-#[cfg(unix)]
 use std::io;
 #[cfg(unix)]
 use std::os::fd::RawFd;
 #[cfg(unix)]
 use sys::clock::monotonic_millis;
+#[cfg(unix)]
+use uqm_platform::os as sys;
 
 /// Environment variable carrying the full-duplex nested-group registration descriptor.
 #[cfg(unix)]
@@ -759,7 +759,7 @@ mod os {
     use std::time::{Duration, Instant};
 
     use crate::automation::identity::{digest_hex, sha256_file};
-    use crate::platform::os as sys;
+    use uqm_platform::os as sys;
 
     use super::{
         ChangeWait, NestedGroupOperation, NestedGroupProtocol, ProcessIdentity, SleepWait,

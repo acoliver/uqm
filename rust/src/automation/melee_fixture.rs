@@ -1,8 +1,8 @@
 //! Bounded parity setups on the loaded game world. No fixture owns a global.
 
-use crate::engine::battle::Cx;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use uqm_engine::battle::Cx;
 
 mod live;
 
@@ -81,7 +81,7 @@ pub struct MeleeSetupRequest {
 
 impl MeleeSetupRequest {
     pub fn validate(&self) -> Result<(), String> {
-        crate::supermelee::session::validate_fleets(&self.ships)
+        uqm_modes::supermelee::session::validate_fleets(&self.ships)
     }
 }
 
@@ -319,7 +319,7 @@ pub(crate) fn run(
     request: &FixtureRequest,
     checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<FixtureRun, String> {
-    crate::collections::observation::enable();
+    uqm_engine::collections::observation::enable();
     let proof = execute(cx, Operation::Fixture(request.fixture), checkpoint)?
         .ok_or("fixture operation returned no proof")?;
     if request.fixture != FixtureName::StarContact {
@@ -334,7 +334,7 @@ pub(crate) fn corpus(
     checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<(), String> {
     request.validate()?;
-    crate::collections::observation::enable();
+    uqm_engine::collections::observation::enable();
     execute(cx, Operation::Corpus(request), checkpoint).map(|_| ())
 }
 

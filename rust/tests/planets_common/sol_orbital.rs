@@ -4,11 +4,11 @@
 
 use super::sol::{self, Layout};
 use std::fmt::Write as _;
-use uqm_rust::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
-use uqm_rust::math::RandomContext;
-use uqm_rust::planets::generate::calc::{AnalysisSite, StarDescription};
-use uqm_rust::planets::generate::sol::orbital;
-use uqm_rust::planets::generate::special::{Body, Orbit};
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_modes::planets::generate::calc::{AnalysisSite, StarDescription};
+use uqm_modes::planets::generate::sol::orbital;
+use uqm_modes::planets::generate::special::{Body, Orbit};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Case {
@@ -22,7 +22,7 @@ pub trait Ops {
 
 pub fn input(case: Case) -> (PlanetDesc, Option<PlanetDesc>) {
     let mut planets = Default::default();
-    uqm_rust::planets::generate::sol::generate_planets(
+    uqm_modes::planets::generate::sol::generate_planets(
         &mut RandomContext::with_seed(91),
         &mut planets,
     );
@@ -30,7 +30,7 @@ pub fn input(case: Case) -> (PlanetDesc, Option<PlanetDesc>) {
         Body::Planet(p) => (planets[usize::from(p)], None),
         Body::Moon { planet, moon } => {
             let mut moons = Default::default();
-            uqm_rust::planets::generate::sol::generate_moons(
+            uqm_modes::planets::generate::sol::generate_moons(
                 &mut RandomContext::with_seed(case.layout.seed),
                 case.layout.size,
                 case.layout.color,

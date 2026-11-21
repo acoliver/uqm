@@ -62,7 +62,7 @@ impl SessionCore {
     }
     pub(crate) fn replay_wait(&self, poll: impl FnMut() -> bool) -> bool {
         poll_replay_wait(self.replay_remote_player.is_some(), poll, || {
-            crate::threading::pacing::yield_input_loop(uqm_engine::host::yield_now);
+            uqm_engine::threading::pacing::yield_input_loop(uqm_engine::host::yield_now);
         })
     }
 }
@@ -93,7 +93,7 @@ impl std::ops::Deref for NetplaySession {
     }
 }
 impl NetplaySession {
-    pub fn battle_net(&self) -> std::rc::Rc<dyn crate::engine::battle::net::BattleNet> {
+    pub fn battle_net(&self) -> std::rc::Rc<dyn uqm_engine::battle::net::BattleNet> {
         self.0.clone()
     }
     pub fn options_mut(&mut self) -> &mut Options {
@@ -143,7 +143,7 @@ mod tests {
     use super::*;
     #[test]
     fn new_menu_owns_teams_and_retains_the_protocol_across_battles() {
-        let mut world = crate::engine::World::default();
+        let mut world = uqm_engine::World::default();
         let mut menu =
             crate::supermelee::session::MeleeSession::new(world.activity_control(), Vec::new());
         world.set_activity(0x1004);

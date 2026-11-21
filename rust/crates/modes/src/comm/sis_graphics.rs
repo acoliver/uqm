@@ -2,11 +2,11 @@
 
 use super::locdata::CColor;
 use super::Comm;
-use crate::graphics::{
+use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, font::FontLease, geometry::Color,
     geometry::Extent, geometry::Point, geometry::Rect,
 };
-use std::ffi::{CStr, CString};
 
 pub(crate) struct ConversationResources {
     pub commander_name: CString,
@@ -19,7 +19,7 @@ pub(crate) struct ConversationDisplay {
     pub space: ContextLease,
     pub player_font: FontLease,
     pub history_font: FontLease,
-    pub game_strings: crate::strings::owned_table::LoadedTextTable,
+    pub game_strings: uqm_engine::strings::owned_table::LoadedTextTable,
     pub subtitles: SubtitleCache,
 }
 
@@ -35,7 +35,7 @@ impl ConversationDisplay {
     pub(crate) fn new(
         comm: &Comm,
         assets: &super::assets::Assets,
-        kernel: &crate::engine::Kernel,
+        kernel: &uqm_engine::Kernel,
     ) -> Result<Self, &'static str> {
         let history = comm
             .presentation
@@ -52,9 +52,7 @@ impl ConversationDisplay {
 }
 
 impl ConversationResources {
-    pub(crate) fn new(
-        world: &crate::engine::World,
-    ) -> Result<Self, std::ffi::FromBytesUntilNulError> {
+    pub(crate) fn new(world: &uqm_engine::World) -> Result<Self, std::ffi::FromBytesUntilNulError> {
         Ok(Self {
             commander_name: CStr::from_bytes_until_nul(&world.data.flagship.commander_name)?
                 .to_owned(),
@@ -67,7 +65,7 @@ impl ConversationResources {
 impl Comm {
     pub fn admit_conversation_names(
         &mut self,
-        world: &crate::engine::World,
+        world: &uqm_engine::World,
     ) -> Result<(), std::ffi::FromBytesUntilNulError> {
         self.display.resources = Some(ConversationResources::new(world)?);
         Ok(())
@@ -120,7 +118,7 @@ impl<'a> Text<'a> {
                 let measured = font.measure(
                     self.text,
                     self.baseline,
-                    crate::graphics::geometry::TextAlign::from_c(self.align),
+                    uqm_engine::graphics::geometry::TextAlign::from_c(self.align),
                     count,
                 );
                 (measured.rect.extent.width, measured.characters)
@@ -135,7 +133,7 @@ impl<'a> Text<'a> {
             font,
             self.text,
             self.baseline,
-            crate::graphics::geometry::TextAlign::from_c(self.align),
+            uqm_engine::graphics::geometry::TextAlign::from_c(self.align),
             color,
             self.char_count,
         );
@@ -356,7 +354,7 @@ pub fn refresh_responses(comm: &mut Comm, activity: u16, top: u8, count: u8, sel
 #[derive(Default)]
 struct SummaryLoopState {
     print_next: bool,
-    history: Vec<crate::sound::trackplayer::SubtitleSnapshot>,
+    history: Vec<uqm_engine::sound::trackplayer::SubtitleSnapshot>,
     next_sub: usize,
     left_over: Option<usize>,
 }
@@ -450,7 +448,7 @@ fn draw_summary_page_contents(comm: &Comm, state: &mut SummaryLoopState) {
 
 fn do_summary_page_frame(
     comm: &Comm,
-    input: &crate::engine::input::InputSession,
+    input: &uqm_engine::input::InputSession,
     state: &mut SummaryLoopState,
     activity: u16,
 ) -> bool {
@@ -471,7 +469,7 @@ fn do_summary_page_frame(
         draw_summary_page_contents(comm, state);
         state.print_next = false;
     } else {
-        crate::threading::pacing::GameThreadPacer::new(space_context(comm))
+        uqm_engine::threading::pacing::GameThreadPacer::new(space_context(comm))
             .sleep_for(ONE_SECOND / 20);
     }
     true
@@ -479,8 +477,8 @@ fn do_summary_page_frame(
 
 pub fn select_conversation_summary(
     comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) {
     if comm.response_display[1] > 0 {
         if let Some(entry) = comm.responses().get(comm.response_display[2] as usize) {
@@ -490,7 +488,7 @@ pub fn select_conversation_summary(
     }
     let mut state = SummaryLoopState {
         print_next: true,
-        history: crate::sound::trackplayer::subtitle_history(),
+        history: uqm_engine::sound::trackplayer::subtitle_history(),
         ..Default::default()
     };
     let runtime = cx.kernel.input_runtime();
@@ -511,7 +509,7 @@ mod tests {
 
     #[test]
     fn conversation_names_are_admitted_once_and_reject_unterminated_buffers() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         game.world.data.flagship.commander_name[..5].copy_from_slice("Zoë\0".as_bytes());
         game.world.data.flagship.ship_name[..4].copy_from_slice("船\0".as_bytes());
         let mut comm = Comm::new();
@@ -562,7 +560,7 @@ mod tests {
     #[serial_test::serial]
     fn history_pages_and_scroll_indicators_use_real_retained_resources() {
         super::super::sis_graphics_font_tests::with_display("comm::sis_graphics::tests::history_pages_and_scroll_indicators_use_real_retained_resources", |comm, context| {
-            use crate::sound::trackplayer;
+            use uqm_engine::sound::trackplayer;
             trackplayer::stop_track().unwrap();
             for _ in 0..20 {
                 trackplayer::splice_track(Some("history"), Some("A"), None, None, vec![]).unwrap();
@@ -578,18 +576,18 @@ mod tests {
             draw_summary_page_contents(comm, &mut state);
             assert_eq!(state.next_sub, 20);
             assert!(!state.has_next());
-            let input = crate::engine::input::InputSession::default();
+            let input = uqm_engine::input::InputSession::default();
             assert!(!do_summary_page_frame(comm, &input, &mut state, CHECK_ABORT));
             state.print_next = false;
             assert!(do_summary_page_frame(comm, &input, &mut state, 0));
-            let frames = crate::graphics::drawable::LoadedDrawable::create(8, 13, 5, 8).unwrap();
+            let frames = uqm_engine::graphics::drawable::LoadedDrawable::create(8, 13, 5, 8).unwrap();
             let frame = frames.lease().context_frame(0);
             assert_eq!(scroll_indicator_origin(&frame, 124), Point { x: 228, y: 124 });
             comm.presentation.activity_frame = frame.frame();
             scroll_indicator(context, comm, 6, 123);
             scroll_indicator(context, comm, 7, 225);
             context.flush();
-            comm.presentation.activity_frame = crate::graphics::drawable::FrameId::NULL;
+            comm.presentation.activity_frame = uqm_engine::graphics::drawable::FrameId::NULL;
         });
     }
     #[test]
@@ -601,7 +599,7 @@ mod tests {
                 let font = player_font(comm);
                 let baseline = Point { x: 10, y: 135 };
                 let mut text = Text::new(c"AAA AAA", baseline, 0, u16::MAX);
-                let width = font.measure(text.text, baseline, crate::graphics::geometry::TextAlign::Left, u16::MAX).rect.extent.width;
+                let width = font.measure(text.text, baseline, uqm_engine::graphics::geometry::TextAlign::Left, u16::MAX).rect.extent.width;
                 let line = text.fit(&font, width, u16::MAX);
                 assert!(!line.end_of_line);
                 assert_eq!((line.characters, line.next), (3, 4));

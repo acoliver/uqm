@@ -1,7 +1,7 @@
 use crate::comm::host::Host;
 use crate::comm::races::starbas::*;
 use crate::comm::Comm;
-use crate::engine::battle::Cx;
+use uqm_engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.starbas.take().unwrap_or_default();
     {
@@ -97,7 +97,7 @@ mod api {
         use super::*;
         use crate::comm::host::Host;
 
-        use crate::engine::world::fleet::escorts_worth;
+        use uqm_engine::world::fleet::escorts_worth;
 
         use crate::planets::cargo::draw_cargo;
 
@@ -141,7 +141,7 @@ mod api {
                 self.cx.borrow().kernel.using_speech != 0
             }
             fn random(&mut self) -> u32 {
-                crate::math::random()
+                uqm_engine::math::random()
             }
             fn talking_animation(&mut self, enabled: bool) {
                 self.comm.borrow_mut().set_talking_animation(enabled);
@@ -171,7 +171,7 @@ mod api {
                 crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 3)
             }
             fn now(&mut self) -> u32 {
-                crate::engine::time::counter_abi::get_time_counter()
+                uqm_engine::time::counter_abi::get_time_counter()
             }
             fn sleep(&mut self, ticks: u32) {
                 let runtime = self.cx.borrow().kernel.input_runtime();

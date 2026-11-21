@@ -1,7 +1,7 @@
 use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 fn run(
     api: &mut Fake<Handler, api::World>,
@@ -177,7 +177,7 @@ fn required_yehat_game_state_keys_are_present() {
         "PKUNK_HOME_VISITS",
     ] {
         assert!(
-            crate::engine::StoryKey::from_name(key).is_some(),
+            uqm_engine::StoryKey::from_name(key).is_some(),
             "missing game state key: {key}"
         );
     }

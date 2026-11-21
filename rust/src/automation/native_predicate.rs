@@ -111,7 +111,7 @@ fn at_least(label: &str, key: &str, minimum: u64) -> bool {
     number(label, key).is_some_and(|actual| actual >= minimum)
 }
 
-fn has_category(label: &str, category: crate::planet_side::cargo::ElementCategory) -> bool {
+fn has_category(label: &str, category: uqm_modes::planet_side::cargo::ElementCategory) -> bool {
     label
         .split(':')
         .any(|field| field.strip_prefix("category=") == Some(category.name()))
@@ -689,7 +689,7 @@ pub(super) mod tests {
     }
 
     pub(in crate::automation) fn pkunk_records(label: &str, restored: bool) -> Vec<TraceRecord> {
-        use crate::engine::observe::battle::{BattlePhase, BattleShip, BattleTick};
+        use uqm_engine::observe::battle::{BattlePhase, BattleShip, BattleTick};
         let mut result = Vec::new();
         for (frame, crew) in if restored {
             vec![(12, 8)]
@@ -714,7 +714,7 @@ pub(super) mod tests {
                     ships: [
                         Some(BattleShip {
                             identity: [3, 7],
-                            species: crate::engine::species::species_id::SPECIES_ID_PKUNK_ID,
+                            species: uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID,
                             position: [0; 2],
                             velocity: [0; 2],
                             facing: 0,
@@ -787,7 +787,7 @@ pub(super) mod tests {
                 2 => ship.crew = 0,
                 3 => actual.frame = 11,
                 4 => tick.counters[0] = 0,
-                _ => tick.phase = crate::engine::observe::battle::BattlePhase::Input,
+                _ => tick.phase = uqm_engine::observe::battle::BattlePhase::Input,
             }
             assert!(!history.clone().verify(&action("restored"), &bad, &frame()));
         }
@@ -1246,7 +1246,7 @@ pub(super) mod tests {
             device: Device::ClearSpindle,
             max_ticks: 50,
         });
-        let state = crate::planets::device_effects::DEVICE_STORY_KEYS
+        let state = uqm_modes::planets::device_effects::DEVICE_STORY_KEYS
             .iter()
             .map(|&(_, name)| name)
             .chain(["fuel", "activity"])
@@ -1330,7 +1330,7 @@ pub(super) mod tests {
     #[test]
     fn only_a_collected_label_of_the_same_category_and_minimum_satisfies_the_action() {
         use crate::automation::script::CollectPlanetMineralsStep;
-        use crate::planet_side::cargo::ElementCategory;
+        use uqm_modes::planet_side::cargo::ElementCategory;
         let action = Action::CollectPlanetMinerals(CollectPlanetMineralsStep {
             category: ElementCategory::Radioactive,
             minimum_units: 2,
@@ -1417,7 +1417,7 @@ pub(super) mod tests {
     #[test]
     fn only_a_verified_element_label_of_the_same_category_and_minimum_satisfies_the_action() {
         use crate::automation::script::ShipElementAssertion;
-        use crate::planet_side::cargo::ElementCategory;
+        use uqm_modes::planet_side::cargo::ElementCategory;
         let action = Action::AssertShipElement(ShipElementAssertion {
             category: ElementCategory::Radioactive,
             minimum: 1,

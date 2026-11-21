@@ -189,7 +189,7 @@ impl GameClock {
     /// # Returns
     /// A vector of events that fired on this tick
     pub fn tick(&mut self) -> Vec<Event> {
-        let _guard = crate::engine::sync::lock(&self.mutex);
+        let _guard = uqm_engine::sync::lock(&self.mutex);
         self.tick_count += 1;
 
         let mut fired_events = Vec::new();
@@ -266,31 +266,31 @@ impl SharedGameClock {
     /// Get a snapshot of the current date
     #[must_use]
     pub fn current_date(&self) -> GameDate {
-        let inner = crate::engine::sync::lock(&self.inner);
+        let inner = uqm_engine::sync::lock(&self.inner);
         inner.current_date()
     }
 
     /// Tick the clock (returns fired events)
     pub fn tick(&self) -> Vec<Event> {
-        let mut inner = crate::engine::sync::lock(&self.inner);
+        let mut inner = uqm_engine::sync::lock(&self.inner);
         inner.tick()
     }
 
     /// Add an event
     pub fn add_event(&self, date: GameDate, event: Event) -> Result<(), String> {
-        let mut inner = crate::engine::sync::lock(&self.inner);
+        let mut inner = uqm_engine::sync::lock(&self.inner);
         inner.add_event(date, event)
     }
 
     /// Set the tick rate
     pub fn set_rate(&self, ticks_per_day: usize) {
-        let mut inner = crate::engine::sync::lock(&self.inner);
+        let mut inner = uqm_engine::sync::lock(&self.inner);
         inner.set_rate(ticks_per_day);
     }
 
     /// Move forward by days
     pub fn move_days(&self, days: usize) {
-        let mut inner = crate::engine::sync::lock(&self.inner);
+        let mut inner = uqm_engine::sync::lock(&self.inner);
         inner.move_days(days);
     }
 }

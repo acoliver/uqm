@@ -1,11 +1,11 @@
 //! Context and landing cursor retained by one orbit visit.
 
 use crate::comm::locdata::{CPoint, CRect};
-use crate::engine::graphics::{
+use std::cell::RefCell;
+use uqm_engine::graphics::{
     context::ContextLease, context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable,
 };
-use crate::engine::Kernel;
-use std::cell::RefCell;
+use uqm_engine::Kernel;
 
 #[derive(Default)]
 pub struct ScanCursor {
@@ -88,16 +88,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn scan_contexts_keep_separate_clips_and_survive_the_other_owner() {
-        let mut game = crate::engine::Game::new();
+        let mut game = uqm_engine::Game::new();
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let space = ContextLease::require(game.kernel.space_context);
         space.set_frame(ContextFrame::retain(game.kernel.screen));
-        space.set_clip(crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point { x: 7, y: 13 },
-            extent: crate::graphics::geometry::Extent {
+        space.set_clip(uqm_engine::graphics::geometry::Rect {
+            corner: uqm_engine::graphics::geometry::Point { x: 7, y: 13 },
+            extent: uqm_engine::graphics::geometry::Extent {
                 width: 242,
                 height: 227,
             },
@@ -120,7 +120,7 @@ mod tests {
             Default::default(),
             None,
         );
-        game.kernel.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.misc_data_frame = uqm_engine::graphics::drawable::FrameId::NULL;
         drop(cursor_image);
         drop(background);
         assert_eq!(first.cursor_image.indexed_frame(105).frame_count(), 106);
@@ -133,10 +133,12 @@ mod tests {
         assert_eq!((expected.extent.width, expected.extent.height), (242, 75));
         first.cursor.borrow_mut().move_to(CPoint { x: 32, y: 40 });
         second.cursor.borrow_mut().move_to(CPoint { x: 44, y: 52 });
-        first.context().set_clip(crate::graphics::geometry::Rect {
-            corner: crate::graphics::geometry::Point { x: 20, y: 30 },
-            ..expected
-        });
+        first
+            .context()
+            .set_clip(uqm_engine::graphics::geometry::Rect {
+                corner: uqm_engine::graphics::geometry::Point { x: 20, y: 30 },
+                ..expected
+            });
         second.context().select();
         drop(first);
         assert_eq!(second.context().clip_rect(), expected);

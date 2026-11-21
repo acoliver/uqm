@@ -5,12 +5,12 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `PLANETARY_CHANGE` (set on pickup).
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
-use crate::engine::StoryKey;
-use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, Body, Story, EARTH_ATMOSPHERE, TELLURIC_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
+use uqm_engine::math::RandomContext;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
+use uqm_engine::StoryKey;
 
 const WORLD: Body = Body::Planet(1);
 
@@ -26,7 +26,7 @@ pub trait AndrosynthSite {
     /// table's count) the table is released and `discovery_string` is cleared.
     fn load_ruins_story(
         &mut self,
-        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _system: &mut uqm_engine::world::generation::SolarSys<'_>,
         visits: u32,
     );
 }
@@ -115,7 +115,7 @@ pub fn pickup_energy(
         site.set_flag(StoryKey::PLANETARY_CHANGE, 1);
         site.report(
             system,
-            crate::engine::world::generation::ReportDisposition::Cycle,
+            uqm_engine::world::generation::ReportDisposition::Cycle,
         );
     }
     false
@@ -123,7 +123,7 @@ pub fn pickup_energy(
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 

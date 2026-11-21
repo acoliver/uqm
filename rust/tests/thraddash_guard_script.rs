@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use serde_json::Value;
 
 #[test]
@@ -14,7 +15,7 @@ fn homeworld_crash_regression_observes_duration_before_normal_loss() {
         .iter()
         .position(|step| step["action"] == "wait_for_battle_frames")
         .expect("the battle must run past the #379 crash point");
-    let crash_frames = 314 * uqm_rust::battle::BATTLE_FRAME_RATE;
+    let crash_frames = 314 * uqm_modes::battle::BATTLE_FRAME_RATE;
     assert_eq!(steps[duration]["minimum"], crash_frames + 1);
     assert_eq!(steps[duration]["max_ticks"], crash_frames + 2);
     assert_eq!(steps[duration - 1]["action"], "tap_menu_key");

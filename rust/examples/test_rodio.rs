@@ -1,4 +1,5 @@
 //! Test rodio audio playback with a real OGG file
+#![forbid(unsafe_code)]
 
 use std::fs::File;
 use std::io::BufReader;

@@ -1,12 +1,12 @@
-use crate::engine::battle::gravity::{calculate_gravity, time_space_matter_conflict};
-use crate::engine::battle::{Battle, Cx, ElementId, World};
 use std::cell::Cell;
+use uqm_engine::battle::gravity::{calculate_gravity, time_space_matter_conflict};
+use uqm_engine::battle::{Battle, Cx, ElementId, World};
 
 fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
     // SAFETY: the fixture owns the local queues, slots and projections until cleanup.
     {
         let mut battle = Battle::new();
-        let mut kernel = crate::engine::battle::record::Kernel::new();
+        let mut kernel = uqm_engine::battle::record::Kernel::new();
         let elements = kernel.fixture_elements();
         elements.reset_capacity(3);
         let ids = std::array::from_fn(|_| {
@@ -17,14 +17,14 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
         });
         let mut world = World::new();
         let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, || 0);
-        cx.element_mut(ids[2]).flags = crate::engine::battle::flags::NONSOLID as u16;
+        cx.element_mut(ids[2]).flags = uqm_engine::battle::flags::NONSOLID as u16;
         call(&mut cx, ids);
     }
 }
 
 #[test]
 fn gravity_selects_next_positions_without_changing_traversal_order() {
-    use crate::engine::battle::flags::{NONSOLID, PRE_PROCESS};
+    use uqm_engine::battle::flags::{NONSOLID, PRE_PROCESS};
     with_elements(|cx, [ship, planet, _]| {
         cx.element_mut(planet).mass = 200;
         cx.element_mut(ship).current.location.x = 2000;
@@ -55,14 +55,14 @@ fn gravity_accelerates_a_non_gravitating_element_toward_the_source() {
 
 #[test]
 fn conflict_checks_player_ships_even_when_nonsolid() {
-    use crate::engine::battle::flags::{NONSOLID, PLAYER_SHIP};
+    use uqm_engine::battle::flags::{NONSOLID, PLAYER_SHIP};
     with_elements(|cx, [subject, other, _]| {
         cx.element_mut(subject).current.location.x = 100;
         cx.element_mut(other).flags = NONSOLID as u16;
-        let control = crate::engine::battle::gravity::control(
+        let control = uqm_engine::battle::gravity::control(
             cx,
             subject,
-            crate::engine::battle::views::FrameSelection::ABSENT,
+            uqm_engine::battle::views::FrameSelection::ABSENT,
         );
         assert_eq!(control.end_point.x, 25);
         assert_eq!(control.intersect_stamp.origin.x, 25);

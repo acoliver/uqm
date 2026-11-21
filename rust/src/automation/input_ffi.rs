@@ -19,8 +19,8 @@
 
 use super::{campaign_state::CampaignView, ui_observation::UiObservation};
 use crate::automation::coordinator::AutomationObserver;
-use crate::engine::input::InputControls;
-use crate::engine::world::generation::{Body, SolarSnapshot};
+use uqm_engine::input::InputControls;
+use uqm_engine::world::generation::{Body, SolarSnapshot};
 
 // ===========================================================================
 //  C global input state — FFI access to ImmediateInputState.menu[]
@@ -118,7 +118,7 @@ impl ViewGeometry {
 
 /// The screen size (C: `ScreenWidth` and `ScreenHeight`).
 pub(crate) fn screen_size() -> (i32, i32) {
-    crate::graphics::state::screen_dimensions()
+    uqm_engine::graphics::state::screen_dimensions()
 }
 
 /// Read only the mode owner's copied admission value, including its live orbit flag.
@@ -289,13 +289,14 @@ pub(crate) fn contact_snapshot(
         } else {
             128 << 6
         };
-        let point = crate::planets::solar_coords::SolarCoordinates::new(solar.screen).to_display(
-            crate::graphics::geometry::Point {
-                x: location.0,
-                y: location.1,
-            },
-            radius,
-        );
+        let point = uqm_modes::planets::solar_coords::SolarCoordinates::new(solar.screen)
+            .to_display(
+                uqm_engine::graphics::geometry::Point {
+                    x: location.0,
+                    y: location.1,
+                },
+                radius,
+            );
         snapshot.target_x = i32::from(point.x);
         snapshot.target_y = i32::from(point.y);
         snapshot.inner_planet = -1;
@@ -406,7 +407,7 @@ pub(crate) fn navigation_snapshot(
 /// is terminal, trace each presentation, and capture frames on request.
 struct PresentHooks(std::sync::Arc<AutomationObserver>);
 
-impl crate::graphics::present::PresentObserver for PresentHooks {
+impl uqm_engine::graphics::present::PresentObserver for PresentHooks {
     fn suppress_present(&mut self) -> bool {
         self.0.runtime.mirror.is_terminal()
     }
@@ -414,33 +415,34 @@ impl crate::graphics::present::PresentObserver for PresentHooks {
     fn capture(
         &mut self,
         count: u64,
-        samples: &[crate::graphics::presentation_diagnostics::PresentationSample],
+        samples: &[uqm_engine::graphics::presentation_diagnostics::PresentationSample],
     ) -> Option<u64> {
         self.0.trace_native_graphics(count, samples);
         Some(self.0.runtime.mirror.capture_generation())
     }
 
-    fn presented(&mut self, frame: Option<crate::graphics::presented_frame::PresentedFrame>) {
+    fn presented(&mut self, frame: Option<uqm_engine::graphics::presented_frame::PresentedFrame>) {
         let mut owner = super::observer::Handle(self.0.clone());
-        let io = crate::engine::observe::Io {
+        let io = uqm_engine::observe::Io {
             observer: &mut owner,
         };
-        let mut frame = crate::engine::observe::Presented { frame, stop: false };
+        let mut frame = uqm_engine::observe::Presented { frame, stop: false };
         io.observer.presented(&mut frame);
     }
 }
 
 pub(crate) fn graphics_options(
     observer: Option<std::sync::Arc<AutomationObserver>>,
-) -> crate::graphics::present::GraphicsOptions {
-    crate::graphics::present::GraphicsOptions {
+) -> uqm_engine::graphics::present::GraphicsOptions {
+    uqm_engine::graphics::present::GraphicsOptions {
         #[cfg(feature = "debug-process")]
         native_position: crate::automation::native_window::active_native_window_config()
             .map(|config| (config.client_bounds.x, config.client_bounds.y)),
         #[cfg(not(feature = "debug-process"))]
         native_position: None,
         observer: observer.map(|observer| {
-            Box::new(PresentHooks(observer)) as Box<dyn crate::graphics::present::PresentObserver>
+            Box::new(PresentHooks(observer))
+                as Box<dyn uqm_engine::graphics::present::PresentObserver>
         }),
     }
 }
@@ -453,7 +455,7 @@ pub(crate) fn service_input(
     capture: &mut dyn FnMut() -> CampaignView,
     button_wait: bool,
     setup: &mut super::input_admission::Target<'_>,
-    sink: &mut dyn crate::engine::observe::Observer,
+    sink: &mut dyn uqm_engine::observe::Observer,
 ) -> i32 {
     // Step 1: ABI entry (saturating).
     let rt = &observer.runtime;
@@ -536,7 +538,7 @@ pub fn rust_automation_set_immediate_player_key(
     let Ok(index) = usize::try_from(index) else {
         return -1;
     };
-    if index >= crate::engine::input::frames::FLIGHT_KEYS {
+    if index >= uqm_engine::input::frames::FLIGHT_KEYS {
         return -1;
     }
     input.set_player_key(0, index, value != 0);
@@ -554,7 +556,7 @@ pub(crate) fn discard_menu_pulse(input: &InputControls, index: i32) -> bool {
 fn menu_key_slot(index: i32) -> Option<usize> {
     usize::try_from(index)
         .ok()
-        .filter(|slot| *slot < crate::engine::input::frames::MENU_KEYS)
+        .filter(|slot| *slot < uqm_engine::input::frames::MENU_KEYS)
 }
 
 pub(crate) fn inject_menu_key(input: &InputControls, index: i32, value: i32) {
@@ -569,7 +571,7 @@ pub(crate) fn inject_player_key(input: &InputControls, index: i32, value: i32) {
     }
 }
 
-pub(crate) fn current_inputs(input: &InputControls) -> crate::engine::input::frames::InputState {
+pub(crate) fn current_inputs(input: &InputControls) -> uqm_engine::input::frames::InputState {
     input.current()
 }
 
@@ -605,9 +607,9 @@ pub(crate) fn star_flight_observation(
     Some(super::star_flight::Observation {
         activity: world.activity,
         current_star: world.current_star.map(|id| id.0 as u16),
-        space_side: world.story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)?,
+        space_side: world.story_value(uqm_engine::StoryKey::ARILOU_SPACE_SIDE)?,
         conversation_active: ui.conversation_snapshot().active,
-        portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
+        portal_open: world.story_value(uqm_engine::StoryKey::ARILOU_SPACE) == Some(1),
         solar_active: departure_snapshot(world, ui.solar_snapshot()).active != 0,
         cursor,
         cursor_delta,
@@ -645,7 +647,7 @@ pub(crate) fn cyborg_settings(_world: &CampaignView) -> Option<(bool, u8)> {
 
 #[cfg(not(test))]
 pub(crate) fn escort_roster(world: &CampaignView) -> Option<Vec<(u8, u16)>> {
-    world.story_value(crate::engine::StoryKey::STARBASE_AVAILABLE)?;
+    world.story_value(uqm_engine::StoryKey::STARBASE_AVAILABLE)?;
     Some(world.escorts.clone())
 }
 
@@ -670,7 +672,7 @@ pub(crate) fn fleet_fight_observation(
                 .player_ships
                 .iter()
                 .take(world.player_ships.len().saturating_sub(1))
-                .filter(|ship| ship.species != super::super::pickship::NO_ID)
+                .filter(|ship| ship.species != uqm_modes::pickship::NO_ID)
                 .map(|ship| ship.index)
                 .collect(),
         })

@@ -7,19 +7,19 @@ use crate::battle::element::{
     NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP,
 };
 use crate::comm::dispatch::{ENCOUNTER_REFORMING, MAX_HYPER_SHIPS, ONE_SHOT_ENCOUNTER};
-use crate::engine::battle::hooks::animation_preprocess;
-use crate::engine::battle::views::{FrameSelection as Frame, Frames};
-use crate::engine::battle::EMPTY_PRIMITIVE;
-use crate::engine::battle::STAMP_PRIMITIVE;
-use crate::engine::battle::{CollisionHook, ElementHook};
-use crate::engine::battle::{Cx, ElementId};
-use crate::engine::world::activity::activity_flags::IN_BATTLE;
-use crate::engine::world::queues::EncounterRecord;
-use crate::engine::StoryKey;
-use crate::graphics::geometry::Point;
-use crate::math::arctan as ARCTAN;
-use crate::math::{cosine, sine};
 use std::ptr;
+use uqm_engine::battle::hooks::animation_preprocess;
+use uqm_engine::battle::views::{FrameSelection as Frame, Frames};
+use uqm_engine::battle::EMPTY_PRIMITIVE;
+use uqm_engine::battle::STAMP_PRIMITIVE;
+use uqm_engine::battle::{CollisionHook, ElementHook};
+use uqm_engine::battle::{Cx, ElementId};
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::arctan as ARCTAN;
+use uqm_engine::math::{cosine, sine};
+use uqm_engine::world::activity::activity_flags::IN_BATTLE;
+use uqm_engine::world::queues::EncounterRecord;
+use uqm_engine::StoryKey;
 
 const MAKEUP: [u8; 23] = [
     0x51, 0, 0, 0x51, 0x51, 0, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x11, 0x51, 0x51, 0x51, 0x11,
@@ -48,7 +48,7 @@ pub(super) fn allocate(cx: &mut Cx<'_>, point: Point) -> Option<ElementId> {
     let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1;
     let source = &cx.kernel.hyperstars[1 + usize::from(side)];
     let frames = Frames::retain_shared(
-        crate::engine::battle::views::SharedFrames::Hyperspace(side),
+        uqm_engine::battle::views::SharedFrames::Hyperspace(side),
         std::slice::from_ref(source),
     );
     let frame = Frame::retain(*source);
@@ -83,7 +83,7 @@ pub(super) fn ambient(cx: &mut Cx<'_>) {
     };
     let stars = cx.kernel.stars_in_space;
     let frames = Frames::retain_shared(
-        crate::engine::battle::views::SharedFrames::Stars,
+        uqm_engine::battle::views::SharedFrames::Stars,
         std::slice::from_ref(&cx.kernel.stars_in_space),
     );
     cx.set_single_frames(element, frames, Frame::retain(stars));
@@ -101,10 +101,7 @@ pub(super) fn ambient(cx: &mut Cx<'_>) {
     let head = cx.elements().head();
     cx.insert_before(element, head);
 }
-pub fn transition(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    element: crate::engine::battle::ElementId,
-) {
+pub fn transition(cx: &mut uqm_engine::battle::Cx<'_>, element: uqm_engine::battle::ElementId) {
     cx.element_mut(element).flags &= !DISAPPEARING;
     cx.element_mut(element).life = 1;
     let state = cx.element(element);
@@ -387,7 +384,7 @@ fn process(
 }
 pub(super) fn process_all(cx: &mut Cx<'_>, universe: Point, ox: i16, oy: i16) {
     let frame = cx.absolute_frame(Frame::retain(cx.kernel.stars_in_space).view(), 91);
-    let radar = crate::engine::battle::hyperspace::radar_context(cx.kernel);
+    let radar = uqm_engine::battle::hyperspace::radar_context(cx.kernel);
     let mut stamp = Point { x: 0, y: 0 };
     let mut next = cx.world.encounters_ref().head();
     while let Some(id) = next {
@@ -396,7 +393,7 @@ pub(super) fn process_all(cx: &mut Cx<'_>, universe: Point, ox: i16, oy: i16) {
         next = encounters.succ(id);
         if process(cx, &mut encounter, universe, ox, oy, &mut stamp) {
             radar.draw_stamp(
-                &crate::graphics::drawable::ContextFrame::retain(frame.raw()),
+                &uqm_engine::graphics::drawable::ContextFrame::retain(frame.raw()),
                 stamp,
             );
             *cx.world.encounters().get_mut(id) = encounter;
@@ -410,7 +407,7 @@ pub(super) fn process_all(cx: &mut Cx<'_>, universe: Point, ox: i16, oy: i16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{battle::Battle, Game};
+    use uqm_engine::{battle::Battle, Game};
 
     #[test]
     fn wrapping_keeps_both_edges_and_single_screen_displacement() {
@@ -423,12 +420,12 @@ mod tests {
     #[test]
     fn reforming_one_shots_and_quasispace_do_not_allocate_or_draw_rng() {
         let mut game = Game::new();
-        game.world.story = Some(crate::engine::world::story::StoryState::new());
+        game.world.story = Some(uqm_engine::world::story::StoryState::new());
         let mut battle = Battle::new();
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
             panic!("unexpected RNG draw")
         });
-        let mut encounter = crate::engine::world::queues::EncounterRecord {
+        let mut encounter = uqm_engine::world::queues::EncounterRecord {
             flags: (ENCOUNTER_REFORMING | ONE_SHOT_ENCOUNTER),
             num_ships: 1,
             ..Default::default()

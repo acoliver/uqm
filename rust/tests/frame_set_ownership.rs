@@ -1,7 +1,6 @@
-use uqm_rust::engine::battle::frames::{
-    FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames,
-};
-use uqm_rust::graphics::drawable::{retain_frames, LoadedDrawable};
+#![forbid(unsafe_code)]
+use uqm_engine::battle::frames::{FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames};
+use uqm_engine::graphics::drawable::{retain_frames, LoadedDrawable};
 
 #[test]
 #[serial_test::serial]
@@ -10,12 +9,12 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
         let owned = LoadedDrawable::create(0, 1, 1, 1).unwrap();
         let frame = owned.first_frame();
         let drawable = frame.drawable();
-        let mut owner = uqm_rust::engine::Game::new();
+        let mut owner = uqm_engine::Game::new();
         owner.kernel.reset_ship_capacity(0, 1);
         let mut ships = owner.kernel.ships(0);
         let link = ships.alloc().unwrap();
         let ship = ships.ship_id(link);
-        let mut descriptor = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY;
+        let mut descriptor = uqm_engine::battle::record::RaceDescriptor::EMPTY;
         descriptor.ship_data.weapon = FrameArray::from_native([frame; 3]);
         let image = FrameSetRef::ship(ship, Role::Weapon, descriptor.ship_data.weapon.clone());
         drop(descriptor);
@@ -33,7 +32,7 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
 
 #[test]
 fn ownership_distinguishes_role_ship_and_reused_slot_generation() {
-    let mut owner = uqm_rust::engine::Game::new();
+    let mut owner = uqm_engine::Game::new();
     owner.kernel.reset_ship_capacity(0, 1);
     let mut ships = owner.kernel.ships(0);
     let link = ships.alloc().unwrap();

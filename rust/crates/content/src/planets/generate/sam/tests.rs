@@ -1,8 +1,8 @@
 use super::*;
-use crate::engine::StoryKey;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::vux::tests::{record, with_orbit, Site};
 use std::rc::Rc;
+use uqm_engine::StoryKey;
 
 #[derive(Default)]
 struct Guard {
@@ -10,7 +10,7 @@ struct Guard {
     reference: u32,
     groups: Vec<IP_GROUP>,
     built: u16,
-    moved: Option<crate::graphics::geometry::Point>,
+    moved: Option<uqm_engine::graphics::geometry::Point>,
 }
 impl GuardSite for Guard {
     fn save_ip_groups(&mut self) {
@@ -48,17 +48,17 @@ impl GuardSite for Guard {
     fn init_ip_groups(&mut self, reference: u32) {
         self.calls.push(format!("init:{reference}"));
     }
-    fn planet_outer_location(&self, planet: u16) -> crate::graphics::geometry::Point {
+    fn planet_outer_location(&self, planet: u16) -> uqm_engine::graphics::geometry::Point {
         assert_eq!(planet, 4);
-        crate::graphics::geometry::Point { x: 100, y: -200 }
+        uqm_engine::graphics::geometry::Point { x: 100, y: -200 }
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         self.groups.iter_mut().for_each(visit);
     }
-    fn ip_location(&self) -> crate::graphics::geometry::Point {
-        crate::graphics::geometry::Point { x: -900, y: 800 }
+    fn ip_location(&self) -> uqm_engine::graphics::geometry::Point {
+        uqm_engine::graphics::geometry::Point { x: -900, y: 800 }
     }
-    fn set_and_transform_ip_location(&mut self, value: crate::graphics::geometry::Point) {
+    fn set_and_transform_ip_location(&mut self, value: uqm_engine::graphics::geometry::Point) {
         self.calls.push("transform".into());
         self.moved = Some(value);
     }
@@ -74,7 +74,7 @@ fn groups(count: usize) -> Vec<IP_GROUP> {
                 dest_loc: 13,
                 orbit_pos: 15,
                 in_system: 17,
-                loc: crate::graphics::geometry::Point { x: -23, y: 29 },
+                loc: uqm_engine::graphics::geometry::Point { x: -23, y: 29 },
                 ..Default::default()
             };
             g
@@ -116,7 +116,7 @@ fn guard_build_order_races_and_full_groups() {
                 g.dest_loc = 5;
                 g.orbit_pos = (((angle + 2) >> 2) & 15) as u8;
                 g.group_counter = 0;
-                g.loc = crate::graphics::geometry::Point {
+                g.loc = uqm_engine::graphics::geometry::Point {
                     x: (100 + cosine(angle, 1600)) as i16,
                     y: (-200 + sine(angle, 1600)) as i16,
                 };

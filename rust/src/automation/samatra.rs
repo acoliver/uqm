@@ -3,9 +3,9 @@
 use super::battle_fight::{bearing_facing, FightControl};
 use super::fleet_fight::Picker;
 use super::script::MenuKey;
-use crate::battle::battle_types::shortest_path_delta;
-use crate::engine::battle::observation::samatra::{Events, Hazard, Snapshot};
-use crate::pickship::{Cursor, FLAGSHIP_COLUMN};
+use uqm_engine::battle::observation::samatra::{Events, Hazard, Snapshot};
+use uqm_modes::battle::battle_types::shortest_path_delta;
+use uqm_modes::pickship::{Cursor, FLAGSHIP_COLUMN};
 
 #[derive(Debug, Default, Clone, Copy, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -255,7 +255,7 @@ impl Controller {
     fn generator_engagement(
         &mut self,
         s: &Snapshot,
-        player: crate::engine::battle::observation::ShipState,
+        player: uqm_engine::battle::observation::ShipState,
     ) -> Controls {
         if s.selected_species == Some(5) {
             return Controls {
@@ -307,7 +307,7 @@ fn escort_hazards(s: &Snapshot) -> impl Iterator<Item = &Hazard> {
 
 fn fury_engagement(
     s: &Snapshot,
-    player: crate::engine::battle::observation::ShipState,
+    player: uqm_engine::battle::observation::ShipState,
 ) -> FightControl {
     let px = f64::from(shortest_path_delta(s.gate.0, player.x, s.arena.0));
     let py = f64::from(shortest_path_delta(s.gate.1, player.y, s.arena.1));
@@ -367,8 +367,8 @@ fn fury_engagement(
 
 fn escort_approach(
     s: &Snapshot,
-    player: crate::engine::battle::observation::ShipState,
-    target: &crate::engine::battle::observation::samatra::Generator,
+    player: uqm_engine::battle::observation::ShipState,
+    target: &uqm_engine::battle::observation::samatra::Generator,
 ) -> FightControl {
     let dx = shortest_path_delta(player.x, target.x, s.arena.0);
     let dy = shortest_path_delta(player.y, target.y, s.arena.1);
@@ -424,7 +424,7 @@ fn escort_approach(
 
 fn can_hit(
     s: &Snapshot,
-    player: crate::engine::battle::observation::ShipState,
+    player: uqm_engine::battle::observation::ShipState,
     x: i32,
     y: i32,
     velocity: (i32, i32),
@@ -481,8 +481,8 @@ pub use live::observe;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::observation::samatra::Generator;
-    use crate::engine::battle::observation::ShipState;
+    use uqm_engine::battle::observation::samatra::Generator;
+    use uqm_engine::battle::observation::ShipState;
 
     fn snapshot() -> Snapshot {
         Snapshot {
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn fury_ignores_non_solid_comet_trails_when_clearing_the_gate() {
-        use crate::engine::battle::observation::samatra::Hazard;
+        use uqm_engine::battle::observation::samatra::Hazard;
         let mut controller = Controller::default();
         let mut s = snapshot();
         s.selected_species = Some(5);
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn fury_uses_a_side_gun_for_a_hazard_without_abandoning_navigation() {
-        use crate::engine::battle::observation::samatra::Hazard;
+        use uqm_engine::battle::observation::samatra::Hazard;
         let mut s = snapshot();
         s.selected_species = Some(5);
         s.player.as_mut().unwrap().facing = 0;
@@ -661,7 +661,7 @@ mod tests {
 
     #[test]
     fn avatar_clears_an_incoming_hazard_before_routing_to_a_generator() {
-        use crate::engine::battle::observation::samatra::Hazard;
+        use uqm_engine::battle::observation::samatra::Hazard;
         let mut s = snapshot();
         let mut player = s.player.unwrap();
         player.x = 2895;
@@ -696,7 +696,7 @@ mod tests {
 
     #[test]
     fn open_gate_does_not_abandon_hazards_that_can_destroy_the_bomb() {
-        use crate::engine::battle::observation::samatra::Hazard;
+        use uqm_engine::battle::observation::samatra::Hazard;
         let mut controller = Controller::default();
         let mut s = snapshot();
         let mut e = Events {

@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-use uqm_rust::engine::{
+use uqm_engine::{
     battle::{Battle, Cx},
     Game,
 };
-use uqm_rust::navigation::{hyper_units::Geometry, hyperspace::move_sis};
+use uqm_modes::navigation::{hyper_units::Geometry, hyperspace::move_sis};
 
 #[test]
 #[serial_test::serial]
@@ -17,7 +17,7 @@ fn movement_clips_displacement_from_an_unpublished_context() {
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
     let (mut dx, mut dy) = (1, 1);
     move_sis(
@@ -57,7 +57,7 @@ fn unthrottled_runtime_processes_callbacks_without_sampling_or_flushing_input() 
         atomic::{AtomicBool, Ordering},
         Arc,
     };
-    use uqm_rust::engine::input::{frames::KEY_MENU_SELECT, InputControls, InputRuntime};
+    use uqm_engine::input::{frames::KEY_MENU_SELECT, InputControls, InputRuntime};
     let mut game = Game::new();
     let controls = InputControls::default();
     controls.set_menu_key(KEY_MENU_SELECT as usize, true);
@@ -76,15 +76,15 @@ fn unthrottled_runtime_processes_callbacks_without_sampling_or_flushing_input() 
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        uqm_engine::math::random,
     );
     let called = Arc::new(AtomicBool::new(false));
-    uqm_rust::engine::host::dispatch().add_callback(
+    uqm_engine::host::dispatch().add_callback(
         |flag: Arc<AtomicBool>| flag.store(true, Ordering::SeqCst),
         called.clone(),
     );
     runtime.yield_poll(&mut cx);
-    uqm_rust::engine::host::dispatch().clear();
+    uqm_engine::host::dispatch().clear();
     assert!(called.load(Ordering::SeqCst));
     assert_eq!(controls.current(), current);
     assert_eq!(controls.pulsed(), pulsed);

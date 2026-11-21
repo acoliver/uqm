@@ -1,16 +1,16 @@
 //! Flagship gauges borrow campaign state and retained display resources.
 use super::*;
-use crate::engine::World;
-use crate::graphics::{
-    drawable::ContextFrame, drawable::FrameId, font::FontLease, geometry::Extent, geometry::Point,
-    geometry::Rect, geometry::TextAlign,
-};
 use crate::starbase::ids;
 use crate::starbase::module_guard;
 use crate::starbase::platform::StatusMessageMode;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
 use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
+    drawable::ContextFrame, drawable::FrameId, font::FontLease, geometry::Extent, geometry::Point,
+    geometry::Rect, geometry::TextAlign,
+};
+use uqm_engine::World;
 
 pub const UNDEFINED_DELTA: i16 = 0x7fff;
 
@@ -41,7 +41,7 @@ pub fn gauge_rect(crew: bool) -> Rect {
         },
     }
 }
-fn update_crew(state: &mut crate::engine::world::SisState, delta: i16) {
+fn update_crew(state: &mut uqm_engine::world::SisState, delta: i16) {
     if delta == 0 || delta == UNDEFINED_DELTA {
         return;
     }
@@ -52,7 +52,7 @@ fn update_crew(state: &mut crate::engine::world::SisState, delta: i16) {
         ((i32::from(state.crew_enlisted) + i32::from(delta)) as u16).min(capacity)
     };
 }
-fn update_fuel(state: &mut crate::engine::world::SisState, delta: i16) -> bool {
+fn update_fuel(state: &mut uqm_engine::world::SisState, delta: i16) -> bool {
     if delta == 0 {
         return false;
     }
@@ -74,7 +74,7 @@ fn update_fuel(state: &mut crate::engine::world::SisState, delta: i16) -> bool {
     }
     (state.fuel_on_board / equipment::FUEL_TANK_SCALE) as u16 != old
 }
-fn update_resources(state: &mut crate::engine::world::SisState, delta: i16, mode: u32) {
+fn update_resources(state: &mut uqm_engine::world::SisState, delta: i16, mode: u32) {
     if delta == 0 || delta == UNDEFINED_DELTA {
         return;
     }
@@ -406,19 +406,19 @@ mod tests {
     #[serial_test::serial]
     fn owned_gauges_and_border_draw_without_publishing_campaign_state() {
         if !uqm_engine::test_support::native_process::own_graphics_process("ui::sis::gauges::tests::owned_gauges_and_border_draw_without_publishing_campaign_state") { return; }
-        use crate::engine::Game;
-        use crate::graphics::drawable::LoadedDrawable;
+        use uqm_engine::graphics::drawable::LoadedDrawable;
         use uqm_engine::test_support::campaign_display::CampaignDisplay;
+        use uqm_engine::Game;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("gauge fixture: {error}"));
         game.kernel
-            .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+            .install_game_text(uqm_engine::strings::owned_table::LoadedTextTable::fixture(
                 vec![b"A\0".to_vec(); (ids::STATUS_STRING_BASE + 6) as usize],
             ));
         let font = font(&game.kernel);
         game.kernel.screen_context = game.kernel.status_context;
-        let space_owner = crate::graphics::context::LoadedContext::create(c"gauge-space");
+        let space_owner = uqm_engine::graphics::context::LoadedContext::create(c"gauge-space");
         let space = space_owner.context();
         game.kernel.space_context = Some(space);
         let frames =
@@ -492,8 +492,8 @@ mod tests {
             (7, 242)
         );
         context.flush();
-        game.kernel.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
-        game.kernel.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
+        game.kernel.flag_stat_frame = uqm_engine::graphics::drawable::FrameId::NULL;
+        game.kernel.font_grad_frame = uqm_engine::graphics::drawable::FrameId::NULL;
         drop(context);
         drop(font);
         drop(frames);
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn gauge_updates_preserve_saturation_wrapping_and_refresh_sentinels() {
-        let mut state = crate::engine::World::new().data.flagship;
+        let mut state = uqm_engine::World::new().data.flagship;
         state.crew_enlisted = 40;
         state.fuel_on_board = 105;
         state.res_units = 10;

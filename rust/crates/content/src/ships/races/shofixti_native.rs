@@ -1,20 +1,20 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRES_FORE, IGNORE_SIMILAR, MAX_SHIP_MASS, SPECIAL,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP,
         STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::ElementHook;
-    use crate::engine::battle::EMPTY_PRIMITIVE;
-    use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
-    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-    use crate::graphics::geometry::Color;
-    use crate::math::battle_types::ONE_SHIFT;
-    use crate::math::velocity::VelocityDesc;
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::battle::EMPTY_PRIMITIVE;
+    use uqm_engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::math::battle_types::ONE_SHIFT;
+    use uqm_engine::math::velocity::VelocityDesc;
+    use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
     const MAX_CREW: u16 = 6;
     const MAX_ENERGY: u8 = 4;
     const MAX_THRUST: u16 = 35;
@@ -41,9 +41,9 @@ pub mod engine {
         a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a
     }
 
-    fn descriptor(world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
-        let mut d = crate::engine::battle::template::RaceTemplate {
-            info: crate::engine::battle::views::Info {
+    fn descriptor(world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        let mut d = uqm_engine::battle::template::RaceTemplate {
+            info: uqm_engine::battle::views::Info {
                 ship_flags: FIRES_FORE as u16,
                 ship_cost: 5,
                 crew_level: MAX_CREW,
@@ -51,7 +51,7 @@ pub mod engine {
                 energy_level: MAX_ENERGY,
                 max_energy: MAX_ENERGY,
             },
-            resources: crate::engine::battle::template::RaceResources {
+            resources: uqm_engine::battle::template::RaceResources {
                 strings: Some(c"ship.shofixti.text"),
                 icons: Some(c"ship.shofixti.icons"),
                 melee_icon: Some(c"ship.shofixti.meleeicons"),
@@ -87,14 +87,14 @@ pub mod engine {
                 special_wait: 0,
                 ship_mass: 1,
             },
-            intelligence: crate::engine::battle::views::Intelligence {
+            intelligence: uqm_engine::battle::views::Intelligence {
                 weapon_range: ((24 << ONE_SHIFT) * 10) as u16,
                 ..Default::default()
             },
             ..Default::default()
         };
         if world.activity() as u8 == IN_ENCOUNTER as u8
-            && world.story_state(crate::engine::battle::race::StoryKey::SHOFIXTI_RECRUITED) == 0
+            && world.story_state(uqm_engine::battle::race::StoryKey::SHOFIXTI_RECRUITED) == 0
         {
             configure_old_scout(&mut d);
         }
@@ -102,7 +102,7 @@ pub mod engine {
         d.descriptor(&SHOFIXTI)
     }
 
-    fn configure_old_scout(d: &mut crate::engine::battle::template::RaceTemplate) {
+    fn configure_old_scout(d: &mut uqm_engine::battle::template::RaceTemplate) {
         d.resources.ship = [
             Some(c"ship.shofixti.graphics.oldscout.large"),
             Some(c"ship.shofixti.graphics.oldscout.medium"),
@@ -131,7 +131,7 @@ pub mod engine {
         }
     }
 
-    pub static SHOFIXTI: crate::engine::battle::Race = crate::engine::battle::Race {
+    pub static SHOFIXTI: uqm_engine::battle::Race = uqm_engine::battle::Race {
         descriptor,
         preprocess: None,
         postprocess: Some(shofixti_postprocess),
@@ -146,7 +146,7 @@ pub mod engine {
         origin: WeaponOrigin,
     ) -> WeaponSpawn {
         let facing = cx.ship_state(ss).facing;
-        vec![cx.missile(&mut crate::engine::battle::views::Missile {
+        vec![cx.missile(&mut uqm_engine::battle::views::Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
             frames: cx.ship_frame_set(ss, 1),
@@ -245,7 +245,7 @@ pub mod engine {
                     && dist <= (DESTRUCT_RANGE * DESTRUCT_RANGE) as u32
                 {
                     let destruction = 1 + MAX_DESTRUCTION
-                        * (DESTRUCT_RANGE - i32::from(crate::math::square_root(dist)))
+                        * (DESTRUCT_RANGE - i32::from(uqm_engine::math::square_root(dist)))
                         / DESTRUCT_RANGE;
                     if flags & PLAYER_SHIP as u16 != 0 {
                         if !cx.delta_crew(obj, -destruction as i16) {
@@ -287,7 +287,7 @@ pub mod engine {
         cx.start_ship_explosion(e, false);
         cx.element_mut(e).pre = Some(ElementHook::Native(destruct_preprocess));
         cx.play_battle_sound(
-            crate::engine::battle::views::BattleSoundBank::Ship(ss),
+            uqm_engine::battle::views::BattleSoundBank::Ship(ss),
             1,
             e,
             3,

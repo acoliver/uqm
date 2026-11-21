@@ -1,11 +1,12 @@
 //! Sound decoder integration tests
 //!
 //! These tests verify the Ogg decoder works with real audio files.
+#![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 
 // Import from the crate using the lib name
-use uqm_rust::sound::{AudioFormat, DecodeError, Decoder, DecoderFormats, OggDecoder};
+use uqm_engine::sound::{AudioFormat, DecodeError, Decoder, DecoderFormats, OggDecoder};
 
 /// Get path to test audio file (if available)
 fn get_test_ogg_path() -> Option<PathBuf> {

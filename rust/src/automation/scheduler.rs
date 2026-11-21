@@ -2131,7 +2131,7 @@ mod tests {
     #[test]
     fn ship_element_assertion_advances_without_input_effects() {
         use crate::automation::script::ShipElementAssertion;
-        use crate::planet_side::cargo::ElementCategory;
+        use uqm_modes::planet_side::cargo::ElementCategory;
         let actions = [
             Action::AssertShipElement(ShipElementAssertion {
                 category: ElementCategory::Radioactive,
@@ -3358,7 +3358,7 @@ mod budgeted_wait_tests {
         WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
     };
 
-    use crate::planet_side::cargo::ElementCategory;
+    use uqm_modes::planet_side::cargo::ElementCategory;
 
     fn navigation_actions(max_ticks: u64) -> Vec<Action> {
         vec![

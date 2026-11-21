@@ -1,25 +1,25 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::ai_constants::{
         ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX, FIRST_EMPTY_INDEX, GRAVITY_MASS_INDEX,
         IGNORE_SIMILAR, LEFT, MAX_SHIP_MASS, MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_PURSUE, RIGHT,
         SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, COLLISION, CREW_IMMUNE, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM,
         NONSOLID, PLAYER_SHIP, SHIP_AT_MAX_SPEED, SHIP_IN_GRAVITY_WELL,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::{CollisionHook, ElementHook};
-    use crate::engine::world::activity::activity_kinds::IN_ENCOUNTER;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::VELOCITY_SHIFT;
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::{CollisionHook, ElementHook};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{HALF_CIRCLE, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::VELOCITY_SHIFT;
+    use uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER;
 
-    use crate::engine::battle::views::Laser;
-    use crate::engine::battle::{
+    use uqm_engine::battle::views::Laser;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
     };
     pub static SLYLANDRO: Race = Race {
@@ -37,7 +37,7 @@ pub mod engine {
     const HARVEST_RANGE: i32 = 208 * 3 / 8;
     const CLOSE_RANGE_WEAPON: u16 = 50 << ONE_SHIFT;
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();
         d.info.ship_flags = (SEEKING_WEAPON | CREW_IMMUNE) as u16;
         d.info.ship_cost = 17;

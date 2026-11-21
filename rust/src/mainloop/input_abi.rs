@@ -1,21 +1,20 @@
 //! Native input repeat, nested loops and battle controls.
 
-use crate::threading::pacing::yield_input_loop;
+use uqm_engine::threading::pacing::yield_input_loop;
 
-use crate::engine::input_port::frames::{
+#[cfg(feature = "debug-process")]
+use uqm_engine::battle::statistics::{delta_crew, delta_energy};
+use uqm_engine::input_port::frames::{
     KEY_DEBUG, KEY_EXIT, KEY_MENU_BACKSPACE, KEY_MENU_CANCEL, KEY_MENU_DELETE, KEY_MENU_DOWN,
     KEY_MENU_LEFT, KEY_MENU_PAGE_DOWN, KEY_MENU_PAGE_UP, KEY_MENU_RIGHT, KEY_MENU_SELECT,
     KEY_MENU_SPECIAL, KEY_MENU_UP, KEY_PAUSE,
 };
-use crate::engine::{
+use uqm_engine::{
     battle::Cx,
     input::{InputControls, InputSession},
 };
 #[cfg(feature = "debug-process")]
-use crate::{
-    engine::battle::statistics::{delta_crew, delta_energy},
-    front_end::uqmdebug::debug_key_pressed_synchronous,
-};
+use uqm_modes::front_end::uqmdebug::debug_key_pressed_synchronous;
 
 pub(crate) mod live {
     use super::*;
@@ -25,17 +24,17 @@ pub(crate) mod live {
     }
 
     pub fn update_input_state(cx: &mut Cx<'_>, input: &InputSession) {
-        if !crate::graphics::state::game_active() {
-            crate::ui::util::sleep_game(cx);
+        if !uqm_engine::graphics::state::game_active() {
+            uqm_modes::ui::util::sleep_game(cx);
         }
         if input.paused() {
-            crate::ui::util::pause_game(cx, input);
+            uqm_modes::ui::util::pause_game(cx, input);
         }
         if input.exit_requested() {
             confirm_exit(cx, input);
         }
         let before_frame = input.immediate();
-        crate::input::sdl_input::begin_input_frame();
+        uqm_engine::input_port::sdl_input::begin_input_frame();
         let after_frame = input.immediate();
         let now = crate::time::counter_abi::get_time_counter();
         input.advance(before_frame, after_frame, now);
@@ -54,8 +53,8 @@ pub(crate) mod live {
 
     pub fn set_input_callback(
         input: &InputSession,
-        callback: Option<crate::engine::input::InputFrameHook>,
-    ) -> Option<crate::engine::input::InputFrameHook> {
+        callback: Option<uqm_engine::input::InputFrameHook>,
+    ) -> Option<uqm_engine::input::InputFrameHook> {
         input.replace_callback(callback)
     }
 
@@ -76,11 +75,11 @@ pub(crate) mod live {
     }
 
     pub fn flush_input(input: &InputControls) {
-        crate::input::sdl_input::reset_controls();
+        uqm_engine::input_port::sdl_input::reset_controls();
         input.clear_menu_state();
     }
 
-    pub(super) fn menu_sound_flags(state: &crate::engine::input::frames::InputState) -> u16 {
+    pub(super) fn menu_sound_flags(state: &uqm_engine::input::frames::InputState) -> u16 {
         [
             KEY_MENU_UP,
             KEY_MENU_DOWN,
@@ -108,7 +107,7 @@ pub(crate) mod live {
     pub fn confirm_exit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
         let old = input.repeat_config();
         input.set_default_menu_repeat(crate::time::counter_abi::get_time_counter());
-        let result = crate::ui::confirm::do_confirm_exit(cx, input);
+        let result = uqm_modes::ui::confirm::do_confirm_exit(cx, input);
         set_menu_repeat_delay(input, old.0, old.1, old.2, u32::from(old.3));
         result
     }

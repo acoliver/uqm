@@ -1,39 +1,40 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
+#![forbid(unsafe_code)]
 
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-#[path = "support/battle.rs"]
-mod shared;
 #[path = "support/special_hooks.rs"]
 mod special_hooks;
 
-use std::{
-    mem, ptr,
-    sync::atomic::{AtomicUsize, Ordering},
+use std::sync::atomic::{AtomicUsize, Ordering};
+use uqm_content::ships::native::{
+    angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
-use uqm_rust::collections::observation;
-use uqm_rust::engine::battle::ai_constants::FIRES_FORE;
-use uqm_rust::engine::battle::ai_constants::FIRES_LEFT;
-use uqm_rust::engine::battle::ai_constants::FIRES_RIGHT;
-use uqm_rust::engine::battle::ai_constants::IGNORE_SIMILAR;
-use uqm_rust::engine::battle::ai_constants::LEFT;
-use uqm_rust::engine::battle::ai_constants::RIGHT;
-use uqm_rust::engine::battle::ai_constants::SPECIAL;
-use uqm_rust::engine::battle::ai_constants::THRUST;
-use uqm_rust::engine::battle::ai_constants::WEAPON;
-use uqm_rust::engine::battle::flags::{
+use uqm_engine::battle::ai_constants::FIRES_FORE;
+use uqm_engine::battle::ai_constants::FIRES_LEFT;
+use uqm_engine::battle::ai_constants::FIRES_RIGHT;
+use uqm_engine::battle::ai_constants::IGNORE_SIMILAR;
+use uqm_engine::battle::ai_constants::LEFT;
+use uqm_engine::battle::ai_constants::RIGHT;
+use uqm_engine::battle::ai_constants::SPECIAL;
+use uqm_engine::battle::ai_constants::THRUST;
+use uqm_engine::battle::ai_constants::WEAPON;
+use uqm_engine::battle::flags::{
     APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NONSOLID, NORMAL_LIFE, PLAYER_SHIP,
     STAMPFILL_PRIMITIVE,
 };
-use uqm_rust::engine::battle::record::{ElementRecord, EvaluateRecord};
-use uqm_rust::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-use uqm_rust::engine::species::species_id::SPECIES_ID_PKUNK_ID;
-use uqm_rust::graphics::geometry::Color;
-use uqm_rust::graphics::geometry::Point;
-use uqm_rust::math::random;
-use uqm_rust::math::seed_random;
-use uqm_rust::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
-use uqm_rust::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+use uqm_engine::battle::Concern;
+use uqm_engine::battle::ElementId;
+use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use uqm_engine::collections::observation;
+use uqm_engine::graphics::geometry::Color;
+use uqm_engine::graphics::geometry::Point;
+use uqm_engine::math::random;
+use uqm_engine::math::seed_random;
+use uqm_engine::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+use uqm_engine::species::species_id::SPECIES_ID_PKUNK_ID;
 
 // races.h / intel.h flags that are macros with casts rather than constants.
 const STANDARD_RATING: u8 = 1 << 4;
@@ -46,7 +47,7 @@ const SPACE_W: i32 = (320 - 64) * 4 * 8;
 const SPACE_H: i32 = 240 * 4 * 8;
 
 struct Battle {
-    inner: shared::Battle,
+    inner: battle::Battle,
 }
 
 impl Battle {
@@ -56,64 +57,60 @@ impl Battle {
 
     fn with_capacity(capacity: u16) -> Self {
         Self {
-            inner: shared::Battle::new(capacity),
+            inner: battle::Battle::new(capacity),
         }
     }
 }
 
 // The same engine-readable drawable layout used by the other native race tests.
-use shared::FrameSet;
+use battle::FrameSet;
 
 #[derive(Clone, Copy)]
 struct SavedState {
-    phoenix: *mut std::ffi::c_void,
-    saved_preprocess: Option<uqm_rust::engine::battle::ElementHook>,
-    saved_postprocess: Option<uqm_rust::engine::battle::ElementHook>,
-    saved_death: Option<uqm_rust::engine::battle::ElementHook>,
+    phoenix: Option<ElementId>,
+    saved_preprocess: Option<uqm_engine::battle::ElementHook>,
+    saved_postprocess: Option<uqm_engine::battle::ElementHook>,
+    saved_death: Option<uqm_engine::battle::ElementHook>,
 }
 
 static MARK: AtomicUsize = AtomicUsize::new(0);
 
 // Stand-ins for the engine callbacks Pkunk saves around an explosion. Each
 // body differs so the functions keep distinct addresses.
-fn engine_preprocess(
-    _: &mut uqm_rust::engine::battle::Cx<'_>,
-    _: uqm_rust::engine::battle::ElementId,
-) {
+fn engine_preprocess(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {
     MARK.store(1, Ordering::SeqCst);
 }
-fn engine_postprocess(
-    _: &mut uqm_rust::engine::battle::Cx<'_>,
-    _: uqm_rust::engine::battle::ElementId,
-) {
+fn engine_postprocess(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {
     MARK.store(2, Ordering::SeqCst);
 }
-fn engine_death(_: &mut uqm_rust::engine::battle::Cx<'_>, _: uqm_rust::engine::battle::ElementId) {
+fn engine_death(_: &mut uqm_engine::battle::Cx<'_>, _: uqm_engine::battle::ElementId) {
     MARK.store(3, Ordering::SeqCst);
 }
 
-fn addr(f: Option<uqm_rust::engine::battle::ElementHook>) -> Option<usize> {
+fn addr(f: Option<uqm_engine::battle::ElementHook>) -> Option<usize> {
     f.map(|f| (f).address())
 }
 
 struct Ship<'a> {
-    inner: shared::Ship<'a>,
-    handle: *mut std::ffi::c_void,
+    inner: battle::Ship<'a>,
+    id: ElementId,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
 }
 
 impl<'a> Ship<'a> {
-    unsafe fn new(battle: &'a Battle, player: i16) -> Self {
-        let mut inner = shared::Ship::new(&battle.inner, SPECIES_ID_PKUNK_ID, player);
-        let handle = inner.handle;
+    fn new(battle: &'a Battle, player: i16) -> Self {
+        let mut inner = battle::Ship::new(&battle.inner, SPECIES_ID_PKUNK_ID, player);
+        let id = inner.id;
         let ship_frames = FrameSet::new(16);
         let weapon_frames = FrameSet::new(8);
-        let desc = inner.descriptor_mut();
-        desc.ship_data.ship = ship_frames.array();
-        desc.ship_data.weapon = weapon_frames.array();
+        {
+            let mut desc = inner.descriptor_mut();
+            desc.ship_data.ship = ship_frames.array();
+            desc.ship_data.weapon = weapon_frames.array();
+        }
         let frames = inner.frame_set(0);
-        let el = inner.element_mut();
+        let mut el = inner.element_mut();
         el.current.image.frames = frames;
         el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
@@ -122,28 +119,24 @@ impl<'a> Ship<'a> {
         el.intersect_control.intersect_stamp.origin = Point { x: 1000, y: 1000 };
         Self {
             inner,
-            handle,
+            id,
             ship_frames,
             weapon_frames,
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> u16 {
+    fn fire(&mut self, out: &mut [Option<ElementId>]) -> u16 {
         crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
             for (slot, weapon) in out.iter_mut().zip(&weapons) {
-                *slot = weapon.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast());
+                *slot = *weapon;
             }
             weapons.len() as u16
         })
     }
-    fn ptr(&self) -> *mut ElementRecord {
-        self.handle.cast()
-    }
-
-    unsafe fn data(&mut self) -> SavedState {
-        let uqm_rust::engine::battle::RaceState::Pkunk {
+    fn data(&mut self) -> SavedState {
+        let uqm_engine::battle::RaceState::Pkunk {
             phoenix,
             saved_pre,
             saved_post,
@@ -153,62 +146,63 @@ impl<'a> Ship<'a> {
             panic!("Pkunk state");
         };
         SavedState {
-            phoenix: phoenix.map_or(ptr::null_mut(), |id| {
-                self.inner.weapon_record(Some(id)).cast()
-            }),
+            phoenix,
             saved_preprocess: saved_pre,
             saved_postprocess: saved_post,
             saved_death,
         }
     }
-    unsafe fn intelligence(&mut self, concerns: &mut [EvaluateRecord; 4]) {
+    fn intelligence(&mut self, concerns: &mut [Concern; 4]) {
         let mut subject = self.inner.subject();
         // The AI operand is a value copy, not a member of the live queue.
         // Its phoenix predecessor may be disposed during intelligence.
         self.inner.intelligence_subject(&mut subject, concerns, 0);
     }
 
-    unsafe fn at(&mut self, x: i16, y: i16) {
-        (*self.ptr()).current.location = Point { x, y };
-        (*self.ptr()).next.location = Point { x, y };
+    fn at(&mut self, x: i16, y: i16) {
+        battle::get_mut(self.id).current.location = Point { x, y };
+        battle::get_mut(self.id).next.location = Point { x, y };
     }
 
-    unsafe fn preprocess(&mut self) {
+    fn preprocess(&mut self) {
         self.inner.preprocess();
     }
 
     /// A brand-new ship about to run its first preprocess.
-    unsafe fn appearing(&mut self) {
-        (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
-        (*self.ptr()).target = None;
+    fn appearing(&mut self) {
+        battle::get_mut(self.id).state_flags = (PLAYER_SHIP | APPEARING) as u16;
+        battle::get_mut(self.id).target = None;
     }
 
     /// The ship `new_pkunk` leaves behind: appearing with hTarget set.
-    unsafe fn reincarnating(&mut self, x: i16, y: i16, facing: u16) {
+    fn reincarnating(&mut self, x: i16, y: i16, facing: u16) {
         self.at(x, y);
         self.inner.ship_mut().ship_facing = facing;
-        (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
-        (*self.ptr()).life = NORMAL_LIFE as u16;
-        (*self.ptr()).target = Some(shared::id((self.handle).cast()));
+        battle::get_mut(self.id).state_flags = (PLAYER_SHIP | APPEARING) as u16;
+        battle::get_mut(self.id).life = NORMAL_LIFE as u16;
+        battle::get_mut(self.id).target = Some(self.id);
     }
 
     /// Drives the real hooks (the phoenix sees the death, then the death
     /// function explodes the ship) until the death function is `new_pkunk`.
-    unsafe fn armed_new_pkunk(&mut self) -> uqm_rust::engine::battle::ElementHook {
+    fn armed_new_pkunk(&mut self) -> uqm_engine::battle::ElementHook {
         self.appearing();
         seed_random(odd_seed());
         self.preprocess();
-        let phoenix = shared::element(self.data().phoenix);
+        let phoenix = self
+            .data()
+            .phoenix
+            .unwrap_or_else(|| panic!("allocated phoenix"));
         self.inner.descriptor_mut().ship_info.crew_level = 0;
-        hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
-        let explode = (*self.ptr()).death_func.unwrap();
-        hooks::invoke_element_pointer(explode, self.ptr());
-        (*self.ptr()).death_func.unwrap()
+        hooks::invoke_element(battle::get(phoenix).death_func.unwrap(), phoenix);
+        let explode = battle::get(self.id).death_func.unwrap();
+        hooks::invoke_element(explode, self.id);
+        battle::get(self.id).death_func.unwrap()
     }
 
-    unsafe fn drain(&self) {
+    fn drain(&self) {
         for h in queued() {
-            if h != self.handle {
+            if h != self.id {
                 battle_context::unlink(h);
                 battle_context::dispose(h);
             }
@@ -216,19 +210,13 @@ impl<'a> Ship<'a> {
     }
 }
 
-unsafe fn prim(el: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
-    // SAFETY: the caller passes a live fixture element.
-    let index = unsafe { (*el).prim_index };
-    crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
-}
-
-unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
+fn queued() -> Vec<ElementId> {
     let mut result = Vec::new();
-    let mut h = shared::head();
-    while !h.is_null() {
+    let mut cursor = battle::head();
+    while let Some(h) = cursor {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = shared::succ(h);
+        cursor = battle::succ(h);
     }
     result
 }
@@ -251,13 +239,13 @@ fn color_bytes(c: Color) -> [u8; 4] {
     [c.r, c.g, c.b, c.a]
 }
 
-unsafe fn rolls(seed: u32, count: usize) -> Vec<u32> {
+fn rolls(seed: u32, count: usize) -> Vec<u32> {
     seed_random(seed);
     (0..count).map(|_| random()).collect()
 }
 
 /// Runs `run` from `seed` and checks it consumed exactly `draws` values.
-unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
+fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     let expected = rolls(seed, draws + 1)[draws];
     seed_random(seed);
     let result = run();
@@ -265,17 +253,17 @@ unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     result
 }
 
-unsafe fn seed_with_first_roll(wanted: impl Fn(u32) -> bool) -> u32 {
+fn seed_with_first_roll(wanted: impl Fn(u32) -> bool) -> u32 {
     (1..100_000u32)
         .find(|&seed| wanted(rolls(seed, 1)[0]))
         .expect("a seed with the wanted first draw")
 }
 
-unsafe fn odd_seed() -> u32 {
+fn odd_seed() -> u32 {
     seed_with_first_roll(|r| r & 1 == 1)
 }
 
-unsafe fn even_seed() -> u32 {
+fn even_seed() -> u32 {
     seed_with_first_roll(|r| r & 1 == 0)
 }
 
@@ -316,7 +304,7 @@ fn wrap_coord(v: i32, extent: i32) -> i16 {
 }
 
 /// Where the player-ship branch of `phoenix_transition` puts a trail image.
-unsafe fn trail_origin(from: Point, facing: u16, life_span: u16) -> Point {
+fn trail_origin(from: Point, facing: u16, life_span: u16) -> Point {
     let angle = facing_to_angle(i32::from(facing));
     let back = i32::from(life_span) - 1;
     let x = (i32::from(from.x) - i32::from(cosine(angle, 80)) * back) as i16;
@@ -327,17 +315,17 @@ unsafe fn trail_origin(from: Point, facing: u16, life_span: u16) -> Point {
     }
 }
 
-unsafe fn nothing_saved(ship: &mut Ship) -> bool {
+fn nothing_saved(ship: &mut Ship) -> bool {
     let data = ship.data();
     data.saved_preprocess.is_none()
         && data.saved_postprocess.is_none()
         && data.saved_death.is_none()
 }
 
-fn block_is_zero(state: uqm_rust::engine::battle::RaceState) -> bool {
+fn block_is_zero(state: uqm_engine::battle::RaceState) -> bool {
     matches!(
         state,
-        uqm_rust::engine::battle::RaceState::Pkunk {
+        uqm_engine::battle::RaceState::Pkunk {
             phoenix: None,
             saved_pre: None,
             saved_post: None,
@@ -346,37 +334,43 @@ fn block_is_zero(state: uqm_rust::engine::battle::RaceState) -> bool {
     )
 }
 
-unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: Point, angle: u16) {
-    assert_eq!((*trail).player_nr, -1);
+fn check_trail(ship: &mut Ship, trail: ElementId, at: Point, angle: u16) {
+    assert_eq!(battle::get(trail).player_nr, -1);
     assert_eq!(
-        (*trail).state_flags,
+        battle::get(trail).state_flags,
         (APPEARING | FINITE_LIFE | NONSOLID) as u16
     );
-    assert_eq!((*trail).life, 1);
-    assert_eq!((*prim(trail)).kind, STAMPFILL_PRIMITIVE);
+    assert_eq!(battle::get(trail).life, 1);
+    assert_eq!(battle::prim(trail).kind, STAMPFILL_PRIMITIVE);
     // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x15, 0x00), 0x7A)
-    assert_eq!(color_bytes((*prim(trail)).color), [0xFF, 0xAD, 0x00, 0xFF]);
-    assert_eq!((*trail).color_cycle_index, 0);
     assert_eq!(
-        (*trail).current.image.frame.raw(),
-        (*ship.ptr()).current.image.frame.raw()
+        color_bytes(battle::prim(trail).color),
+        [0xFF, 0xAD, 0x00, 0xFF]
+    );
+    assert_eq!(battle::get(trail).color_cycle_index, 0);
+    assert_eq!(
+        battle::get(trail).current.image.frame.raw(),
+        battle::get(ship.id).current.image.frame.raw()
     );
     assert_eq!(
-        (*trail).current.image.frames,
-        (*ship.ptr()).current.image.frames
+        battle::get(trail).current.image.frames,
+        battle::get(ship.id).current.image.frames
     );
     assert_eq!(
-        ((*trail).current.location.x, (*trail).current.location.y),
+        (
+            battle::get(trail).current.location.x,
+            battle::get(trail).current.location.y
+        ),
         (at.x, at.y)
     );
-    assert_eq!((*trail).mass, angle as u8);
-    assert!((*trail).preprocess_func.is_some());
-    assert!((*trail).death_func.is_some());
-    assert!((*trail).postprocess_func.is_none());
-    assert!((*trail).collision_func.is_none());
+    assert_eq!(battle::get(trail).mass, angle as u8);
+    assert!(battle::get(trail).preprocess_func.is_some());
+    assert!(battle::get(trail).death_func.is_some());
+    assert!(battle::get(trail).postprocess_func.is_none());
+    assert!(battle::get(trail).collision_func.is_none());
     assert_eq!(
-        (*trail).parent,
-        uqm_rust::engine::battle::Parent::Ship(ship.inner.ship_id)
+        battle::get(trail).parent,
+        uqm_engine::battle::Parent::Ship(ship.inner.ship_id)
     );
 }
 
@@ -385,7 +379,7 @@ fn descriptor_matches_every_c_initializer_field() {
     battle_context::run(|_| {
         let _battle = Battle::new();
         {
-            let d = shared::descriptor(SPECIES_ID_PKUNK_ID);
+            let d = battle::descriptor(SPECIES_ID_PKUNK_ID);
             assert_eq!(
                 d.ship_info.ship_flags,
                 (FIRES_FORE | FIRES_LEFT | FIRES_RIGHT) as u16
@@ -466,47 +460,45 @@ fn descriptor_matches_every_c_initializer_field() {
 
 #[test]
 fn every_init_copies_the_template_and_gives_the_copy_its_own_zeroed_state() {
-    battle_context::run(|_| unsafe {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         let mut first = Ship::new(&_battle, 0);
         let mut second = Ship::new(&_battle, 1);
         assert!(block_is_zero(first.inner.descriptor_mut().race_state));
         assert!(block_is_zero(second.inner.descriptor_mut().race_state));
         let phoenix = first.inner.id;
-        first.inner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
+        first.inner.descriptor_mut().race_state = uqm_engine::battle::RaceState::Pkunk {
             phoenix: Some(phoenix),
             saved_pre: None,
             saved_post: None,
             saved_death: None,
         };
-        second.inner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
+        second.inner.descriptor_mut().race_state = uqm_engine::battle::RaceState::Pkunk {
             phoenix: None,
             saved_pre: None,
             saved_post: None,
-            saved_death: Some(uqm_rust::engine::battle::ElementHook::Native(engine_death)),
+            saved_death: Some(uqm_engine::battle::ElementHook::Native(engine_death)),
         };
-        assert!(second.data().phoenix.is_null());
+        assert!(second.data().phoenix.is_none());
         assert!(first.data().saved_death.is_none());
         first.inner.uninit();
         assert!(matches!(
             first.inner.descriptor_mut().race_state,
-            uqm_rust::engine::battle::RaceState::None
+            uqm_engine::battle::RaceState::None
         ));
         first.inner.uninit();
         assert!(matches!(
             first.inner.descriptor_mut().race_state,
-            uqm_rust::engine::battle::RaceState::None
+            uqm_engine::battle::RaceState::None
         ));
         assert_eq!(
             addr(second.data().saved_death),
-            addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                engine_death
-            )))
+            addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
         );
         second.inner.uninit();
         assert!(matches!(
             second.inner.descriptor_mut().race_state,
-            uqm_rust::engine::battle::RaceState::None
+            uqm_engine::battle::RaceState::None
         ));
         let mut third = Ship::new(&_battle, 0);
         assert!(block_is_zero(third.inner.descriptor_mut().race_state));
@@ -518,15 +510,15 @@ fn every_init_copies_the_template_and_gives_the_copy_its_own_zeroed_state() {
 fn ships_keep_independent_phoenix_state() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut a = Ship::new(&_battle, 0);
             let mut b = Ship::new(&_battle, 1);
             assert_ne!(a.inner.ship_id, b.inner.ship_id);
             a.appearing();
             b.appearing();
             with_rng(odd_seed(), 1, || a.preprocess());
-            assert!(!a.data().phoenix.is_null());
-            assert!(b.data().phoenix.is_null());
+            assert!(!a.data().phoenix.is_none());
+            assert!(b.data().phoenix.is_none());
             // Only A's descriptor stopped asking for the one-time preprocess.
             assert!(a.inner.descriptor_mut().callbacks()[1] == 0);
             assert!(b.inner.descriptor_mut().callbacks()[1] != 0);
@@ -538,21 +530,21 @@ fn ships_keep_independent_phoenix_state() {
 fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 1);
             for facing in 0..16u16 {
                 for ship_speed in [0i16, 14] {
                     ship.inner.ship_mut().ship_facing = facing;
                     ship.at(321, -654);
-                    uqm_rust::battle::velocity::set_velocity_vector(
-                        &mut (*ship.ptr()).velocity,
+                    uqm_modes::battle::velocity::set_velocity_vector(
+                        &mut battle::get_mut(ship.id).velocity,
                         ship_speed,
                         (facing + 3) % 16,
                     );
                     let (velocity_x, velocity_y) =
-                        ((*ship.ptr()).velocity).get_current_components();
+                        (battle::get(ship.id).velocity).get_current_components();
                     let (dx, dy) = (velocity_x as i16, velocity_y as i16);
-                    let mut out = [std::ptr::dangling_mut::<std::ffi::c_void>(); 3];
+                    let mut out = [Some(ship.id); 3];
                     let before = queued();
                     let count = with_rng(5, 0, || ship.fire(&mut out));
                     assert_eq!(count, 3);
@@ -565,35 +557,38 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         // Fore, +90 degrees, and +270 degrees (the i == 2 extra quadrant).
                         let turn = [0, 4, 12][i];
                         let face = normalize_facing(i32::from(facing) + turn);
-                        let m = shared::element(h);
-                        assert_eq!((*m).life, 5);
-                        assert_eq!((*m).hits, 1);
-                        assert_eq!((*m).mass, 1);
-                        assert_eq!((*m).thrust, 1);
+                        let m = h.unwrap();
+                        assert_eq!(battle::get(m).life, 5);
+                        assert_eq!(battle::get(m).hits, 1);
+                        assert_eq!(battle::get(m).mass, 1);
+                        assert_eq!(battle::get(m).thrust, 1);
                         assert_eq!(
-                            (*m).state_flags,
+                            battle::get(m).state_flags,
                             (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                         );
-                        assert_eq!((*m).player_nr, 1);
-                        assert_eq!((*m).current.image.frame.raw(), ship.weapon_frames.frame(0));
-                        assert_eq!((*m).current.image.frames, ship.inner.frame_set(1));
-                        assert_eq!((*prim(m)).kind, STAMP_PRIMITIVE);
-                        assert!((*m).collision_func.is_some());
-                        assert!((*m).postprocess_func.is_none());
-                        assert!((*m).death_func.is_none());
-                        assert!((*m).parent == uqm_rust::engine::battle::Parent::None);
-                        assert!((*m).preprocess_func.is_some());
+                        assert_eq!(battle::get(m).player_nr, 1);
+                        assert_eq!(
+                            battle::get(m).current.image.frame.raw(),
+                            ship.weapon_frames.frame(0)
+                        );
+                        assert_eq!(battle::get(m).current.image.frames, ship.inner.frame_set(1));
+                        assert_eq!(battle::prim(m).kind, STAMP_PRIMITIVE);
+                        assert!(battle::get(m).collision_func.is_some());
+                        assert!(battle::get(m).postprocess_func.is_none());
+                        assert!(battle::get(m).death_func.is_none());
+                        assert!(battle::get(m).parent == uqm_engine::battle::Parent::None);
+                        assert!(battle::get(m).preprocess_func.is_some());
 
                         // initialize_missile at speed DISPLAY_TO_WORLD (24), then the
                         // ship's own motion is added to the missile.
                         let angle = facing_to_angle(i32::from(face));
                         let vx = cosine(angle, 96 << VELOCITY_SHIFT);
                         let vy = sine(angle, 96 << VELOCITY_SHIFT);
-                        let mut expected: VelocityDesc = mem::zeroed();
+                        let mut expected: VelocityDesc = VelocityDesc::new();
                         (expected).set_components(i32::from(vx), i32::from(vy));
                         (expected).delta_components(i32::from(dx), i32::from(dy));
                         assert_eq!(
-                            velocity_fields(&(*m).velocity),
+                            velocity_fields(&battle::get(m).velocity),
                             velocity_fields(&expected),
                             "facing {facing}, missile {i}"
                         );
@@ -606,11 +601,14 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                             - (i32::from(vy) >> VELOCITY_SHIFT)
                             - (i32::from(dy) >> VELOCITY_SHIFT);
                         assert_eq!(
-                            ((*m).current.location.x, (*m).current.location.y),
+                            (
+                                battle::get(m).current.location.x,
+                                battle::get(m).current.location.y
+                            ),
                             (x as i16, y as i16),
                             "facing {facing}, missile {i}"
                         );
-                        battle_context::dispose(h);
+                        battle_context::dispose(h.unwrap());
                     }
                 }
             }
@@ -623,21 +621,21 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
     battle_context::run(|_| {
         // The ship takes one slot, so exactly one missile fits.
         let _battle = Battle::with_capacity(2);
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.inner.ship_mut().ship_facing = 6;
-            let mut out = [std::ptr::dangling_mut::<std::ffi::c_void>(); 3];
+            let mut out = [Some(ship.id); 3];
             let count = ship.fire(&mut out);
             assert_eq!(count, 3);
-            assert!(!out[0].is_null());
-            assert!(out[1].is_null());
-            assert!(out[2].is_null());
+            assert!(out[0].is_some());
+            assert!(out[1].is_none());
+            assert!(out[2].is_none());
             assert_eq!(
-                ((*shared::element(out[0])).current.image.frame.raw()).index(),
+                (battle::get(out[0].unwrap()).current.image.frame.raw()).index(),
                 0,
                 "the first missile is the forward one"
             );
-            battle_context::dispose(out[0]);
+            battle_context::dispose(out[0].unwrap());
         }
     })
 }
@@ -646,35 +644,35 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
 fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
-            let mut out = [ptr::null_mut(); 3];
+            let mut out = [None; 3];
             ship.fire(&mut out);
-            let m = shared::element(out[0]);
-            let animate = (*m).preprocess_func.unwrap();
-            (*m).current.image.frame = ship.weapon_frames.selection(2);
-            (*m).state_flags &= !(CHANGING as u16);
-            assert_eq!((*m).turn, 0);
-            hooks::invoke_element_pointer(animate, m);
-            assert_eq!(((*m).next.image.frame.raw()).index(), 3);
-            assert_ne!((*m).state_flags & CHANGING as u16, 0);
+            let m = out[0].unwrap();
+            let animate = battle::get(m).preprocess_func.unwrap();
+            battle::get_mut(m).current.image.frame = ship.weapon_frames.selection(2);
+            battle::get_mut(m).state_flags &= !(CHANGING as u16);
+            assert_eq!(battle::get(m).turn, 0);
+            hooks::invoke_element(animate, m);
+            assert_eq!((battle::get(m).next.image.frame.raw()).index(), 3);
+            assert_ne!(battle::get(m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
-            assert_eq!((*m).turn, 1);
+            assert_eq!(battle::get(m).turn, 1);
 
-            (*m).state_flags &= !(CHANGING as u16);
-            (*m).next.image.frame = ship.weapon_frames.selection(6);
-            hooks::invoke_element_pointer(animate, m);
-            assert_eq!((*m).turn, 0);
-            assert_eq!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!(((*m).next.image.frame.raw()).index(), 6);
+            battle::get_mut(m).state_flags &= !(CHANGING as u16);
+            battle::get_mut(m).next.image.frame = ship.weapon_frames.selection(6);
+            hooks::invoke_element(animate, m);
+            assert_eq!(battle::get(m).turn, 0);
+            assert_eq!(battle::get(m).state_flags & CHANGING as u16, 0);
+            assert_eq!((battle::get(m).next.image.frame.raw()).index(), 6);
 
-            (*m).current.image.frame = ship.weapon_frames.selection(7);
-            hooks::invoke_element_pointer(animate, m);
-            assert_eq!(((*m).next.image.frame.raw()).index(), 0);
-            assert_ne!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!((*m).turn, 1);
+            battle::get_mut(m).current.image.frame = ship.weapon_frames.selection(7);
+            hooks::invoke_element(animate, m);
+            assert_eq!((battle::get(m).next.image.frame.raw()).index(), 0);
+            assert_ne!(battle::get(m).state_flags & CHANGING as u16, 0);
+            assert_eq!(battle::get(m).turn, 1);
             for h in out {
-                battle_context::dispose(h);
+                battle_context::dispose(h.unwrap());
             }
         }
     })
@@ -684,18 +682,18 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
 fn first_preprocess_with_an_even_draw_spawns_no_phoenix() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             let start_status = (LEFT | THRUST | WEAPON | LOW_ON_ENERGY as u32) as u16;
             ship.appearing();
             ship.inner.ship_mut().cur_status_flags = start_status;
             with_rng(even_seed(), 1, || ship.preprocess());
-            assert_eq!(queued(), vec![ship.handle]);
-            assert!(ship.data().phoenix.is_null());
+            assert_eq!(queued(), vec![ship.id]);
+            assert!(ship.data().phoenix.is_none());
             // A brand-new ship is preprocessed only once.
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, start_status);
-            assert_ne!((*ship.ptr()).state_flags & APPEARING as u16, 0);
+            assert_ne!(battle::get(ship.id).state_flags & APPEARING as u16, 0);
         }
     })
 }
@@ -704,7 +702,7 @@ fn first_preprocess_with_an_even_draw_spawns_no_phoenix() {
 fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 1);
             let start_status = (LEFT | THRUST | WEAPON | LOW_ON_ENERGY as u32) as u16;
             ship.appearing();
@@ -712,28 +710,28 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
             with_rng(odd_seed(), 1, || ship.preprocess());
             let all = queued();
             assert_eq!(all.len(), 2);
-            let phoenix = shared::element(all[0]);
-            assert_eq!(all[1], ship.handle);
-            assert_eq!(ship.data().phoenix, all[0]);
-            assert_eq!((*phoenix).player_nr, 1);
+            let phoenix = all[0];
+            assert_eq!(all[1], ship.id);
+            assert_eq!(ship.data().phoenix, Some(all[0]));
+            assert_eq!(battle::get(phoenix).player_nr, 1);
             assert_eq!(
-                (*phoenix).state_flags,
+                battle::get(phoenix).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
             );
-            assert_eq!((*phoenix).life, 1);
-            assert!((*phoenix).death_func.is_some());
-            assert!((*phoenix).preprocess_func.is_none());
-            assert!((*phoenix).postprocess_func.is_none());
+            assert_eq!(battle::get(phoenix).life, 1);
+            assert!(battle::get(phoenix).death_func.is_some());
+            assert!(battle::get(phoenix).preprocess_func.is_none());
+            assert!(battle::get(phoenix).postprocess_func.is_none());
             assert_eq!(
-                (*phoenix).parent,
-                uqm_rust::engine::battle::Parent::Ship(ship.inner.ship_id)
+                battle::get(phoenix).parent,
+                uqm_engine::battle::Parent::Ship(ship.inner.ship_id)
             );
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, start_status);
             // hTarget stays clear: this is not a reincarnation.
-            assert!((*ship.ptr()).target.is_none());
+            assert!(battle::get(ship.id).target.is_none());
             assert_eq!(
-                (*ship.ptr()).state_flags,
+                battle::get(ship.id).state_flags,
                 (PLAYER_SHIP | APPEARING) as u16,
                 "no phoenix transition on a new ship"
             );
@@ -745,11 +743,11 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
 fn phoenix_allocation_failure_still_consumes_the_draw_and_records_no_phoenix() {
     battle_context::run(|_| {
         let _battle = Battle::with_capacity(1);
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.appearing();
             let id = ship.inner.id;
-            if let uqm_rust::engine::battle::RaceState::Pkunk { phoenix, .. } =
+            if let uqm_engine::battle::RaceState::Pkunk { phoenix, .. } =
                 &mut ship.inner.descriptor_mut().race_state
             {
                 *phoenix = Some(id);
@@ -757,8 +755,8 @@ fn phoenix_allocation_failure_still_consumes_the_draw_and_records_no_phoenix() {
                 panic!("Pkunk state");
             }
             with_rng(odd_seed(), 1, || ship.preprocess());
-            assert_eq!(queued(), vec![ship.handle]);
-            assert!(ship.data().phoenix.is_null());
+            assert_eq!(queued(), vec![ship.id]);
+            assert!(ship.data().phoenix.is_none());
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
         }
     })
@@ -768,7 +766,7 @@ fn phoenix_allocation_failure_still_consumes_the_draw_and_records_no_phoenix() {
 fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             let seed = odd_seed();
             let cases = [
@@ -781,23 +779,23 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
             for (facing, x, y) in cases {
                 ship.reincarnating(x, y, facing);
                 ship.inner.ship_mut().cur_status_flags = 0x3ff;
-                (*ship.ptr()).velocity = mem::zeroed();
+                battle::get_mut(ship.id).velocity = VelocityDesc::new();
                 with_rng(seed, 1, || ship.preprocess());
 
                 let all = queued();
                 assert_eq!(all.len(), 6, "phoenix, ship and four trails");
-                assert_eq!(all[1], ship.handle);
-                assert_eq!(ship.data().phoenix, all[0]);
+                assert_eq!(all[1], ship.id);
+                assert_eq!(ship.data().phoenix, Some(all[0]));
                 assert_eq!(
-                    (*shared::element(all[0])).state_flags,
+                    battle::get(all[0]).state_flags,
                     (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
                 );
 
-                let el = ship.ptr();
-                assert_eq!((*el).life, 12);
-                assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE);
+                let el = ship.id;
+                assert_eq!(battle::get(el).life, 12);
+                assert_eq!(battle::prim(el).kind, EMPTY_PRIMITIVE);
                 assert_eq!(
-                    (*el).state_flags,
+                    battle::get(el).state_flags,
                     (PLAYER_SHIP | APPEARING | NONSOLID | FINITE_LIFE | CHANGING) as u16
                 );
                 assert_eq!(
@@ -812,14 +810,14 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
                     ship.inner.ship_mut().cur_status_flags,
                     0x3ff & !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
                 );
-                assert_eq!(ship.data().phoenix, all[0]);
+                assert_eq!(ship.data().phoenix, Some(all[0]));
 
                 for (k, &h) in all[2..].iter().enumerate() {
                     let trail_facing =
                         normalize_facing(i32::from(facing) + angle_to_facing(8 + 16 * k as i32));
                     let angle = facing_to_angle(i32::from(trail_facing)) as u16;
                     let expected = trail_origin(Point { x, y }, trail_facing, 12);
-                    check_trail(&mut ship, shared::element(h), expected, angle);
+                    check_trail(&mut ship, h, expected, angle);
                 }
                 ship.drain();
             }
@@ -832,7 +830,7 @@ fn reincarnation_trails_are_limited_by_free_elements() {
     battle_context::run(|_| {
         // Ship + two trails; the phoenix draw is even so none is queued.
         let _battle = Battle::with_capacity(3);
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.reincarnating(4000, 4000, 3);
             with_rng(even_seed(), 1, || ship.preprocess());
@@ -842,14 +840,17 @@ fn reincarnation_trails_are_limited_by_free_elements() {
                 let trail_facing = normalize_facing(3 + angle_to_facing(8 + 16 * k as i32));
                 let angle = facing_to_angle(i32::from(trail_facing)) as u16;
                 let expected = trail_origin(Point { x: 4000, y: 4000 }, trail_facing, 12);
-                check_trail(&mut ship, shared::element(h), expected, angle);
+                check_trail(&mut ship, h, expected, angle);
             }
             // A trail that cannot allocate keeps its callback to retry next frame.
-            let first_trail = shared::element(all[1]);
-            let callback = addr((*first_trail).preprocess_func);
-            hooks::invoke_element_pointer((*first_trail).preprocess_func.unwrap(), first_trail);
+            let first_trail = all[1];
+            let callback = addr(battle::get(first_trail).preprocess_func);
+            hooks::invoke_element(
+                battle::get(first_trail).preprocess_func.unwrap(),
+                first_trail,
+            );
             assert_eq!(queued(), all);
-            assert_eq!(addr((*first_trail).preprocess_func), callback);
+            assert_eq!(addr(battle::get(first_trail).preprocess_func), callback);
         }
     })
 }
@@ -858,37 +859,41 @@ fn reincarnation_trails_are_limited_by_free_elements() {
 fn reincarnation_ends_when_life_span_returns_to_normal() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.reincarnating(4000, 4000, 2);
             with_rng(even_seed(), 1, || ship.preprocess());
             ship.drain();
-            let el = ship.ptr();
+            let el = ship.id;
 
             // While the animation is running only the input bits are cleared.
-            (*el).state_flags &= !(APPEARING as u16);
-            (*el).life = 5;
+            battle::get_mut(el).state_flags &= !(APPEARING as u16);
+            battle::get_mut(el).life = 5;
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
             assert_eq!(ship.inner.ship_mut().cur_status_flags, 0x3e0);
             assert!(ship.inner.descriptor_mut().callbacks()[1] != 0);
-            assert_eq!((*prim(el)).kind, EMPTY_PRIMITIVE);
+            assert_eq!(battle::prim(el).kind, EMPTY_PRIMITIVE);
 
             // At NORMAL_LIFE the ship becomes solid again.
-            (*el).life = NORMAL_LIFE as u16;
-            (*el).current.image.frame = ship.ship_frames.selection(5);
-            (*el).next.image.frame = ship.ship_frames.selection(9);
-            (*el).next.image.frames = ship.inner.frame_set(0);
-            (*el).current.location = Point { x: 400, y: -800 };
-            (*el).next.location = Point { x: 1201, y: 77 };
-            (*el).velocity = mem::zeroed();
-            uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 9, 6);
+            battle::get_mut(el).life = NORMAL_LIFE as u16;
+            battle::get_mut(el).current.image.frame = ship.ship_frames.selection(5);
+            battle::get_mut(el).next.image.frame = ship.ship_frames.selection(9);
+            battle::get_mut(el).next.image.frames = ship.inner.frame_set(0);
+            battle::get_mut(el).current.location = Point { x: 400, y: -800 };
+            battle::get_mut(el).next.location = Point { x: 1201, y: 77 };
+            battle::get_mut(el).velocity = VelocityDesc::new();
+            uqm_modes::battle::velocity::set_velocity_vector(
+                &mut battle::get_mut(el).velocity,
+                9,
+                6,
+            );
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
-            assert_eq!(((*el).current.image.frame.raw()).index(), 5);
-            assert_eq!(((*el).next.image.frame.raw()).index(), 5);
-            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE);
-            let control = (*el).intersect_control;
+            assert_eq!((battle::get(el).current.image.frame.raw()).index(), 5);
+            assert_eq!((battle::get(el).next.image.frame.raw()).index(), 5);
+            assert_eq!(battle::prim(el).kind, STAMP_PRIMITIVE);
+            let control = battle::get(el).intersect_control;
             assert_eq!(
                 (
                     control.intersect_stamp.origin.x,
@@ -899,13 +904,13 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             assert_eq!((control.end_point.x, control.end_point.y), (300, 19));
             // next.image.frame was overwritten before InitIntersectFrame runs.
             assert_eq!((control.intersect_stamp.frame).index(), 5);
-            assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
+            assert_eq!(velocity_fields(&battle::get(el).velocity), [0; 9]);
             assert_eq!(
-                (*el).state_flags & (NONSOLID | FINITE_LIFE) as u16,
+                battle::get(el).state_flags & (NONSOLID | FINITE_LIFE) as u16,
                 0,
                 "solid and no longer finite"
             );
-            assert_ne!((*el).state_flags & CHANGING as u16, 0);
+            assert_ne!(battle::get(el).state_flags & CHANGING as u16, 0);
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, 0x3e0);
         }
@@ -916,22 +921,22 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
 fn trails_hop_forward_until_the_ship_is_solid_again() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.reincarnating(4000, 4000, 0);
             with_rng(even_seed(), 1, || ship.preprocess());
-            let first = shared::element(queued()[1]);
+            let first = queued()[1];
             let mut parent = first;
-            let mut from = (*first).current.location;
-            let angle = i32::from((*first).mass);
+            let mut from = battle::get(first).current.location;
+            let angle = i32::from(battle::get(first).mass);
             for hop in 0..3 {
                 let before = queued().len();
-                let step = (*parent).preprocess_func.unwrap();
-                hooks::invoke_element_pointer(step, parent);
+                let step = battle::get(parent).preprocess_func.unwrap();
+                hooks::invoke_element(step, parent);
                 // The old trail stops hopping; one new trail takes its place.
-                assert!((*parent).preprocess_func.is_none(), "hop {hop}");
+                assert!(battle::get(parent).preprocess_func.is_none(), "hop {hop}");
                 assert_eq!(queued().len(), before + 1);
-                let child = shared::element(*queued().last().unwrap());
+                let child = *queued().last().unwrap();
                 let to = Point {
                     x: (i32::from(from.x) + i32::from(cosine(angle, 80))) as i16,
                     y: (i32::from(from.y) + i32::from(sine(angle, 80))) as i16,
@@ -942,10 +947,10 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
             }
 
             // Once the ship is solid the pending trail simply stops.
-            (*ship.ptr()).state_flags &= !(NONSOLID as u16);
+            battle::get_mut(ship.id).state_flags &= !(NONSOLID as u16);
             let before = queued();
-            hooks::invoke_element_pointer((*parent).preprocess_func.unwrap(), parent);
-            assert!((*parent).preprocess_func.is_none());
+            hooks::invoke_element(battle::get(parent).preprocess_func.unwrap(), parent);
+            assert!(battle::get(parent).preprocess_func.is_none());
             assert_eq!(queued(), before);
         }
     })
@@ -955,12 +960,12 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
 fn trail_death_steps_through_the_twelve_ember_colors() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.reincarnating(4000, 4000, 0);
             with_rng(even_seed(), 1, || ship.preprocess());
-            let trail = shared::element(queued()[1]);
-            let death = (*trail).death_func.unwrap();
+            let trail = queued()[1];
+            let death = battle::get(trail).death_func.unwrap();
             // BUILD_COLOR (MAKE_RGB15 (r, g, b), _) for the C table, as bytes.
             let table: [[u8; 3]; 12] = [
                 [0xFF, 0xAD, 0x00],
@@ -977,31 +982,31 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
                 [0x5A, 0x00, 0x00],
             ];
             for (index, rgb) in table.iter().enumerate().skip(1) {
-                (*trail).state_flags |= DISAPPEARING as u16;
-                (*trail).state_flags &= !(CHANGING as u16);
-                (*trail).life = 0;
-                hooks::invoke_element_pointer(death, trail);
-                assert_eq!((*trail).color_cycle_index as usize, index);
-                assert_eq!((*trail).life, 1);
+                battle::get_mut(trail).state_flags |= DISAPPEARING as u16;
+                battle::get_mut(trail).state_flags &= !(CHANGING as u16);
+                battle::get_mut(trail).life = 0;
+                hooks::invoke_element(death, trail);
+                assert_eq!(battle::get(trail).color_cycle_index as usize, index);
+                assert_eq!(battle::get(trail).life, 1);
                 assert_eq!(
-                    color_bytes((*prim(trail)).color),
+                    color_bytes(battle::prim(trail).color),
                     [rgb[0], rgb[1], rgb[2], 0xFF]
                 );
-                assert_eq!((*trail).state_flags & DISAPPEARING as u16, 0);
-                assert_ne!((*trail).state_flags & CHANGING as u16, 0);
+                assert_eq!(battle::get(trail).state_flags & DISAPPEARING as u16, 0);
+                assert_ne!(battle::get(trail).state_flags & CHANGING as u16, 0);
             }
 
             // The twelfth step runs off the table: the trail is allowed to vanish.
-            let last_color = color_bytes((*prim(trail)).color);
-            (*trail).state_flags |= DISAPPEARING as u16;
-            (*trail).state_flags &= !(CHANGING as u16);
-            (*trail).life = 0;
-            hooks::invoke_element_pointer(death, trail);
-            assert_eq!((*trail).color_cycle_index, 12);
-            assert_eq!((*trail).life, 0);
-            assert_ne!((*trail).state_flags & DISAPPEARING as u16, 0);
-            assert_eq!((*trail).state_flags & CHANGING as u16, 0);
-            assert_eq!(color_bytes((*prim(trail)).color), last_color);
+            let last_color = color_bytes(battle::prim(trail).color);
+            battle::get_mut(trail).state_flags |= DISAPPEARING as u16;
+            battle::get_mut(trail).state_flags &= !(CHANGING as u16);
+            battle::get_mut(trail).life = 0;
+            hooks::invoke_element(death, trail);
+            assert_eq!(battle::get(trail).color_cycle_index, 12);
+            assert_eq!(battle::get(trail).life, 0);
+            assert_ne!(battle::get(trail).state_flags & DISAPPEARING as u16, 0);
+            assert_eq!(battle::get(trail).state_flags & CHANGING as u16, 0);
+            assert_eq!(color_bytes(battle::prim(trail).color), last_color);
         }
     })
 }
@@ -1010,93 +1015,83 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
 fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
-            let el = ship.ptr();
-            (*el).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-                engine_preprocess,
-            ));
-            (*el).postprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-                engine_postprocess,
-            ));
-            (*el).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
+            let el = ship.id;
+            battle::get_mut(el).preprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_preprocess));
+            battle::get_mut(el).postprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_postprocess));
+            battle::get_mut(el).death_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_death));
             ship.appearing();
             with_rng(odd_seed(), 1, || ship.preprocess());
-            let phoenix = shared::element(ship.data().phoenix);
-            let hook = (*phoenix).death_func.unwrap();
+            let phoenix = ship.data().phoenix.unwrap();
+            let hook = battle::get(phoenix).death_func.unwrap();
 
             // Crew left: the phoenix survives another frame and nothing else moves.
-            (*phoenix).state_flags |= DISAPPEARING as u16;
-            (*phoenix).life = 0;
-            hooks::invoke_element_pointer(hook, phoenix);
-            assert_eq!((*phoenix).state_flags & DISAPPEARING as u16, 0);
-            assert_eq!((*phoenix).life, 1);
-            assert_eq!((*el).mass, 1);
+            battle::get_mut(phoenix).state_flags |= DISAPPEARING as u16;
+            battle::get_mut(phoenix).life = 0;
+            hooks::invoke_element(hook, phoenix);
+            assert_eq!(battle::get(phoenix).state_flags & DISAPPEARING as u16, 0);
+            assert_eq!(battle::get(phoenix).life, 1);
+            assert_eq!(battle::get(el).mass, 1);
             assert_eq!(
-                addr((*el).death_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_death
-                )))
+                addr(battle::get(el).death_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
             );
             assert!(nothing_saved(&mut ship));
 
             // MAX_SHIP_MASS * 10 is the warp-out marker: mass 100 is 101 here.
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             for warping in [100u8, 101, 255] {
-                (*el).mass = warping;
-                hooks::invoke_element_pointer(hook, phoenix);
-                assert_eq!((*el).mass, warping);
+                battle::get_mut(el).mass = warping;
+                hooks::invoke_element(hook, phoenix);
+                assert_eq!(battle::get(el).mass, warping);
                 assert_eq!(
-                    addr((*el).death_func),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                        engine_death
-                    )))
+                    addr(battle::get(el).death_func),
+                    addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
                 );
                 assert!(nothing_saved(&mut ship));
             }
 
             // Anything else is a death Pkunk walks away from.
             for mass in [0u8, 1, 10, 99] {
-                (*el).mass = mass;
-                (*el).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_preprocess,
-                ));
-                (*el).death_func =
-                    Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
-                if let uqm_rust::engine::battle::RaceState::Pkunk { saved_death, .. } =
+                battle::get_mut(el).mass = mass;
+                battle::get_mut(el).preprocess_func =
+                    Some(uqm_engine::battle::ElementHook::Native(engine_preprocess));
+                battle::get_mut(el).death_func =
+                    Some(uqm_engine::battle::ElementHook::Native(engine_death));
+                if let uqm_engine::battle::RaceState::Pkunk { saved_death, .. } =
                     &mut ship.inner.descriptor_mut().race_state
                 {
                     *saved_death = None;
                 } else {
                     panic!("Pkunk state");
                 }
-                hooks::invoke_element_pointer(hook, phoenix);
-                assert_eq!((*el).mass, 11, "mass {mass}");
+                hooks::invoke_element(hook, phoenix);
+                assert_eq!(battle::get(el).mass, 11, "mass {mass}");
                 let data = ship.data();
                 assert_eq!(
                     addr(data.saved_preprocess),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                    addr(Some(uqm_engine::battle::ElementHook::Native(
                         engine_preprocess
                     )))
                 );
                 assert_eq!(
                     addr(data.saved_postprocess),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                    addr(Some(uqm_engine::battle::ElementHook::Native(
                         engine_postprocess
                     )))
                 );
                 assert_eq!(
                     addr(data.saved_death),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                        engine_death
-                    )))
+                    addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
                 );
-                assert!((*el).death_func.is_some());
+                assert!(battle::get(el).death_func.is_some());
                 assert_ne!(
-                    addr((*el).death_func),
-                    addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                        engine_death
-                    )))
+                    addr(battle::get(el).death_func),
+                    addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
                 );
             }
         }
@@ -1107,9 +1102,9 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
 fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
-            let el = ship.ptr();
+            let el = ship.id;
             let pkunk_preprocess = ship
                 .inner
                 .descriptor_mut()
@@ -1117,73 +1112,76 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
                 .unwrap()
                 .preprocess
                 .unwrap();
-            (*el).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-                engine_preprocess,
-            ));
-            (*el).postprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
-                engine_postprocess,
-            ));
-            (*el).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
+            battle::get_mut(el).preprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_preprocess));
+            battle::get_mut(el).postprocess_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_postprocess));
+            battle::get_mut(el).death_func =
+                Some(uqm_engine::battle::ElementHook::Native(engine_death));
             ship.at(2000, 3000);
 
             // The brand-new ship spawns its phoenix, which later sees the death.
             ship.appearing();
             with_rng(odd_seed(), 1, || ship.preprocess());
-            let phoenix = shared::element(ship.data().phoenix);
+            let phoenix = ship.data().phoenix.unwrap();
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
-            hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
-            assert_eq!((*el).mass, 11);
-            let reincarnation = (*el).death_func.unwrap();
+            hooks::invoke_element(battle::get(phoenix).death_func.unwrap(), phoenix);
+            assert_eq!(battle::get(el).mass, 11);
+            let reincarnation = battle::get(el).death_func.unwrap();
 
             // The armed death function explodes the ship (without ship_death).
-            (*el).target = Some(shared::id((ship.handle).cast()));
-            (*el).state_flags |= DISAPPEARING as u16;
-            uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 20, 3);
+            battle::get_mut(el).target = Some(ship.id);
+            battle::get_mut(el).state_flags |= DISAPPEARING as u16;
+            uqm_modes::battle::velocity::set_velocity_vector(
+                &mut battle::get_mut(el).velocity,
+                20,
+                3,
+            );
             ship.inner.descriptor_mut().ship_info.energy_level = 9;
-            hooks::invoke_element_pointer(reincarnation, el);
-            assert_eq!((*el).life, 36);
-            assert_eq!((*el).state_flags & DISAPPEARING as u16, 0);
+            hooks::invoke_element(reincarnation, el);
+            assert_eq!(battle::get(el).life, 36);
+            assert_eq!(battle::get(el).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(
-                (*el).state_flags & (FINITE_LIFE | NONSOLID) as u16,
+                battle::get(el).state_flags & (FINITE_LIFE | NONSOLID) as u16,
                 (FINITE_LIFE | NONSOLID) as u16
             );
-            assert!((*el).target.is_none());
-            assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
+            assert!(battle::get(el).target.is_none());
+            assert_eq!(velocity_fields(&battle::get(el).velocity), [0; 9]);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 0);
             assert_ne!(
-                addr((*el).preprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(battle::get(el).preprocess_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_preprocess
                 )))
             );
             assert_ne!(
-                addr((*el).postprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(battle::get(el).postprocess_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_postprocess
                 )))
             );
             assert_ne!(
-                addr((*el).death_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_death
-                )))
+                addr(battle::get(el).death_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
             );
-            assert_ne!(addr((*el).death_func), addr(Some(reincarnation)));
+            assert_ne!(addr(battle::get(el).death_func), addr(Some(reincarnation)));
 
             // When the explosion ends the engine runs the new death function.
             // Leave the ship in a state a Vux-slowed, long-dead Pkunk would have.
             ship.inner.descriptor_mut().race_callbacks.pre =
-                uqm_rust::engine::battle::Selection::Disabled;
+                uqm_engine::battle::Selection::Disabled;
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             ship.inner.descriptor_mut().ship_info.energy_level = 0;
-            let c = &mut ship.inner.descriptor_mut().characteristics;
-            (
-                c.max_thrust,
-                c.thrust_increment,
-                c.turn_wait,
-                c.thrust_wait,
-                c.special_wait,
-            ) = (1, 1, 9, 9, 9);
+            {
+                let c = &mut ship.inner.descriptor_mut().characteristics;
+                (
+                    c.max_thrust,
+                    c.thrust_increment,
+                    c.turn_wait,
+                    c.thrust_wait,
+                    c.special_wait,
+                ) = (1, 1, 9, 9, 9);
+            }
             ship.inner.ship_mut().ship_input_state = 0xff;
             ship.inner.ship_mut().cur_status_flags = 0xffff;
             ship.inner.ship_mut().old_status_flags = 0xffff;
@@ -1191,13 +1189,13 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             ship.inner.ship_mut().weapon_counter = 9;
             ship.inner.ship_mut().special_counter = 9;
             ship.inner.ship_mut().ship_facing = 3;
-            (*el).hits = 7;
-            (*el).turn = 9;
-            (*el).thrust = 9;
-            (*el).life = 3;
-            (*el).mass = 11;
-            (*el).target = None;
-            (*prim(el)).kind = EMPTY_PRIMITIVE;
+            battle::get_mut(el).hits = 7;
+            battle::get_mut(el).turn = 9;
+            battle::get_mut(el).thrust = 9;
+            battle::get_mut(el).life = 3;
+            battle::get_mut(el).mass = 11;
+            battle::get_mut(el).target = None;
+            battle::prim_mut(el).kind = EMPTY_PRIMITIVE;
 
             let seed = 777;
             let draws = rolls(seed, 7);
@@ -1206,44 +1204,45 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((after_x, after_y), (4, 7), "three draws per coordinate");
             let facing = (draws[0] & 15) as u16;
             with_rng(seed, 7, || {
-                hooks::invoke_element_pointer((*el).death_func.unwrap(), el)
+                hooks::invoke_element(battle::get(el).death_func.unwrap(), el)
             });
 
             assert_eq!(
-                (*el).state_flags,
+                battle::get(el).state_flags,
                 (APPEARING | PLAYER_SHIP | IGNORE_SIMILAR) as u16
             );
-            assert_eq!((*el).mass, 1);
+            assert_eq!(battle::get(el).mass, 1);
             assert_eq!(
-                addr((*el).preprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(battle::get(el).preprocess_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_preprocess
                 )))
             );
             assert_eq!(
-                addr((*el).postprocess_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
+                addr(battle::get(el).postprocess_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(
                     engine_postprocess
                 )))
             );
             assert_eq!(
-                addr((*el).death_func),
-                addr(Some(uqm_rust::engine::battle::ElementHook::Native(
-                    engine_death
-                )))
+                addr(battle::get(el).death_func),
+                addr(Some(uqm_engine::battle::ElementHook::Native(engine_death)))
             );
             assert_eq!(
                 Some(ship.inner.descriptor_mut().callbacks()[1]),
                 Some(pkunk_preprocess as usize),
                 "the one-time callback is armed again"
             );
-            assert_eq!(
-                (
-                    ship.inner.descriptor_mut().ship_info.crew_level,
-                    ship.inner.descriptor_mut().ship_info.energy_level
-                ),
-                (8, 12)
-            );
+            {
+                let descriptor = ship.inner.descriptor_mut();
+                assert_eq!(
+                    (
+                        descriptor.ship_info.crew_level,
+                        descriptor.ship_info.energy_level
+                    ),
+                    (8, 12)
+                );
+            }
             let c = ship.inner.descriptor_mut().characteristics;
             assert_eq!(
                 (
@@ -1258,26 +1257,38 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(ship.inner.ship_mut().ship_input_state, 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, PLAY_VICTORY_DITTY);
             assert_eq!(ship.inner.ship_mut().old_status_flags, 0);
+            {
+                let record = ship.inner.ship_mut();
+                assert_eq!(
+                    (
+                        record.energy_counter,
+                        record.weapon_counter,
+                        record.special_counter
+                    ),
+                    (0, 0, 0)
+                );
+            }
+            assert_eq!(battle::get(el).hits, 0);
+            assert_eq!(battle::get(el).turn, 0);
+            assert_eq!(battle::get(el).thrust, 0);
+            assert_eq!(battle::get(el).life, 1);
+            assert_eq!(ship.inner.ship_mut().ship_facing, facing);
+            assert_eq!(
+                battle::get(el).current.image.frames,
+                ship.inner.frame_set(0)
+            );
+            assert_eq!((battle::get(el).current.image.frame.raw()).index(), facing);
+            assert_eq!(battle::prim(el).kind, STAMP_PRIMITIVE);
             assert_eq!(
                 (
-                    ship.inner.ship_mut().energy_counter,
-                    ship.inner.ship_mut().weapon_counter,
-                    ship.inner.ship_mut().special_counter
+                    battle::get(el).current.location.x,
+                    battle::get(el).current.location.y
                 ),
-                (0, 0, 0)
+                (x, y)
             );
-            assert_eq!((*el).hits, 0);
-            assert_eq!((*el).turn, 0);
-            assert_eq!((*el).thrust, 0);
-            assert_eq!((*el).life, 1);
-            assert_eq!(ship.inner.ship_mut().ship_facing, facing);
-            assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
-            assert_eq!(((*el).current.image.frame.raw()).index(), facing);
-            assert_eq!((*prim(el)).kind, STAMP_PRIMITIVE);
-            assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
-                (*el).target,
-                Some(shared::id((ship.handle).cast())),
+                battle::get(el).target,
+                Some(ship.id),
                 "marks the next preprocess as a reincarnation"
             );
         }
@@ -1288,7 +1299,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
 fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             // A seed whose second candidate position is clear of the first.
             let far = |a: i32, b: i32, extent: i32| {
                 let mut d = b - a;
@@ -1322,22 +1333,25 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             let mut ship = Ship::new(&_battle, 0);
             let new_pkunk = ship.armed_new_pkunk();
             // GRAVITY_MASS (mass + 1): a planet sitting on the first candidate.
-            let mut planet_owner = shared::Object::new(&_battle.inner);
-            let planet = planet_owner.ptr();
-            let planet_handle = planet.cast();
-            (*planet).state_flags = 0;
-            (*planet).mass = 200;
-            (*planet).current.location = Point { x: x1, y: y1 };
-            (*planet).next = (*planet).current.clone();
-            (*planet).current.image.frames = ship.inner.frame_set(0);
-            (*planet).current.image.frame = ship.ship_frames.selection(0);
-            (*prim(planet)).kind = STAMP_PRIMITIVE;
-            shared::put(planet_handle);
+            let planet_owner = battle::Object::new(&_battle.inner);
+            let planet = planet_owner.id;
+            let planet_handle = planet;
+            battle::get_mut(planet).state_flags = 0;
+            battle::get_mut(planet).mass = 200;
+            battle::get_mut(planet).current.location = Point { x: x1, y: y1 };
+            battle::get_mut(planet).next = battle::get(planet).current.clone();
+            battle::get_mut(planet).current.image.frames = ship.inner.frame_set(0);
+            battle::get_mut(planet).current.image.frame = ship.ship_frames.selection(0);
+            battle::prim_mut(planet).kind = STAMP_PRIMITIVE;
+            battle::put(planet_handle);
 
-            let el = ship.ptr();
-            with_rng(seed, 13, || hooks::invoke_element_pointer(new_pkunk, el));
+            let el = ship.id;
+            with_rng(seed, 13, || hooks::invoke_element(new_pkunk, el));
             assert_eq!(
-                ((*el).current.location.x, (*el).current.location.y),
+                (
+                    battle::get(el).current.location.x,
+                    battle::get(el).current.location.y
+                ),
                 (x2, y2),
                 "the candidate on top of the planet is rejected"
             );
@@ -1350,7 +1364,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
 fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.inner.descriptor_mut().install_sound_fixture(4);
 
@@ -1402,7 +1416,7 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
 fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.inner.descriptor_mut().install_sound_fixture(4);
 
@@ -1463,14 +1477,13 @@ fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
 fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
             ship.appearing();
             with_rng(odd_seed(), 1, || ship.preprocess());
             let phoenix = ship.data().phoenix;
-            assert!(!phoenix.is_null());
 
-            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+            let mut concerns: [Concern; 4] = [Concern::default(); 4];
             ship.inner.descriptor_mut().ship_info.energy_level = 12;
 
             for control in [0u8, 1 << 1, GOOD_RATING, 1 << 6] {
@@ -1486,13 +1499,13 @@ fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
             with_rng(3, 0, || {
                 ship.intelligence(&mut concerns);
             });
-            assert!(ship.data().phoenix.is_null());
-            assert_eq!(queued(), vec![ship.handle]);
+            assert!(ship.data().phoenix.is_none());
+            assert_eq!(queued(), vec![ship.id]);
             // Nothing left to drop the second time.
             with_rng(3, 0, || {
                 ship.intelligence(&mut concerns);
             });
-            assert_eq!(queued(), vec![ship.handle]);
+            assert_eq!(queued(), vec![ship.id]);
         }
     })
 }
@@ -1501,14 +1514,14 @@ fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
 fn ai_taunts_when_short_of_energy_and_throttles_on_the_low_byte_of_one_draw() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
 
             // (u8) truncates before the comparison: a draw above 255 whose low
             // byte is under 20 counts.
             let low = seed_with_first_roll(|r| r & 0xff < 20 && r > 0xff);
             let high = seed_with_first_roll(|r| r & 0xff >= 20);
-            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+            let mut concerns: [Concern; 4] = [Concern::default(); 4];
             ship.inner.ship_mut().weapon_counter = 1;
             // (energy, special_counter, seed, draws, taunts)
             let cases = [
@@ -1543,10 +1556,10 @@ fn ai_taunts_when_short_of_energy_and_throttles_on_the_low_byte_of_one_draw() {
 fn ai_finishes_with_the_shared_pass_after_deciding_on_the_taunt() {
     battle_context::run(|_| {
         let _battle = Battle::new();
-        unsafe {
+        {
             let mut ship = Ship::new(&_battle, 0);
 
-            let mut concerns: [EvaluateRecord; 4] = mem::zeroed();
+            let mut concerns: [Concern; 4] = [Concern::default(); 4];
             ship.inner.descriptor_mut().ship_info.energy_level = 4;
             ship.inner.ship_mut().special_counter = 0;
             // ship_intelligence clears WEAPON while the weapon counter is idle.

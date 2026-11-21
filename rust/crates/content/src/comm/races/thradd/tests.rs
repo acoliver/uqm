@@ -2,7 +2,7 @@ use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 #[test]
 fn descriptor_resources_exist_in_the_shipped_map() {

@@ -1,11 +1,10 @@
-use uqm_rust::{
-    engine::{
-        battle::{Battle, Cx},
-        observe::{Io, Unobserved},
-        Game,
-    },
-    mainloop::restart_menu::restart_ops::{RestartHost, RestartMenu, RestartMenuOps},
+#![forbid(unsafe_code)]
+use uqm_engine::{
+    battle::{Battle, Cx},
+    observe::{Io, Unobserved},
+    Game,
 };
+use uqm_rust::mainloop::restart_menu::restart_ops::{RestartHost, RestartMenu, RestartMenuOps};
 
 struct NoLifecycle;
 impl RestartHost for NoLifecycle {
@@ -38,7 +37,7 @@ fn player_control_writes_only_the_supplied_kernel_and_keeps_byte_truncation() {
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            uqm_rust::math::random,
+            uqm_engine::math::random,
         );
         menu.operations(&mut cx, &mut io, &mut host)
             .set_player_control(player, value);

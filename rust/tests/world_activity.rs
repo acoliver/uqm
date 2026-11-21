@@ -1,4 +1,5 @@
-use uqm_rust::engine::World;
+#![forbid(unsafe_code)]
+use uqm_engine::World;
 
 #[test]
 fn activity_observation_uses_the_live_world_without_bridge_publication() {
@@ -69,7 +70,7 @@ fn presentation_terminal_reads_and_signals_the_supplied_world_without_a_bridge()
         script,
         directory.path().into(),
         world.activity_control(),
-        uqm_rust::engine::input::InputControls::default(),
+        uqm_engine::input::InputControls::default(),
         Default::default(),
     );
     world.set_activity(0x0403);

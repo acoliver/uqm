@@ -2,11 +2,11 @@
 
 use super::*;
 use crate::automation::trace::NativeBattleEvidence;
-use crate::engine::observe::battle::{BattleTick, ReplacementGate};
+use uqm_engine::observe::battle::{BattleTick, ReplacementGate};
 
 impl AutomationObserver {
     pub(crate) fn native_diagnostics(&self) -> bool {
-        self.native_trace.is_some() && !crate::engine::host::is_replay()
+        self.native_trace.is_some() && !uqm_engine::host::is_replay()
     }
 
     pub(crate) fn observes_pkunk_rebirth(&self) -> bool {
@@ -24,7 +24,7 @@ impl AutomationObserver {
             self.inner
                 .lock()
                 .pkunk_rebirth
-                .observe(crate::collections::observation::current_frame(), tick);
+                .observe(uqm_engine::collections::observation::current_frame(), tick);
         }
         self.trace_native_battle(Some(*tick), None);
     }
@@ -43,8 +43,8 @@ impl AutomationObserver {
         }
         let now = self.elapsed_ms();
         let phase = match tick.map(|tick| tick.phase) {
-            Some(crate::engine::observe::battle::BattlePhase::Input) => 0,
-            Some(crate::engine::observe::battle::BattlePhase::Advanced) => 1,
+            Some(uqm_engine::observe::battle::BattlePhase::Input) => 0,
+            Some(uqm_engine::observe::battle::BattlePhase::Advanced) => 1,
             None => 2,
         };
         let delta_ms = inner.native_battle_previous_ms[phase].map(|previous| now - previous);
@@ -71,7 +71,7 @@ impl AutomationObserver {
             checkpoint: None,
             failure: None,
             native_battle: Some(NativeBattleEvidence {
-                frame: crate::collections::observation::current_frame(),
+                frame: uqm_engine::collections::observation::current_frame(),
                 tick,
                 gate,
                 picker_active: active,
@@ -173,7 +173,7 @@ impl AutomationObserver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe::battle::BattlePhase;
+    use uqm_engine::observe::battle::BattlePhase;
 
     fn make_observer(root: &std::path::Path, native: bool) -> Arc<AutomationObserver> {
         let bytes = br#"{"version":1,"name":"battle-trace","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":100,"max_wallclock_seconds":60}}"#;
@@ -186,7 +186,7 @@ mod tests {
             script,
             root.into(),
             native.then_some(16384),
-            crate::engine::World::new().activity_control(),
+            uqm_engine::World::new().activity_control(),
             Default::default(),
             Default::default(),
         )

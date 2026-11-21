@@ -7,26 +7,26 @@
 //! those arguments.
 
 pub mod engine {
-    use crate::engine::battle::ai_constants::{
+    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::ai_constants::{
         FIRES_FORE, FIRES_LEFT, FIRES_RIGHT, IGNORE_SIMILAR, LEFT, MAX_SHIP_MASS, RIGHT, SPECIAL,
         THRUST, WEAPON,
     };
-    use crate::engine::battle::flags::{
+    use uqm_engine::battle::flags::{
         APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, NEUTRAL_PLAYER_NUM, NONSOLID, NORMAL_LIFE,
         PLAYER_SHIP, STAMPFILL_PRIMITIVE,
     };
-    use crate::engine::battle::record::CharacteristicRecord;
-    use crate::engine::battle::ElementHook;
-    use crate::engine::battle::{
+    use uqm_engine::battle::record::CharacteristicRecord;
+    use uqm_engine::battle::ElementHook;
+    use uqm_engine::battle::{
         Concerns, Cx, ElementId, RaceState, Selection, ShipId, WeaponOrigin, WeaponSpawn,
     };
-    use crate::engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
-    use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
-    use crate::graphics::geometry::Color;
-    use crate::graphics::geometry::Point;
-    use crate::math::battle_types::{FULL_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
-    use crate::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
-    use crate::ships::native::{angle_to_facing, cosine, facing_to_angle, normalize_facing, sine};
+    use uqm_engine::battle::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use uqm_engine::graphics::geometry::Color;
+    use uqm_engine::graphics::geometry::Point;
+    use uqm_engine::math::battle_types::{FULL_CIRCLE, OCTANT, ONE_SHIFT, QUADRANT};
+    use uqm_engine::math::velocity::{VelocityDesc, VELOCITY_SHIFT};
+    use uqm_engine::world::fleet::SPHERE_RADIUS_INCREMENT;
     // Core characteristics
     const MAX_CREW: u16 = 8;
     const MAX_ENERGY: u8 = 12;
@@ -98,9 +98,9 @@ pub mod engine {
         rgb15(0x0B, 0x00, 0x00),
     ];
 
-    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
-        let d = crate::engine::battle::template::RaceTemplate {
-            info: crate::engine::battle::views::Info {
+    fn descriptor(_world: &mut uqm_engine::battle::World) -> uqm_engine::battle::RaceDesc {
+        let d = uqm_engine::battle::template::RaceTemplate {
+            info: uqm_engine::battle::views::Info {
                 ship_flags: (FIRES_FORE | FIRES_LEFT | FIRES_RIGHT) as u16,
                 ship_cost: 20,
                 crew_level: MAX_CREW,
@@ -108,7 +108,7 @@ pub mod engine {
                 energy_level: MAX_ENERGY,
                 max_energy: MAX_ENERGY,
             },
-            resources: crate::engine::battle::template::RaceResources {
+            resources: uqm_engine::battle::template::RaceResources {
                 strings: Some(c"ship.pkunk.text"),
                 icons: Some(c"ship.pkunk.icons"),
                 melee_icon: Some(c"ship.pkunk.meleeicons"),
@@ -142,7 +142,7 @@ pub mod engine {
                 special_wait: 0,
                 ship_mass: SHIP_MASS,
             },
-            intelligence: crate::engine::battle::views::Intelligence {
+            intelligence: uqm_engine::battle::views::Intelligence {
                 weapon_range: (CLOSE_RANGE_WEAPON + 1) as u16,
                 ..Default::default()
             },
@@ -153,12 +153,11 @@ pub mod engine {
                 saved_death: None,
             },
         };
-        crate::engine::battle::kernel::LAST_PKUNK_SOUND
-            .store(0, std::sync::atomic::Ordering::Relaxed);
+        uqm_engine::battle::kernel::LAST_PKUNK_SOUND.store(0, std::sync::atomic::Ordering::Relaxed);
         d.descriptor(&PKUNK)
     }
 
-    pub static PKUNK: crate::engine::battle::Race = crate::engine::battle::Race {
+    pub static PKUNK: uqm_engine::battle::Race = uqm_engine::battle::Race {
         descriptor,
         preprocess: Some(pkunk_preprocess),
         postprocess: Some(pkunk_postprocess),
@@ -218,7 +217,7 @@ pub mod engine {
         ss: ShipId,
         origin: WeaponOrigin,
     ) -> WeaponSpawn {
-        let mut block = crate::engine::battle::views::Missile {
+        let mut block = uqm_engine::battle::views::Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
             frames: cx.ship_frame_set(ss, 1),
@@ -549,8 +548,8 @@ pub mod engine {
     }
 
     pub fn uninit_pkunk(
-        _world: &mut crate::engine::battle::World,
-        stats: &mut crate::engine::battle::views::RaceStats,
+        _world: &mut uqm_engine::battle::World,
+        stats: &mut uqm_engine::battle::views::RaceStats,
     ) {
         stats.state = RaceState::None;
     }

@@ -1,4 +1,5 @@
 //! Two loaded game processes exchange live input/checksums through LoopbackNet.
+#![forbid(unsafe_code)]
 use std::{
     error::Error,
     fs,
@@ -13,7 +14,7 @@ use uqm_engine::{
     network::loopback::LoopbackNet,
 };
 
-use uqm_rust::supermelee::netplay::packet::{DecodeError, Packet};
+use uqm_modes::supermelee::netplay::packet::{DecodeError, Packet};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 struct Replay(Child);

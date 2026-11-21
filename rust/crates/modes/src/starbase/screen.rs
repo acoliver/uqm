@@ -33,7 +33,7 @@ use super::platform::{
 use super::sis_modules::{fuel_bar_layout, ModuleSlots};
 use super::starbase_menu::{MenuCommand, StarbaseFrameInput, StarbaseMenu, StarbaseStep};
 use super::visit::{cleanup_after_starbase, CleanupOutcome, TimePassage, IN_STARBASE_MARK};
-use crate::engine::world::activity::activity_flags;
+use uqm_engine::world::activity::activity_flags;
 
 /// Restores the previous drawing context when dropped (`OldContext =
 /// SetContext (...)` ... `SetContext (OldContext)`).
@@ -183,7 +183,7 @@ impl<'a, P: Platform + ?Sized> StarbaseScreen<'a, P> {
 
     fn initialize(
         &mut self,
-        last_activity: crate::engine::world::activity::ActivityValue,
+        last_activity: uqm_engine::world::activity::ActivityValue,
     ) -> Result<(), StarbaseError> {
         let p = self.platform;
         p.set_last_activity(last_activity);

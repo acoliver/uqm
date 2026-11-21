@@ -1,13 +1,14 @@
 //! Original compiled C, sealed full-buffer fixtures and the Rust terrain owner.
+#![forbid(unsafe_code)]
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use uqm_rust::comm::locdata::{CPoint, CRect};
-use uqm_rust::math::{random as TFB_Random, seed_random as TFB_SeedRandom, RandomContext};
-use uqm_rust::planets::render::topo_gen::{make_crater, make_gas_giant, make_storms, MAP_HEIGHT};
+use uqm_engine::math::{random as TFB_Random, seed_random as TFB_SeedRandom, RandomContext};
+use uqm_modes::comm::locdata::{CPoint, CRect};
+use uqm_modes::planets::render::topo_gen::{make_crater, make_gas_giant, make_storms, MAP_HEIGHT};
 
 #[derive(Deserialize, Debug)]
 struct Case {

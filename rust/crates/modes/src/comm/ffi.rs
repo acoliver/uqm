@@ -1,9 +1,9 @@
 //! Rust communication facade for state, playback and dialogue orchestration.
 
 use crate::comm::Comm;
-use crate::engine::observe::CheckpointView;
-use crate::engine::StoryKey;
 use std::ffi::{c_int, c_uint};
+use uqm_engine::observe::CheckpointView;
+use uqm_engine::StoryKey;
 
 use super::segue::Segue;
 
@@ -17,7 +17,7 @@ pub use response_commands::{do_response_phrase, rust_clear_responses};
 // ============================================================================
 
 /// Resolve a phrase name against the offered list on the game thread.
-pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices {
+pub fn response_choices(comm: &Comm) -> uqm_engine::observe::ResponseChoices {
     comm.responses().choices(|reference| {
         let table = comm.display.phrases.as_ref()?;
         if reference == 0 || reference as usize > table.len() {
@@ -31,7 +31,7 @@ pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices 
 }
 
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
-pub fn rust_execute_response(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+pub fn rust_execute_response(comm: &mut Comm, cx: &mut uqm_engine::battle::Cx<'_>) -> u16 {
     let state = &*comm;
     let response = match state.responses().get_selected() {
         Some(r) => r,
@@ -74,9 +74,9 @@ pub fn rust_set_segue(comm: &mut Comm, segue: c_uint) {
 /// Returns 1 if talking finished (reached end), 0 otherwise.
 pub fn rust_alien_talk_segue(
     comm: &mut Comm,
-    input: &crate::engine::input::InputSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    input: &uqm_engine::input::InputSession,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
     wait: c_uint,
 ) -> c_int {
     #[cfg(not(test))]
@@ -154,9 +154,9 @@ fn run_alien_talk_unlocked<C>(
 /// @pseudocode 003-do-communication-rewrite lines 41-81
 pub fn rust_do_communication(
     comm: &mut Comm,
-    input: &crate::engine::input::InputSession,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    input: &uqm_engine::input::InputSession,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> c_int {
     if speech::run_pending(comm, input, cx, io) {
         return 1;
@@ -184,7 +184,7 @@ pub fn rust_do_communication(
     if response_count == 0 {
         // No responses — run last-replay then done.
         // run_last_replay calls C bridges, so no lock.
-        use crate::sound::heart_ffi::fade_music as FadeMusic;
+        use uqm_engine::sound::heart_ffi::fade_music as FadeMusic;
         let timeout = FadeMusic(
             0u8,
             (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,
@@ -346,8 +346,8 @@ pub fn rust_clear_subtitles(comm: &mut Comm) {
 #[cfg(not(test))]
 pub fn rust_show_conversation_summary(
     comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> c_int {
     super::sis_graphics::select_conversation_summary(comm, cx, io);
     1
@@ -367,8 +367,8 @@ pub fn rust_show_conversation_summary(
 #[cfg(test)]
 pub fn rust_show_conversation_summary(
     comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
+    io: &mut uqm_engine::observe::Io<'_>,
 ) -> c_int {
     let _ = (cx, io);
     use super::summary::SummaryResult;
@@ -426,7 +426,7 @@ fn format_alliance_name(buffer: &mut [u8], phrase: &[u8], commander: Option<&[u8
 }
 
 pub fn npc_phrase(
-    world: &crate::engine::World,
+    world: &uqm_engine::World,
     comm: &mut Comm,
     index: c_int,
     callback: super::glue::PhraseCallback,
@@ -442,7 +442,7 @@ pub fn npc_phrase(
         } else {
             resources.ship_name.as_c_str()
         };
-        crate::sound::heart_ffi::splice_track(None, Some(name), None, callback);
+        uqm_engine::sound::heart_ffi::splice_track(None, Some(name), None, callback);
     } else if index < 0 {
         let variant = world.story_state(StoryKey::NEW_ALLIANCE_NAME) as c_int;
         let adjusted = index - GLOBAL_ALLIANCE_NAME;
@@ -467,7 +467,7 @@ pub fn npc_phrase(
                 .map_while(std::num::NonZeroU8::new)
                 .collect::<Vec<_>>(),
         );
-        crate::sound::heart_ffi::splice_track(None, Some(&text), None, callback);
+        uqm_engine::sound::heart_ffi::splice_track(None, Some(&text), None, callback);
     } else {
         let Some(phrase) = comm
             .display
@@ -478,12 +478,17 @@ pub fn npc_phrase(
             return;
         };
         let Some(text) = phrase.text else { return };
-        crate::sound::heart_ffi::splice_track(phrase.clip, Some(text), phrase.timestamp, callback);
+        uqm_engine::sound::heart_ffi::splice_track(
+            phrase.clip,
+            Some(text),
+            phrase.timestamp,
+            callback,
+        );
     }
     comm.rebuild_summary();
 }
 
-pub fn splice_phrase(world: &crate::engine::World, comm: &mut Comm, index: c_int) {
+pub fn splice_phrase(world: &uqm_engine::World, comm: &mut Comm, index: c_int) {
     if index == 0 {
         return;
     }
@@ -501,9 +506,9 @@ pub fn splice_phrase(world: &crate::engine::World, comm: &mut Comm, index: c_int
     };
     let Some(text) = phrase.text else { return };
     if let Some(clip) = phrase.clip {
-        crate::sound::heart_ffi::splice_multi_track(&[clip], Some(text));
+        uqm_engine::sound::heart_ffi::splice_multi_track(&[clip], Some(text));
     } else {
-        crate::sound::heart_ffi::splice_track(None, Some(text), None, None);
+        uqm_engine::sound::heart_ffi::splice_track(None, Some(text), None, None);
     }
     comm.rebuild_summary();
 }

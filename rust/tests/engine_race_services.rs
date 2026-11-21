@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use uqm_engine::battle::{Battle, Cx, ElementId, RaceDesc, ShipId};
 use uqm_engine::Game;
 
@@ -55,7 +56,7 @@ fn race_effects_require_installation_on_the_supplied_kernel() {
             Some(&"battle race services were not installed")
         );
         assert!(cx.winner().is_none());
-        uqm_rust::battle::services::install(cx.kernel);
+        uqm_modes::battle::services::install(cx.kernel);
         cx.select_self_destruct_winner(dead);
         assert_eq!(cx.winner(), Some(cx.owner(dead)));
     });
@@ -65,7 +66,7 @@ fn race_effects_require_installation_on_the_supplied_kernel() {
 #[serial_test::serial]
 fn self_destruct_selects_survivor_and_clears_only_its_own_victory_flag() {
     with_context(|cx| {
-        uqm_rust::battle::services::install(cx.kernel);
+        uqm_modes::battle::services::install(cx.kernel);
         let (dead_ship, dead) = owner(cx, 0);
         let (survivor, _) = owner(cx, 1);
         cx.element_mut(dead).life = 0;
@@ -120,11 +121,11 @@ fn queued_ship_effects_preserve_order_and_silence_suppresses_later_sounds() {
 #[serial_test::serial]
 fn real_death_and_unlink_services_use_only_the_supplied_owners() {
     with_context(|cx| {
-        uqm_rust::battle::services::install(cx.kernel);
+        uqm_modes::battle::services::install(cx.kernel);
         let (_, a) = owner(cx, 0);
         let (_, b) = owner(cx, 1);
         cx.world
-            .set_activity(uqm_rust::engine::world::activity::activity_kinds::IN_ENCOUNTER);
+            .set_activity(uqm_engine::world::activity::activity_kinds::IN_ENCOUNTER);
         cx.b.counters = [2, 3];
         cx.record_ship_death(a);
         assert_eq!(cx.b.counters, [1, 3]);

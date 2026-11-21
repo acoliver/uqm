@@ -1,7 +1,7 @@
 use super::super::{planet_mass, scan_value};
 use super::*;
-use crate::graphics::{drawable::DrawableLease, font::FontLease};
 use crate::starbase::gfx::{Align, Point, TextDraw};
+use uqm_engine::graphics::{drawable::DrawableLease, font::FontLease};
 
 pub(super) fn text(g: &Graphics, x: i16, y: i16, align: Align, text: String) {
     g.draw_text(&TextDraw {
@@ -36,8 +36,8 @@ fn pc_value(g: &Graphics, x: i16, y: i16, label: i32, value: String) {
         .unwrap_or_else(|| panic!("scan label font is not selected"))
         .measure(
             &string,
-            crate::graphics::geometry::Point { x, y },
-            crate::graphics::geometry::TextAlign::Left,
+            uqm_engine::graphics::geometry::Point { x, y },
+            uqm_engine::graphics::geometry::TextAlign::Left,
             u16::MAX,
         );
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
@@ -168,7 +168,7 @@ fn three_do(
     text(g, map_width >> 1, 13, Align::Center, title(solar, g));
     planet.draw_stamp(
         &junk.context_frame(0).wrapped_frame(20),
-        crate::graphics::geometry::Point { x: 16, y: 0 },
+        uqm_engine::graphics::geometry::Point { x: 16, y: 0 },
     );
     let orbit = (i64::from(info.planet_to_sun_dist) * 100 + 256) / 512;
     text(g, 43, 25, Align::Left, scan_value(orbit, "♁"));

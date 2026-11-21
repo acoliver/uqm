@@ -28,7 +28,7 @@ pub struct CffiGameplayRandom;
 
 impl GameplayRandom for CffiGameplayRandom {
     fn next(&mut self) -> u32 {
-        crate::math::random()
+        uqm_engine::math::random()
     }
 }
 
@@ -111,7 +111,7 @@ fn publish_deposits(
         let SurfaceEntityKind::MineralNode { category, .. } = &entity.kind else {
             return None;
         };
-        Some(crate::engine::observe_port::planet_side::MineralDeposit {
+        Some(uqm_engine::observe_port::planet_side::MineralDeposit {
             x: entity.position.x,
             y: entity.position.y,
             category: u8::try_from(*category).ok()?,
@@ -438,7 +438,7 @@ where
 
     fn apply_world_step(
         &mut self,
-        cx: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+        cx: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
         result: &WorldStepResult,
         audio: &mut impl super::runtime::PlanetSideAudio,
     ) -> Result<(), AdapterError> {
@@ -707,7 +707,7 @@ mod tests {
         fn shot_visual(&mut self, _facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 0,
                 },
                 mask: solid(),
@@ -720,7 +720,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 0x100 + animation_frame,
                 },
                 mask: solid(),
@@ -730,7 +730,7 @@ mod tests {
         fn hazard_visual(&mut self, _kind: HazardKind) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: 2,
                 },
                 mask: solid(),
@@ -744,7 +744,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: crate::graphics::drawable::ContextFrame::default(),
+                    base: uqm_engine::graphics::drawable::ContextFrame::default(),
                     index: animation_frame,
                 },
                 mask: solid(),
@@ -755,13 +755,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn stunned_creature_keeps_canister_visual_and_yields_bio_on_pickup() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         let mut creature = brainbox_entity(1);
@@ -835,7 +835,7 @@ mod tests {
     }
 
     struct PersistentGenerator {
-        files: std::rc::Rc<std::cell::RefCell<crate::engine::world::state_file::StateFileManager>>,
+        files: std::rc::Rc<std::cell::RefCell<uqm_engine::world::state_file::StateFileManager>>,
     }
     impl SurfaceGenerator for PersistentGenerator {
         fn node_count(
@@ -885,7 +885,7 @@ mod tests {
         ) -> Result<(), AdapterError> {
             self.files
                 .borrow_mut()
-                .can_node(crate::engine::world::planet_info::CannedNode {
+                .can_node(uqm_engine::world::planet_info::CannedNode {
                     star: 1,
                     planet: 2,
                     moon: 1,
@@ -901,17 +901,17 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn lethal_shot_survives_relanding_save_load_and_collection_retires_node() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         use super::super::generation::*;
-        use crate::engine::world::state_file::StateFileManager;
+        use uqm_engine::world::state_file::StateFileManager;
         let files = std::rc::Rc::new(std::cell::RefCell::new(StateFileManager::new()));
         let mut generator = PersistentGenerator {
             files: files.clone(),
@@ -1168,11 +1168,7 @@ mod tests {
     struct RecordingAudio;
 
     impl super::super::runtime::PlanetSideAudio for RecordingAudio {
-        fn play(
-            &mut self,
-            _world: &crate::engine::World,
-            _cue: SoundCue,
-        ) -> Result<(), AdapterError> {
+        fn play(&mut self, _world: &uqm_engine::World, _cue: SoundCue) -> Result<(), AdapterError> {
             Ok(())
         }
     }
@@ -1222,13 +1218,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn first_stun_bolt_retires_a_multi_hit_point_brainbox_node() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+        let mut owner = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(uqm_engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         ));
 
         use super::super::generation::{GeneratedEntity, ScanNodeId, ScanType};

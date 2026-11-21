@@ -1,7 +1,7 @@
 //! Collision hooks retain the caller's pair ordering and point mutation order.
 
-use crate::engine::battle::{CollisionHook, Cx, ElementId};
-use crate::graphics::geometry::Point;
+use uqm_engine::battle::{CollisionHook, Cx, ElementId};
+use uqm_engine::graphics::geometry::Point;
 
 pub fn invoke_collision(
     cx: &mut Cx<'_>,

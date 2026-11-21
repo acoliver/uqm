@@ -1,11 +1,11 @@
 //! Retained graphics-context inspection with supplied input and diagnostic output.
 use super::*;
-use crate::graphics::{
+use std::io::{self, Write};
+use uqm_engine::graphics::{
     context::LoadedContext, drawable::ContextFrame, drawable::LoadedDrawable, geometry::Point,
     geometry::Rect, geometry::TextAlign,
 };
-use crate::input::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
-use std::io::{self, Write};
+use uqm_engine::input_port::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
 struct ScreenRestore {
@@ -38,7 +38,7 @@ pub fn debug_contexts(cx: &mut Cx<'_>, io: &mut Io<'_>, out: &mut impl Write) ->
             &screen,
             Some(Rect {
                 corner: Point { x: 0, y: 0 },
-                extent: crate::graphics::geometry::Extent {
+                extent: uqm_engine::graphics::geometry::Extent {
                     width: dimensions.0 as i16,
                     height: dimensions.1 as i16,
                 },
@@ -93,7 +93,7 @@ pub fn debug_contexts(cx: &mut Cx<'_>, io: &mut Io<'_>, out: &mut impl Write) ->
 fn draw_context(
     context: &ContextLease,
     source: &ContextLease,
-    font: &crate::graphics::font::FontLease,
+    font: &uqm_engine::graphics::font::FontLease,
     hue: f64,
 ) {
     let rectangle = colors::hsva_to_rgba(hue, 1.0, 0.5, 100);

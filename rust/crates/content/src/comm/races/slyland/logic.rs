@@ -1,5 +1,5 @@
 use super::*;
-use crate::engine::StoryKey;
+use uqm_engine::StoryKey;
 
 impl<A: SlylandApi> Dialogue<'_, A> {
     pub fn initialize(&mut self) {

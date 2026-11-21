@@ -5,8 +5,8 @@ use super::scan_frames::{
     mineral_scan_dot, mineral_surface_sprite, ScanFrameError, BIO_SCAN_DOT, ENERGY_SCAN_DOT,
 };
 use crate::battle::element::ElementFlags;
-use crate::engine::battle::{views::FrameSelection as Frame, Cx, ElementId};
-use crate::engine::world::planet::PlanetInfo;
+use uqm_engine::battle::{views::FrameSelection as Frame, Cx, ElementId};
+use uqm_engine::world::planet::PlanetInfo;
 
 const MAG_SHIFT: i32 = 2;
 const MAX_SCROUNGED: u8 = 50;
@@ -48,7 +48,7 @@ pub(crate) fn synced_node_position(
 mod production {
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
     use super::{initialize_element, Frame};
-    use crate::engine::battle::Cx;
+    use uqm_engine::battle::Cx;
 
     pub fn generate(
         game: &std::cell::RefCell<Cx<'_>>,
@@ -117,7 +117,7 @@ mod production {
                     super::synced_node_position(state.life, state.flags, &positions)
                 {
                     cx.element_mut(element).current.location =
-                        crate::graphics::geometry::Point { x, y };
+                        uqm_engine::graphics::geometry::Point { x, y };
                 }
             }
         }
@@ -209,8 +209,8 @@ fn initialize_element(
     };
     cx.set_primitive_stamp(
         element,
-        crate::graphics::intersection::Stamp {
-            origin: crate::graphics::geometry::Point { x: 0, y: 0 },
+        uqm_engine::graphics::intersection::Stamp {
+            origin: uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
             frame: frame.raw(),
         },
     );
@@ -219,7 +219,7 @@ fn initialize_element(
 
 /// Populate the scan display list through the supplied generation service.
 pub fn generate_planet_side(
-    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    game: &std::cell::RefCell<uqm_engine::battle::Cx<'_>>,
     generator: &mut dyn super::generation::SurfaceGenerator,
     frames: &[Frame; 6],
     persistence: super::generation::ScanPersistence,
@@ -228,7 +228,7 @@ pub fn generate_planet_side(
 }
 
 pub(crate) fn sync_positions(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut uqm_engine::battle::Cx<'_>,
     surface: &super::assembly::SurfaceAssembly,
 ) {
     production::sync_positions(cx, surface);
@@ -242,21 +242,21 @@ mod retrieval_tests {
     #[test]
     #[serial_test::serial]
     fn scan_frame_indices_wrap_and_retain_the_drawable_after_release() {
-        use crate::engine::battle::views::FrameSelection;
-        let drawable = crate::graphics::drawable::LoadedDrawable::create(0, 0, 0, 4)
+        use uqm_engine::battle::views::FrameSelection;
+        let drawable = uqm_engine::graphics::drawable::LoadedDrawable::create(0, 0, 0, 4)
             .unwrap_or_else(|| panic!("scan fixture drawable"));
         let lease = drawable.lease();
         let source = FrameSelection::retain(lease.frame(2).unwrap());
         let expected = lease.frame(1).unwrap();
         drop(lease);
         drop(drawable);
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut game = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let cx = Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         let wrapped = cx.absolute_frame(source.view(), 5);
         drop(source);
@@ -268,12 +268,12 @@ mod retrieval_tests {
     #[test]
     #[serial_test::serial]
     fn real_scan_initializer_preserves_every_node_kind_and_retained_frame() {
-        use crate::graphics::drawable::LoadedDrawable;
         use crate::planet_side::{
             creatures::CreatureKind,
             generation::{GeneratedNode, GeneratedNodeKind},
             model::SurfacePoint,
         };
+        use uqm_engine::graphics::drawable::LoadedDrawable;
         let misc_owner = LoadedDrawable::create(0, 0, 0, 48).unwrap();
         let scene_owner = LoadedDrawable::create(0, 0, 0, 6).unwrap();
         let misc = Frame::retain(misc_owner.lease().frame(0).unwrap());
@@ -281,13 +281,13 @@ mod retrieval_tests {
             std::array::from_fn(|index| Frame::retain(scene_owner.lease().frame(index).unwrap()));
         drop(misc_owner);
         drop(scene_owner);
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
+        let mut game = uqm_engine::Game::new();
+        let mut battle = uqm_engine::battle::Battle::new();
         let mut cx = Cx::new(
             &mut battle,
             &mut game.world,
             &mut game.kernel,
-            crate::math::random,
+            uqm_engine::math::random,
         );
         let cases = [
             (

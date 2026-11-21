@@ -1,7 +1,7 @@
 //! Immutable definitions used by conversation content.
 
-pub(crate) use crate::graphics::geometry::{Color, Point};
 use std::ffi::CStr;
+pub(crate) use uqm_engine::graphics::geometry::{Color, Point};
 
 pub const MAX_ANIMATIONS: usize = 20;
 

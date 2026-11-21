@@ -1,8 +1,8 @@
 //! Fourteen bounded production engagements for each seven-ship fleet.
 
 use super::*;
-use crate::collections::observation::{inspect_pending, Event};
-use crate::engine::species::species_id::SPECIES_ID_NO_ID;
+use uqm_engine::collections::observation::{inspect_pending, Event};
+use uqm_engine::species::species_id::SPECIES_ID_NO_ID;
 
 pub(super) struct Run {
     request: CorpusRequest,
@@ -39,7 +39,7 @@ impl Observations {
                         if let Some(side) = self.parents.get(parent) {
                             self.coverage.hook(
                                 *side,
-                                crate::battle::hook_registry::name(&self.registry, *callback),
+                                uqm_modes::battle::hook_registry::name(&self.registry, *callback),
                             );
                         }
                     }

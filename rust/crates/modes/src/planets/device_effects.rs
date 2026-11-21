@@ -1,13 +1,13 @@
 //! Story transitions for inventory-device use.
 
-use crate::engine::{StoryKey, World};
+use uqm_engine::{StoryKey, World};
 
 pub(super) fn inventory(world: &World, maximum: usize) -> Vec<u8> {
     let story = world
         .story
         .as_ref()
         .unwrap_or_else(|| panic!("initialized device inventory"));
-    crate::engine::save::summary::inventory_devices(story, maximum)
+    uqm_engine::save::summary::inventory_devices(story, maximum)
 }
 
 pub(super) const ULTRON_COMPONENTS: [StoryKey; 3] = [
@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn observed_device_story_keys_are_typed_and_preserve_trace_names() {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         let expected = [
             (StoryKey::ULTRON_CONDITION, "ULTRON_CONDITION"),
             (StoryKey::ROSY_SPHERE_ON_SHIP, "ROSY_SPHERE_ON_SHIP"),
@@ -145,7 +145,7 @@ mod tests {
 
     fn world(condition: u32) -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
+        world.story = Some(uqm_engine::world::story::StoryState::new());
         world.set_story_state(StoryKey::ULTRON_CONDITION, condition);
         world.set_story_state(StoryKey::DISCUSSED_ULTRON, 1);
         world.set_story_state(StoryKey::SUPOX_ULTRON_HELP, 1);

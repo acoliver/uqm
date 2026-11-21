@@ -2,13 +2,13 @@
 //!
 //! Live effects are provided by the solar-system mode.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
-use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::engine::StoryKey;
+use uqm_engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use uqm_engine::world::queues::IpGroup as IP_GROUP;
+use uqm_engine::StoryKey;
 
 use super::generator::SystemGenerator;
 use super::host::SiteHost;
-use crate::engine::world::generation::SolarSys;
+use uqm_engine::world::generation::SolarSys;
 
 pub struct Generator;
 
@@ -95,13 +95,13 @@ pub mod orbital;
 mod orbital_tests;
 pub use orbital::generate_orbital;
 
-use crate::engine::save::summary::PLANET_NUMBER_BASE;
-use crate::math::RandomContext;
 use crate::planets::generate::consts::{EARTH_RADIUS, MAP_HEIGHT, MAP_WIDTH, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, PlanetNames};
 use crate::planets::generate::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::generate::special::{self, Body, FleetGroups, Story};
 use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN};
+use uqm_engine::math::RandomContext;
+use uqm_engine::save::summary::PLANET_NUMBER_BASE;
 
 const SOL_SEED: u32 = 334_241_042;
 const PLUTO: Body = Body::Planet(8);

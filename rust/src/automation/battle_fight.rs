@@ -10,7 +10,7 @@
 //! outcome and every failure are testable without a linked game.
 
 use crate::automation::script::FightBattleStep;
-use crate::battle::battle_types::{
+use uqm_modes::battle::battle_types::{
     angle_to_facing, arctan, cosine, facing_to_angle, shortest_path_delta, sine,
 };
 
@@ -57,7 +57,7 @@ pub const fn arena_size(screen_width: i32, screen_height: i32) -> (i32, i32) {
     ((screen_width - STATUS_WIDTH) << 5, screen_height << 5)
 }
 
-use crate::engine::battle::observation::ShipState;
+use uqm_engine::battle::observation::ShipState;
 
 /// One read of the running battle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,8 +429,8 @@ impl BattleSnapshot {
     /// the game's own queue is broken and no fight can be judged from it.
     #[must_use]
     pub fn live(
-        cx: &crate::engine::battle::Cx<'_>,
-        world: &crate::engine::observe::CampaignView,
+        cx: &uqm_engine::battle::Cx<'_>,
+        world: &uqm_engine::observe::CampaignView,
     ) -> Self {
         let (width, height) = crate::automation::input_ffi::screen_size();
         let arena = arena_size(width, height);
@@ -441,7 +441,7 @@ impl BattleSnapshot {
         Self::from_context(cx, arena)
     }
 
-    fn from_context(cx: &crate::engine::battle::Cx<'_>, arena: (i32, i32)) -> Self {
+    fn from_context(cx: &uqm_engine::battle::Cx<'_>, arena: (i32, i32)) -> Self {
         let ([player, enemy], counters) = super::parity_state::fighters(cx);
         Self {
             in_battle: true,

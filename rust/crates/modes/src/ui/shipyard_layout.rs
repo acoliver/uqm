@@ -1,6 +1,6 @@
 //! Hangar positions and cursor traversal for the shipped PC layout.
 
-use crate::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
+use uqm_engine::graphics::{geometry::Extent, geometry::Point, geometry::Rect};
 
 // Mirrors the shipped C build, which does not define USE_3DO_HANGAR.
 pub(crate) const USE_3DO_HANGAR: bool = false;

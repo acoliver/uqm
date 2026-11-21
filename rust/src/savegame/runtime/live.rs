@@ -3,11 +3,11 @@
 use super::location::{self, LocationError};
 use super::solar::{GameStrings, SolarSummary, SolarSystemOwner};
 use super::star::{self, StarError};
-use crate::engine::save::{snapshot, SessionView};
-use crate::engine::world::generation::SolarSnapshot;
-use crate::engine::{Kernel, World};
 use crate::savegame::types::{SaveFile, StarDesc};
 use std::fmt;
+use uqm_engine::save::{snapshot, SessionView};
+use uqm_engine::world::generation::SolarSnapshot;
+use uqm_engine::{Kernel, World};
 
 /// `GAME_STRING (index)` over the loaded `GameStrings` table.
 struct LiveGameStrings<'a>(&'a Kernel);
@@ -30,7 +30,7 @@ pub fn capture_prepared(
     world: &mut World,
     kernel: &Kernel,
     star: StarDesc,
-    ip_location: crate::graphics::geometry::Point,
+    ip_location: uqm_engine::graphics::geometry::Point,
     name: &[u8],
     state: Option<SolarSnapshot>,
 ) -> anyhow::Result<SaveFile> {
@@ -42,11 +42,11 @@ pub fn capture_prepared(
         &strings,
     );
     if world.story.is_none() {
-        return Err(crate::engine::world::story::GameStateOwnerError::NotInitialized.into());
+        return Err(uqm_engine::world::story::GameStateOwnerError::NotInitialized.into());
     }
     let solar = solar.prepare_summary(
         world.activity(),
-        world.story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == u32::from(u8::MAX),
+        world.story_state(uqm_engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == u32::from(u8::MAX),
     )?;
     snapshot(
         world,
@@ -89,6 +89,6 @@ pub fn prepare_live_solar_location(
 ) -> Result<(), LiveLocationError> {
     let location = location::prepare_solar_location(&world.data.game, solar)
         .map_err(LiveLocationError::Location)?;
-    crate::engine::save::location::apply_solar_location(world, location)
+    uqm_engine::save::location::apply_solar_location(world, location)
         .map_err(LiveLocationError::Location)
 }

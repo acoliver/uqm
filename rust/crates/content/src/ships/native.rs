@@ -13,11 +13,11 @@ pub fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) {
     }
 }
 
-pub use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
+pub use uqm_engine::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
 
-pub use crate::math::{cosine, sine};
+pub use uqm_engine::math::{cosine, sine};
 
-pub use crate::math::wrap_delta;
+pub use uqm_engine::math::wrap_delta;
 
 #[cfg(test)]
 mod tests {
@@ -27,7 +27,7 @@ mod tests {
     fn native_trigonometry_uses_the_immutable_table_with_size_truncation() {
         for angle in -128..128 {
             for magnitude in [i32::MIN, -65537, -1, 0, 1, 32767, 65537, i32::MAX] {
-                let value = crate::math::SINE_TABLE[(angle & 63) as usize];
+                let value = uqm_engine::math::SINE_TABLE[(angle & 63) as usize];
                 let expected = ((i64::from(value) * i64::from(magnitude)) >> 14) as i16;
                 assert_eq!(sine(angle, magnitude), expected);
                 assert_eq!(cosine(angle - 16, magnitude), expected);

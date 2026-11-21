@@ -1,8 +1,8 @@
 //! Geometry and colors for game-options rendering.
 
-use crate::graphics::{geometry::Color, geometry::Extent, geometry::Point, geometry::Rect};
 use crate::starbase::ids::{SHIP_NAME_HEIGHT, SHIP_NAME_WIDTH};
 use crate::ui::rgb15;
+use uqm_engine::graphics::{geometry::Color, geometry::Extent, geometry::Point, geometry::Rect};
 
 pub(super) const CAPTAIN_NAME_RECT: Rect = Rect {
     corner: Point { x: 3, y: 10 },

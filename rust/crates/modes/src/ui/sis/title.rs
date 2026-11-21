@@ -1,11 +1,11 @@
 //! Campaign title drawing over retained display resources.
 use super::{rgb15, SIS_ORG_X, SIS_ORG_Y, SIS_TITLE_BOX_WIDTH, SIS_TITLE_HEIGHT, SIS_TITLE_WIDTH};
-use crate::engine::Kernel;
-use crate::graphics::{
+use std::ffi::{CStr, CString};
+use uqm_engine::graphics::{
     context::ContextLease, drawable::ContextFrame, geometry::Extent, geometry::Point,
     geometry::Rect, geometry::TextAlign,
 };
-use std::ffi::{CStr, CString};
+use uqm_engine::Kernel;
 
 pub fn draw_title(kernel: &Kernel, screen_width: i32, text: &CStr) {
     let context = ContextLease::require(kernel.off_screen_context);

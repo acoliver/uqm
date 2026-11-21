@@ -1,9 +1,9 @@
 //! Live computer-input routing, preserving intel.c's battle and selection rules.
 
 use crate::battle::context_access::ai_legacy::AiOps;
-use crate::engine::battle::flags::{IN_LAST_BATTLE, RPG_PLAYER_NUM};
-use crate::engine::battle::{Cx, ShipId};
-use crate::engine::world::activity::activity_kinds::SUPER_MELEE;
+use uqm_engine::battle::flags::{IN_LAST_BATTLE, RPG_PLAYER_NUM};
+use uqm_engine::battle::{Cx, ShipId};
+use uqm_engine::world::activity::activity_kinds::SUPER_MELEE;
 
 #[derive(Debug, PartialEq)]
 enum Route {
@@ -48,7 +48,7 @@ pub(crate) fn computer_input(
         Route::None => 0,
         Route::Human => cx.human_input(player),
         Route::Tactical(escape) => {
-            let mut input = crate::engine::battle::cyborg::tactical(
+            let mut input = uqm_engine::battle::cyborg::tactical(
                 cx,
                 ship.unwrap_or_else(|| panic!("missing checked battle value")),
             );
@@ -62,7 +62,10 @@ pub(crate) fn computer_input(
             1 << 3
         }
         Route::Unexpected => {
-            crate::log_abi::log_message(3, "Warning: Unexpected state in computer_intelligence().");
+            uqm_engine::log_abi::log_message(
+                3,
+                "Warning: Unexpected state in computer_intelligence().",
+            );
             0
         }
     }
