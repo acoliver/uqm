@@ -101,10 +101,11 @@ impl AutomationObserver {
         if !self.native_diagnostics() {
             return;
         }
-        let inner = self.inner.lock();
-        if inner.terminal_class.is_some() {
+        let mut inner = self.inner.lock();
+        if inner.terminal_class.is_some() || inner.last_native_graphics == samples {
             return;
         }
+        inner.last_native_graphics = samples.to_vec();
         let reservation = self.runtime.commit.reserve();
         let mut record = crate::automation::capture::capture_trace_record(
             reservation.sequence(),
@@ -181,6 +182,61 @@ mod tests {
                 assert_eq!(value["samples"][0]["fade_amount"], 0);
             }
         }
+    }
+
+    #[test]
+    fn a_native_graphics_record_is_written_only_when_the_samples_change() {
+        let root = tempfile::tempdir().unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(
+                br#"{"version":1,"name":"graphics-probe","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":100,"max_wallclock_seconds":60}}"#,
+                "test.json",
+            )
+            .unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let observer = AutomationObserver::init_with_native_checkpoints(
+            script,
+            root.path().into(),
+            Some(16384),
+            uqm_engine::World::new().activity_control(),
+            Default::default(),
+            Default::default(),
+        );
+        let steady = [PresentationSample::Preprocess {
+            force_redraw: 0,
+            transition_amount: 255,
+            fade_amount: 255,
+        }];
+        let fading = [PresentationSample::Preprocess {
+            force_redraw: 0,
+            transition_amount: 255,
+            fade_amount: 128,
+        }];
+        for (count, samples) in [
+            (1, &steady),
+            (2, &steady),
+            (3, &fading),
+            (4, &fading),
+            (5, &steady),
+        ] {
+            observer.trace_native_graphics(count, samples);
+        }
+        observer.flush_native_trace().unwrap();
+        let bytes = std::fs::read(root.path().join("trace.jsonl")).unwrap();
+        let counts: Vec<u64> = String::from_utf8(bytes)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .filter(|record| record.kind == RecordKind::NativeGraphics)
+            .map(|record| {
+                let value: serde_json::Value =
+                    serde_json::from_str(record.label.as_ref().unwrap()).unwrap();
+                value["readback_count"].as_u64().unwrap()
+            })
+            .collect();
+        assert_eq!(counts, [1, 3, 5]);
     }
 }
 

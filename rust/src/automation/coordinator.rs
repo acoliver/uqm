@@ -302,6 +302,9 @@ struct CoordInner {
     replay_final_activity: u16,
     parity_fixture: Option<crate::automation::melee_fixture::FixtureRun>,
     save_capture: Option<super::save_capture::Request>,
+    /// Samples of the last `native_graphics` record, so an unchanged
+    /// presentation adds nothing to the trace.
+    last_native_graphics: Vec<uqm_engine::graphics::presentation_diagnostics::PresentationSample>,
 }
 
 /// The automation coordinator, holding all live state needed to drive
