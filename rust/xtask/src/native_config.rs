@@ -372,6 +372,17 @@ mod tests {
     }
 
     #[test]
+    fn the_longest_campaign_scenario_has_a_trace_that_fits_a_member() {
+        let scenario = scenario_for(
+            &root(),
+            "rust/scripts/campaign-s07c-war-cleared.json".into(),
+        )
+        .expect("campaign scenario exists");
+        assert_eq!(scenario.expected_input_ticks, Some(101_050));
+        scenario.runtime_contract().validate().unwrap();
+    }
+
+    #[test]
     fn outer_deadline_covers_the_derived_wall_budget() {
         let scenario = scenario_for(
             &root(),
