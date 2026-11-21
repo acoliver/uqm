@@ -3457,7 +3457,7 @@ fn validate_linked_cargo_messages(
     let (Some(package_id), None) = (package_ids.next(), package_ids.next()) else {
         return Err(NativeWindowProofError::Receipt);
     };
-    let build_package = package_id.replace("#uqm@", "/crates/engine#uqm-engine@");
+    let build_package = package_id.replace("#uqm@", "/crates/platform#uqm-platform@");
     let mut executables = BTreeSet::new();
     let mut rust_archives = BTreeSet::new();
     let mut out_dirs = BTreeSet::new();
@@ -4149,7 +4149,7 @@ mod tests {
                 concat!(
                     "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm\",\"kind\":[\"bin\"]},\"executable\":\"/tmp/uqm\",\"filenames\":[]}\n",
                     "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm_rust\",\"kind\":[\"rlib\"]},\"executable\":null,\"filenames\":[\"/tmp/libuqm_rust-a.rlib\"]}\n",
-                    "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///repo/rust/crates/engine#uqm-engine@0.8.0\",\"out_dir\":\"/tmp/out\"}\n",
+                    "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///repo/rust/crates/platform#uqm-platform@0.8.0\",\"out_dir\":\"/tmp/out\"}\n",
                     "{\"reason\":\"build-finished\",\"success\":true}\n"
                 )
                 .as_bytes(),
