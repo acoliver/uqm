@@ -165,7 +165,7 @@ fn starbase_visits_run_the_owned_outfit_and_shipyard_sessions() -> Result<(), Bo
     assert_eq!(summary["completed"], true, "{summary}");
     assert_eq!(summary["final_activity"], 4, "{summary}");
     assert_eq!(summary["inputs_admitted"], 1305, "{summary}");
-    assert_eq!(summary["presents"], 2470, "{summary}");
+    assert_eq!(summary["presents"], 2471, "{summary}");
     Ok(())
 }
 

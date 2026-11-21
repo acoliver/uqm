@@ -228,6 +228,9 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 scheduled.post_update();
                 manual.post_update();
                 uqm_engine::graphics::state::flush();
+                // #890: post-update redraws the unchanged frame index over the
+                // original that pre-update restored.
+                assert_eq!(pixel(2), (13, 25, 37, 255));
                 assert_eq!(pixel(2), pixel(11));
                 drop(scheduled);
                 drop(manual);
