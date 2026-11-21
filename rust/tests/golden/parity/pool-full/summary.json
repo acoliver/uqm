@@ -2,13 +2,13 @@
   "replay": {
     "completed": true,
     "inputs_admitted": 361,
-    "presents": 362,
+    "presents": 364,
     "steps": 660,
     "final_activity": 512
   },
   "counts": {
     "input_seen": 361,
-    "present_seen": 362,
+    "present_seen": 364,
     "terminal": "success",
     "completed": true,
     "exit_code": 0,
@@ -933,11 +933,11 @@
         "phase": "TapHolding { remaining: 2 }"
       },
       {
-        "input_seen": 123,
-        "present_seen": 8,
+        "input_seen": 122,
+        "present_seen": 9,
         "step": 1,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
+        "phase": "TapHolding { remaining: 2 }"
       },
       {
         "input_seen": 123,
@@ -954,11 +954,11 @@
         "phase": "TapHolding { remaining: 1 }"
       },
       {
-        "input_seen": 124,
-        "present_seen": 10,
+        "input_seen": 123,
+        "present_seen": 11,
         "step": 1,
         "action": "tap_menu_key",
-        "phase": "TapReleasePending"
+        "phase": "TapHolding { remaining: 1 }"
       },
       {
         "input_seen": 124,
@@ -968,11 +968,11 @@
         "phase": "TapReleasePending"
       },
       {
-        "input_seen": 125,
-        "present_seen": 11,
+        "input_seen": 124,
+        "present_seen": 12,
         "step": 1,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
+        "phase": "TapReleasePending"
       },
       {
         "input_seen": 125,
@@ -989,11 +989,11 @@
         "phase": "TapSettling { remaining: 3 }"
       },
       {
-        "input_seen": 126,
-        "present_seen": 13,
+        "input_seen": 125,
+        "present_seen": 14,
         "step": 1,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 2 }"
+        "phase": "TapSettling { remaining: 3 }"
       },
       {
         "input_seen": 126,
@@ -1010,11 +1010,11 @@
         "phase": "TapSettling { remaining: 2 }"
       },
       {
-        "input_seen": 127,
-        "present_seen": 15,
+        "input_seen": 126,
+        "present_seen": 16,
         "step": 1,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 1 }"
+        "phase": "TapSettling { remaining: 2 }"
       },
       {
         "input_seen": 127,
@@ -1031,11 +1031,11 @@
         "phase": "TapSettling { remaining: 1 }"
       },
       {
-        "input_seen": 128,
-        "present_seen": 17,
-        "step": 2,
+        "input_seen": 127,
+        "present_seen": 18,
+        "step": 1,
         "action": "tap_menu_key",
-        "phase": "WaitingForInput"
+        "phase": "TapSettling { remaining: 1 }"
       },
       {
         "input_seen": 128,
@@ -1045,11 +1045,11 @@
         "phase": "WaitingForInput"
       },
       {
-        "input_seen": 129,
-        "present_seen": 18,
+        "input_seen": 128,
+        "present_seen": 19,
         "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 2 }"
+        "phase": "WaitingForInput"
       },
       {
         "input_seen": 129,
@@ -1059,18 +1059,18 @@
         "phase": "TapHolding { remaining: 2 }"
       },
       {
-        "input_seen": 130,
-        "present_seen": 19,
-        "step": 2,
-        "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
-      },
-      {
-        "input_seen": 130,
+        "input_seen": 129,
         "present_seen": 20,
         "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 129,
+        "present_seen": 21,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
       },
       {
         "input_seen": 130,
@@ -1080,18 +1080,18 @@
         "phase": "TapHolding { remaining: 1 }"
       },
       {
-        "input_seen": 131,
-        "present_seen": 21,
-        "step": 2,
-        "action": "tap_menu_key",
-        "phase": "TapReleasePending"
-      },
-      {
-        "input_seen": 131,
+        "input_seen": 130,
         "present_seen": 22,
         "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapReleasePending"
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 130,
+        "present_seen": 23,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
       },
       {
         "input_seen": 131,
@@ -1101,32 +1101,32 @@
         "phase": "TapReleasePending"
       },
       {
-        "input_seen": 132,
-        "present_seen": 23,
-        "step": 2,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
-      },
-      {
-        "input_seen": 132,
+        "input_seen": 131,
         "present_seen": 24,
         "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
+        "phase": "TapReleasePending"
       },
       {
-        "input_seen": 133,
-        "present_seen": 24,
-        "step": 2,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 2 }"
-      },
-      {
-        "input_seen": 133,
+        "input_seen": 131,
         "present_seen": 25,
         "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 2 }"
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 132,
+        "present_seen": 25,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
+      },
+      {
+        "input_seen": 132,
+        "present_seen": 26,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
       },
       {
         "input_seen": 133,
@@ -1136,18 +1136,18 @@
         "phase": "TapSettling { remaining: 2 }"
       },
       {
-        "input_seen": 134,
-        "present_seen": 26,
-        "step": 2,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 1 }"
-      },
-      {
-        "input_seen": 134,
+        "input_seen": 133,
         "present_seen": 27,
         "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 1 }"
+        "phase": "TapSettling { remaining: 2 }"
+      },
+      {
+        "input_seen": 133,
+        "present_seen": 28,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 2 }"
       },
       {
         "input_seen": 134,
@@ -1157,32 +1157,32 @@
         "phase": "TapSettling { remaining: 1 }"
       },
       {
-        "input_seen": 135,
-        "present_seen": 28,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 135,
+        "input_seen": 134,
         "present_seen": 29,
-        "step": 3,
+        "step": 2,
         "action": "tap_menu_key",
-        "phase": "WaitingForInput"
+        "phase": "TapSettling { remaining: 1 }"
       },
       {
-        "input_seen": 136,
-        "present_seen": 29,
-        "step": 3,
+        "input_seen": 134,
+        "present_seen": 30,
+        "step": 2,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 2 }"
+        "phase": "TapSettling { remaining: 1 }"
       },
       {
-        "input_seen": 136,
+        "input_seen": 135,
         "present_seen": 30,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 2 }"
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 135,
+        "present_seen": 31,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "WaitingForInput"
       },
       {
         "input_seen": 136,
@@ -1199,32 +1199,32 @@
         "phase": "TapHolding { remaining: 2 }"
       },
       {
-        "input_seen": 137,
-        "present_seen": 32,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
-      },
-      {
-        "input_seen": 137,
+        "input_seen": 136,
         "present_seen": 33,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
+        "phase": "TapHolding { remaining: 2 }"
       },
       {
-        "input_seen": 138,
-        "present_seen": 33,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapReleasePending"
-      },
-      {
-        "input_seen": 138,
+        "input_seen": 136,
         "present_seen": 34,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapReleasePending"
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 137,
+        "present_seen": 34,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 137,
+        "present_seen": 35,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
       },
       {
         "input_seen": 138,
@@ -1234,18 +1234,18 @@
         "phase": "TapReleasePending"
       },
       {
-        "input_seen": 139,
-        "present_seen": 35,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 10 }"
-      },
-      {
-        "input_seen": 139,
+        "input_seen": 138,
         "present_seen": 36,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 10 }"
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 138,
+        "present_seen": 37,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapReleasePending"
       },
       {
         "input_seen": 139,
@@ -1255,32 +1255,32 @@
         "phase": "TapSettling { remaining: 10 }"
       },
       {
-        "input_seen": 140,
-        "present_seen": 37,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 9 }"
-      },
-      {
-        "input_seen": 140,
+        "input_seen": 139,
         "present_seen": 38,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 9 }"
+        "phase": "TapSettling { remaining: 10 }"
       },
       {
-        "input_seen": 141,
-        "present_seen": 38,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 8 }"
-      },
-      {
-        "input_seen": 141,
+        "input_seen": 139,
         "present_seen": 39,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 8 }"
+        "phase": "TapSettling { remaining: 10 }"
+      },
+      {
+        "input_seen": 140,
+        "present_seen": 39,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 9 }"
+      },
+      {
+        "input_seen": 140,
+        "present_seen": 40,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 9 }"
       },
       {
         "input_seen": 141,
@@ -1290,18 +1290,18 @@
         "phase": "TapSettling { remaining: 8 }"
       },
       {
-        "input_seen": 142,
-        "present_seen": 40,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 7 }"
-      },
-      {
-        "input_seen": 142,
+        "input_seen": 141,
         "present_seen": 41,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 7 }"
+        "phase": "TapSettling { remaining: 8 }"
+      },
+      {
+        "input_seen": 141,
+        "present_seen": 42,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 8 }"
       },
       {
         "input_seen": 142,
@@ -1311,32 +1311,32 @@
         "phase": "TapSettling { remaining: 7 }"
       },
       {
-        "input_seen": 143,
-        "present_seen": 42,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 6 }"
-      },
-      {
-        "input_seen": 143,
+        "input_seen": 142,
         "present_seen": 43,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 6 }"
+        "phase": "TapSettling { remaining: 7 }"
       },
       {
-        "input_seen": 144,
-        "present_seen": 43,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 5 }"
-      },
-      {
-        "input_seen": 144,
+        "input_seen": 142,
         "present_seen": 44,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 5 }"
+        "phase": "TapSettling { remaining: 7 }"
+      },
+      {
+        "input_seen": 143,
+        "present_seen": 44,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 6 }"
+      },
+      {
+        "input_seen": 143,
+        "present_seen": 45,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 6 }"
       },
       {
         "input_seen": 144,
@@ -1346,32 +1346,32 @@
         "phase": "TapSettling { remaining: 5 }"
       },
       {
-        "input_seen": 145,
-        "present_seen": 45,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 4 }"
-      },
-      {
-        "input_seen": 145,
+        "input_seen": 144,
         "present_seen": 46,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 4 }"
+        "phase": "TapSettling { remaining: 5 }"
       },
       {
-        "input_seen": 146,
-        "present_seen": 46,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
-      },
-      {
-        "input_seen": 146,
+        "input_seen": 144,
         "present_seen": 47,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
+        "phase": "TapSettling { remaining: 5 }"
+      },
+      {
+        "input_seen": 145,
+        "present_seen": 47,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 4 }"
+      },
+      {
+        "input_seen": 145,
+        "present_seen": 48,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 4 }"
       },
       {
         "input_seen": 146,
@@ -1381,18 +1381,18 @@
         "phase": "TapSettling { remaining: 3 }"
       },
       {
-        "input_seen": 147,
-        "present_seen": 48,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 2 }"
-      },
-      {
-        "input_seen": 147,
+        "input_seen": 146,
         "present_seen": 49,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 2 }"
+        "phase": "TapSettling { remaining: 3 }"
+      },
+      {
+        "input_seen": 146,
+        "present_seen": 50,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
       },
       {
         "input_seen": 147,
@@ -1402,32 +1402,32 @@
         "phase": "TapSettling { remaining: 2 }"
       },
       {
-        "input_seen": 148,
-        "present_seen": 50,
-        "step": 3,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 1 }"
-      },
-      {
-        "input_seen": 148,
+        "input_seen": 147,
         "present_seen": 51,
         "step": 3,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 1 }"
+        "phase": "TapSettling { remaining: 2 }"
       },
       {
-        "input_seen": 149,
-        "present_seen": 51,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 149,
+        "input_seen": 147,
         "present_seen": 52,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitingForInput"
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 2 }"
+      },
+      {
+        "input_seen": 148,
+        "present_seen": 52,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
+      },
+      {
+        "input_seen": 148,
+        "present_seen": 53,
+        "step": 3,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
       },
       {
         "input_seen": 149,
@@ -1437,18 +1437,18 @@
         "phase": "WaitingForInput"
       },
       {
-        "input_seen": 150,
-        "present_seen": 53,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 89 }"
-      },
-      {
-        "input_seen": 150,
+        "input_seen": 149,
         "present_seen": 54,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 89 }"
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 149,
+        "present_seen": 55,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitingForInput"
       },
       {
         "input_seen": 150,
@@ -1458,18 +1458,18 @@
         "phase": "WaitCounting { remaining: 89 }"
       },
       {
-        "input_seen": 151,
-        "present_seen": 55,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 88 }"
-      },
-      {
-        "input_seen": 151,
+        "input_seen": 150,
         "present_seen": 56,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 88 }"
+        "phase": "WaitCounting { remaining: 89 }"
+      },
+      {
+        "input_seen": 150,
+        "present_seen": 57,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 89 }"
       },
       {
         "input_seen": 151,
@@ -1479,18 +1479,18 @@
         "phase": "WaitCounting { remaining: 88 }"
       },
       {
-        "input_seen": 152,
-        "present_seen": 57,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 87 }"
-      },
-      {
-        "input_seen": 152,
+        "input_seen": 151,
         "present_seen": 58,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 87 }"
+        "phase": "WaitCounting { remaining: 88 }"
+      },
+      {
+        "input_seen": 151,
+        "present_seen": 59,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 88 }"
       },
       {
         "input_seen": 152,
@@ -1500,32 +1500,32 @@
         "phase": "WaitCounting { remaining: 87 }"
       },
       {
-        "input_seen": 153,
-        "present_seen": 59,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 86 }"
-      },
-      {
-        "input_seen": 153,
+        "input_seen": 152,
         "present_seen": 60,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 86 }"
+        "phase": "WaitCounting { remaining: 87 }"
       },
       {
-        "input_seen": 154,
-        "present_seen": 60,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 85 }"
-      },
-      {
-        "input_seen": 154,
+        "input_seen": 152,
         "present_seen": 61,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 85 }"
+        "phase": "WaitCounting { remaining: 87 }"
+      },
+      {
+        "input_seen": 153,
+        "present_seen": 61,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 86 }"
+      },
+      {
+        "input_seen": 153,
+        "present_seen": 62,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 86 }"
       },
       {
         "input_seen": 154,
@@ -1535,60 +1535,60 @@
         "phase": "WaitCounting { remaining: 85 }"
       },
       {
+        "input_seen": 154,
+        "present_seen": 63,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 85 }"
+      },
+      {
+        "input_seen": 154,
+        "present_seen": 64,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 85 }"
+      },
+      {
         "input_seen": 155,
-        "present_seen": 62,
+        "present_seen": 64,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 84 }"
       },
       {
         "input_seen": 155,
-        "present_seen": 63,
+        "present_seen": 65,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 84 }"
       },
       {
         "input_seen": 156,
-        "present_seen": 63,
+        "present_seen": 65,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 83 }"
       },
       {
         "input_seen": 156,
-        "present_seen": 64,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 83 }"
-      },
-      {
-        "input_seen": 157,
-        "present_seen": 64,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 82 }"
-      },
-      {
-        "input_seen": 157,
-        "present_seen": 65,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 82 }"
-      },
-      {
-        "input_seen": 158,
-        "present_seen": 65,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 81 }"
-      },
-      {
-        "input_seen": 158,
         "present_seen": 66,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 81 }"
+        "phase": "WaitCounting { remaining: 83 }"
+      },
+      {
+        "input_seen": 157,
+        "present_seen": 66,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 82 }"
+      },
+      {
+        "input_seen": 157,
+        "present_seen": 67,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 82 }"
       },
       {
         "input_seen": 158,
@@ -1598,60 +1598,60 @@
         "phase": "WaitCounting { remaining: 81 }"
       },
       {
+        "input_seen": 158,
+        "present_seen": 68,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 81 }"
+      },
+      {
+        "input_seen": 158,
+        "present_seen": 69,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 81 }"
+      },
+      {
         "input_seen": 159,
-        "present_seen": 67,
+        "present_seen": 69,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 80 }"
       },
       {
         "input_seen": 159,
-        "present_seen": 68,
+        "present_seen": 70,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 80 }"
       },
       {
         "input_seen": 160,
-        "present_seen": 68,
+        "present_seen": 70,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 79 }"
       },
       {
         "input_seen": 160,
-        "present_seen": 69,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 79 }"
-      },
-      {
-        "input_seen": 161,
-        "present_seen": 69,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 78 }"
-      },
-      {
-        "input_seen": 161,
-        "present_seen": 70,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 78 }"
-      },
-      {
-        "input_seen": 162,
-        "present_seen": 70,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 77 }"
-      },
-      {
-        "input_seen": 162,
         "present_seen": 71,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 77 }"
+        "phase": "WaitCounting { remaining: 79 }"
+      },
+      {
+        "input_seen": 161,
+        "present_seen": 71,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 78 }"
+      },
+      {
+        "input_seen": 161,
+        "present_seen": 72,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 78 }"
       },
       {
         "input_seen": 162,
@@ -1661,60 +1661,60 @@
         "phase": "WaitCounting { remaining: 77 }"
       },
       {
+        "input_seen": 162,
+        "present_seen": 73,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 77 }"
+      },
+      {
+        "input_seen": 162,
+        "present_seen": 74,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 77 }"
+      },
+      {
         "input_seen": 163,
-        "present_seen": 72,
+        "present_seen": 74,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 76 }"
       },
       {
         "input_seen": 163,
-        "present_seen": 73,
+        "present_seen": 75,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 76 }"
       },
       {
         "input_seen": 164,
-        "present_seen": 73,
+        "present_seen": 75,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 75 }"
       },
       {
         "input_seen": 164,
-        "present_seen": 74,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 75 }"
-      },
-      {
-        "input_seen": 165,
-        "present_seen": 74,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 74 }"
-      },
-      {
-        "input_seen": 165,
-        "present_seen": 75,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 74 }"
-      },
-      {
-        "input_seen": 166,
-        "present_seen": 75,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 73 }"
-      },
-      {
-        "input_seen": 166,
         "present_seen": 76,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 73 }"
+        "phase": "WaitCounting { remaining: 75 }"
+      },
+      {
+        "input_seen": 165,
+        "present_seen": 76,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 74 }"
+      },
+      {
+        "input_seen": 165,
+        "present_seen": 77,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 74 }"
       },
       {
         "input_seen": 166,
@@ -1724,60 +1724,60 @@
         "phase": "WaitCounting { remaining: 73 }"
       },
       {
+        "input_seen": 166,
+        "present_seen": 78,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 73 }"
+      },
+      {
+        "input_seen": 166,
+        "present_seen": 79,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 73 }"
+      },
+      {
         "input_seen": 167,
-        "present_seen": 77,
+        "present_seen": 79,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 72 }"
       },
       {
         "input_seen": 167,
-        "present_seen": 78,
+        "present_seen": 80,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 72 }"
       },
       {
         "input_seen": 168,
-        "present_seen": 78,
+        "present_seen": 80,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 71 }"
       },
       {
         "input_seen": 168,
-        "present_seen": 79,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 71 }"
-      },
-      {
-        "input_seen": 169,
-        "present_seen": 79,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 70 }"
-      },
-      {
-        "input_seen": 169,
-        "present_seen": 80,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 70 }"
-      },
-      {
-        "input_seen": 170,
-        "present_seen": 80,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 69 }"
-      },
-      {
-        "input_seen": 170,
         "present_seen": 81,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 69 }"
+        "phase": "WaitCounting { remaining: 71 }"
+      },
+      {
+        "input_seen": 169,
+        "present_seen": 81,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 70 }"
+      },
+      {
+        "input_seen": 169,
+        "present_seen": 82,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 70 }"
       },
       {
         "input_seen": 170,
@@ -1787,60 +1787,60 @@
         "phase": "WaitCounting { remaining: 69 }"
       },
       {
+        "input_seen": 170,
+        "present_seen": 83,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 69 }"
+      },
+      {
+        "input_seen": 170,
+        "present_seen": 84,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 69 }"
+      },
+      {
         "input_seen": 171,
-        "present_seen": 82,
+        "present_seen": 84,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 68 }"
       },
       {
         "input_seen": 171,
-        "present_seen": 83,
+        "present_seen": 85,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 68 }"
       },
       {
         "input_seen": 172,
-        "present_seen": 83,
+        "present_seen": 85,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 67 }"
       },
       {
         "input_seen": 172,
-        "present_seen": 84,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 67 }"
-      },
-      {
-        "input_seen": 173,
-        "present_seen": 84,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 66 }"
-      },
-      {
-        "input_seen": 173,
-        "present_seen": 85,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 66 }"
-      },
-      {
-        "input_seen": 174,
-        "present_seen": 85,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 65 }"
-      },
-      {
-        "input_seen": 174,
         "present_seen": 86,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 65 }"
+        "phase": "WaitCounting { remaining: 67 }"
+      },
+      {
+        "input_seen": 173,
+        "present_seen": 86,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 66 }"
+      },
+      {
+        "input_seen": 173,
+        "present_seen": 87,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 66 }"
       },
       {
         "input_seen": 174,
@@ -1850,60 +1850,60 @@
         "phase": "WaitCounting { remaining: 65 }"
       },
       {
+        "input_seen": 174,
+        "present_seen": 88,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 65 }"
+      },
+      {
+        "input_seen": 174,
+        "present_seen": 89,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 65 }"
+      },
+      {
         "input_seen": 175,
-        "present_seen": 87,
+        "present_seen": 89,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 64 }"
       },
       {
         "input_seen": 175,
-        "present_seen": 88,
+        "present_seen": 90,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 64 }"
       },
       {
         "input_seen": 176,
-        "present_seen": 88,
+        "present_seen": 90,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 63 }"
       },
       {
         "input_seen": 176,
-        "present_seen": 89,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 63 }"
-      },
-      {
-        "input_seen": 177,
-        "present_seen": 89,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 62 }"
-      },
-      {
-        "input_seen": 177,
-        "present_seen": 90,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 62 }"
-      },
-      {
-        "input_seen": 178,
-        "present_seen": 90,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 61 }"
-      },
-      {
-        "input_seen": 178,
         "present_seen": 91,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 61 }"
+        "phase": "WaitCounting { remaining: 63 }"
+      },
+      {
+        "input_seen": 177,
+        "present_seen": 91,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 62 }"
+      },
+      {
+        "input_seen": 177,
+        "present_seen": 92,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 62 }"
       },
       {
         "input_seen": 178,
@@ -1913,60 +1913,60 @@
         "phase": "WaitCounting { remaining: 61 }"
       },
       {
+        "input_seen": 178,
+        "present_seen": 93,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 61 }"
+      },
+      {
+        "input_seen": 178,
+        "present_seen": 94,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 61 }"
+      },
+      {
         "input_seen": 179,
-        "present_seen": 92,
+        "present_seen": 94,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 60 }"
       },
       {
         "input_seen": 179,
-        "present_seen": 93,
+        "present_seen": 95,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 60 }"
       },
       {
         "input_seen": 180,
-        "present_seen": 93,
+        "present_seen": 95,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 59 }"
       },
       {
         "input_seen": 180,
-        "present_seen": 94,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 59 }"
-      },
-      {
-        "input_seen": 181,
-        "present_seen": 94,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 58 }"
-      },
-      {
-        "input_seen": 181,
-        "present_seen": 95,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 58 }"
-      },
-      {
-        "input_seen": 182,
-        "present_seen": 95,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 57 }"
-      },
-      {
-        "input_seen": 182,
         "present_seen": 96,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 57 }"
+        "phase": "WaitCounting { remaining: 59 }"
+      },
+      {
+        "input_seen": 181,
+        "present_seen": 96,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 58 }"
+      },
+      {
+        "input_seen": 181,
+        "present_seen": 97,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 58 }"
       },
       {
         "input_seen": 182,
@@ -1976,60 +1976,60 @@
         "phase": "WaitCounting { remaining: 57 }"
       },
       {
+        "input_seen": 182,
+        "present_seen": 98,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 57 }"
+      },
+      {
+        "input_seen": 182,
+        "present_seen": 99,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 57 }"
+      },
+      {
         "input_seen": 183,
-        "present_seen": 97,
+        "present_seen": 99,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 56 }"
       },
       {
         "input_seen": 183,
-        "present_seen": 98,
+        "present_seen": 100,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 56 }"
       },
       {
         "input_seen": 184,
-        "present_seen": 98,
+        "present_seen": 100,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 55 }"
       },
       {
         "input_seen": 184,
-        "present_seen": 99,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 55 }"
-      },
-      {
-        "input_seen": 185,
-        "present_seen": 99,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 54 }"
-      },
-      {
-        "input_seen": 185,
-        "present_seen": 100,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 54 }"
-      },
-      {
-        "input_seen": 186,
-        "present_seen": 100,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 53 }"
-      },
-      {
-        "input_seen": 186,
         "present_seen": 101,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 53 }"
+        "phase": "WaitCounting { remaining: 55 }"
+      },
+      {
+        "input_seen": 185,
+        "present_seen": 101,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 54 }"
+      },
+      {
+        "input_seen": 185,
+        "present_seen": 102,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 54 }"
       },
       {
         "input_seen": 186,
@@ -2039,60 +2039,60 @@
         "phase": "WaitCounting { remaining: 53 }"
       },
       {
+        "input_seen": 186,
+        "present_seen": 103,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 53 }"
+      },
+      {
+        "input_seen": 186,
+        "present_seen": 104,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 53 }"
+      },
+      {
         "input_seen": 187,
-        "present_seen": 102,
+        "present_seen": 104,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 52 }"
       },
       {
         "input_seen": 187,
-        "present_seen": 103,
+        "present_seen": 105,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 52 }"
       },
       {
         "input_seen": 188,
-        "present_seen": 103,
+        "present_seen": 105,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 51 }"
       },
       {
         "input_seen": 188,
-        "present_seen": 104,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 51 }"
-      },
-      {
-        "input_seen": 189,
-        "present_seen": 104,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 50 }"
-      },
-      {
-        "input_seen": 189,
-        "present_seen": 105,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 50 }"
-      },
-      {
-        "input_seen": 190,
-        "present_seen": 105,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 49 }"
-      },
-      {
-        "input_seen": 190,
         "present_seen": 106,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 49 }"
+        "phase": "WaitCounting { remaining: 51 }"
+      },
+      {
+        "input_seen": 189,
+        "present_seen": 106,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 50 }"
+      },
+      {
+        "input_seen": 189,
+        "present_seen": 107,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 50 }"
       },
       {
         "input_seen": 190,
@@ -2102,60 +2102,60 @@
         "phase": "WaitCounting { remaining: 49 }"
       },
       {
+        "input_seen": 190,
+        "present_seen": 108,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 49 }"
+      },
+      {
+        "input_seen": 190,
+        "present_seen": 109,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 49 }"
+      },
+      {
         "input_seen": 191,
-        "present_seen": 107,
+        "present_seen": 109,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 48 }"
       },
       {
         "input_seen": 191,
-        "present_seen": 108,
+        "present_seen": 110,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 48 }"
       },
       {
         "input_seen": 192,
-        "present_seen": 108,
+        "present_seen": 110,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 47 }"
       },
       {
         "input_seen": 192,
-        "present_seen": 109,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 47 }"
-      },
-      {
-        "input_seen": 193,
-        "present_seen": 109,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 46 }"
-      },
-      {
-        "input_seen": 193,
-        "present_seen": 110,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 46 }"
-      },
-      {
-        "input_seen": 194,
-        "present_seen": 110,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 45 }"
-      },
-      {
-        "input_seen": 194,
         "present_seen": 111,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 45 }"
+        "phase": "WaitCounting { remaining: 47 }"
+      },
+      {
+        "input_seen": 193,
+        "present_seen": 111,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 46 }"
+      },
+      {
+        "input_seen": 193,
+        "present_seen": 112,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 46 }"
       },
       {
         "input_seen": 194,
@@ -2165,60 +2165,60 @@
         "phase": "WaitCounting { remaining: 45 }"
       },
       {
+        "input_seen": 194,
+        "present_seen": 113,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 45 }"
+      },
+      {
+        "input_seen": 194,
+        "present_seen": 114,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 45 }"
+      },
+      {
         "input_seen": 195,
-        "present_seen": 112,
+        "present_seen": 114,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 44 }"
       },
       {
         "input_seen": 195,
-        "present_seen": 113,
+        "present_seen": 115,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 44 }"
       },
       {
         "input_seen": 196,
-        "present_seen": 113,
+        "present_seen": 115,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 43 }"
       },
       {
         "input_seen": 196,
-        "present_seen": 114,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 43 }"
-      },
-      {
-        "input_seen": 197,
-        "present_seen": 114,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 42 }"
-      },
-      {
-        "input_seen": 197,
-        "present_seen": 115,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 42 }"
-      },
-      {
-        "input_seen": 198,
-        "present_seen": 115,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 41 }"
-      },
-      {
-        "input_seen": 198,
         "present_seen": 116,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 41 }"
+        "phase": "WaitCounting { remaining: 43 }"
+      },
+      {
+        "input_seen": 197,
+        "present_seen": 116,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 42 }"
+      },
+      {
+        "input_seen": 197,
+        "present_seen": 117,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 42 }"
       },
       {
         "input_seen": 198,
@@ -2228,60 +2228,60 @@
         "phase": "WaitCounting { remaining: 41 }"
       },
       {
+        "input_seen": 198,
+        "present_seen": 118,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 41 }"
+      },
+      {
+        "input_seen": 198,
+        "present_seen": 119,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 41 }"
+      },
+      {
         "input_seen": 199,
-        "present_seen": 117,
+        "present_seen": 119,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 40 }"
       },
       {
         "input_seen": 199,
-        "present_seen": 118,
+        "present_seen": 120,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 40 }"
       },
       {
         "input_seen": 200,
-        "present_seen": 118,
+        "present_seen": 120,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 39 }"
       },
       {
         "input_seen": 200,
-        "present_seen": 119,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 39 }"
-      },
-      {
-        "input_seen": 201,
-        "present_seen": 119,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 38 }"
-      },
-      {
-        "input_seen": 201,
-        "present_seen": 120,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 38 }"
-      },
-      {
-        "input_seen": 202,
-        "present_seen": 120,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 37 }"
-      },
-      {
-        "input_seen": 202,
         "present_seen": 121,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 37 }"
+        "phase": "WaitCounting { remaining: 39 }"
+      },
+      {
+        "input_seen": 201,
+        "present_seen": 121,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 38 }"
+      },
+      {
+        "input_seen": 201,
+        "present_seen": 122,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 38 }"
       },
       {
         "input_seen": 202,
@@ -2291,60 +2291,60 @@
         "phase": "WaitCounting { remaining: 37 }"
       },
       {
+        "input_seen": 202,
+        "present_seen": 123,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 37 }"
+      },
+      {
+        "input_seen": 202,
+        "present_seen": 124,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 37 }"
+      },
+      {
         "input_seen": 203,
-        "present_seen": 122,
+        "present_seen": 124,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 36 }"
       },
       {
         "input_seen": 203,
-        "present_seen": 123,
+        "present_seen": 125,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 36 }"
       },
       {
         "input_seen": 204,
-        "present_seen": 123,
+        "present_seen": 125,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 35 }"
       },
       {
         "input_seen": 204,
-        "present_seen": 124,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 35 }"
-      },
-      {
-        "input_seen": 205,
-        "present_seen": 124,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 34 }"
-      },
-      {
-        "input_seen": 205,
-        "present_seen": 125,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 34 }"
-      },
-      {
-        "input_seen": 206,
-        "present_seen": 125,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 33 }"
-      },
-      {
-        "input_seen": 206,
         "present_seen": 126,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 33 }"
+        "phase": "WaitCounting { remaining: 35 }"
+      },
+      {
+        "input_seen": 205,
+        "present_seen": 126,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 34 }"
+      },
+      {
+        "input_seen": 205,
+        "present_seen": 127,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 34 }"
       },
       {
         "input_seen": 206,
@@ -2354,60 +2354,60 @@
         "phase": "WaitCounting { remaining: 33 }"
       },
       {
+        "input_seen": 206,
+        "present_seen": 128,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 33 }"
+      },
+      {
+        "input_seen": 206,
+        "present_seen": 129,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 33 }"
+      },
+      {
         "input_seen": 207,
-        "present_seen": 127,
+        "present_seen": 129,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 32 }"
       },
       {
         "input_seen": 207,
-        "present_seen": 128,
+        "present_seen": 130,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 32 }"
       },
       {
         "input_seen": 208,
-        "present_seen": 128,
+        "present_seen": 130,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 31 }"
       },
       {
         "input_seen": 208,
-        "present_seen": 129,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 31 }"
-      },
-      {
-        "input_seen": 209,
-        "present_seen": 129,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 30 }"
-      },
-      {
-        "input_seen": 209,
-        "present_seen": 130,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 30 }"
-      },
-      {
-        "input_seen": 210,
-        "present_seen": 130,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 29 }"
-      },
-      {
-        "input_seen": 210,
         "present_seen": 131,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 29 }"
+        "phase": "WaitCounting { remaining: 31 }"
+      },
+      {
+        "input_seen": 209,
+        "present_seen": 131,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 30 }"
+      },
+      {
+        "input_seen": 209,
+        "present_seen": 132,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 30 }"
       },
       {
         "input_seen": 210,
@@ -2417,60 +2417,60 @@
         "phase": "WaitCounting { remaining: 29 }"
       },
       {
+        "input_seen": 210,
+        "present_seen": 133,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 29 }"
+      },
+      {
+        "input_seen": 210,
+        "present_seen": 134,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 29 }"
+      },
+      {
         "input_seen": 211,
-        "present_seen": 132,
+        "present_seen": 134,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 28 }"
       },
       {
         "input_seen": 211,
-        "present_seen": 133,
+        "present_seen": 135,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 28 }"
       },
       {
         "input_seen": 212,
-        "present_seen": 133,
+        "present_seen": 135,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 27 }"
       },
       {
         "input_seen": 212,
-        "present_seen": 134,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 27 }"
-      },
-      {
-        "input_seen": 213,
-        "present_seen": 134,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 26 }"
-      },
-      {
-        "input_seen": 213,
-        "present_seen": 135,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 26 }"
-      },
-      {
-        "input_seen": 214,
-        "present_seen": 135,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 25 }"
-      },
-      {
-        "input_seen": 214,
         "present_seen": 136,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 25 }"
+        "phase": "WaitCounting { remaining: 27 }"
+      },
+      {
+        "input_seen": 213,
+        "present_seen": 136,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 26 }"
+      },
+      {
+        "input_seen": 213,
+        "present_seen": 137,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 26 }"
       },
       {
         "input_seen": 214,
@@ -2480,60 +2480,60 @@
         "phase": "WaitCounting { remaining: 25 }"
       },
       {
+        "input_seen": 214,
+        "present_seen": 138,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 25 }"
+      },
+      {
+        "input_seen": 214,
+        "present_seen": 139,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 25 }"
+      },
+      {
         "input_seen": 215,
-        "present_seen": 137,
+        "present_seen": 139,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 24 }"
       },
       {
         "input_seen": 215,
-        "present_seen": 138,
+        "present_seen": 140,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 24 }"
       },
       {
         "input_seen": 216,
-        "present_seen": 138,
+        "present_seen": 140,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 23 }"
       },
       {
         "input_seen": 216,
-        "present_seen": 139,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 23 }"
-      },
-      {
-        "input_seen": 217,
-        "present_seen": 139,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 22 }"
-      },
-      {
-        "input_seen": 217,
-        "present_seen": 140,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 22 }"
-      },
-      {
-        "input_seen": 218,
-        "present_seen": 140,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 21 }"
-      },
-      {
-        "input_seen": 218,
         "present_seen": 141,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 21 }"
+        "phase": "WaitCounting { remaining: 23 }"
+      },
+      {
+        "input_seen": 217,
+        "present_seen": 141,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 22 }"
+      },
+      {
+        "input_seen": 217,
+        "present_seen": 142,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 22 }"
       },
       {
         "input_seen": 218,
@@ -2543,60 +2543,60 @@
         "phase": "WaitCounting { remaining: 21 }"
       },
       {
+        "input_seen": 218,
+        "present_seen": 143,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 21 }"
+      },
+      {
+        "input_seen": 218,
+        "present_seen": 144,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 21 }"
+      },
+      {
         "input_seen": 219,
-        "present_seen": 142,
+        "present_seen": 144,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 20 }"
       },
       {
         "input_seen": 219,
-        "present_seen": 143,
+        "present_seen": 145,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 20 }"
       },
       {
         "input_seen": 220,
-        "present_seen": 143,
+        "present_seen": 145,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 19 }"
       },
       {
         "input_seen": 220,
-        "present_seen": 144,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 19 }"
-      },
-      {
-        "input_seen": 221,
-        "present_seen": 144,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 18 }"
-      },
-      {
-        "input_seen": 221,
-        "present_seen": 145,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 18 }"
-      },
-      {
-        "input_seen": 222,
-        "present_seen": 145,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 17 }"
-      },
-      {
-        "input_seen": 222,
         "present_seen": 146,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 17 }"
+        "phase": "WaitCounting { remaining: 19 }"
+      },
+      {
+        "input_seen": 221,
+        "present_seen": 146,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 18 }"
+      },
+      {
+        "input_seen": 221,
+        "present_seen": 147,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 18 }"
       },
       {
         "input_seen": 222,
@@ -2606,60 +2606,60 @@
         "phase": "WaitCounting { remaining: 17 }"
       },
       {
+        "input_seen": 222,
+        "present_seen": 148,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 17 }"
+      },
+      {
+        "input_seen": 222,
+        "present_seen": 149,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 17 }"
+      },
+      {
         "input_seen": 223,
-        "present_seen": 147,
+        "present_seen": 149,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 16 }"
       },
       {
         "input_seen": 223,
-        "present_seen": 148,
+        "present_seen": 150,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 16 }"
       },
       {
         "input_seen": 224,
-        "present_seen": 148,
+        "present_seen": 150,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 15 }"
       },
       {
         "input_seen": 224,
-        "present_seen": 149,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 15 }"
-      },
-      {
-        "input_seen": 225,
-        "present_seen": 149,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 14 }"
-      },
-      {
-        "input_seen": 225,
-        "present_seen": 150,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 14 }"
-      },
-      {
-        "input_seen": 226,
-        "present_seen": 150,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 13 }"
-      },
-      {
-        "input_seen": 226,
         "present_seen": 151,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 13 }"
+        "phase": "WaitCounting { remaining: 15 }"
+      },
+      {
+        "input_seen": 225,
+        "present_seen": 151,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 14 }"
+      },
+      {
+        "input_seen": 225,
+        "present_seen": 152,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 14 }"
       },
       {
         "input_seen": 226,
@@ -2669,60 +2669,60 @@
         "phase": "WaitCounting { remaining: 13 }"
       },
       {
+        "input_seen": 226,
+        "present_seen": 153,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 13 }"
+      },
+      {
+        "input_seen": 226,
+        "present_seen": 154,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 13 }"
+      },
+      {
         "input_seen": 227,
-        "present_seen": 152,
+        "present_seen": 154,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 12 }"
       },
       {
         "input_seen": 227,
-        "present_seen": 153,
+        "present_seen": 155,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 12 }"
       },
       {
         "input_seen": 228,
-        "present_seen": 153,
+        "present_seen": 155,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 11 }"
       },
       {
         "input_seen": 228,
-        "present_seen": 154,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 11 }"
-      },
-      {
-        "input_seen": 229,
-        "present_seen": 154,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 10 }"
-      },
-      {
-        "input_seen": 229,
-        "present_seen": 155,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 10 }"
-      },
-      {
-        "input_seen": 230,
-        "present_seen": 155,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 9 }"
-      },
-      {
-        "input_seen": 230,
         "present_seen": 156,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 9 }"
+        "phase": "WaitCounting { remaining: 11 }"
+      },
+      {
+        "input_seen": 229,
+        "present_seen": 156,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 10 }"
+      },
+      {
+        "input_seen": 229,
+        "present_seen": 157,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 10 }"
       },
       {
         "input_seen": 230,
@@ -2732,60 +2732,60 @@
         "phase": "WaitCounting { remaining: 9 }"
       },
       {
+        "input_seen": 230,
+        "present_seen": 158,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 9 }"
+      },
+      {
+        "input_seen": 230,
+        "present_seen": 159,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 9 }"
+      },
+      {
         "input_seen": 231,
-        "present_seen": 157,
+        "present_seen": 159,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 8 }"
       },
       {
         "input_seen": 231,
-        "present_seen": 158,
+        "present_seen": 160,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 8 }"
       },
       {
         "input_seen": 232,
-        "present_seen": 158,
+        "present_seen": 160,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 7 }"
       },
       {
         "input_seen": 232,
-        "present_seen": 159,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 7 }"
-      },
-      {
-        "input_seen": 233,
-        "present_seen": 159,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 6 }"
-      },
-      {
-        "input_seen": 233,
-        "present_seen": 160,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 6 }"
-      },
-      {
-        "input_seen": 234,
-        "present_seen": 160,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 5 }"
-      },
-      {
-        "input_seen": 234,
         "present_seen": 161,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 5 }"
+        "phase": "WaitCounting { remaining: 7 }"
+      },
+      {
+        "input_seen": 233,
+        "present_seen": 161,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 6 }"
+      },
+      {
+        "input_seen": 233,
+        "present_seen": 162,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 6 }"
       },
       {
         "input_seen": 234,
@@ -2795,60 +2795,60 @@
         "phase": "WaitCounting { remaining: 5 }"
       },
       {
+        "input_seen": 234,
+        "present_seen": 163,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 5 }"
+      },
+      {
+        "input_seen": 234,
+        "present_seen": 164,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 5 }"
+      },
+      {
         "input_seen": 235,
-        "present_seen": 162,
+        "present_seen": 164,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 4 }"
       },
       {
         "input_seen": 235,
-        "present_seen": 163,
+        "present_seen": 165,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 4 }"
       },
       {
         "input_seen": 236,
-        "present_seen": 163,
+        "present_seen": 165,
         "step": 4,
         "action": "wait_input_ticks",
         "phase": "WaitCounting { remaining: 3 }"
       },
       {
         "input_seen": 236,
-        "present_seen": 164,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 3 }"
-      },
-      {
-        "input_seen": 237,
-        "present_seen": 164,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 2 }"
-      },
-      {
-        "input_seen": 237,
-        "present_seen": 165,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 2 }"
-      },
-      {
-        "input_seen": 238,
-        "present_seen": 165,
-        "step": 4,
-        "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 1 }"
-      },
-      {
-        "input_seen": 238,
         "present_seen": 166,
         "step": 4,
         "action": "wait_input_ticks",
-        "phase": "WaitCounting { remaining: 1 }"
+        "phase": "WaitCounting { remaining: 3 }"
+      },
+      {
+        "input_seen": 237,
+        "present_seen": 166,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 2 }"
+      },
+      {
+        "input_seen": 237,
+        "present_seen": 167,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 2 }"
       },
       {
         "input_seen": 238,
@@ -2858,193 +2858,193 @@
         "phase": "WaitCounting { remaining: 1 }"
       },
       {
+        "input_seen": 238,
+        "present_seen": 168,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 1 }"
+      },
+      {
+        "input_seen": 238,
+        "present_seen": 169,
+        "step": 4,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 1 }"
+      },
+      {
         "input_seen": 239,
-        "present_seen": 167,
+        "present_seen": 169,
         "step": 5,
         "action": "configure_parity_melee",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 239,
-        "present_seen": 168,
+        "present_seen": 170,
         "step": 5,
         "action": "configure_parity_melee",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 240,
-        "present_seen": 168,
+        "present_seen": 170,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 240,
-        "present_seen": 169,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 241,
-        "present_seen": 169,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 2 }"
-      },
-      {
-        "input_seen": 241,
-        "present_seen": 170,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 2 }"
-      },
-      {
-        "input_seen": 242,
-        "present_seen": 170,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
-      },
-      {
-        "input_seen": 242,
         "present_seen": 171,
         "step": 6,
         "action": "tap_menu_key",
-        "phase": "TapHolding { remaining: 1 }"
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 241,
+        "present_seen": 171,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 241,
+        "present_seen": 172,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
       },
       {
         "input_seen": 242,
         "present_seen": 172,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 242,
+        "present_seen": 173,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 242,
+        "present_seen": 174,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapHolding { remaining: 1 }"
       },
       {
         "input_seen": 243,
-        "present_seen": 172,
+        "present_seen": 174,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapReleasePending"
       },
       {
         "input_seen": 244,
-        "present_seen": 172,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 10 }"
-      },
-      {
-        "input_seen": 244,
-        "present_seen": 173,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 10 }"
-      },
-      {
-        "input_seen": 244,
         "present_seen": 174,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 10 }"
       },
       {
+        "input_seen": 244,
+        "present_seen": 175,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 10 }"
+      },
+      {
+        "input_seen": 244,
+        "present_seen": 176,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 10 }"
+      },
+      {
         "input_seen": 245,
-        "present_seen": 174,
+        "present_seen": 176,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 9 }"
       },
       {
         "input_seen": 245,
-        "present_seen": 175,
+        "present_seen": 177,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 9 }"
       },
       {
         "input_seen": 246,
-        "present_seen": 175,
+        "present_seen": 177,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 8 }"
       },
       {
         "input_seen": 246,
-        "present_seen": 176,
+        "present_seen": 178,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 8 }"
       },
       {
         "input_seen": 247,
-        "present_seen": 176,
+        "present_seen": 178,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 7 }"
       },
       {
         "input_seen": 247,
-        "present_seen": 177,
+        "present_seen": 179,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 7 }"
       },
       {
         "input_seen": 248,
-        "present_seen": 177,
+        "present_seen": 179,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 6 }"
       },
       {
         "input_seen": 248,
-        "present_seen": 178,
+        "present_seen": 180,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 6 }"
       },
       {
         "input_seen": 249,
-        "present_seen": 178,
+        "present_seen": 180,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 5 }"
       },
       {
         "input_seen": 249,
-        "present_seen": 179,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 5 }"
-      },
-      {
-        "input_seen": 250,
-        "present_seen": 179,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 4 }"
-      },
-      {
-        "input_seen": 250,
-        "present_seen": 180,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 4 }"
-      },
-      {
-        "input_seen": 251,
-        "present_seen": 180,
-        "step": 6,
-        "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
-      },
-      {
-        "input_seen": 251,
         "present_seen": 181,
         "step": 6,
         "action": "tap_menu_key",
-        "phase": "TapSettling { remaining: 3 }"
+        "phase": "TapSettling { remaining: 5 }"
+      },
+      {
+        "input_seen": 250,
+        "present_seen": 181,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 4 }"
+      },
+      {
+        "input_seen": 250,
+        "present_seen": 182,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 4 }"
       },
       {
         "input_seen": 251,
@@ -3054,102 +3054,102 @@
         "phase": "TapSettling { remaining: 3 }"
       },
       {
+        "input_seen": 251,
+        "present_seen": 183,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
+      },
+      {
+        "input_seen": 251,
+        "present_seen": 184,
+        "step": 6,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
+      },
+      {
         "input_seen": 252,
-        "present_seen": 182,
+        "present_seen": 184,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 2 }"
       },
       {
         "input_seen": 252,
-        "present_seen": 183,
+        "present_seen": 185,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 2 }"
       },
       {
         "input_seen": 253,
-        "present_seen": 183,
+        "present_seen": 185,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 1 }"
       },
       {
         "input_seen": 253,
-        "present_seen": 184,
+        "present_seen": 186,
         "step": 6,
         "action": "tap_menu_key",
         "phase": "TapSettling { remaining: 1 }"
       },
       {
         "input_seen": 254,
-        "present_seen": 184,
+        "present_seen": 186,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 254,
-        "present_seen": 185,
+        "present_seen": 187,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 255,
-        "present_seen": 185,
+        "present_seen": 187,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1199 }"
       },
       {
         "input_seen": 255,
-        "present_seen": 186,
+        "present_seen": 188,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1199 }"
       },
       {
         "input_seen": 256,
-        "present_seen": 186,
+        "present_seen": 188,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1198 }"
       },
       {
         "input_seen": 256,
-        "present_seen": 187,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1198 }"
-      },
-      {
-        "input_seen": 257,
-        "present_seen": 187,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1197 }"
-      },
-      {
-        "input_seen": 257,
-        "present_seen": 188,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1197 }"
-      },
-      {
-        "input_seen": 258,
-        "present_seen": 188,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1196 }"
-      },
-      {
-        "input_seen": 258,
         "present_seen": 189,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1196 }"
+        "phase": "WaitingCondition { remaining: 1198 }"
+      },
+      {
+        "input_seen": 257,
+        "present_seen": 189,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1197 }"
+      },
+      {
+        "input_seen": 257,
+        "present_seen": 190,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1197 }"
       },
       {
         "input_seen": 258,
@@ -3159,102 +3159,102 @@
         "phase": "WaitingCondition { remaining: 1196 }"
       },
       {
+        "input_seen": 258,
+        "present_seen": 191,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1196 }"
+      },
+      {
+        "input_seen": 258,
+        "present_seen": 192,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1196 }"
+      },
+      {
         "input_seen": 259,
-        "present_seen": 190,
+        "present_seen": 192,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1195 }"
       },
       {
         "input_seen": 259,
-        "present_seen": 191,
+        "present_seen": 193,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1195 }"
       },
       {
         "input_seen": 260,
-        "present_seen": 191,
+        "present_seen": 193,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1194 }"
       },
       {
         "input_seen": 260,
-        "present_seen": 192,
+        "present_seen": 194,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1194 }"
       },
       {
         "input_seen": 261,
-        "present_seen": 192,
+        "present_seen": 194,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1193 }"
       },
       {
         "input_seen": 261,
-        "present_seen": 193,
+        "present_seen": 195,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1193 }"
       },
       {
         "input_seen": 262,
-        "present_seen": 193,
+        "present_seen": 195,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1192 }"
       },
       {
         "input_seen": 262,
-        "present_seen": 194,
+        "present_seen": 196,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1192 }"
       },
       {
         "input_seen": 263,
-        "present_seen": 194,
+        "present_seen": 196,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1191 }"
       },
       {
         "input_seen": 263,
-        "present_seen": 195,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1191 }"
-      },
-      {
-        "input_seen": 264,
-        "present_seen": 195,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1190 }"
-      },
-      {
-        "input_seen": 264,
-        "present_seen": 196,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1190 }"
-      },
-      {
-        "input_seen": 265,
-        "present_seen": 196,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1189 }"
-      },
-      {
-        "input_seen": 265,
         "present_seen": 197,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1189 }"
+        "phase": "WaitingCondition { remaining: 1191 }"
+      },
+      {
+        "input_seen": 264,
+        "present_seen": 197,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1190 }"
+      },
+      {
+        "input_seen": 264,
+        "present_seen": 198,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1190 }"
       },
       {
         "input_seen": 265,
@@ -3264,102 +3264,102 @@
         "phase": "WaitingCondition { remaining: 1189 }"
       },
       {
+        "input_seen": 265,
+        "present_seen": 199,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1189 }"
+      },
+      {
+        "input_seen": 265,
+        "present_seen": 200,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1189 }"
+      },
+      {
         "input_seen": 266,
-        "present_seen": 198,
+        "present_seen": 200,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1188 }"
       },
       {
         "input_seen": 266,
-        "present_seen": 199,
+        "present_seen": 201,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1188 }"
       },
       {
         "input_seen": 267,
-        "present_seen": 199,
+        "present_seen": 201,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1187 }"
       },
       {
         "input_seen": 267,
-        "present_seen": 200,
+        "present_seen": 202,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1187 }"
       },
       {
         "input_seen": 268,
-        "present_seen": 200,
+        "present_seen": 202,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1186 }"
       },
       {
         "input_seen": 268,
-        "present_seen": 201,
+        "present_seen": 203,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1186 }"
       },
       {
         "input_seen": 269,
-        "present_seen": 201,
+        "present_seen": 203,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1185 }"
       },
       {
         "input_seen": 269,
-        "present_seen": 202,
+        "present_seen": 204,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1185 }"
       },
       {
         "input_seen": 270,
-        "present_seen": 202,
+        "present_seen": 204,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1184 }"
       },
       {
         "input_seen": 270,
-        "present_seen": 203,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1184 }"
-      },
-      {
-        "input_seen": 271,
-        "present_seen": 203,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1183 }"
-      },
-      {
-        "input_seen": 271,
-        "present_seen": 204,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1183 }"
-      },
-      {
-        "input_seen": 272,
-        "present_seen": 204,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1182 }"
-      },
-      {
-        "input_seen": 272,
         "present_seen": 205,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1182 }"
+        "phase": "WaitingCondition { remaining: 1184 }"
+      },
+      {
+        "input_seen": 271,
+        "present_seen": 205,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1183 }"
+      },
+      {
+        "input_seen": 271,
+        "present_seen": 206,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1183 }"
       },
       {
         "input_seen": 272,
@@ -3369,102 +3369,102 @@
         "phase": "WaitingCondition { remaining: 1182 }"
       },
       {
+        "input_seen": 272,
+        "present_seen": 207,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1182 }"
+      },
+      {
+        "input_seen": 272,
+        "present_seen": 208,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1182 }"
+      },
+      {
         "input_seen": 273,
-        "present_seen": 206,
+        "present_seen": 208,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1181 }"
       },
       {
         "input_seen": 273,
-        "present_seen": 207,
+        "present_seen": 209,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1181 }"
       },
       {
         "input_seen": 274,
-        "present_seen": 207,
+        "present_seen": 209,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1180 }"
       },
       {
         "input_seen": 274,
-        "present_seen": 208,
+        "present_seen": 210,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1180 }"
       },
       {
         "input_seen": 275,
-        "present_seen": 208,
+        "present_seen": 210,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1179 }"
       },
       {
         "input_seen": 275,
-        "present_seen": 209,
+        "present_seen": 211,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1179 }"
       },
       {
         "input_seen": 276,
-        "present_seen": 209,
+        "present_seen": 211,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1178 }"
       },
       {
         "input_seen": 276,
-        "present_seen": 210,
+        "present_seen": 212,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1178 }"
       },
       {
         "input_seen": 277,
-        "present_seen": 210,
+        "present_seen": 212,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1177 }"
       },
       {
         "input_seen": 277,
-        "present_seen": 211,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1177 }"
-      },
-      {
-        "input_seen": 278,
-        "present_seen": 211,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1176 }"
-      },
-      {
-        "input_seen": 278,
-        "present_seen": 212,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1176 }"
-      },
-      {
-        "input_seen": 279,
-        "present_seen": 212,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1175 }"
-      },
-      {
-        "input_seen": 279,
         "present_seen": 213,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1175 }"
+        "phase": "WaitingCondition { remaining: 1177 }"
+      },
+      {
+        "input_seen": 278,
+        "present_seen": 213,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1176 }"
+      },
+      {
+        "input_seen": 278,
+        "present_seen": 214,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1176 }"
       },
       {
         "input_seen": 279,
@@ -3474,102 +3474,102 @@
         "phase": "WaitingCondition { remaining: 1175 }"
       },
       {
+        "input_seen": 279,
+        "present_seen": 215,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1175 }"
+      },
+      {
+        "input_seen": 279,
+        "present_seen": 216,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1175 }"
+      },
+      {
         "input_seen": 280,
-        "present_seen": 214,
+        "present_seen": 216,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1174 }"
       },
       {
         "input_seen": 280,
-        "present_seen": 215,
+        "present_seen": 217,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1174 }"
       },
       {
         "input_seen": 281,
-        "present_seen": 215,
+        "present_seen": 217,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1173 }"
       },
       {
         "input_seen": 281,
-        "present_seen": 216,
+        "present_seen": 218,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1173 }"
       },
       {
         "input_seen": 282,
-        "present_seen": 216,
+        "present_seen": 218,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1172 }"
       },
       {
         "input_seen": 282,
-        "present_seen": 217,
+        "present_seen": 219,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1172 }"
       },
       {
         "input_seen": 283,
-        "present_seen": 217,
+        "present_seen": 219,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1171 }"
       },
       {
         "input_seen": 283,
-        "present_seen": 218,
+        "present_seen": 220,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1171 }"
       },
       {
         "input_seen": 284,
-        "present_seen": 218,
+        "present_seen": 220,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1170 }"
       },
       {
         "input_seen": 284,
-        "present_seen": 219,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1170 }"
-      },
-      {
-        "input_seen": 285,
-        "present_seen": 219,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1169 }"
-      },
-      {
-        "input_seen": 285,
-        "present_seen": 220,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1169 }"
-      },
-      {
-        "input_seen": 286,
-        "present_seen": 220,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1168 }"
-      },
-      {
-        "input_seen": 286,
         "present_seen": 221,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1168 }"
+        "phase": "WaitingCondition { remaining: 1170 }"
+      },
+      {
+        "input_seen": 285,
+        "present_seen": 221,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1169 }"
+      },
+      {
+        "input_seen": 285,
+        "present_seen": 222,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1169 }"
       },
       {
         "input_seen": 286,
@@ -3579,102 +3579,102 @@
         "phase": "WaitingCondition { remaining: 1168 }"
       },
       {
+        "input_seen": 286,
+        "present_seen": 223,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1168 }"
+      },
+      {
+        "input_seen": 286,
+        "present_seen": 224,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1168 }"
+      },
+      {
         "input_seen": 287,
-        "present_seen": 222,
+        "present_seen": 224,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1167 }"
       },
       {
         "input_seen": 287,
-        "present_seen": 223,
+        "present_seen": 225,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1167 }"
       },
       {
         "input_seen": 288,
-        "present_seen": 223,
+        "present_seen": 225,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1166 }"
       },
       {
         "input_seen": 288,
-        "present_seen": 224,
+        "present_seen": 226,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1166 }"
       },
       {
         "input_seen": 289,
-        "present_seen": 224,
+        "present_seen": 226,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1165 }"
       },
       {
         "input_seen": 289,
-        "present_seen": 225,
+        "present_seen": 227,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1165 }"
       },
       {
         "input_seen": 290,
-        "present_seen": 225,
+        "present_seen": 227,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1164 }"
       },
       {
         "input_seen": 290,
-        "present_seen": 226,
+        "present_seen": 228,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1164 }"
       },
       {
         "input_seen": 291,
-        "present_seen": 226,
+        "present_seen": 228,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1163 }"
       },
       {
         "input_seen": 291,
-        "present_seen": 227,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1163 }"
-      },
-      {
-        "input_seen": 292,
-        "present_seen": 227,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1162 }"
-      },
-      {
-        "input_seen": 292,
-        "present_seen": 228,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1162 }"
-      },
-      {
-        "input_seen": 293,
-        "present_seen": 228,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1161 }"
-      },
-      {
-        "input_seen": 293,
         "present_seen": 229,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1161 }"
+        "phase": "WaitingCondition { remaining: 1163 }"
+      },
+      {
+        "input_seen": 292,
+        "present_seen": 229,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1162 }"
+      },
+      {
+        "input_seen": 292,
+        "present_seen": 230,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1162 }"
       },
       {
         "input_seen": 293,
@@ -3684,46 +3684,46 @@
         "phase": "WaitingCondition { remaining: 1161 }"
       },
       {
+        "input_seen": 293,
+        "present_seen": 231,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1161 }"
+      },
+      {
+        "input_seen": 293,
+        "present_seen": 232,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1161 }"
+      },
+      {
         "input_seen": 294,
-        "present_seen": 230,
+        "present_seen": 232,
         "step": 7,
         "action": "wait_for_battle_frames",
         "phase": "WaitingCondition { remaining: 1160 }"
       },
       {
         "input_seen": 294,
-        "present_seen": 231,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1160 }"
-      },
-      {
-        "input_seen": 295,
-        "present_seen": 231,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1159 }"
-      },
-      {
-        "input_seen": 295,
-        "present_seen": 232,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1159 }"
-      },
-      {
-        "input_seen": 296,
-        "present_seen": 232,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1158 }"
-      },
-      {
-        "input_seen": 296,
         "present_seen": 233,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1158 }"
+        "phase": "WaitingCondition { remaining: 1160 }"
+      },
+      {
+        "input_seen": 295,
+        "present_seen": 233,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1159 }"
+      },
+      {
+        "input_seen": 295,
+        "present_seen": 234,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1159 }"
       },
       {
         "input_seen": 296,
@@ -3733,18 +3733,18 @@
         "phase": "WaitingCondition { remaining: 1158 }"
       },
       {
-        "input_seen": 297,
-        "present_seen": 234,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1157 }"
-      },
-      {
-        "input_seen": 297,
+        "input_seen": 296,
         "present_seen": 235,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1157 }"
+        "phase": "WaitingCondition { remaining: 1158 }"
+      },
+      {
+        "input_seen": 296,
+        "present_seen": 236,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1158 }"
       },
       {
         "input_seen": 297,
@@ -3754,18 +3754,18 @@
         "phase": "WaitingCondition { remaining: 1157 }"
       },
       {
-        "input_seen": 298,
-        "present_seen": 236,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1156 }"
-      },
-      {
-        "input_seen": 298,
+        "input_seen": 297,
         "present_seen": 237,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1156 }"
+        "phase": "WaitingCondition { remaining: 1157 }"
+      },
+      {
+        "input_seen": 297,
+        "present_seen": 238,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1157 }"
       },
       {
         "input_seen": 298,
@@ -3775,18 +3775,18 @@
         "phase": "WaitingCondition { remaining: 1156 }"
       },
       {
-        "input_seen": 299,
-        "present_seen": 238,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1155 }"
-      },
-      {
-        "input_seen": 299,
+        "input_seen": 298,
         "present_seen": 239,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1155 }"
+        "phase": "WaitingCondition { remaining: 1156 }"
+      },
+      {
+        "input_seen": 298,
+        "present_seen": 240,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1156 }"
       },
       {
         "input_seen": 299,
@@ -3796,18 +3796,18 @@
         "phase": "WaitingCondition { remaining: 1155 }"
       },
       {
-        "input_seen": 300,
-        "present_seen": 240,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1154 }"
-      },
-      {
-        "input_seen": 300,
+        "input_seen": 299,
         "present_seen": 241,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1154 }"
+        "phase": "WaitingCondition { remaining: 1155 }"
+      },
+      {
+        "input_seen": 299,
+        "present_seen": 242,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1155 }"
       },
       {
         "input_seen": 300,
@@ -3817,18 +3817,18 @@
         "phase": "WaitingCondition { remaining: 1154 }"
       },
       {
-        "input_seen": 301,
-        "present_seen": 242,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1153 }"
-      },
-      {
-        "input_seen": 301,
+        "input_seen": 300,
         "present_seen": 243,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1153 }"
+        "phase": "WaitingCondition { remaining: 1154 }"
+      },
+      {
+        "input_seen": 300,
+        "present_seen": 244,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1154 }"
       },
       {
         "input_seen": 301,
@@ -3838,18 +3838,18 @@
         "phase": "WaitingCondition { remaining: 1153 }"
       },
       {
-        "input_seen": 302,
-        "present_seen": 244,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1152 }"
-      },
-      {
-        "input_seen": 302,
+        "input_seen": 301,
         "present_seen": 245,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1152 }"
+        "phase": "WaitingCondition { remaining: 1153 }"
+      },
+      {
+        "input_seen": 301,
+        "present_seen": 246,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1153 }"
       },
       {
         "input_seen": 302,
@@ -3859,18 +3859,18 @@
         "phase": "WaitingCondition { remaining: 1152 }"
       },
       {
-        "input_seen": 303,
-        "present_seen": 246,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1151 }"
-      },
-      {
-        "input_seen": 303,
+        "input_seen": 302,
         "present_seen": 247,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1151 }"
+        "phase": "WaitingCondition { remaining: 1152 }"
+      },
+      {
+        "input_seen": 302,
+        "present_seen": 248,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1152 }"
       },
       {
         "input_seen": 303,
@@ -3880,18 +3880,18 @@
         "phase": "WaitingCondition { remaining: 1151 }"
       },
       {
-        "input_seen": 304,
-        "present_seen": 248,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1150 }"
-      },
-      {
-        "input_seen": 304,
+        "input_seen": 303,
         "present_seen": 249,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1150 }"
+        "phase": "WaitingCondition { remaining: 1151 }"
+      },
+      {
+        "input_seen": 303,
+        "present_seen": 250,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1151 }"
       },
       {
         "input_seen": 304,
@@ -3901,18 +3901,18 @@
         "phase": "WaitingCondition { remaining: 1150 }"
       },
       {
-        "input_seen": 305,
-        "present_seen": 250,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1149 }"
-      },
-      {
-        "input_seen": 305,
+        "input_seen": 304,
         "present_seen": 251,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1149 }"
+        "phase": "WaitingCondition { remaining: 1150 }"
+      },
+      {
+        "input_seen": 304,
+        "present_seen": 252,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1150 }"
       },
       {
         "input_seen": 305,
@@ -3922,18 +3922,18 @@
         "phase": "WaitingCondition { remaining: 1149 }"
       },
       {
-        "input_seen": 306,
-        "present_seen": 252,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1148 }"
-      },
-      {
-        "input_seen": 306,
+        "input_seen": 305,
         "present_seen": 253,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1148 }"
+        "phase": "WaitingCondition { remaining: 1149 }"
+      },
+      {
+        "input_seen": 305,
+        "present_seen": 254,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1149 }"
       },
       {
         "input_seen": 306,
@@ -3943,18 +3943,18 @@
         "phase": "WaitingCondition { remaining: 1148 }"
       },
       {
-        "input_seen": 307,
-        "present_seen": 254,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1147 }"
-      },
-      {
-        "input_seen": 307,
+        "input_seen": 306,
         "present_seen": 255,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1147 }"
+        "phase": "WaitingCondition { remaining: 1148 }"
+      },
+      {
+        "input_seen": 306,
+        "present_seen": 256,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1148 }"
       },
       {
         "input_seen": 307,
@@ -3964,18 +3964,18 @@
         "phase": "WaitingCondition { remaining: 1147 }"
       },
       {
-        "input_seen": 308,
-        "present_seen": 256,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1146 }"
-      },
-      {
-        "input_seen": 308,
+        "input_seen": 307,
         "present_seen": 257,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1146 }"
+        "phase": "WaitingCondition { remaining: 1147 }"
+      },
+      {
+        "input_seen": 307,
+        "present_seen": 258,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1147 }"
       },
       {
         "input_seen": 308,
@@ -3985,18 +3985,18 @@
         "phase": "WaitingCondition { remaining: 1146 }"
       },
       {
-        "input_seen": 309,
-        "present_seen": 258,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1145 }"
-      },
-      {
-        "input_seen": 309,
+        "input_seen": 308,
         "present_seen": 259,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1145 }"
+        "phase": "WaitingCondition { remaining: 1146 }"
+      },
+      {
+        "input_seen": 308,
+        "present_seen": 260,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1146 }"
       },
       {
         "input_seen": 309,
@@ -4006,18 +4006,18 @@
         "phase": "WaitingCondition { remaining: 1145 }"
       },
       {
-        "input_seen": 310,
-        "present_seen": 260,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1144 }"
-      },
-      {
-        "input_seen": 310,
+        "input_seen": 309,
         "present_seen": 261,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1144 }"
+        "phase": "WaitingCondition { remaining: 1145 }"
+      },
+      {
+        "input_seen": 309,
+        "present_seen": 262,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1145 }"
       },
       {
         "input_seen": 310,
@@ -4027,18 +4027,18 @@
         "phase": "WaitingCondition { remaining: 1144 }"
       },
       {
-        "input_seen": 311,
-        "present_seen": 262,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1143 }"
-      },
-      {
-        "input_seen": 311,
+        "input_seen": 310,
         "present_seen": 263,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1143 }"
+        "phase": "WaitingCondition { remaining: 1144 }"
+      },
+      {
+        "input_seen": 310,
+        "present_seen": 264,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1144 }"
       },
       {
         "input_seen": 311,
@@ -4048,18 +4048,18 @@
         "phase": "WaitingCondition { remaining: 1143 }"
       },
       {
-        "input_seen": 312,
-        "present_seen": 264,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1142 }"
-      },
-      {
-        "input_seen": 312,
+        "input_seen": 311,
         "present_seen": 265,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1142 }"
+        "phase": "WaitingCondition { remaining: 1143 }"
+      },
+      {
+        "input_seen": 311,
+        "present_seen": 266,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1143 }"
       },
       {
         "input_seen": 312,
@@ -4069,18 +4069,18 @@
         "phase": "WaitingCondition { remaining: 1142 }"
       },
       {
-        "input_seen": 313,
-        "present_seen": 266,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1141 }"
-      },
-      {
-        "input_seen": 313,
+        "input_seen": 312,
         "present_seen": 267,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1141 }"
+        "phase": "WaitingCondition { remaining: 1142 }"
+      },
+      {
+        "input_seen": 312,
+        "present_seen": 268,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1142 }"
       },
       {
         "input_seen": 313,
@@ -4090,18 +4090,18 @@
         "phase": "WaitingCondition { remaining: 1141 }"
       },
       {
-        "input_seen": 314,
-        "present_seen": 268,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1140 }"
-      },
-      {
-        "input_seen": 314,
+        "input_seen": 313,
         "present_seen": 269,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1140 }"
+        "phase": "WaitingCondition { remaining: 1141 }"
+      },
+      {
+        "input_seen": 313,
+        "present_seen": 270,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1141 }"
       },
       {
         "input_seen": 314,
@@ -4111,18 +4111,18 @@
         "phase": "WaitingCondition { remaining: 1140 }"
       },
       {
-        "input_seen": 315,
-        "present_seen": 270,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1139 }"
-      },
-      {
-        "input_seen": 315,
+        "input_seen": 314,
         "present_seen": 271,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1139 }"
+        "phase": "WaitingCondition { remaining: 1140 }"
+      },
+      {
+        "input_seen": 314,
+        "present_seen": 272,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1140 }"
       },
       {
         "input_seen": 315,
@@ -4132,18 +4132,18 @@
         "phase": "WaitingCondition { remaining: 1139 }"
       },
       {
-        "input_seen": 316,
-        "present_seen": 272,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1138 }"
-      },
-      {
-        "input_seen": 316,
+        "input_seen": 315,
         "present_seen": 273,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1138 }"
+        "phase": "WaitingCondition { remaining: 1139 }"
+      },
+      {
+        "input_seen": 315,
+        "present_seen": 274,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1139 }"
       },
       {
         "input_seen": 316,
@@ -4153,18 +4153,18 @@
         "phase": "WaitingCondition { remaining: 1138 }"
       },
       {
-        "input_seen": 317,
-        "present_seen": 274,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1137 }"
-      },
-      {
-        "input_seen": 317,
+        "input_seen": 316,
         "present_seen": 275,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1137 }"
+        "phase": "WaitingCondition { remaining: 1138 }"
+      },
+      {
+        "input_seen": 316,
+        "present_seen": 276,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1138 }"
       },
       {
         "input_seen": 317,
@@ -4174,18 +4174,18 @@
         "phase": "WaitingCondition { remaining: 1137 }"
       },
       {
-        "input_seen": 318,
-        "present_seen": 276,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1136 }"
-      },
-      {
-        "input_seen": 318,
+        "input_seen": 317,
         "present_seen": 277,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1136 }"
+        "phase": "WaitingCondition { remaining: 1137 }"
+      },
+      {
+        "input_seen": 317,
+        "present_seen": 278,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1137 }"
       },
       {
         "input_seen": 318,
@@ -4195,18 +4195,18 @@
         "phase": "WaitingCondition { remaining: 1136 }"
       },
       {
-        "input_seen": 319,
-        "present_seen": 278,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1135 }"
-      },
-      {
-        "input_seen": 319,
+        "input_seen": 318,
         "present_seen": 279,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1135 }"
+        "phase": "WaitingCondition { remaining: 1136 }"
+      },
+      {
+        "input_seen": 318,
+        "present_seen": 280,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1136 }"
       },
       {
         "input_seen": 319,
@@ -4216,18 +4216,18 @@
         "phase": "WaitingCondition { remaining: 1135 }"
       },
       {
-        "input_seen": 320,
-        "present_seen": 280,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1134 }"
-      },
-      {
-        "input_seen": 320,
+        "input_seen": 319,
         "present_seen": 281,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1134 }"
+        "phase": "WaitingCondition { remaining: 1135 }"
+      },
+      {
+        "input_seen": 319,
+        "present_seen": 282,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1135 }"
       },
       {
         "input_seen": 320,
@@ -4237,18 +4237,18 @@
         "phase": "WaitingCondition { remaining: 1134 }"
       },
       {
-        "input_seen": 321,
-        "present_seen": 282,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1133 }"
-      },
-      {
-        "input_seen": 321,
+        "input_seen": 320,
         "present_seen": 283,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1133 }"
+        "phase": "WaitingCondition { remaining: 1134 }"
+      },
+      {
+        "input_seen": 320,
+        "present_seen": 284,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1134 }"
       },
       {
         "input_seen": 321,
@@ -4258,18 +4258,18 @@
         "phase": "WaitingCondition { remaining: 1133 }"
       },
       {
-        "input_seen": 322,
-        "present_seen": 284,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1132 }"
-      },
-      {
-        "input_seen": 322,
+        "input_seen": 321,
         "present_seen": 285,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1132 }"
+        "phase": "WaitingCondition { remaining: 1133 }"
+      },
+      {
+        "input_seen": 321,
+        "present_seen": 286,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1133 }"
       },
       {
         "input_seen": 322,
@@ -4279,18 +4279,18 @@
         "phase": "WaitingCondition { remaining: 1132 }"
       },
       {
-        "input_seen": 323,
-        "present_seen": 286,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1131 }"
-      },
-      {
-        "input_seen": 323,
+        "input_seen": 322,
         "present_seen": 287,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1131 }"
+        "phase": "WaitingCondition { remaining: 1132 }"
+      },
+      {
+        "input_seen": 322,
+        "present_seen": 288,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1132 }"
       },
       {
         "input_seen": 323,
@@ -4300,18 +4300,18 @@
         "phase": "WaitingCondition { remaining: 1131 }"
       },
       {
-        "input_seen": 324,
-        "present_seen": 288,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1130 }"
-      },
-      {
-        "input_seen": 324,
+        "input_seen": 323,
         "present_seen": 289,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1130 }"
+        "phase": "WaitingCondition { remaining: 1131 }"
+      },
+      {
+        "input_seen": 323,
+        "present_seen": 290,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1131 }"
       },
       {
         "input_seen": 324,
@@ -4321,18 +4321,18 @@
         "phase": "WaitingCondition { remaining: 1130 }"
       },
       {
-        "input_seen": 325,
-        "present_seen": 290,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1129 }"
-      },
-      {
-        "input_seen": 325,
+        "input_seen": 324,
         "present_seen": 291,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1129 }"
+        "phase": "WaitingCondition { remaining: 1130 }"
+      },
+      {
+        "input_seen": 324,
+        "present_seen": 292,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1130 }"
       },
       {
         "input_seen": 325,
@@ -4342,18 +4342,18 @@
         "phase": "WaitingCondition { remaining: 1129 }"
       },
       {
-        "input_seen": 326,
-        "present_seen": 292,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1128 }"
-      },
-      {
-        "input_seen": 326,
+        "input_seen": 325,
         "present_seen": 293,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1128 }"
+        "phase": "WaitingCondition { remaining: 1129 }"
+      },
+      {
+        "input_seen": 325,
+        "present_seen": 294,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1129 }"
       },
       {
         "input_seen": 326,
@@ -4363,18 +4363,18 @@
         "phase": "WaitingCondition { remaining: 1128 }"
       },
       {
-        "input_seen": 327,
-        "present_seen": 294,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1127 }"
-      },
-      {
-        "input_seen": 327,
+        "input_seen": 326,
         "present_seen": 295,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1127 }"
+        "phase": "WaitingCondition { remaining: 1128 }"
+      },
+      {
+        "input_seen": 326,
+        "present_seen": 296,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1128 }"
       },
       {
         "input_seen": 327,
@@ -4384,18 +4384,18 @@
         "phase": "WaitingCondition { remaining: 1127 }"
       },
       {
-        "input_seen": 328,
-        "present_seen": 296,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1126 }"
-      },
-      {
-        "input_seen": 328,
+        "input_seen": 327,
         "present_seen": 297,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1126 }"
+        "phase": "WaitingCondition { remaining: 1127 }"
+      },
+      {
+        "input_seen": 327,
+        "present_seen": 298,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1127 }"
       },
       {
         "input_seen": 328,
@@ -4405,18 +4405,18 @@
         "phase": "WaitingCondition { remaining: 1126 }"
       },
       {
-        "input_seen": 329,
-        "present_seen": 298,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1125 }"
-      },
-      {
-        "input_seen": 329,
+        "input_seen": 328,
         "present_seen": 299,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1125 }"
+        "phase": "WaitingCondition { remaining: 1126 }"
+      },
+      {
+        "input_seen": 328,
+        "present_seen": 300,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1126 }"
       },
       {
         "input_seen": 329,
@@ -4426,18 +4426,18 @@
         "phase": "WaitingCondition { remaining: 1125 }"
       },
       {
-        "input_seen": 330,
-        "present_seen": 300,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1124 }"
-      },
-      {
-        "input_seen": 330,
+        "input_seen": 329,
         "present_seen": 301,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1124 }"
+        "phase": "WaitingCondition { remaining: 1125 }"
+      },
+      {
+        "input_seen": 329,
+        "present_seen": 302,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1125 }"
       },
       {
         "input_seen": 330,
@@ -4447,18 +4447,18 @@
         "phase": "WaitingCondition { remaining: 1124 }"
       },
       {
-        "input_seen": 331,
-        "present_seen": 302,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1123 }"
-      },
-      {
-        "input_seen": 331,
+        "input_seen": 330,
         "present_seen": 303,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1123 }"
+        "phase": "WaitingCondition { remaining: 1124 }"
+      },
+      {
+        "input_seen": 330,
+        "present_seen": 304,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1124 }"
       },
       {
         "input_seen": 331,
@@ -4468,18 +4468,18 @@
         "phase": "WaitingCondition { remaining: 1123 }"
       },
       {
-        "input_seen": 332,
-        "present_seen": 304,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1122 }"
-      },
-      {
-        "input_seen": 332,
+        "input_seen": 331,
         "present_seen": 305,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1122 }"
+        "phase": "WaitingCondition { remaining: 1123 }"
+      },
+      {
+        "input_seen": 331,
+        "present_seen": 306,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1123 }"
       },
       {
         "input_seen": 332,
@@ -4489,18 +4489,18 @@
         "phase": "WaitingCondition { remaining: 1122 }"
       },
       {
-        "input_seen": 333,
-        "present_seen": 306,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1121 }"
-      },
-      {
-        "input_seen": 333,
+        "input_seen": 332,
         "present_seen": 307,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1121 }"
+        "phase": "WaitingCondition { remaining: 1122 }"
+      },
+      {
+        "input_seen": 332,
+        "present_seen": 308,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1122 }"
       },
       {
         "input_seen": 333,
@@ -4510,18 +4510,18 @@
         "phase": "WaitingCondition { remaining: 1121 }"
       },
       {
-        "input_seen": 334,
-        "present_seen": 308,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1120 }"
-      },
-      {
-        "input_seen": 334,
+        "input_seen": 333,
         "present_seen": 309,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1120 }"
+        "phase": "WaitingCondition { remaining: 1121 }"
+      },
+      {
+        "input_seen": 333,
+        "present_seen": 310,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1121 }"
       },
       {
         "input_seen": 334,
@@ -4531,18 +4531,18 @@
         "phase": "WaitingCondition { remaining: 1120 }"
       },
       {
-        "input_seen": 335,
-        "present_seen": 310,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1119 }"
-      },
-      {
-        "input_seen": 335,
+        "input_seen": 334,
         "present_seen": 311,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1119 }"
+        "phase": "WaitingCondition { remaining: 1120 }"
+      },
+      {
+        "input_seen": 334,
+        "present_seen": 312,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1120 }"
       },
       {
         "input_seen": 335,
@@ -4552,18 +4552,18 @@
         "phase": "WaitingCondition { remaining: 1119 }"
       },
       {
-        "input_seen": 336,
-        "present_seen": 312,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1118 }"
-      },
-      {
-        "input_seen": 336,
+        "input_seen": 335,
         "present_seen": 313,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1118 }"
+        "phase": "WaitingCondition { remaining: 1119 }"
+      },
+      {
+        "input_seen": 335,
+        "present_seen": 314,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1119 }"
       },
       {
         "input_seen": 336,
@@ -4573,18 +4573,18 @@
         "phase": "WaitingCondition { remaining: 1118 }"
       },
       {
-        "input_seen": 337,
-        "present_seen": 314,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1117 }"
-      },
-      {
-        "input_seen": 337,
+        "input_seen": 336,
         "present_seen": 315,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1117 }"
+        "phase": "WaitingCondition { remaining: 1118 }"
+      },
+      {
+        "input_seen": 336,
+        "present_seen": 316,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1118 }"
       },
       {
         "input_seen": 337,
@@ -4594,18 +4594,18 @@
         "phase": "WaitingCondition { remaining: 1117 }"
       },
       {
-        "input_seen": 338,
-        "present_seen": 316,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1116 }"
-      },
-      {
-        "input_seen": 338,
+        "input_seen": 337,
         "present_seen": 317,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1116 }"
+        "phase": "WaitingCondition { remaining: 1117 }"
+      },
+      {
+        "input_seen": 337,
+        "present_seen": 318,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1117 }"
       },
       {
         "input_seen": 338,
@@ -4615,18 +4615,18 @@
         "phase": "WaitingCondition { remaining: 1116 }"
       },
       {
-        "input_seen": 339,
-        "present_seen": 318,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1115 }"
-      },
-      {
-        "input_seen": 339,
+        "input_seen": 338,
         "present_seen": 319,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1115 }"
+        "phase": "WaitingCondition { remaining: 1116 }"
+      },
+      {
+        "input_seen": 338,
+        "present_seen": 320,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1116 }"
       },
       {
         "input_seen": 339,
@@ -4636,18 +4636,18 @@
         "phase": "WaitingCondition { remaining: 1115 }"
       },
       {
-        "input_seen": 340,
-        "present_seen": 320,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1114 }"
-      },
-      {
-        "input_seen": 340,
+        "input_seen": 339,
         "present_seen": 321,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1114 }"
+        "phase": "WaitingCondition { remaining: 1115 }"
+      },
+      {
+        "input_seen": 339,
+        "present_seen": 322,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1115 }"
       },
       {
         "input_seen": 340,
@@ -4657,18 +4657,18 @@
         "phase": "WaitingCondition { remaining: 1114 }"
       },
       {
-        "input_seen": 341,
-        "present_seen": 322,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1113 }"
-      },
-      {
-        "input_seen": 341,
+        "input_seen": 340,
         "present_seen": 323,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1113 }"
+        "phase": "WaitingCondition { remaining: 1114 }"
+      },
+      {
+        "input_seen": 340,
+        "present_seen": 324,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1114 }"
       },
       {
         "input_seen": 341,
@@ -4678,18 +4678,18 @@
         "phase": "WaitingCondition { remaining: 1113 }"
       },
       {
-        "input_seen": 342,
-        "present_seen": 324,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1112 }"
-      },
-      {
-        "input_seen": 342,
+        "input_seen": 341,
         "present_seen": 325,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1112 }"
+        "phase": "WaitingCondition { remaining: 1113 }"
+      },
+      {
+        "input_seen": 341,
+        "present_seen": 326,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1113 }"
       },
       {
         "input_seen": 342,
@@ -4699,18 +4699,18 @@
         "phase": "WaitingCondition { remaining: 1112 }"
       },
       {
-        "input_seen": 343,
-        "present_seen": 326,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1111 }"
-      },
-      {
-        "input_seen": 343,
+        "input_seen": 342,
         "present_seen": 327,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1111 }"
+        "phase": "WaitingCondition { remaining: 1112 }"
+      },
+      {
+        "input_seen": 342,
+        "present_seen": 328,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1112 }"
       },
       {
         "input_seen": 343,
@@ -4720,18 +4720,18 @@
         "phase": "WaitingCondition { remaining: 1111 }"
       },
       {
-        "input_seen": 344,
-        "present_seen": 328,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1110 }"
-      },
-      {
-        "input_seen": 344,
+        "input_seen": 343,
         "present_seen": 329,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1110 }"
+        "phase": "WaitingCondition { remaining: 1111 }"
+      },
+      {
+        "input_seen": 343,
+        "present_seen": 330,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1111 }"
       },
       {
         "input_seen": 344,
@@ -4741,18 +4741,18 @@
         "phase": "WaitingCondition { remaining: 1110 }"
       },
       {
-        "input_seen": 345,
-        "present_seen": 330,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1109 }"
-      },
-      {
-        "input_seen": 345,
+        "input_seen": 344,
         "present_seen": 331,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1109 }"
+        "phase": "WaitingCondition { remaining: 1110 }"
+      },
+      {
+        "input_seen": 344,
+        "present_seen": 332,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1110 }"
       },
       {
         "input_seen": 345,
@@ -4762,18 +4762,18 @@
         "phase": "WaitingCondition { remaining: 1109 }"
       },
       {
-        "input_seen": 346,
-        "present_seen": 332,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1108 }"
-      },
-      {
-        "input_seen": 346,
+        "input_seen": 345,
         "present_seen": 333,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1108 }"
+        "phase": "WaitingCondition { remaining: 1109 }"
+      },
+      {
+        "input_seen": 345,
+        "present_seen": 334,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1109 }"
       },
       {
         "input_seen": 346,
@@ -4783,18 +4783,18 @@
         "phase": "WaitingCondition { remaining: 1108 }"
       },
       {
-        "input_seen": 347,
-        "present_seen": 334,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1107 }"
-      },
-      {
-        "input_seen": 347,
+        "input_seen": 346,
         "present_seen": 335,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1107 }"
+        "phase": "WaitingCondition { remaining: 1108 }"
+      },
+      {
+        "input_seen": 346,
+        "present_seen": 336,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1108 }"
       },
       {
         "input_seen": 347,
@@ -4804,18 +4804,18 @@
         "phase": "WaitingCondition { remaining: 1107 }"
       },
       {
-        "input_seen": 348,
-        "present_seen": 336,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1106 }"
-      },
-      {
-        "input_seen": 348,
+        "input_seen": 347,
         "present_seen": 337,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1106 }"
+        "phase": "WaitingCondition { remaining: 1107 }"
+      },
+      {
+        "input_seen": 347,
+        "present_seen": 338,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1107 }"
       },
       {
         "input_seen": 348,
@@ -4825,18 +4825,18 @@
         "phase": "WaitingCondition { remaining: 1106 }"
       },
       {
-        "input_seen": 349,
-        "present_seen": 338,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1105 }"
-      },
-      {
-        "input_seen": 349,
+        "input_seen": 348,
         "present_seen": 339,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1105 }"
+        "phase": "WaitingCondition { remaining: 1106 }"
+      },
+      {
+        "input_seen": 348,
+        "present_seen": 340,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1106 }"
       },
       {
         "input_seen": 349,
@@ -4846,18 +4846,18 @@
         "phase": "WaitingCondition { remaining: 1105 }"
       },
       {
-        "input_seen": 350,
-        "present_seen": 340,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1104 }"
-      },
-      {
-        "input_seen": 350,
+        "input_seen": 349,
         "present_seen": 341,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1104 }"
+        "phase": "WaitingCondition { remaining: 1105 }"
+      },
+      {
+        "input_seen": 349,
+        "present_seen": 342,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1105 }"
       },
       {
         "input_seen": 350,
@@ -4867,18 +4867,18 @@
         "phase": "WaitingCondition { remaining: 1104 }"
       },
       {
-        "input_seen": 351,
-        "present_seen": 342,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1103 }"
-      },
-      {
-        "input_seen": 351,
+        "input_seen": 350,
         "present_seen": 343,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1103 }"
+        "phase": "WaitingCondition { remaining: 1104 }"
+      },
+      {
+        "input_seen": 350,
+        "present_seen": 344,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1104 }"
       },
       {
         "input_seen": 351,
@@ -4888,18 +4888,18 @@
         "phase": "WaitingCondition { remaining: 1103 }"
       },
       {
-        "input_seen": 352,
-        "present_seen": 344,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1102 }"
-      },
-      {
-        "input_seen": 352,
+        "input_seen": 351,
         "present_seen": 345,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1102 }"
+        "phase": "WaitingCondition { remaining: 1103 }"
+      },
+      {
+        "input_seen": 351,
+        "present_seen": 346,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1103 }"
       },
       {
         "input_seen": 352,
@@ -4909,18 +4909,18 @@
         "phase": "WaitingCondition { remaining: 1102 }"
       },
       {
-        "input_seen": 353,
-        "present_seen": 346,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1101 }"
-      },
-      {
-        "input_seen": 353,
+        "input_seen": 352,
         "present_seen": 347,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1101 }"
+        "phase": "WaitingCondition { remaining: 1102 }"
+      },
+      {
+        "input_seen": 352,
+        "present_seen": 348,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1102 }"
       },
       {
         "input_seen": 353,
@@ -4930,18 +4930,18 @@
         "phase": "WaitingCondition { remaining: 1101 }"
       },
       {
-        "input_seen": 354,
-        "present_seen": 348,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1100 }"
-      },
-      {
-        "input_seen": 354,
+        "input_seen": 353,
         "present_seen": 349,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1100 }"
+        "phase": "WaitingCondition { remaining: 1101 }"
+      },
+      {
+        "input_seen": 353,
+        "present_seen": 350,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1101 }"
       },
       {
         "input_seen": 354,
@@ -4951,18 +4951,18 @@
         "phase": "WaitingCondition { remaining: 1100 }"
       },
       {
-        "input_seen": 355,
-        "present_seen": 350,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1099 }"
-      },
-      {
-        "input_seen": 355,
+        "input_seen": 354,
         "present_seen": 351,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1099 }"
+        "phase": "WaitingCondition { remaining: 1100 }"
+      },
+      {
+        "input_seen": 354,
+        "present_seen": 352,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1100 }"
       },
       {
         "input_seen": 355,
@@ -4972,18 +4972,18 @@
         "phase": "WaitingCondition { remaining: 1099 }"
       },
       {
-        "input_seen": 356,
-        "present_seen": 352,
-        "step": 7,
-        "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1098 }"
-      },
-      {
-        "input_seen": 356,
+        "input_seen": 355,
         "present_seen": 353,
         "step": 7,
         "action": "wait_for_battle_frames",
-        "phase": "WaitingCondition { remaining: 1098 }"
+        "phase": "WaitingCondition { remaining: 1099 }"
+      },
+      {
+        "input_seen": 355,
+        "present_seen": 354,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1099 }"
       },
       {
         "input_seen": 356,
@@ -4993,18 +4993,18 @@
         "phase": "WaitingCondition { remaining: 1098 }"
       },
       {
-        "input_seen": 357,
-        "present_seen": 354,
-        "step": 8,
-        "action": "run_parity_fixture",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 357,
+        "input_seen": 356,
         "present_seen": 355,
-        "step": 8,
-        "action": "run_parity_fixture",
-        "phase": "WaitingForInput"
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1098 }"
+      },
+      {
+        "input_seen": 356,
+        "present_seen": 356,
+        "step": 7,
+        "action": "wait_for_battle_frames",
+        "phase": "WaitingCondition { remaining: 1098 }"
       },
       {
         "input_seen": 357,
@@ -5014,17 +5014,17 @@
         "phase": "WaitingForInput"
       },
       {
-        "input_seen": 358,
-        "present_seen": 356,
-        "step": 9,
-        "action": "assert_parity_fixture",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 358,
+        "input_seen": 357,
         "present_seen": 357,
-        "step": 9,
-        "action": "assert_parity_fixture",
+        "step": 8,
+        "action": "run_parity_fixture",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 357,
+        "present_seen": 358,
+        "step": 8,
+        "action": "run_parity_fixture",
         "phase": "WaitingForInput"
       },
       {
@@ -5035,57 +5035,71 @@
         "phase": "WaitingForInput"
       },
       {
-        "input_seen": 359,
-        "present_seen": 358,
-        "step": 10,
-        "action": "capture",
+        "input_seen": 358,
+        "present_seen": 359,
+        "step": 9,
+        "action": "assert_parity_fixture",
         "phase": "WaitingForInput"
       },
       {
-        "input_seen": 359,
-        "present_seen": 359,
-        "step": 10,
-        "action": "capture",
+        "input_seen": 358,
+        "present_seen": 360,
+        "step": 9,
+        "action": "assert_parity_fixture",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 359,
         "present_seen": 360,
+        "step": 10,
+        "action": "capture",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 359,
+        "present_seen": 361,
+        "step": 10,
+        "action": "capture",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 359,
+        "present_seen": 362,
         "step": 10,
         "action": "capture",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 360,
-        "present_seen": 360,
+        "present_seen": 362,
         "step": 10,
         "action": "capture",
         "phase": "WaitingCapture { generation: CaptureGeneration(1) }"
       },
       {
         "input_seen": 360,
-        "present_seen": 361,
+        "present_seen": 363,
         "step": 11,
         "action": "finish",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 360,
-        "present_seen": 362,
+        "present_seen": 364,
         "step": 11,
         "action": "finish",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 361,
-        "present_seen": 362,
+        "present_seen": 364,
         "step": 11,
         "action": "finish",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 361,
-        "present_seen": 362,
+        "present_seen": 364,
         "step": 11,
         "action": "finish",
         "phase": "WaitingForInput"
