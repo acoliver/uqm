@@ -77,7 +77,14 @@ pub(super) fn apply(
     let result = move_check::analyze(root, reference, &baseline, current, hits, false)?;
     for (target, lines) in &result.measured_debt {
         if *lines == 0 {
-            baseline.coverage_moves.debt.remove(target);
+            let Some(debt) = baseline.coverage_moves.debt.get(target) else {
+                continue;
+            };
+            if debt.owner == *owner {
+                baseline.coverage_moves.debt.remove(target);
+            } else {
+                println!("coverage debt {target} is retirable by {}", debt.owner);
+            }
             continue;
         }
         if let Some(debt) = baseline.coverage_moves.debt.get_mut(target) {

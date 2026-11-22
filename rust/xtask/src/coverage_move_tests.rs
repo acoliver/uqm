@@ -752,3 +752,32 @@ fn add_moves_rejects_merging_coverage_credits_without_mutating_the_baseline() {
     assert!(error.contains("merge coverage debt"), "{error}");
     assert_eq!(f.baseline, original);
 }
+
+#[test]
+fn tightening_retires_a_zero_count_debt_only_for_its_owner() {
+    let mut f = fixture();
+    let root = f.directory.path();
+    let path = root.join("rust/xtask/quality-baseline.toml");
+    f.baseline.write(&path).unwrap();
+    move_edit::apply(root, "record", "U6-04", "HEAD", &f.current, &f.hits).unwrap();
+    commit(root, "debt owned by U6-04");
+    // Rewriting the function leaves no moved token lines, so its debt measures zero.
+    write(root, "rust/src/host.rs", "fn talk() -> u32 { 41 }\n");
+    f.current = measure(root);
+    let function = source::unique(&f.current.coverage_functions, TARGET).unwrap();
+    f.hits = [(
+        function.file.clone(),
+        (function.start.0..=function.end.0)
+            .map(|line| (line, true))
+            .collect(),
+    )]
+    .into();
+    let before = fs::read(&path).unwrap();
+    move_edit::apply(root, "tighten", "U6-03", "HEAD", &f.current, &f.hits).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let kept = Baseline::read(&path).unwrap();
+    assert_eq!(kept.coverage_moves.debt[TARGET].owner, "U6-04");
+    move_edit::apply(root, "tighten", "U6-04", "HEAD", &f.current, &f.hits).unwrap();
+    let retired = Baseline::read(&path).unwrap();
+    assert!(!retired.coverage_moves.debt.contains_key(TARGET));
+}
