@@ -29,7 +29,7 @@ fn config(root: &std::path::Path) -> ChildSessionConfig {
         timeout: Duration::from_secs(30),
         grace: Duration::from_millis(500),
         executable_digest: command_executable_digest(&Command::new("/bin/sh"))
-            .expect("shell digest"),
+            .unwrap_or_else(|error| panic!("shell digest: {error}")),
     }
 }
 

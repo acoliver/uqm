@@ -183,7 +183,12 @@ impl<'a> Visit<'a> for Walker {
             });
             let path = if let Some(path) = explicit {
                 if self.context.inline_depth == 0 {
-                    self.context.path.parent().unwrap().join(path)
+                    let file = &self.context.path;
+                    file.parent()
+                        .unwrap_or_else(|| {
+                            panic!("source file {} has no directory", file.display())
+                        })
+                        .join(path)
                 } else {
                     self.context.directory.join(path)
                 }

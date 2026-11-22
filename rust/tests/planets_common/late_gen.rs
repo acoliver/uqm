@@ -106,7 +106,7 @@ pub fn render(kind: Kind, frames: &[PlanetFrame], ops: &mut impl Ops) -> String 
                         };
                         let mut planets = descriptors(16);
                         let result = ops.layout(case, &mut planets);
-                        writeln!(out, "layout {case:?} {result:?} {planets:?}").unwrap();
+                        let _ = writeln!(out, "layout {case:?} {result:?} {planets:?}");
                     }
                 }
             }
@@ -128,8 +128,10 @@ pub fn render(kind: Kind, frames: &[PlanetFrame], ops: &mut impl Ops) -> String 
                             };
                             let mut moons = descriptors(4);
                             let result = ops.moons(case, planet, count, &mut moons);
-                            writeln!(out, "moons {case:?} {planet} {count} {result:?} {moons:?}")
-                                .unwrap();
+                            let _ = writeln!(
+                                out,
+                                "moons {case:?} {planet} {count} {result:?} {moons:?}"
+                            );
                         }
                     }
                 }
@@ -180,7 +182,7 @@ pub fn render(kind: Kind, frames: &[PlanetFrame], ops: &mut impl Ops) -> String 
                                         format!("{:?}", nodes[2]),
                                         format!("{:?}", fresh_node())
                                     );
-                                    writeln!(out, "scan {case:?} {result:?} {nodes:?}").unwrap();
+                                    let _ = writeln!(out, "scan {case:?} {result:?} {nodes:?}");
                                 }
                             }
                         }

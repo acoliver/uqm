@@ -39,23 +39,43 @@ fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
                 density: 0,
             }; 8];
             for (slot, pair) in fields[3..11].iter().enumerate() {
-                let (kind, density) = pair.split_once(':').expect("element pair");
+                let (kind, density) = pair
+                    .split_once(':')
+                    .unwrap_or_else(|| panic!("element pair"));
                 elements[slot] = ElementEntry {
-                    element_type: kind.parse().expect("element type"),
-                    density: density.parse().expect("element density"),
+                    element_type: kind
+                        .parse()
+                        .unwrap_or_else(|error| panic!("element type: {error}")),
+                    density: density
+                        .parse()
+                        .unwrap_or_else(|error| panic!("element density: {error}")),
                 };
             }
             PlanetFrame {
-                type_: fields[0].parse().expect("type"),
-                base_tectonics: fields[1].parse().expect("tectonics"),
-                atmo_and_density: fields[2].parse().expect("atmo"),
+                type_: fields[0]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("type: {error}")),
+                base_tectonics: fields[1]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("tectonics: {error}")),
+                atmo_and_density: fields[2]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("atmo: {error}")),
                 useful_elements: elements,
                 cmap_instance: c"",
                 xlat_tab_instance: c"",
-                num_faults: fields[11].parse().expect("faults"),
-                fault_depth: fields[12].parse().expect("depth"),
-                num_blemishes: fields[13].parse().expect("blemishes"),
-                base_elevation: fields[14].parse().expect("elevation"),
+                num_faults: fields[11]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("faults: {error}")),
+                fault_depth: fields[12]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("depth: {error}")),
+                num_blemishes: fields[13]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("blemishes: {error}")),
+                base_elevation: fields[14]
+                    .parse()
+                    .unwrap_or_else(|error| panic!("elevation: {error}")),
             }
         })
         .collect()

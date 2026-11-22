@@ -27,10 +27,15 @@ fn script_steps(name: &str) -> Vec<Value> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("scripts")
         .join(format!("{name}.json"));
-    let text = std::fs::read_to_string(&path).expect("read scenario script");
-    let document: Value = serde_json::from_str(&text).expect("scenario script is JSON");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read scenario script: {error}"));
+    let document: Value = serde_json::from_str(&text)
+        .unwrap_or_else(|error| panic!("scenario script is JSON: {error}"));
     assert_eq!(document["name"], name, "script name is preserved");
-    document["steps"].as_array().expect("steps array").clone()
+    document["steps"]
+        .as_array()
+        .unwrap_or_else(|| panic!("steps array"))
+        .clone()
 }
 
 fn is_flight_hold(step: &Value) -> bool {
@@ -584,7 +589,7 @@ fn position(steps: &[Value], from: usize, wanted: impl Fn(&Value) -> bool) -> us
         .iter()
         .position(wanted)
         .map(|offset| offset + from)
-        .expect("expected step is missing")
+        .unwrap_or_else(|| panic!("expected step is missing"))
 }
 
 fn reward_precedes_post_commander_menu(steps: &[Value], farewell: usize, reward: usize) -> bool {
@@ -952,7 +957,7 @@ impl DerivedPreparation {
         let gravity = lunar_info.planet_info.gravity;
         let landing_cost = u32::from(landing_fuel_needed(
             gravity,
-            u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
+            u16::try_from(FUEL_TANK_SCALE).unwrap_or_else(|error| panic!("scale fits: {error}")),
         ));
 
         let mut mercury_info = Default::default();
@@ -963,7 +968,7 @@ impl DerivedPreparation {
         let mercury_gravity = mercury_info.planet_info.gravity;
         let mercury_landing_cost = u32::from(landing_fuel_needed(
             mercury_gravity,
-            u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
+            u16::try_from(FUEL_TANK_SCALE).unwrap_or_else(|error| panic!("scale fits: {error}")),
         ));
 
         let reward = u32::from(uqm_modes::comm::races::starbas::STARBASE_READY_REWARD);
@@ -990,7 +995,7 @@ fn derived_preparation() -> DerivedPreparation {
     let opening = steps
         .iter()
         .find_map(resources)
-        .expect("opening resource proof");
+        .unwrap_or_else(|| panic!("opening resource proof"));
     assert_eq!(
         opening.0,
         Some(u64::from(
@@ -999,7 +1004,8 @@ fn derived_preparation() -> DerivedPreparation {
         "the alliance chain opens with the game's starting tank"
     );
     DerivedPreparation::from_game_data(
-        u32::try_from(opening.1.expect("opening RU")).expect("RU fits"),
+        u32::try_from(opening.1.unwrap_or_else(|| panic!("opening RU")))
+            .unwrap_or_else(|error| panic!("RU fits: {error}")),
     )
 }
 

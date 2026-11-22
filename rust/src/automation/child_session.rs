@@ -4024,7 +4024,9 @@ mod tests {
 //  Production supervisor tests (cfg(unix))
 // ===========================================================================
 
-#[cfg(all(test, unix))]
+// clippy treats only a bare `cfg(test)` as test code.
+#[cfg(test)]
+#[cfg(unix)]
 mod os_tests {
     use super::*;
     use std::process::Command;

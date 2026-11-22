@@ -404,7 +404,8 @@ fn fixture_path(name: &str) -> PathBuf {
 }
 
 fn check_fixture(name: &str, text: &str) {
-    let stored = std::fs::read_to_string(fixture_path(name)).expect("read fixture");
+    let stored = std::fs::read_to_string(fixture_path(name))
+        .unwrap_or_else(|error| panic!("read fixture: {error}"));
     assert_eq!(stored, text, "{name} differs from the checked-in C fixture");
 }
 
@@ -508,7 +509,7 @@ fn render_plan_resources(table: &[PlanetFrame]) -> String {
     let name = |resource: &std::ffi::CStr| {
         resource
             .to_str()
-            .expect("resource names are ASCII")
+            .unwrap_or_else(|error| panic!("resource names are ASCII: {error}"))
             .to_owned()
     };
     table

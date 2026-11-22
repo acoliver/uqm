@@ -134,7 +134,7 @@ pub fn measure(
         macros::archived_registry(&rust)?
     };
     let platform_split = metadata.packages.iter().any(|p| p.name == "uqm-platform");
-    let mut walker = Walker::new(rust, names, defs_only);
+    let mut walker = Walker::new(rust, names, defs_only)?;
     walker.handlers = handlers;
     for package in metadata
         .packages
@@ -178,8 +178,10 @@ pub fn measure(
 }
 
 impl Walker {
-    fn new(rust: PathBuf, names: Option<&[String]>, defs_only: bool) -> Self {
-        let rust = rust.canonicalize().expect("quality source root exists");
+    fn new(rust: PathBuf, names: Option<&[String]>, defs_only: bool) -> Result<Self, String> {
+        let rust = rust
+            .canonicalize()
+            .map_err(|error| format!("quality source root {}: {error}", rust.display()))?;
         let queue_functions = fs::read_to_string(rust.join(
             if rust.join("crates/engine/src/collections/queue.rs").exists() {
                 "crates/engine/src/collections/queue.rs"
@@ -199,7 +201,7 @@ impl Walker {
                 .collect()
         })
         .unwrap_or_default();
-        Self {
+        Ok(Self {
             rust,
             context: Context::default(),
             measurement: Measurement::default(),
@@ -225,7 +227,7 @@ impl Walker {
                 .iter()
                 .map(|(f, n)| (f.to_string(), n.to_string()))
                 .collect(),
-        }
+        })
     }
 
     fn load(&mut self, path: &Path, package_root: Option<&Path>) -> Result<(), String> {

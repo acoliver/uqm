@@ -73,7 +73,12 @@ impl OrzFixture for Ship<'_> {
         let old = battle::succ(self.id).unwrap_or_else(|| panic!("queued turret"));
         let e = old;
         battle::get_mut(e).life = 0;
-        hooks::invoke_element(battle::get(e).postprocess_func.unwrap(), e);
+        hooks::invoke_element(
+            battle::get(e)
+                .postprocess_func
+                .unwrap_or_else(|| panic!("turret has a postprocess hook")),
+            e,
+        );
         battle_context::unlink(old);
         battle_context::dispose(old);
         battle::succ(self.id).unwrap_or_else(|| panic!("queued turret"))
@@ -89,7 +94,10 @@ impl OrzFixture for Ship<'_> {
         assert_ne!(battle::tail(), Some(tail));
         let marine = battle::tail().unwrap_or_else(|| panic!("queued marine"));
         assert_eq!(
-            battle::get(marine).collision_func.unwrap().address(),
+            battle::get(marine)
+                .collision_func
+                .unwrap_or_else(|| panic!("marine has a collision hook"))
+                .address(),
             marine_collision as *const () as usize
         );
         battle::get_mut(marine).next = battle::get(marine).current.clone();
@@ -139,7 +147,7 @@ fn seed_for_byte(byte: u8) -> u32 {
             seed_random(seed);
             random() as u8 == byte
         })
-        .expect("seed for each intruder outcome boundary")
+        .unwrap_or_else(|| panic!("seed for each intruder outcome boundary"))
 }
 
 fn velocity_fields(v: &VelocityDesc) -> [i32; 9] {

@@ -19,12 +19,19 @@ fn script_path(name: &str) -> PathBuf {
 }
 
 fn document(name: &str) -> Value {
-    serde_json::from_slice(&std::fs::read(script_path(name)).unwrap()).unwrap()
+    serde_json::from_slice(
+        &std::fs::read(script_path(name))
+            .unwrap_or_else(|error| panic!("read scenario script: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("parse scenario script: {error}"))
 }
 
 fn validate(value: &Value) -> Result<(), String> {
-    let path = script_path(value["name"].as_str().unwrap());
-    let bytes = serde_json::to_vec(value).unwrap();
+    let name = value["name"]
+        .as_str()
+        .ok_or_else(|| "script name is not a string".to_string())?;
+    let path = script_path(name);
+    let bytes = serde_json::to_vec(value).map_err(|error| error.to_string())?;
     let parsed = parse_script(&bytes, &path).map_err(|error| error.to_string())?;
     validate_script(parsed, &path)
         .map(|_| ())

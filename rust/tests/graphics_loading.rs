@@ -14,9 +14,9 @@ fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8>
         encoder.set_depth(png::BitDepth::Eight);
         encoder
             .write_header()
-            .unwrap()
+            .unwrap_or_else(|error| panic!("write PNG header: {error}"))
             .write_image_data(pixels)
-            .unwrap();
+            .unwrap_or_else(|error| panic!("write PNG data: {error}"));
     }
     output
 }

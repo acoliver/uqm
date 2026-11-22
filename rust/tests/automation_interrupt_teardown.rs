@@ -21,7 +21,8 @@ fn config(root: &std::path::Path, command: &Command) -> ChildSessionConfig {
         stderr_budget: 1 << 20,
         timeout: Duration::from_secs(30),
         grace: Duration::from_millis(500),
-        executable_digest: command_executable_digest(command).expect("shell digest"),
+        executable_digest: command_executable_digest(command)
+            .unwrap_or_else(|error| panic!("shell digest: {error}")),
     }
 }
 

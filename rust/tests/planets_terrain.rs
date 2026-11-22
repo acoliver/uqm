@@ -96,16 +96,18 @@ fn original_c_terrain_full_buffers_guards_rng_and_optional_live_oracle() {
 }
 
 fn compare_cases(fixture: &[u8], parameters: &str, raw_var: &str) -> [usize; 3] {
-    let cases: Vec<Case> = serde_json::from_str(parameters).expect("sealed C parameters");
+    let cases: Vec<Case> = serde_json::from_str(parameters)
+        .unwrap_or_else(|error| panic!("sealed C parameters: {error}"));
     assert_eq!(MAP_HEIGHT, 75);
-    let mut raw = std::env::var_os(raw_var)
-        .map(|p| File::open(p).expect("open original C capture read-only"));
+    let mut raw = std::env::var_os(raw_var).map(|p| {
+        File::open(p).unwrap_or_else(|error| panic!("open original C capture read-only: {error}"))
+    });
     let mut oracle = std::env::var_os("UQM_TERRAIN_ORIGINAL_C_ORACLE").map(|p| {
         Command::new(p)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
-            .expect("start original compiled C oracle")
+            .unwrap_or_else(|error| panic!("start original compiled C oracle: {error}"))
     });
     let mut offset = 0;
     let mut counts = [0; 3];
@@ -162,11 +164,14 @@ fn compare_cases(fixture: &[u8], parameters: &str, raw_var: &str) -> [usize; 3] 
         if let Some(raw) = raw.as_mut() {
             let mut original = vec![0; case.length];
             raw.read_exact(&mut original)
-                .expect("complete retained C record");
+                .unwrap_or_else(|error| panic!("complete retained C record: {error}"));
             same(&original, expected, "raw C == fixture", case);
         }
         if let Some(child) = oracle.as_mut() {
-            let stdin = child.stdin.as_mut().expect("oracle stdin");
+            let stdin = child
+                .stdin
+                .as_mut()
+                .unwrap_or_else(|| panic!("oracle stdin"));
             for value in [
                 case.op,
                 case.width as u32,
@@ -184,17 +189,21 @@ fn compare_cases(fixture: &[u8], parameters: &str, raw_var: &str) -> [usize; 3] 
             ] {
                 stdin
                     .write_all(&value.to_le_bytes())
-                    .expect("oracle header");
+                    .unwrap_or_else(|error| panic!("oracle header: {error}"));
             }
-            stdin.write_all(&source).expect("original input");
-            stdin.flush().expect("oracle flush");
+            stdin
+                .write_all(&source)
+                .unwrap_or_else(|error| panic!("original input: {error}"));
+            stdin
+                .flush()
+                .unwrap_or_else(|error| panic!("oracle flush: {error}"));
             let mut original = vec![0; case.length];
             child
                 .stdout
                 .as_mut()
-                .expect("oracle stdout")
+                .unwrap_or_else(|| panic!("oracle stdout"))
                 .read_exact(&mut original)
-                .expect("original C full response");
+                .unwrap_or_else(|error| panic!("original C full response: {error}"));
             same(
                 &original,
                 expected,
@@ -207,7 +216,11 @@ fn compare_cases(fixture: &[u8], parameters: &str, raw_var: &str) -> [usize; 3] 
     }
     assert_eq!(offset, fixture.len());
     if let Some(mut raw) = raw {
-        assert_eq!(raw.read(&mut [0]).expect("capture EOF"), 0);
+        assert_eq!(
+            raw.read(&mut [0])
+                .unwrap_or_else(|error| panic!("capture EOF: {error}")),
+            0
+        );
     }
     if let Some(mut child) = oracle {
         drop(child.stdin.take());
@@ -215,12 +228,15 @@ fn compare_cases(fixture: &[u8], parameters: &str, raw_var: &str) -> [usize; 3] 
             child
                 .stdout
                 .as_mut()
-                .expect("oracle stdout")
+                .unwrap_or_else(|| panic!("oracle stdout"))
                 .read(&mut [0])
-                .expect("oracle EOF"),
+                .unwrap_or_else(|error| panic!("oracle EOF: {error}")),
             0
         );
-        assert!(child.wait().expect("oracle exit").success());
+        assert!(child
+            .wait()
+            .unwrap_or_else(|error| panic!("oracle exit: {error}"))
+            .success());
     }
     counts
 }

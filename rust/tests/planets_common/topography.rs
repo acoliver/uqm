@@ -33,7 +33,8 @@ pub struct TopoCase {
 
 impl TopoCase {
     pub fn cells(&self) -> usize {
-        usize::try_from(self.width * self.height).expect("positive map")
+        usize::try_from(self.width * self.height)
+            .unwrap_or_else(|error| panic!("positive map: {error}"))
     }
 
     pub fn initial_map(&self) -> Vec<i8> {

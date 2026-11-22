@@ -254,7 +254,9 @@ impl SpecialOps for Harness {
                 set_game_state(
                     cx.world,
                     uqm_engine::StoryKey::CHMMR_UNLEASHED,
-                    unleashed.parse().expect("0 or 1"),
+                    unleashed
+                        .parse()
+                        .unwrap_or_else(|error| panic!("0 or 1: {error}")),
                 )
             });
         }
@@ -277,7 +279,9 @@ impl SpecialOps for Harness {
                 set_game_state(
                     cx.world,
                     uqm_engine::StoryKey::BURVIXESE_BROADCASTERS,
-                    taken.parse().expect("0 or 1"),
+                    taken
+                        .parse()
+                        .unwrap_or_else(|error| panic!("0 or 1: {error}")),
                 )
             });
         }
@@ -286,7 +290,9 @@ impl SpecialOps for Harness {
                 set_game_state(
                     cx.world,
                     uqm_engine::StoryKey::AQUA_HELIX,
-                    taken.parse().expect("0 or 1"),
+                    taken
+                        .parse()
+                        .unwrap_or_else(|error| panic!("0 or 1: {error}")),
                 )
             });
         }
@@ -295,7 +301,9 @@ impl SpecialOps for Harness {
                 set_game_state(
                     cx.world,
                     uqm_engine::StoryKey::UTWIG_BOMB,
-                    taken.parse().expect("0 or 1"),
+                    taken
+                        .parse()
+                        .unwrap_or_else(|error| panic!("0 or 1: {error}")),
                 )
             });
         }
@@ -304,7 +312,9 @@ impl SpecialOps for Harness {
                 set_game_state(
                     cx.world,
                     uqm_engine::StoryKey::SUN_DEVICE,
-                    taken.parse().expect("0 or 1"),
+                    taken
+                        .parse()
+                        .unwrap_or_else(|error| panic!("0 or 1: {error}")),
                 )
             });
         }
@@ -313,7 +323,9 @@ impl SpecialOps for Harness {
                 set_game_state(
                     cx.world,
                     uqm_engine::StoryKey::TAALO_PROTECTOR,
-                    taken.parse().expect("0 or 1"),
+                    taken
+                        .parse()
+                        .unwrap_or_else(|error| panic!("0 or 1: {error}")),
                 )
             });
         }

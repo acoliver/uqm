@@ -343,10 +343,10 @@ fn transcribe(stream: TokenStream, captures: &Captures) -> Result<TokenStream, S
                             _ => None,
                         })
                         .collect();
-                    if lengths.len() != 1 {
+                    let mut lengths = lengths.into_iter();
+                    let (Some(length), None) = (lengths.next(), lengths.next()) else {
                         return Err("macro repetition has inconsistent capture lengths".into());
-                    }
-                    let length = *lengths.first().unwrap();
+                    };
                     for i in 0..length {
                         if i != 0 {
                             output.extend(separator.clone());

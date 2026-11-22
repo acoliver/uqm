@@ -71,7 +71,7 @@ fn draws(seed: u32, count: usize) -> Vec<u32> {
 fn seed_where(count: usize, accept: impl Fn(&[u32]) -> bool) -> u32 {
     (1..1_000_000)
         .find(|&seed| accept(&draws(seed, count)))
-        .expect("a suitable seed exists")
+        .unwrap_or_else(|| panic!("a suitable seed exists"))
 }
 
 /// Seeds the generator, runs `action`, and reports how many draws it took.
@@ -83,7 +83,7 @@ fn draws_consumed(seed: u32, action: impl FnOnce()) -> usize {
     sequence
         .iter()
         .position(|&value| value == next)
-        .expect("generator advanced by fewer than sixteen draws")
+        .unwrap_or_else(|| panic!("generator advanced by fewer than sixteen draws"))
 }
 
 fn velocity_of(element: ElementId) -> (i16, i16) {
