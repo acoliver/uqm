@@ -2319,7 +2319,7 @@ mod tests {
                 if t.contains("cfg(test)") {
                     return false;
                 }
-                if t.contains("stale_patterns") || t.contains("c_line_is_comment") {
+                if t.contains("stale_patterns") {
                     return false;
                 }
                 if t.starts_with('"') || t.starts_with("\"b") {
@@ -2408,19 +2408,6 @@ mod tests {
         result
     }
 
-    /// Returns true if a trimmed C source line is a comment line.
-    /// Matches: `//`, `*`, or `/` followed by `*` (block comment open).
-    #[allow(dead_code)]
-    fn c_line_is_comment(line: &str) -> bool {
-        let t = line.trim();
-        if t.starts_with("//") || t.starts_with('*') {
-            return true;
-        }
-        // Detect `/*` without triggering Rust's own block-comment parser.
-        let b = t.as_bytes();
-        b.len() >= 2 && b[0] == b'/' && b[1] == b'*'
-    }
-
     /// Extract the brace-balanced body of a Rust function by signature prefix.
     /// Only the function's own block is returned; doc-comments before the
     /// signature are excluded.
@@ -2445,65 +2432,6 @@ mod tests {
                 _ => {}
             }
             i += 1;
-        }
-        None
-    }
-
-    /// Extract the brace-balanced body of a C function definition.
-    ///
-    /// Searches for occurrences of `fn_name` that look like a definition
-    /// (not a comment or forward declaration).  Only the body content between
-    /// the opening and closing braces is returned.
-    #[allow(dead_code)]
-    fn extract_c_fn_body(source: &str, fn_name: &str) -> Option<String> {
-        let mut search_pos = 0;
-        while let Some(rel) = source[search_pos..].find(fn_name) {
-            let abs = search_pos + rel;
-
-            // Preceding byte must be whitespace/newline (not part of an identifier).
-            let pre_ok = abs == 0 || {
-                let b = source.as_bytes()[abs - 1];
-                b == b'\n' || b == b' ' || b == b'\t'
-            };
-
-            // Following byte must be `(` or whitespace (not inside an identifier).
-            let post_pos = abs + fn_name.len();
-            let post_ok = post_pos < source.len() && {
-                let b = source.as_bytes()[post_pos];
-                b == b'(' || b == b' ' || b == b'\t' || b == b'\n'
-            };
-
-            if pre_ok && post_ok {
-                let after = &source[abs..];
-                if let Some(brace_rel) = after.find('{') {
-                    let between = &after[..brace_rel];
-                    // A semicolon before the brace means this is a declaration, not a definition.
-                    if between.contains(';') {
-                        search_pos = abs + fn_name.len();
-                        continue;
-                    }
-
-                    let body_abs = abs + brace_rel;
-                    let mut depth = 0usize;
-                    let bytes = source.as_bytes();
-                    let mut i = body_abs;
-                    while i < bytes.len() {
-                        match bytes[i] {
-                            b'{' => depth += 1,
-                            b'}' => {
-                                depth -= 1;
-                                if depth == 0 {
-                                    return Some(source[body_abs..=i].to_string());
-                                }
-                            }
-                            _ => {}
-                        }
-                        i += 1;
-                    }
-                }
-            }
-
-            search_pos = abs + fn_name.len();
         }
         None
     }

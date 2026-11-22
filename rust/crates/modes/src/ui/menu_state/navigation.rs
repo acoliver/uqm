@@ -86,7 +86,7 @@ pub(crate) fn alternate(base: &mut u8, current: &mut u8) -> bool {
             }
             _ => {
                 uqm_engine::log_abi::log_message(
-                    uqm_engine::logging::LogLevel::Error as i32,
+                    uqm_engine::logging::LogLevel::Error,
                     &format!(
                         "Unknown state combination: {}, {}",
                         *base as i32, *current as i32

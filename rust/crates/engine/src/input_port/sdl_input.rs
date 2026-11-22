@@ -282,11 +282,17 @@ fn init_joysticks() -> Result<(), InputInitError> {
     let names = crate::host::platform().init_joysticks().map_err(|error| {
         InputInitError(format!("Couldn't initialize joystick subsystem: {error}"))
     })?;
-    crate::log_abi::log_message(4, &format!("{} joysticks were found.", names.len()));
+    crate::log_abi::log_message(
+        crate::logging::LogLevel::Info,
+        &format!("{} joysticks were found.", names.len()),
+    );
     if !names.is_empty() {
-        crate::log_abi::log_message(4, "The names of the joysticks are:");
+        crate::log_abi::log_message(
+            crate::logging::LogLevel::Info,
+            "The names of the joysticks are:",
+        );
         for name in names {
-            crate::log_abi::log_message(4, &format!("    {name}"));
+            crate::log_abi::log_message(crate::logging::LogLevel::Info, &format!("    {name}"));
         }
     }
     Ok(())
@@ -453,7 +459,10 @@ fn apply_event(vc: &mut super::vcontrol::VControl, event: &HostEvent) {
 pub fn control_name(template: i32, control: i32, alternate: i32) -> String {
     let state = INPUT.lock();
     let Some(index) = DriverState::control_index(template, control, alternate) else {
-        crate::log_abi::log_message(3, "InterrogateInputState(): invalid control index");
+        crate::log_abi::log_message(
+            crate::logging::LogLevel::Warning,
+            "InterrogateInputState(): invalid control index",
+        );
         return String::new();
     };
     match state.configured.get(index).copied().flatten() {
@@ -478,7 +487,10 @@ pub fn control_name(template: i32, control: i32, alternate: i32) -> String {
 pub fn remove_input_state(template: i32, control: i32, alternate: i32) {
     let mut state = INPUT.lock();
     let Some(index) = DriverState::control_index(template, control, alternate) else {
-        crate::log_abi::log_message(3, "RemoveInputState(): invalid control index");
+        crate::log_abi::log_message(
+            crate::logging::LogLevel::Warning,
+            "RemoveInputState(): invalid control index",
+        );
         return;
     };
     let (template, control, alternate) = (template as usize, control as usize, alternate as usize);
@@ -495,7 +507,10 @@ pub fn remove_input_state(template: i32, control: i32, alternate: i32) {
 /// alternate. `poll` runs one frame of the caller's loop between checks.
 pub fn rebind_input_state(template: i32, control: i32, alternate: i32, mut poll: impl FnMut()) {
     let Some(index) = DriverState::control_index(template, control, alternate) else {
-        crate::log_abi::log_message(3, "RebindInputState(): invalid control index");
+        crate::log_abi::log_message(
+            crate::logging::LogLevel::Warning,
+            "RebindInputState(): invalid control index",
+        );
         return;
     };
     remove_input_state(template, control, alternate);

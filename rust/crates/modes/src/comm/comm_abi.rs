@@ -149,7 +149,7 @@ pub fn check_subtitles(comm: &mut Comm) {
         comm.display.subtitle.align = align;
         if previous == identity {
             uqm_engine::log_abi::log_message(
-                uqm_engine::log_abi::LOG_WARNING,
+                uqm_engine::logging::LogLevel::Warning,
                 "Dialog text and location changed out of sync",
             );
         }
