@@ -1,7 +1,7 @@
 //! Tests for the live "Summ" and "Star" capture.
 //!
 //! The game structures are the ones the other runtime tests use: a real
-//! `GAME_STATE` with `InitQueue` pools, a `SIS_STATE` laid out by the `repr(C)`
+//! `GAME_STATE` with `InitQueue` pools, the `SIS_STATE`
 //! mirror, and the Rust game-state singleton replaced the way a load does.
 //! Expected values are written out here from the bytes of a save the C game
 //! wrote (`C_WRITTEN_SAVE`, read with offsets worked out from `save.c`), from
@@ -1043,7 +1043,7 @@ fn the_star_chunk_of_the_c_save_is_what_the_catalog_entry_gives() {
         .iter()
         .position(|star| (star.star_pt.x, star.star_pt.y) == (saved.star_pt.x, saved.star_pt.y))
         .expect("the saved star is a system");
-    let captured = capture_star(&table, &table[row]).unwrap();
+    let captured = capture_star(&table, Some(row)).unwrap();
     assert_eq!(captured, saved);
 
     assert_eq!(
@@ -1053,37 +1053,25 @@ fn the_star_chunk_of_the_c_save_is_what_the_catalog_entry_gives() {
 }
 
 #[test]
-fn capture_star_reads_the_entry_current_points_at() {
+fn capture_star_reads_the_selected_entry() {
     let table = catalog();
     for index in [0usize, 1, 100, 501, 503, 518] {
-        let captured = capture_star(&table, &table[index]).unwrap();
+        let captured = capture_star(&table, Some(index)).unwrap();
         assert_eq!(captured, wire(&table[index]), "{index}");
     }
-    // NULL is all zeroes, as `memset (&SD, 0, sizeof (SD))`.
-    assert_eq!(capture_star(&table, std::ptr::null()).unwrap(), ZERO_STAR);
+    // No selection is all zeroes, as `memset (&SD, 0, sizeof (SD))`.
+    assert_eq!(capture_star(&table, None).unwrap(), ZERO_STAR);
 }
 
 #[test]
-fn capture_star_refuses_a_pointer_the_catalog_does_not_own() {
+fn capture_star_refuses_a_selection_the_catalog_does_not_hold() {
     let table = catalog();
-    let outside = table[5];
     assert_eq!(
-        capture_star(&table, &outside).unwrap_err(),
-        StarError::CurrentOutsideCatalog
-    );
-    let inside_the_table_but_between_entries =
-        (table.as_ptr() as usize + 3 * 8 + 2) as *const CStarDesc;
-    assert_eq!(
-        capture_star(&table, inside_the_table_but_between_entries).unwrap_err(),
-        StarError::CurrentOutsideCatalog
-    );
-    let past_the_end = (table.as_ptr() as usize + CATALOG_LEN * 8) as *const CStarDesc;
-    assert_eq!(
-        capture_star(&table, past_the_end).unwrap_err(),
+        capture_star(&table, Some(CATALOG_LEN)).unwrap_err(),
         StarError::CurrentOutsideCatalog
     );
     assert_eq!(
-        capture_star(&table[..10], &table[1]).unwrap_err(),
+        capture_star(&table[..10], Some(1)).unwrap_err(),
         StarError::WrongCatalogLength { found: 10 }
     );
 }

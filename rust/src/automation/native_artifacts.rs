@@ -8,6 +8,7 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use uqm_platform::os as sys;
 
 /// Aggregate allowance shared by all writers in one controller.
 #[derive(Clone)]
@@ -478,7 +479,7 @@ fn open_directory(path: &Path) -> io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
     fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .custom_flags(sys::O_DIRECTORY | sys::O_NOFOLLOW | sys::O_CLOEXEC)
         .open(path)
 }
 #[cfg(unix)]
@@ -497,10 +498,10 @@ fn open_relative(directory: &File, relative: &str, is_directory: bool) -> io::Re
     let mut parent = directory.try_clone()?;
     let parts: Vec<_> = relative.split('/').collect();
     for (index, part) in parts.iter().enumerate() {
-        let flags = libc::O_RDONLY
-            | libc::O_NONBLOCK
+        let flags = sys::O_RDONLY
+            | sys::O_NONBLOCK
             | if index + 1 < parts.len() || is_directory {
-                libc::O_DIRECTORY
+                sys::O_DIRECTORY
             } else {
                 0
             };
@@ -519,7 +520,7 @@ fn relative_parent<'a>(directory: &File, relative: &'a str) -> io::Result<(File,
 #[cfg(unix)]
 fn create_relative(directory: &File, relative: &str) -> io::Result<File> {
     let (parent, name) = relative_parent(directory, relative)?;
-    open_at(&parent, name, libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL)
+    open_at(&parent, name, sys::O_WRONLY | sys::O_CREAT | sys::O_EXCL)
 }
 #[cfg(unix)]
 fn open_at(directory: &File, name: &str, flags: i32) -> io::Result<File> {
@@ -528,7 +529,7 @@ fn open_at(directory: &File, name: &str, flags: i32) -> io::Result<File> {
     uqm_platform::os::fd::open_at(
         directory.as_fd(),
         &name,
-        flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        flags | sys::O_NOFOLLOW | sys::O_CLOEXEC,
         0o500,
     )
     .map(File::from)

@@ -1,7 +1,43 @@
-//! Signal dispositions.
+//! Signal dispositions and recorded signal delivery.
 
 use std::ffi::c_int;
 use std::io;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+/// The last signal delivered to [`record_signal`], or zero.
+///
+/// Written only by the handler, which may use nothing but an atomic store.
+static RECORDED: AtomicI32 = AtomicI32::new(0);
+
+/// Async-signal-safety is the whole constraint here: one atomic store, no
+/// allocation, formatting or locks.
+extern "C" fn record_signal(signal: c_int) {
+    RECORDED.store(signal, Ordering::SeqCst);
+}
+
+/// Record deliveries of `signal` for [`recorded`] instead of taking the
+/// signal's default action.
+///
+/// # Errors
+///
+/// As for [`install_handler`].
+pub fn record(signal: c_int) -> io::Result<()> {
+    install_handler(signal, record_signal)
+}
+
+/// The last signal [`record`] captured, if one has arrived.
+#[must_use]
+pub fn recorded() -> Option<c_int> {
+    match RECORDED.load(Ordering::SeqCst) {
+        0 => None,
+        signal => Some(signal),
+    }
+}
+
+/// Forget any recorded signal.
+pub fn clear_recorded() {
+    RECORDED.store(0, Ordering::SeqCst);
+}
 
 /// Run `handler` when the process receives `signal`.
 ///
@@ -13,7 +49,7 @@ use std::io;
 ///
 /// Returns the OS error from `sigaction`; `EINVAL` for a signal that cannot be
 /// caught (`SIGKILL`, `SIGSTOP`) or does not exist.
-pub fn install_handler(signal: c_int, handler: extern "C" fn(c_int)) -> io::Result<()> {
+fn install_handler(signal: c_int, handler: extern "C" fn(c_int)) -> io::Result<()> {
     set_disposition(signal, handler as *const () as usize)
 }
 

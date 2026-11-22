@@ -20,7 +20,7 @@ fn check(result: c_int) -> io::Result<()> {
 }
 
 /// Remove `name` below `directory`; `flags` is `0` for a file or
-/// `libc::AT_REMOVEDIR` for an empty directory.
+/// [`AT_REMOVEDIR`](super::AT_REMOVEDIR) for an empty directory.
 ///
 /// # Errors
 ///

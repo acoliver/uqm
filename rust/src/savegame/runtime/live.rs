@@ -61,7 +61,7 @@ pub fn capture_prepared(
 
 /// The selected star record for the supplied campaign's save.
 pub fn capture_live_star(world: &World) -> Result<StarDesc, StarError> {
-    star::capture_star(world.catalog(), world.star_pointer())
+    star::capture_star(world.catalog(), world.current_star.map(|star| star.0))
 }
 
 /// Why the live solar-system location could not be prepared.

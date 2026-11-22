@@ -177,21 +177,16 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
                 .unwrap();
                 assert_eq!(selected, uqm_engine::StarId(0));
                 world.current_star = Some(selected);
-                let address = world.star_pointer();
-                assert_eq!(address, world.catalog().as_ptr().cast_mut());
                 let foreign = *world.selected_star().unwrap();
                 let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     world.identify_star(&foreign)
                 }));
                 assert!(rejected.is_err());
-                assert_eq!(world.star_pointer(), address);
+                assert_eq!(world.current_star, Some(selected));
             };
         };
     }
-    assert_eq!(
-        game.world.star_pointer(),
-        game.world.catalog().as_ptr().cast_mut()
-    );
+    assert_eq!(game.world.current_star, Some(uqm_engine::StarId(0)));
 }
 
 #[test]
@@ -629,10 +624,7 @@ fn instant_move_selects_a_star_with_the_retained_world() {
     catalog[0].star_pt = Point { x: 1752, y: 1450 };
     game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
     uqm_modes::front_end::uqmdebug::move_flagship(&mut game.world, (320, 240));
-    assert_eq!(
-        game.world.star_pointer(),
-        game.world.catalog().as_ptr().cast_mut()
-    );
+    assert_eq!(game.world.current_star, Some(uqm_engine::StarId(0)));
     assert_eq!(game.world.story_state(StoryKey::USED_BROADCASTER), 0);
     assert_eq!(game.world.activity() & IN_BATTLE, 0);
     assert_ne!(game.world.activity() & START_INTERPLANETARY, 0);

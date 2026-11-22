@@ -42,7 +42,6 @@ pub const TEMPLATES: usize = 6;
 pub const FLIGHT_KEYS: usize = 7;
 pub const MENU_KEYS: usize = 24;
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InputState {
     pub key: [[i32; FLIGHT_KEYS]; TEMPLATES],

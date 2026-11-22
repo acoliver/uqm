@@ -12,7 +12,6 @@ const INTRO: u8 = 32;
 const DONE: u8 = 64;
 const DISABLED: u8 = 128;
 
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct Sequence {
     alarm: u32,

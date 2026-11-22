@@ -183,7 +183,7 @@ impl BoundOutputDirectory {
             use std::os::unix::fs::OpenOptionsExt as _;
             let directory = fs::OpenOptions::new()
                 .read(true)
-                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+                .custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_DIRECTORY)
                 .open(path)
                 .map_err(|error| format!("open native-window output directory: {error}"))?;
             if !directory
@@ -231,7 +231,7 @@ impl BoundOutputDirectory {
         let descriptor = sys::fd::open_at(
             directory,
             &temporary,
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            sys::O_WRONLY | sys::O_CREAT | sys::O_EXCL | sys::O_CLOEXEC | sys::O_NOFOLLOW,
             0o600,
         )
         .map_err(|error| format!("create native-window {label} temporary: {error}"))?;
@@ -290,7 +290,7 @@ impl BoundOutputDirectory {
         let descriptor = sys::fd::open_at(
             self.directory.as_fd(),
             &name,
-            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            sys::O_RDONLY | sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_NONBLOCK,
             0,
         )
         .map_err(|error| format!("open native-window {label}: {error}"))?;
@@ -329,11 +329,6 @@ impl BoundOutputDirectory {
     }
 }
 
-/// Ident of the timeout timer on the wake's queue. The vnode watch uses the
-/// directory's file descriptor as its ident, which is never `usize::MAX`.
-#[cfg(target_os = "macos")]
-const TIMER_IDENT: libc::uintptr_t = libc::uintptr_t::MAX;
-
 /// Wakes a waiter when something is published into a [`BoundOutputDirectory`].
 ///
 /// Every publish renames a new file over the target, which replaces the file
@@ -346,9 +341,7 @@ const TIMER_IDENT: libc::uintptr_t = libc::uintptr_t::MAX;
 pub struct DirectoryChangeWake {
     changed: std::sync::atomic::AtomicBool,
     #[cfg(target_os = "macos")]
-    queue: std::os::fd::OwnedFd,
-    #[cfg(target_os = "macos")]
-    _directory: std::os::fd::OwnedFd,
+    watch: uqm_platform::macos::DirectoryWatch,
 }
 
 impl BoundOutputDirectory {
@@ -357,8 +350,14 @@ impl BoundOutputDirectory {
     pub(crate) fn change_wake(&self) -> Result<DirectoryChangeWake, String> {
         #[cfg(target_os = "macos")]
         {
-            self.change_wake_macos()
-                .map_err(|error| format!("create native-window change wake: {error}"))
+            use std::os::fd::AsFd as _;
+
+            let watch = uqm_platform::macos::DirectoryWatch::new(self.directory.as_fd())
+                .map_err(|error| format!("create native-window change wake: {error}"))?;
+            Ok(DirectoryChangeWake {
+                changed: std::sync::atomic::AtomicBool::new(true),
+                watch,
+            })
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -366,39 +365,6 @@ impl BoundOutputDirectory {
                 changed: std::sync::atomic::AtomicBool::new(true),
             })
         }
-    }
-
-    #[cfg(target_os = "macos")]
-    fn change_wake_macos(&self) -> std::io::Result<DirectoryChangeWake> {
-        use std::os::fd::{AsFd as _, AsRawFd as _};
-
-        let directory = sys::fd::open_at(
-            self.directory.as_fd(),
-            c".",
-            libc::O_RDONLY
-                | libc::O_DIRECTORY
-                | libc::O_NOFOLLOW
-                | libc::O_CLOEXEC
-                | libc::O_EVTONLY,
-            0,
-        )?;
-
-        let queue = uqm_platform::macos::critical_timer::create_queue()?;
-
-        let registration = libc::kevent {
-            ident: directory.as_raw_fd() as libc::uintptr_t,
-            filter: libc::EVFILT_VNODE,
-            flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
-            fflags: libc::NOTE_WRITE | libc::NOTE_EXTEND,
-            data: 0,
-            udata: std::ptr::null_mut(),
-        };
-        uqm_platform::macos::register_events(queue.as_fd(), &[registration])?;
-        Ok(DirectoryChangeWake {
-            changed: std::sync::atomic::AtomicBool::new(true),
-            queue,
-            _directory: directory,
-        })
     }
 }
 
@@ -422,21 +388,10 @@ impl DirectoryChangeWake {
     pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
         #[cfg(target_os = "macos")]
         {
-            use std::os::fd::AsFd as _;
-            use uqm_platform::macos::critical_timer::{timer_change, wait_for_event};
-
             if timeout.is_zero() {
                 return Ok(());
             }
-            // The timer rides on the directory's queue so one blocking call
-            // returns on whichever comes first, and it is a critical timer
-            // because a plain timeout is coalesced to ~16 ms steps on hosted
-            // runners. A one-shot timer that outlives a wake won by the
-            // directory is re-armed by the next wait; if it fires first it
-            // can only end a later wait early, and callers re-read and
-            // re-validate after every wake.
-            let event = wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, timeout)])?;
-            if event == Some(libc::EVFILT_VNODE) {
+            if self.watch.wait(timeout)? {
                 self.changed
                     .store(true, std::sync::atomic::Ordering::Release);
             }
@@ -1333,7 +1288,7 @@ fn read_physical_relative_regular_nofollow_bounded(
         sys::fd::open_at(
             directory.as_fd(),
             &name,
-            flags | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            flags | sys::O_CLOEXEC | sys::O_NOFOLLOW,
             0,
         )
         .map(fs::File::from)
@@ -1341,7 +1296,7 @@ fn read_physical_relative_regular_nofollow_bounded(
 
     let root_file = fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_DIRECTORY)
         .open(root)?;
     if !root_file.metadata()?.is_dir() {
         return Err(std::io::Error::other("root is not a directory"));
@@ -1361,12 +1316,12 @@ fn read_physical_relative_regular_nofollow_bounded(
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "path is empty"))?;
     let mut directory = root_file;
     for name in directories {
-        directory = open_at(&directory, name, libc::O_RDONLY | libc::O_DIRECTORY)?;
+        directory = open_at(&directory, name, sys::O_RDONLY | sys::O_DIRECTORY)?;
         if !directory.metadata()?.is_dir() {
             return Err(std::io::Error::other("path component is not a directory"));
         }
     }
-    let file = open_at(&directory, filename, libc::O_RDONLY)?;
+    let file = open_at(&directory, filename, sys::O_RDONLY)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         return Err(std::io::Error::other("path is not a regular file"));
@@ -2221,7 +2176,7 @@ fn collect_inventory(
         sys::fd::open_at(
             directory.as_fd(),
             &name,
-            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            sys::O_RDONLY | sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_NONBLOCK,
             0,
         )
         .map(fs::File::from)
@@ -2245,7 +2200,7 @@ fn collect_inventory(
 
     let directory = fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_DIRECTORY)
         .open(root)
         .map_err(|_| NativeWindowProofError::Receipt)?;
     let mut pending = vec![(directory, PathBuf::new())];
@@ -4931,7 +4886,7 @@ mod tests {
         );
         let mut observer_after_term = observer_successful_exit.clone();
         observer_after_term.child.exit_code = None;
-        observer_after_term.child.signal = Some(libc::SIGTERM);
+        observer_after_term.child.signal = Some(sys::SIGTERM);
         observer_after_term.child.term_sent = true;
         assert!(
             validate_native_acceptance_failure_bundle(root.path(), &observer_after_term).is_ok()
@@ -5588,7 +5543,6 @@ mod tests {
     #[cfg(target_os = "macos")]
     mod change_wake {
         use super::*;
-        use std::os::fd::AsFd as _;
         use std::time::{Duration, Instant};
 
         fn publish(bound: &BoundOutputDirectory) {
@@ -5693,16 +5647,6 @@ mod tests {
             let started = Instant::now();
             wake.wait(Duration::from_secs(10)).unwrap();
             assert!(started.elapsed() < Duration::from_secs(5));
-        }
-
-        #[test]
-        fn descriptors_do_not_survive_an_exec() {
-            let root = tempfile::tempdir().unwrap();
-            let bound = BoundOutputDirectory::open(root.path()).unwrap();
-            let wake = bound.change_wake().unwrap();
-            for descriptor in [&wake.queue, &wake._directory] {
-                assert!(sys::fd::is_close_on_exec(descriptor.as_fd()).unwrap());
-            }
         }
     }
 

@@ -27,7 +27,6 @@ use uqm_engine::world::generation::{Body, SolarSnapshot};
 // ===========================================================================
 
 /// Snapshot of real interplanetary navigation state.
-#[repr(C)]
 #[derive(Default)]
 pub(crate) struct NavigationSnapshot {
     pub(crate) active: i32,

@@ -1,11 +1,15 @@
-//! macOS-only OS services: the window list and kqueue registration.
+//! macOS-only OS services: the window list, kqueue registration and directory
+//! change watches.
 
 use std::ffi::c_void;
 use std::io;
 use std::os::fd::{AsRawFd as _, BorrowedFd};
 
 pub mod critical_timer;
+mod directory_watch;
 pub mod sandbox;
+
+pub use directory_watch::DirectoryWatch;
 
 type CfArrayRef = *const c_void;
 type CfDictionaryRef = *const c_void;
@@ -185,7 +189,7 @@ unsafe fn dictionary_i64(dictionary: CfDictionaryRef, key: *const c_void) -> Opt
 /// # Errors
 ///
 /// Returns the OS error from `kevent`, for example `EBADF`.
-pub fn register_events(queue: BorrowedFd<'_>, changes: &[libc::kevent]) -> io::Result<()> {
+pub(crate) fn register_events(queue: BorrowedFd<'_>, changes: &[libc::kevent]) -> io::Result<()> {
     let count = libc::c_int::try_from(changes.len())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "too many kevent changes"))?;
     // SAFETY: changes is a valid slice of change records, no event list is

@@ -548,8 +548,7 @@ coverage_capture = ["uqm::comm::races"]
 "complexity|loc|uqm::automation::star_flight::<StarFlight>::observe" = 132
 "complexity|loc|uqm::mainloop::options::build_command" = 245
 "complexity|loc|uqm::target::uqm-gameplay-proof::build_gallery" = 83
-"ffi|extern_c_fn|uqm-platform::uqm-platform" = 1
-"ffi|extern_c_fn|uqm::automation" = 1
+"ffi|extern_c_fn|uqm-platform::uqm-platform" = 2
 "ffi|foreign_items|uqm-platform::uqm-platform" = 22
 "ffi|raw_pointer_parameters|uqm-platform::uqm-platform" = 1
 "ffi|raw_pointer_parameters|uqm::savegame" = 2
@@ -588,4 +587,5 @@ coverage_capture = ["uqm::comm::races"]
 [moved]
 "uqm-engine::observe::@file" = "uqm-engine::observe_port::@file"
 "uqm-engine::observe::Io" = "uqm-engine::observe_port::ObservationIo"
+"uqm::automation::interrupt::record_signal" = "uqm-platform::os::signal::record_signal"
 "uqm::automation::native_isolation" = "uqm-engine::platform::macos::sandbox"

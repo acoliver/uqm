@@ -6,13 +6,8 @@
 //! same targeted stop-and-reap path it uses for every other failure.
 
 use std::io;
-use std::sync::atomic::{AtomicI32, Ordering};
 
-/// The signal that interrupted this process, or zero.
-///
-/// Written only by the signal handler, which may use nothing but an atomic
-/// store.
-static INTERRUPTED: AtomicI32 = AtomicI32::new(0);
+use uqm_platform::os::{self as sys, signal};
 
 /// Why interruption handling could not be established.
 #[derive(Debug)]
@@ -33,14 +28,6 @@ impl std::fmt::Display for InterruptError {
 
 impl std::error::Error for InterruptError {}
 
-/// The signal handler.
-///
-/// Async-signal-safety is the whole constraint here: this does one relaxed
-/// atomic store and nothing else. No allocation, no formatting, no locks.
-extern "C" fn record_signal(signal: libc::c_int) {
-    INTERRUPTED.store(signal, Ordering::SeqCst);
-}
-
 /// Record `SIGINT` and `SIGTERM` rather than dying on them.
 ///
 /// Idempotent, and safe to call before any child exists: the flag is only
@@ -50,24 +37,19 @@ extern "C" fn record_signal(signal: libc::c_int) {
 ///
 /// Returns the first signal whose disposition could not be installed.
 pub fn install() -> Result<(), InterruptError> {
-    for signal in [libc::SIGINT, libc::SIGTERM] {
-        install_one(signal)?;
+    for number in [sys::SIGINT, sys::SIGTERM] {
+        signal::record(number).map_err(|error| InterruptError {
+            signal: number,
+            error,
+        })?;
     }
     Ok(())
-}
-
-fn install_one(signal: libc::c_int) -> Result<(), InterruptError> {
-    uqm_platform::os::signal::install_handler(signal, record_signal)
-        .map_err(|error| InterruptError { signal, error })
 }
 
 /// The signal that interrupted this process, if one has arrived.
 #[must_use]
 pub fn interrupted() -> Option<i32> {
-    match INTERRUPTED.load(Ordering::SeqCst) {
-        0 => None,
-        signal => Some(signal),
-    }
+    signal::recorded()
 }
 
 /// Forget any recorded interruption.
@@ -75,7 +57,7 @@ pub fn interrupted() -> Option<i32> {
 /// Exists so a test can assert the transition rather than inheriting state
 /// from whatever ran before it.
 pub fn clear() {
-    INTERRUPTED.store(0, Ordering::SeqCst);
+    signal::clear_recorded();
 }
 
 /// The error a run reports when it stops because it was interrupted.
@@ -97,8 +79,8 @@ mod tests {
         install().expect("install interruption handling");
 
         // Without a handler this terminates the test process outright.
-        let own_pid = libc::pid_t::try_from(std::process::id()).unwrap();
-        uqm_platform::os::process::send_signal(own_pid, libc::SIGTERM).unwrap();
+        let own_pid = sys::Pid::try_from(std::process::id()).unwrap();
+        uqm_platform::os::process::send_signal(own_pid, sys::SIGTERM).unwrap();
 
         // Delivery to a process-directed signal may land on another thread, so
         // wait for the handler to have recorded it.
@@ -108,7 +90,7 @@ mod tests {
         }
         assert_eq!(
             interrupted(),
-            Some(libc::SIGTERM),
+            Some(sys::SIGTERM),
             "the run must survive to tear its child down"
         );
         clear();
@@ -116,9 +98,9 @@ mod tests {
 
     #[test]
     fn the_reported_error_names_the_signal() {
-        let error = interruption_error(libc::SIGINT);
+        let error = interruption_error(sys::SIGINT);
         let text = error.to_string();
-        assert!(text.contains(&libc::SIGINT.to_string()));
+        assert!(text.contains(&sys::SIGINT.to_string()));
         assert!(text.contains("tearing down"));
     }
 }

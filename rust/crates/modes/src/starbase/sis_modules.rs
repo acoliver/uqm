@@ -265,7 +265,6 @@ pub(crate) fn fuel_bar_at(
 mod tests {
     use super::*;
     use crate::comm::locdata::{CGameState, CSisState};
-    use std::mem::offset_of;
 
     fn slots_with(entries: &[(usize, ModuleType)]) -> ModuleSlots {
         let mut raw = [EMPTY_MODULE_SLOT; NUM_MODULE_SLOTS];
@@ -302,14 +301,9 @@ mod tests {
 
     #[test]
     fn slot_and_module_counts_match_the_c_state_mirror() {
-        assert_eq!(
-            offset_of!(CSisState, drive_slots) - offset_of!(CSisState, module_slots),
-            NUM_MODULE_SLOTS
-        );
-        assert_eq!(
-            offset_of!(CGameState, element_worth) - offset_of!(CGameState, module_cost),
-            NUM_MODULES
-        );
+        let sis = CSisState::default();
+        assert_eq!(sis.module_slots.len(), NUM_MODULE_SLOTS);
+        assert_eq!(CGameState::default().module_cost.len(), NUM_MODULES);
     }
 
     #[test]

@@ -97,7 +97,7 @@ impl TryFrom<u8> for NestedGroupOperation {
             b'+' => Ok(Self::Register),
             b'?' => Ok(Self::Query),
             b'-' => Ok(Self::Unregister),
-            _ => Err(io::Error::from_raw_os_error(libc::EPROTO)),
+            _ => Err(io::Error::from_raw_os_error(sys::EPROTO)),
         }
     }
 }
@@ -107,7 +107,7 @@ impl TryFrom<u8> for NestedGroupOperation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NestedGroupRequest {
     pub operation: NestedGroupOperation,
-    pub pid: libc::pid_t,
+    pub pid: sys::Pid,
     /// Chosen by the requester and echoed in the reply, so a reply that
     /// belongs to another exchange is detected rather than mistaken for this one.
     pub nonce: u64,
@@ -231,11 +231,7 @@ impl NestedGroupProtocol {
     ///
     /// The I/O path uses deadline-bounded `clock_gettime`, `poll`, `read`, and
     /// `write` calls, so a stalled monitor cannot block `pre_exec` indefinitely.
-    pub fn exchange(
-        self,
-        operation: NestedGroupOperation,
-        pid: libc::pid_t,
-    ) -> io::Result<libc::pid_t> {
+    pub fn exchange(self, operation: NestedGroupOperation, pid: sys::Pid) -> io::Result<sys::Pid> {
         self.exchange_with_timeout(operation, pid, std::time::Duration::from_secs(5))
     }
 
@@ -249,19 +245,19 @@ impl NestedGroupProtocol {
     pub fn exchange_with_timeout(
         self,
         operation: NestedGroupOperation,
-        pid: libc::pid_t,
+        pid: sys::Pid,
         timeout: std::time::Duration,
-    ) -> io::Result<libc::pid_t> {
+    ) -> io::Result<sys::Pid> {
         self.exchange_with_limits(operation, pid, timeout, REPLY_HARD_LIMIT)
     }
 
     fn exchange_with_limits(
         self,
         operation: NestedGroupOperation,
-        pid: libc::pid_t,
+        pid: sys::Pid,
         timeout: std::time::Duration,
         reply_hard_limit: std::time::Duration,
-    ) -> io::Result<libc::pid_t> {
+    ) -> io::Result<sys::Pid> {
         let started = monotonic_millis()?;
         let budget = duration_millis(timeout);
         let deadline = started.saturating_add(budget);
@@ -325,11 +321,11 @@ fn default_io_deadline() -> io::Result<u64> {
 fn exchange_locked_until(
     registration_fd: RawFd,
     operation: NestedGroupOperation,
-    pid: libc::pid_t,
+    pid: sys::Pid,
     nonce: u64,
     deadline: u64,
     reply_hard_limit_millis: u64,
-) -> io::Result<libc::pid_t> {
+) -> io::Result<sys::Pid> {
     let mut request = [0_u8; NESTED_GROUP_REQUEST_LEN];
     request[0] = operation as u8;
     request[4..8].copy_from_slice(&pid.to_ne_bytes());
@@ -367,10 +363,10 @@ fn exchange_locked_until(
         || status != 0
         || (operation != NestedGroupOperation::Unregister && anchor_pid <= 0)
     {
-        return Err(io::Error::from_raw_os_error(libc::EPROTO));
+        return Err(io::Error::from_raw_os_error(sys::EPROTO));
     }
     if monotonic_millis()? >= deadline {
-        return Err(io::Error::from_raw_os_error(libc::ETIMEDOUT));
+        return Err(io::Error::from_raw_os_error(sys::ETIMEDOUT));
     }
     Ok(anchor_pid)
 }
@@ -381,7 +377,7 @@ pub fn read_nested_group_request(fd: RawFd) -> io::Result<NestedGroupRequest> {
     let mut request = [0_u8; NESTED_GROUP_REQUEST_LEN];
     sys::fd::read_exact_until(fd, &mut request, default_io_deadline()?)?;
     if request[1..4] != [0; 3] {
-        return Err(io::Error::from_raw_os_error(libc::EPROTO));
+        return Err(io::Error::from_raw_os_error(sys::EPROTO));
     }
     Ok(NestedGroupRequest {
         operation: NestedGroupOperation::try_from(request[0])?,
@@ -404,8 +400,8 @@ pub fn read_nested_group_request(fd: RawFd) -> io::Result<NestedGroupRequest> {
 pub fn write_nested_group_response(
     fd: RawFd,
     status: i32,
-    pid: libc::pid_t,
-    anchor: libc::pid_t,
+    pid: sys::Pid,
+    anchor: sys::Pid,
     nonce: u64,
 ) -> io::Result<()> {
     let mut response = [0_u8; NESTED_GROUP_RESPONSE_LEN];
@@ -1004,10 +1000,8 @@ mod os {
         // of microseconds, and four bytes of padding.
         const START_TIMEVAL_LEN: usize = 16;
 
-        let record = sys::process::kernel_process_record(
-            libc::pid_t::try_from(pid).ok()?,
-            START_TIMEVAL_LEN,
-        )?;
+        let record =
+            sys::process::kernel_process_record(sys::Pid::try_from(pid).ok()?, START_TIMEVAL_LEN)?;
         let seconds = i64::from_ne_bytes(record[0..8].try_into().ok()?);
         let microseconds = i32::from_ne_bytes(record[8..12].try_into().ok()?);
         u64::try_from(seconds)
@@ -1280,17 +1274,16 @@ mod os {
         identity: &ProcessIdentity,
         grace: Duration,
     ) -> Result<StaleProcessScan, ChildSessionError> {
-        let pid =
-            libc::pid_t::try_from(identity.pid).map_err(|_| ChildSessionError::RunLockIo {
-                path: PathBuf::from("<process table>"),
-                operation: "convert recorded pid",
-                error: io::Error::new(ErrorKind::InvalidInput, "PID does not fit pid_t"),
-            })?;
+        let pid = sys::Pid::try_from(identity.pid).map_err(|_| ChildSessionError::RunLockIo {
+            path: PathBuf::from("<process table>"),
+            operation: "convert recorded pid",
+            error: io::Error::new(ErrorKind::InvalidInput, "PID does not fit pid_t"),
+        })?;
         let mut term_sent = false;
         let mut kill_sent = false;
         for (signal, sent) in [
-            (libc::SIGTERM, &mut term_sent),
-            (libc::SIGKILL, &mut kill_sent),
+            (sys::SIGTERM, &mut term_sent),
+            (sys::SIGKILL, &mut kill_sent),
         ] {
             if recorded_process_state(identity)? != Some(true) {
                 break;
@@ -1563,7 +1556,7 @@ mod os {
     }
 
     fn process_exists(pid: u32) -> io::Result<bool> {
-        let pid = libc::pid_t::try_from(pid)
+        let pid = sys::Pid::try_from(pid)
             .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "PID does not fit pid_t"))?;
         sys::process::exists(pid)
     }
@@ -1818,8 +1811,8 @@ mod os {
 
     #[derive(Debug)]
     pub(super) struct LeaderAnchor {
-        pid: libc::pid_t,
-        monitor_anchor_pid: Option<libc::pid_t>,
+        pid: sys::Pid,
+        monitor_anchor_pid: Option<sys::Pid>,
         observed: bool,
         reaped: bool,
     }
@@ -1827,10 +1820,10 @@ mod os {
     impl LeaderAnchor {
         pub(super) fn new(
             pid: u32,
-            monitor_anchor_pid: Option<libc::pid_t>,
+            monitor_anchor_pid: Option<sys::Pid>,
         ) -> Result<Self, ChildSessionError> {
             Ok(Self {
-                pid: libc::pid_t::try_from(pid).map_err(|_| {
+                pid: sys::Pid::try_from(pid).map_err(|_| {
                     ChildSessionError::Wait(io::Error::other("child PID does not fit pid_t"))
                 })?,
                 monitor_anchor_pid,
@@ -1857,7 +1850,7 @@ mod os {
                 // kernel about this process; ECHILD is the same answer from
                 // waitid. Reporting it as an observer failure displaces the
                 // failure the caller was actually trying to record.
-                Err(error) if error.raw_os_error() == Some(libc::ECHILD) => self.observed = true,
+                Err(error) if error.raw_os_error() == Some(sys::ECHILD) => self.observed = true,
                 Err(error) => return Err(error),
             }
             Ok(self.observed)
@@ -1877,7 +1870,7 @@ mod os {
             Ok(())
         }
 
-        fn ignored_group_members(&self) -> [libc::pid_t; 2] {
+        fn ignored_group_members(&self) -> [sys::Pid; 2] {
             [self.pid, self.monitor_anchor_pid.unwrap_or(0)]
         }
     }
@@ -1891,7 +1884,7 @@ mod os {
     /// record answers both questions and carries the PID, so a record that does
     /// not describe the requested process is rejected rather than trusted.
     #[cfg(target_os = "macos")]
-    fn macos_process_group_and_state(pid: libc::pid_t) -> Option<(i32, bool)> {
+    fn macos_process_group_and_state(pid: sys::Pid) -> Option<(i32, bool)> {
         // Offsets within the record: kp_proc.p_stat, kp_proc.p_pid, and
         // kp_eproc.e_pgid.
         const STATE_OFFSET: usize = 36;
@@ -1915,8 +1908,8 @@ mod os {
     #[cfg(target_os = "macos")]
     fn process_group_member(
         process_group: u32,
-        ignored: &[libc::pid_t],
-    ) -> io::Result<Option<libc::pid_t>> {
+        ignored: &[sys::Pid],
+    ) -> io::Result<Option<sys::Pid>> {
         let group = i32::try_from(process_group)
             .map_err(|_| io::Error::other("process group does not fit c_int"))?;
         for pid in sys::process::process_group_pids(process_group)?
@@ -1937,7 +1930,7 @@ mod os {
 
     #[cfg(target_os = "macos")]
     #[cfg(test)]
-    pub(super) fn macos_group_and_state(pid: libc::pid_t) -> Option<(i32, bool)> {
+    pub(super) fn macos_group_and_state(pid: sys::Pid) -> Option<(i32, bool)> {
         macos_process_group_and_state(pid)
     }
 
@@ -1955,8 +1948,8 @@ mod os {
     #[cfg(target_os = "linux")]
     fn process_group_member(
         process_group: u32,
-        ignored: &[libc::pid_t],
-    ) -> io::Result<Option<libc::pid_t>> {
+        ignored: &[sys::Pid],
+    ) -> io::Result<Option<sys::Pid>> {
         for entry in std::fs::read_dir("/proc")? {
             let entry = entry?;
             let Some(pid) = entry
@@ -1976,7 +1969,7 @@ mod os {
                 continue;
             };
             if linux_stat_is_live_group_member(&stat, process_group) {
-                return Ok(Some(pid as libc::pid_t));
+                return Ok(Some(pid as sys::Pid));
             }
         }
         Ok(None)
@@ -1984,12 +1977,12 @@ mod os {
 
     fn process_group_has_other_members(
         process_group: u32,
-        ignored: &[libc::pid_t],
+        ignored: &[sys::Pid],
     ) -> io::Result<bool> {
         process_group_member(process_group, ignored).map(|member| member.is_some())
     }
 
-    fn signal_process_group(anchor: &LeaderAnchor, signal: libc::c_int) -> io::Result<()> {
+    fn signal_process_group(anchor: &LeaderAnchor, signal: std::ffi::c_int) -> io::Result<()> {
         assert!(
             anchor.permits_group_operation(),
             "process-group signal requires an unreaped leader anchor"
@@ -2280,8 +2273,8 @@ mod os {
                 };
                 sys::process::start_new_process_group()?;
                 protocol.make_inheritable()?;
-                let pid = libc::pid_t::try_from(std::process::id())
-                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?;
+                let pid = sys::Pid::try_from(std::process::id())
+                    .map_err(|_| io::Error::from_raw_os_error(sys::EOVERFLOW))?;
                 protocol.exchange_with_timeout(
                     NestedGroupOperation::Register,
                     pid,
@@ -2297,7 +2290,7 @@ mod os {
             let mut child = super::spawn_guarded(&mut command).map_err(ChildSessionError::Spawn)?;
             let pid = child.id();
             let monitor_anchor_pid = match protocol {
-                Some(protocol) => match libc::pid_t::try_from(pid)
+                Some(protocol) => match sys::Pid::try_from(pid)
                     .map_err(|_| io::Error::other("child PID does not fit pid_t"))
                     .and_then(|pid| {
                         protocol.exchange_with_timeout(
@@ -2584,7 +2577,7 @@ mod os {
 
             let mut term_sent = false;
             self.record_group_signal(
-                libc::SIGTERM,
+                sys::SIGTERM,
                 &mut term_sent,
                 &mut failure,
                 &mut cleanup_diagnostics,
@@ -2594,7 +2587,7 @@ mod os {
             let mut kill_sent = false;
             if !group_empty {
                 self.record_group_signal(
-                    libc::SIGKILL,
+                    sys::SIGKILL,
                     &mut kill_sent,
                     &mut failure,
                     &mut cleanup_diagnostics,
@@ -2718,7 +2711,7 @@ mod os {
             }
             match signal_process_group(&self.anchor, signal) {
                 Ok(()) => Ok(true),
-                Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(false),
+                Err(error) if error.raw_os_error() == Some(sys::ESRCH) => Ok(false),
                 Err(error) => Err(ChildSessionError::Signal {
                     pid: self.identity.pid,
                     signal,
@@ -2728,7 +2721,7 @@ mod os {
         }
     }
 
-    fn group_wait_exhausted_detail(anchor: &LeaderAnchor, member: Option<libc::pid_t>) -> String {
+    fn group_wait_exhausted_detail(anchor: &LeaderAnchor, member: Option<sys::Pid>) -> String {
         format!(
             "group {} cleanup grace exhausted: leader_observed={}, live_member={member:?}, ignored={:?}",
             anchor.pid, anchor.observed, anchor.ignored_group_members()
@@ -2805,7 +2798,7 @@ mod os {
         mut inspect_group: F,
     ) -> Result<(), ChildSessionError>
     where
-        F: FnMut(u32, &[libc::pid_t]) -> io::Result<bool>,
+        F: FnMut(u32, &[sys::Pid]) -> io::Result<bool>,
     {
         let process_group = u32::try_from(anchor.pid).unwrap_or(0);
         let ignored = anchor.ignored_group_members();
@@ -2814,7 +2807,7 @@ mod os {
         match anchor.observe() {
             Ok(_) if anchor.observed => match inspect_group(process_group, &ignored) {
                 Ok(has_others) => group_empty = !has_others,
-                Err(error) if error.raw_os_error() == Some(libc::ESRCH) => group_empty = true,
+                Err(error) if error.raw_os_error() == Some(sys::ESRCH) => group_empty = true,
                 Err(error) => {
                     remember_first_failure(&mut failure, ChildSessionError::ProcessGroup(error));
                 }
@@ -2825,13 +2818,13 @@ mod os {
             }
         }
         if !group_empty {
-            if let Err(error) = signal_process_group(anchor, libc::SIGTERM) {
-                if error.raw_os_error() != Some(libc::ESRCH) {
+            if let Err(error) = signal_process_group(anchor, sys::SIGTERM) {
+                if error.raw_os_error() != Some(sys::ESRCH) {
                     remember_first_failure(
                         &mut failure,
                         ChildSessionError::Signal {
                             pid: process_group,
-                            signal: libc::SIGTERM,
+                            signal: sys::SIGTERM,
                             error,
                         },
                     );
@@ -2852,13 +2845,13 @@ mod os {
             };
         }
         if !group_empty {
-            if let Err(error) = signal_process_group(anchor, libc::SIGKILL) {
-                if error.raw_os_error() != Some(libc::ESRCH) {
+            if let Err(error) = signal_process_group(anchor, sys::SIGKILL) {
+                if error.raw_os_error() != Some(sys::ESRCH) {
                     remember_first_failure(
                         &mut failure,
                         ChildSessionError::Signal {
                             pid: process_group,
-                            signal: libc::SIGKILL,
+                            signal: sys::SIGKILL,
                             error,
                         },
                     );
@@ -2920,12 +2913,12 @@ mod os {
     fn wait_for_partial_group<F>(
         anchor: &mut LeaderAnchor,
         process_group: u32,
-        ignored: &[libc::pid_t],
+        ignored: &[sys::Pid],
         duration: Duration,
         inspect_group: &mut F,
     ) -> io::Result<bool>
     where
-        F: FnMut(u32, &[libc::pid_t]) -> io::Result<bool>,
+        F: FnMut(u32, &[sys::Pid]) -> io::Result<bool>,
     {
         let deadline = Instant::now()
             .checked_add(duration)
@@ -2936,7 +2929,7 @@ mod os {
                 match inspect_group(process_group, ignored) {
                     Ok(false) => return Ok(true),
                     Ok(true) => {}
-                    Err(error) if error.raw_os_error() == Some(libc::ESRCH) => return Ok(true),
+                    Err(error) if error.raw_os_error() == Some(sys::ESRCH) => return Ok(true),
                     Err(error) => return Err(error),
                 }
             }
@@ -3434,7 +3427,7 @@ mod os {
                 kill_sent: true,
             });
             let mut cleanup_diagnostics = Vec::new();
-            let inspection = io::Error::from_raw_os_error(libc::EACCES);
+            let inspection = io::Error::from_raw_os_error(sys::EACCES);
             let expected = format!("ProcessGroup({inspection:?})");
             let group_empty = record_group_wait_result(
                 Err(ChildSessionError::ProcessGroup(inspection)),
@@ -3449,7 +3442,7 @@ mod os {
             );
 
             let outcome = WaitOutcome {
-                status: ExitStatus::from_raw(libc::SIGKILL),
+                status: ExitStatus::from_raw(sys::SIGKILL),
                 term_sent: true,
                 kill_sent: true,
                 group_empty,
@@ -3470,7 +3463,7 @@ mod os {
             let receipt = receipt_from(&identity, &outcome, &drained(), &drained(), group_empty);
             assert!(!receipt.orphan_check_passed);
             assert!(receipt.output_drained);
-            assert_eq!(receipt.signal, Some(libc::SIGKILL));
+            assert_eq!(receipt.signal, Some(sys::SIGKILL));
             assert_eq!(
                 receipt.cleanup_diagnostics.as_slice(),
                 std::slice::from_ref(&expected)
@@ -3519,7 +3512,7 @@ mod os {
         fn cleanup_diagnostics_do_not_replace_the_first_cleanup_error() {
             let mut failure = None;
             let mut diagnostics = Vec::new();
-            for errno in [libc::EACCES, libc::ESRCH] {
+            for errno in [sys::EACCES, sys::ESRCH] {
                 remember_cleanup_failure(
                     &mut failure,
                     &mut diagnostics,
@@ -3528,7 +3521,7 @@ mod os {
             }
             assert!(
                 matches!(failure, Some(ChildSessionError::ProcessGroup(ref error))
-                if error.raw_os_error() == Some(libc::EACCES))
+                if error.raw_os_error() == Some(sys::EACCES))
             );
             assert_eq!(diagnostics.len(), 2);
         }
@@ -3572,9 +3565,9 @@ mod tests {
         let mut child = std::process::Command::new("/usr/bin/true")
             .spawn()
             .expect("spawn immediate-exit child");
-        let child_pid = libc::pid_t::try_from(child.id()).expect("child pid");
+        let child_pid = sys::Pid::try_from(child.id()).expect("child pid");
         let (own_group, _) =
-            super::os::macos_group_and_state(libc::pid_t::try_from(std::process::id()).unwrap())
+            super::os::macos_group_and_state(sys::Pid::try_from(std::process::id()).unwrap())
                 .expect("record for this process");
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -3619,7 +3612,7 @@ mod tests {
                 std::time::Duration::from_millis(1),
             )
             .unwrap_err();
-        assert_eq!(error.raw_os_error(), Some(libc::ETIMEDOUT));
+        assert_eq!(error.raw_os_error(), Some(sys::ETIMEDOUT));
     }
 
     /// A containment monitor that answers on a socketpair, with the first
@@ -3722,7 +3715,7 @@ mod tests {
             first
                 .expect_err("the first exchange outlived its budget")
                 .raw_os_error(),
-            Some(libc::ETIMEDOUT)
+            Some(sys::ETIMEDOUT)
         );
         let anchor = protocol
             .exchange_with_timeout(
@@ -3748,7 +3741,7 @@ mod tests {
                 std::time::Duration::from_millis(50),
             )
             .expect_err("the monitor never answered within the hard limit");
-        assert_eq!(error.raw_os_error(), Some(libc::ETIMEDOUT));
+        assert_eq!(error.raw_os_error(), Some(sys::ETIMEDOUT));
 
         // The abandoned request's reply now lands in front of the next one.
         monitor.release_first_reply.send(()).expect("release reply");
@@ -4358,7 +4351,7 @@ mod os_tests {
         assert!(
             matches!(
                 &error,
-                ChildSessionError::Spawn(source) if source.raw_os_error() == Some(libc::ETIMEDOUT)
+                ChildSessionError::Spawn(source) if source.raw_os_error() == Some(sys::ETIMEDOUT)
             ),
             "a stalled monitor must time out registration, got {error:?}"
         );
@@ -4574,7 +4567,7 @@ mod os_tests {
         let pid = child.id();
         // Observing leaves the child waitable, so its PID stays pinned while unreaped.
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while !sys::process::has_exited_without_reaping(libc::pid_t::try_from(pid).unwrap())
+        while !sys::process::has_exited_without_reaping(sys::Pid::try_from(pid).unwrap())
             .expect("observe child")
         {
             assert!(
@@ -4609,7 +4602,7 @@ mod os_tests {
         let pid = session.pid();
         drop(session);
         // After Drop, the child should be dead.
-        let alive = sys::process::exists(pid as libc::pid_t).expect("probe child");
+        let alive = sys::process::exists(pid as sys::Pid).expect("probe child");
         assert!(!alive, "child should be killed by Drop backstop");
         assert!(
             !dir.path().join(super::os::RUN_LOCK_RECORD_NAME).exists(),
@@ -4698,7 +4691,7 @@ mod os_tests {
 
         #[cfg(not(target_os = "linux"))]
         {
-            sys::process::exists(pid as libc::pid_t).unwrap_or(true)
+            sys::process::exists(pid as sys::Pid).unwrap_or(true)
         }
     }
 
@@ -4792,7 +4785,7 @@ mod os_tests {
             Duration::from_millis(50),
             None,
             None,
-            |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
+            |_, _| Err(std::io::Error::from_raw_os_error(sys::EIO)),
         )
         .expect_err("inspection failure must be retained");
         assert!(
@@ -4802,9 +4795,9 @@ mod os_tests {
     }
 
     fn assert_exact_child_reaped(pid: u32) {
-        let result = sys::process::has_exited_without_reaping(pid as libc::pid_t);
+        let result = sys::process::has_exited_without_reaping(pid as sys::Pid);
         assert!(
-            matches!(&result, Err(error) if error.raw_os_error() == Some(libc::ECHILD)),
+            matches!(&result, Err(error) if error.raw_os_error() == Some(sys::ECHILD)),
             "a reaped child is no longer waitable, got {result:?}"
         );
     }
@@ -4879,7 +4872,7 @@ mod os_tests {
             Duration::from_secs(30),
             None,
             None,
-            |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
+            |_, _| Err(std::io::Error::from_raw_os_error(sys::EIO)),
         )
         .expect_err("inspection failure must be retained");
         assert!(

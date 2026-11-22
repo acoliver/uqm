@@ -152,7 +152,6 @@ pub mod dinput {
     use crate::comm::ffi::rust_update_speech_graphics;
 
     // DoInput-compatible talking comm struct (matches C C_TALKING_STATE)
-    #[repr(C)]
     struct TalkingStateDInput {
         next_time: u32,
         wait_track: u16,
@@ -162,7 +161,6 @@ pub mod dinput {
     }
 
     // DoInput-compatible last-replay comm struct
-    #[repr(C)]
     struct LastReplayStateDInput {
         next_time: u32,
         time_out: u32,

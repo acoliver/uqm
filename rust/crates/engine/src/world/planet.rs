@@ -6,7 +6,6 @@ use crate::graphics::intersection::Stamp;
 pub type PlanetDesc = PlanetDescriptor;
 pub type NodeInfo = NodeRecord;
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ElementEntry {
     pub element_type: u8,
@@ -51,7 +50,6 @@ impl Default for PlanetFrame {
     }
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PlanetInfo {
     pub axial_tilt: i16,
@@ -91,7 +89,6 @@ impl Default for PlanetInfo {
     }
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SystemInfo {
     pub star_size: u8,
@@ -100,7 +97,6 @@ pub struct SystemInfo {
     pub planet_info: PlanetInfo,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct PlanetDescriptor {
     pub rand_seed: u32,
@@ -114,7 +110,6 @@ pub struct PlanetDescriptor {
     pub prev_desc: *mut PlanetDesc,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct NodeRecord {
     pub loc_pt: Point,

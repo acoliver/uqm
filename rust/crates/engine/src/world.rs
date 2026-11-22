@@ -260,13 +260,6 @@ impl World {
             .clone()
     }
 
-    /// Return the selected catalog address for legacy read-only callers.
-    pub fn star_pointer(&self) -> *mut CStarDesc {
-        self.selected_star().map_or(std::ptr::null_mut(), |star| {
-            std::ptr::from_ref(star).cast_mut()
-        })
-    }
-
     pub fn selected_star(&self) -> Option<&CStarDesc> {
         self.current_star.map(|id| &self.catalog()[id.0])
     }
@@ -338,7 +331,6 @@ pub const CATALOG_LEN: usize = NUM_SOLAR_SYSTEMS + 1 + (NUM_HYPER_VORTICES + 1) 
 /// `FUEL_TANK_SCALE` (`sis.h`): raw fuel points per displayed fuel unit.
 pub const FUEL_TANK_SCALE: u32 = 100;
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SisState {
     pub log_x: i32,
@@ -359,7 +351,6 @@ pub struct SisState {
 }
 
 /// C: `STAR_DESC` (planets.h).
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CStarDesc {
     pub star_pt: crate::graphics::geometry::Point,

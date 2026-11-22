@@ -195,7 +195,7 @@ fn get(game: &CGameState, offset: usize, len: usize) -> Vec<u8> {
     field.bytes
 }
 
-/// Offsets of the `GlSt` fields in `GAME_STATE`, from the C headers.
+/// Distinct keys for the `GlSt` fields of the record: their offsets in it.
 mod c_offset {
     use super::{offset_of, GameRecord};
     pub const GLOB_FLAGS: usize = offset_of!(GameRecord, glob_flags);

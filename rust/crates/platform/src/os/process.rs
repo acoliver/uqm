@@ -4,6 +4,8 @@ use std::io;
 use std::os::unix::process::CommandExt as _;
 use std::process::Command;
 
+use super::Pid;
+
 /// The real user ID of this process.
 #[must_use]
 pub fn real_user_id() -> u32 {
@@ -26,7 +28,7 @@ pub fn effective_user_id() -> u32 {
 /// # Errors
 ///
 /// Returns the OS error from `kill`, for example `ESRCH` or `EPERM`.
-pub fn send_signal(pid: libc::pid_t, signal: libc::c_int) -> io::Result<()> {
+pub fn send_signal(pid: Pid, signal: libc::c_int) -> io::Result<()> {
     // SAFETY: kill takes integers and never dereferences memory.
     if unsafe { libc::kill(pid, signal) } == -1 {
         return Err(io::Error::last_os_error());
@@ -39,7 +41,7 @@ pub fn send_signal(pid: libc::pid_t, signal: libc::c_int) -> io::Result<()> {
 /// # Errors
 ///
 /// Returns the OS error from `kill`, for example `ESRCH` for an empty group.
-pub fn send_signal_to_group(group: libc::pid_t, signal: libc::c_int) -> io::Result<()> {
+pub fn send_signal_to_group(group: Pid, signal: libc::c_int) -> io::Result<()> {
     send_signal(-group, signal)
 }
 
@@ -50,7 +52,7 @@ pub fn send_signal_to_group(group: libc::pid_t, signal: libc::c_int) -> io::Resu
 /// # Errors
 ///
 /// Returns the OS error from `kill` for any failure other than `ESRCH` and `EPERM`.
-pub fn exists(pid: libc::pid_t) -> io::Result<bool> {
+pub fn exists(pid: Pid) -> io::Result<bool> {
     match send_signal(pid, 0) {
         Ok(()) => Ok(true),
         Err(error) => match error.raw_os_error() {
@@ -100,7 +102,7 @@ pub fn start_new_session() -> io::Result<()> {
 ///
 /// Returns the OS error from `waitid`; `ECHILD` when `pid` is not a child of
 /// this process, or was already reaped.
-pub fn has_exited_without_reaping(pid: libc::pid_t) -> io::Result<bool> {
+pub fn has_exited_without_reaping(pid: Pid) -> io::Result<bool> {
     // SAFETY: siginfo_t is plain data for which all-zero is a valid value.
     let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
     // SAFETY: info is writable siginfo_t storage; WNOWAIT leaves the child waitable.
@@ -163,7 +165,7 @@ pub fn clock_ticks_per_second() -> Option<u64> {
 /// `None` means the kernel has no such record or it is shorter than expected.
 #[cfg(target_os = "macos")]
 #[must_use]
-pub fn kernel_process_record(pid: libc::pid_t, minimum_len: usize) -> Option<Vec<u8>> {
+pub fn kernel_process_record(pid: Pid, minimum_len: usize) -> Option<Vec<u8>> {
     let mut mib: [libc::c_int; 4] = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_PID, pid];
     let mut required: usize = 0;
     // SAFETY: mib names KERN_PROC_PID for one PID, and a null buffer with a
@@ -238,7 +240,7 @@ pub fn executable_path(pid: u32) -> io::Result<std::path::PathBuf> {
 /// The OS error from `proc_listpids`, or an error when the process table kept
 /// growing across every retry.
 #[cfg(target_os = "macos")]
-pub fn process_group_pids(group: u32) -> io::Result<Vec<libc::pid_t>> {
+pub fn process_group_pids(group: u32) -> io::Result<Vec<Pid>> {
     const PROC_PGRP_ONLY: u32 = 2;
     // Query and retry if the process table grows between calls.
     for _ in 0..3 {
@@ -250,11 +252,11 @@ pub fn process_group_pids(group: u32) -> io::Result<Vec<libc::pid_t>> {
         }
         let slots = usize::try_from(required)
             .ok()
-            .and_then(|bytes| bytes.checked_div(std::mem::size_of::<libc::pid_t>()))
+            .and_then(|bytes| bytes.checked_div(std::mem::size_of::<Pid>()))
             .and_then(|count| count.checked_add(16))
             .ok_or_else(|| io::Error::other("process-group member count overflow"))?;
-        let mut pids = vec![0 as libc::pid_t; slots];
-        let bytes = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>())
+        let mut pids = vec![0 as Pid; slots];
+        let bytes = i32::try_from(pids.len() * std::mem::size_of::<Pid>())
             .map_err(|_| io::Error::other("process-group buffer does not fit c_int"))?;
         // SAFETY: pids is writable for exactly bytes bytes.
         let written =
@@ -265,7 +267,7 @@ pub fn process_group_pids(group: u32) -> io::Result<Vec<libc::pid_t>> {
         if written < bytes {
             let count = usize::try_from(written)
                 .ok()
-                .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
+                .and_then(|value| value.checked_div(std::mem::size_of::<Pid>()))
                 .ok_or_else(|| io::Error::other("invalid process-group byte count"))?;
             pids.truncate(count);
             return Ok(pids);
@@ -289,8 +291,8 @@ mod tests {
             .unwrap()
     }
 
-    fn pid_of(child: &std::process::Child) -> libc::pid_t {
-        libc::pid_t::try_from(child.id()).unwrap()
+    fn pid_of(child: &std::process::Child) -> Pid {
+        Pid::try_from(child.id()).unwrap()
     }
 
     #[test]
@@ -434,8 +436,8 @@ mod tests {
     mod macos {
         use super::*;
 
-        fn current_pid() -> libc::pid_t {
-            libc::pid_t::try_from(std::process::id()).unwrap()
+        fn current_pid() -> Pid {
+            Pid::try_from(std::process::id()).unwrap()
         }
 
         #[test]
@@ -449,7 +451,7 @@ mod tests {
         #[test]
         fn a_record_shorter_than_requested_or_for_no_process_is_absent() {
             assert!(kernel_process_record(current_pid(), usize::MAX).is_none());
-            assert!(kernel_process_record(libc::pid_t::MAX, 44).is_none());
+            assert!(kernel_process_record(Pid::MAX, 44).is_none());
         }
 
         #[test]

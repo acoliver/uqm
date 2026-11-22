@@ -12,6 +12,7 @@ use crate::automation::error::AutomationError;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use uqm_platform::os as sys;
 
 /// Read a bounded regular file beneath a trusted directory without following
 /// symlinks in any relative component. Each directory is pinned by its descriptor.
@@ -29,7 +30,7 @@ pub fn read_regular_relative_nofollow(
 
     let mut directory = OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_DIRECTORY)
         .open(root)?;
     let components = relative.components().collect::<Vec<_>>();
     let (last, parents) = components
@@ -46,11 +47,11 @@ pub fn read_regular_relative_nofollow(
             ));
         };
         let name = CString::new(name.as_bytes())?;
-        let flags = libc::O_RDONLY
-            | libc::O_CLOEXEC
-            | libc::O_NOFOLLOW
-            | libc::O_NONBLOCK
-            | if is_directory { libc::O_DIRECTORY } else { 0 };
+        let flags = sys::O_RDONLY
+            | sys::O_CLOEXEC
+            | sys::O_NOFOLLOW
+            | sys::O_NONBLOCK
+            | if is_directory { sys::O_DIRECTORY } else { 0 };
         directory =
             uqm_platform::os::fd::open_at(directory.as_fd(), &name, flags, 0).map(File::from)?;
     }
@@ -167,7 +168,7 @@ pub fn final_name(label: &str, ext: &str) -> String {
 fn classify_sync_error(e: &std::io::Error) -> SyncSupport {
     // On Darwin, fsync on a directory fd returns EINVAL (unsupported).
     // We classify only this as Unsupported; all other errors are fatal.
-    if e.raw_os_error() == Some(libc::EINVAL) {
+    if e.raw_os_error() == Some(sys::EINVAL) {
         return SyncSupport::Unsupported;
     }
     let _ = e;

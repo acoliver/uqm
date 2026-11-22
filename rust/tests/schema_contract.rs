@@ -1,7 +1,7 @@
 //! Stable values shared by save files, input, rendering, ships and netplay.
 #![forbid(unsafe_code)]
 
-use std::mem::{offset_of, size_of};
+use std::mem::size_of;
 use uqm_engine::input_port::frames as input;
 use uqm_engine::species::ship;
 use uqm_engine::world::story::{GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES};
@@ -36,8 +36,9 @@ fn controller_keys_and_template_numbers_remain_stable() {
     assert_eq!(input::KEY_MENU_SELECT, 9);
     assert_eq!(input::KEY_MENU_CANCEL, 10);
     assert_eq!(input::KEY_MENU_ANY, 23);
-    assert_eq!(size_of::<input::InputState>(), 264);
-    assert_eq!(offset_of!(input::InputState, menu), 168);
+    let state = input::InputState::default();
+    assert_eq!(state.key.len(), input::TEMPLATES);
+    assert_eq!(state.menu.len(), input::MENU_KEYS);
 }
 
 #[test]
