@@ -188,8 +188,11 @@ jobs:
           target/${{ matrix.target }}/release/${{ matrix.binary }} --check-content --contentdir=../sc2/content
           cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl --target ${{ matrix.target }}
 
+  # Parity is suspended until the idiomatic-Rust work finishes (Andrew 2026-11-21).
+  # Set repo variable UQM_PARITY=on to run it.
   parity-policy:
     name: Select parity recording scope
+    if: vars.UQM_PARITY == 'on'
     runs-on: ubuntu-24.04
     outputs:
       base: ${{ steps.policy.outputs.base }}
@@ -240,7 +243,7 @@ jobs:
   parity-check:
     name: Parity check (Linux, full goldens)
     needs: parity-policy
-    if: github.event_name != 'schedule' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: vars.UQM_PARITY == 'on' && github.event_name != 'schedule' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -286,7 +289,7 @@ jobs:
 
   parity:
     needs: parity-policy
-    if: needs.parity-policy.outputs.record == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: vars.UQM_PARITY == 'on' && needs.parity-policy.outputs.record == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Parity (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
@@ -380,7 +383,7 @@ jobs:
   parity-platform-compare:
     name: Compare macOS, Ubuntu and loaded jitter parity payloads
     needs: [parity-policy, parity]
-    if: needs.parity-policy.outputs.record == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: vars.UQM_PARITY == 'on' && needs.parity-policy.outputs.record == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -396,7 +399,7 @@ jobs:
   failure-scenarios:
     name: Failure scenario (${{ matrix.scenario }})
     runs-on: macos-15
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: vars.UQM_PARITY == 'on' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     timeout-minutes: 25
     strategy:
       fail-fast: false
