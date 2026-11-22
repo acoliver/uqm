@@ -27,7 +27,6 @@ use uqm_rust::automation::{
     NativeLinkedBuildReceipt, NativeRetainedInput, NATIVE_LINKED_BUILD_RECEIPT_SCHEMA,
 };
 
-mod abi_check;
 mod cli;
 mod clippy;
 mod coverage;

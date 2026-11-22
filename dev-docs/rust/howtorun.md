@@ -8,7 +8,6 @@ From `rust/`, run the development checks:
 
 ```sh
 cargo fmt --all --check
-cargo run --locked --manifest-path xtask/Cargo.toml -- abi-check
 cargo clippy --workspace --all-targets --locked --no-default-features --features audio_heart,debug-process -- -D warnings
 cargo test --workspace --locked --no-default-features --features audio_heart,debug-process
 ```

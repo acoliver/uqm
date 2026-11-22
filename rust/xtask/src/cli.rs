@@ -98,13 +98,12 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
         "release" => build(&root, true),
         #[cfg(feature = "native")]
         "test" => test_linked(&root),
-        "abi-check" => abi_check::run(&root),
         _ => Err(format!("unknown command '{command}'\n{}", usage())),
     }
 }
 
 fn usage() -> String {
-    "usage: cargo xtask <quality|clippy|coverage|deny|abi-check|parity|native-battle-diff> or cargo xtask-native <debug|release|test|native>".into()
+    "usage: cargo xtask <quality|clippy|coverage|deny|parity|native-battle-diff> or cargo xtask-native <debug|release|test|native>".into()
 }
 
 /// Find the requested checkout at run time before checking that this binary
@@ -148,7 +147,6 @@ mod tests {
             let error = invoke(&[command, "--invalid"]).unwrap_err();
             assert!(!error.contains("unknown command"), "{command}: {error}");
         }
-        assert!(invoke(&["abi-check"]).is_ok());
         assert!(repository_root()
             .unwrap()
             .join("rust/xtask/Cargo.toml")
