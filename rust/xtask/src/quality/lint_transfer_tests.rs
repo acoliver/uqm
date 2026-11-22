@@ -29,7 +29,7 @@ fn landed_moves_keep_test_only_lint_credits_until_every_host_migrates() {
         .into(),
         ..Default::default()
     };
-    baseline.retire_moves(&measurement);
+    baseline.retire_moves(&measurement, None);
     assert_eq!(baseline.moved.get(old).map(String::as_str), Some(new));
     baseline
         .tighten(
@@ -55,7 +55,7 @@ fn landed_moves_keep_test_only_lint_credits_until_every_host_migrates() {
         .unwrap();
     assert_eq!(baseline.moved, BTreeMap::new());
     baseline.moved.insert(old.into(), new.into());
-    baseline.retire_moves(&measurement);
+    baseline.retire_moves(&measurement, None);
     assert!(baseline.moved.is_empty());
 }
 
@@ -711,4 +711,47 @@ fn landed_lint_history_does_not_permit_missing_targets_or_retained_sources() {
             previous
         );
     }
+}
+
+#[test]
+fn tightening_keeps_an_alias_while_the_comparison_base_lint_bank_uses_it() {
+    let old = "uqm-engine::input";
+    let new = "uqm-engine::input_port";
+    let old_key = "clippy::undocumented_unsafe_blocks|uqm-engine::@path::src::input::tests.rs";
+    let new_key = "clippy::undocumented_unsafe_blocks|uqm-engine::@path::src::input_port::tests.rs";
+    let measurement = Measurement {
+        findings: vec![Finding {
+            counter: "loc".into(),
+            metric: "loc".into(),
+            identity: format!("{new}::@file"),
+            file: "crates/engine/src/input_port/mod.rs".into(),
+            package: "uqm-engine".into(),
+            subsystem: "input".into(),
+            value: 1,
+        }],
+        ..Default::default()
+    };
+    let entries: BTreeMap<String, u64> = [(format!("loc|loc|{new}::@file"), 1)].into();
+    let mut main = Baseline {
+        entries: entries.clone(),
+        moved: [(old.into(), new.into())].into(),
+        lint: [("macos".into(), [(old_key.into(), 49)].into())].into(),
+        ..Default::default()
+    };
+    let mut branch = Baseline {
+        entries,
+        moved: main.moved.clone(),
+        lint: [("macos".into(), [(new_key.into(), 49)].into())].into(),
+        ..Default::default()
+    };
+    branch.retire_moves(&measurement, Some(&main));
+    branch.tighten(&measurement, Some(&main)).unwrap();
+    assert_eq!(branch.moved.get(old).map(String::as_str), Some(new));
+    super::tool::compare(&branch.lint["macos"], &main.lint["macos"], &branch.moved).unwrap();
+    // Once main's own bank is rekeyed nothing needs the alias any more.
+    main.lint
+        .insert("macos".into(), [(new_key.into(), 49)].into());
+    branch.retire_moves(&measurement, Some(&main));
+    branch.tighten(&measurement, Some(&main)).unwrap();
+    assert!(branch.moved.is_empty());
 }
