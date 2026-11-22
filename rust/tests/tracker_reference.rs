@@ -10,7 +10,7 @@ fn fixture(name: &str, extension: &str) -> Vec<u8> {
             .join("tests/fixtures/tracker")
             .join(format!("{name}.{extension}")),
     )
-    .unwrap()
+    .unwrap_or_else(|error| panic!("read tracker fixture: {error}"))
 }
 
 fn decoder(name: &str) -> ModDecoder {
@@ -18,7 +18,7 @@ fn decoder(name: &str) -> ModDecoder {
     assert!(decoder.init());
     decoder
         .open_from_bytes(&fixture(name, "mod"), name)
-        .unwrap();
+        .unwrap_or_else(|error| panic!("open tracker module: {error}"));
     decoder
 }
 

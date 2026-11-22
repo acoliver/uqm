@@ -40,7 +40,9 @@ fn prepared(state: NetState) -> NetplaySession {
     let session = NetplaySession::with_net(LoopbackNet::default());
     assert!(session.open_player_network_connection(0, &mut |_| panic!("open failed")));
     {
-        let mut conn = session.connection_mut(0).unwrap();
+        let mut conn = session
+            .connection_mut(0)
+            .unwrap_or_else(|| panic!("player 0 connection is open"));
         conn.state = state;
         conn.flags.connected = true;
     }
@@ -50,7 +52,13 @@ fn dispatch(session: &NetplaySession, packet: Packet) -> Result<(), Rejected> {
     session.dispatch(0, &packet, &mut |_| {})
 }
 fn queued_type(session: &NetplaySession) -> usize {
-    session.connection(0).unwrap().queue.front().unwrap().kind()
+    session
+        .connection(0)
+        .unwrap_or_else(|| panic!("player 0 connection is open"))
+        .queue
+        .front()
+        .unwrap_or_else(|| panic!("a packet is queued"))
+        .kind()
 }
 fn exchange(sender: &NetplaySession, receiver: &NetplaySession) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
@@ -66,13 +74,13 @@ fn exchange(sender: &NetplaySession, receiver: &NetplaySession) {
     let mut wire = Vec::new();
     sender
         .connection_mut(0)
-        .unwrap()
+        .unwrap_or_else(|| panic!("sender connection is open"))
         .queue
         .flush(|bytes| {
             wire.extend_from_slice(bytes);
             Ok(bytes.len())
         })
-        .unwrap();
+        .unwrap_or_else(|error| panic!("flush sender queue: {error}"));
     writer
         .write_all(&wire)
         .unwrap_or_else(|error| panic!("write: {error}"));
@@ -81,7 +89,8 @@ fn exchange(sender: &NetplaySession, receiver: &NetplaySession) {
         .read_exact(&mut received)
         .unwrap_or_else(|error| panic!("read: {error}"));
     while !received.is_empty() {
-        let (packet, count) = Packet::decode(&received).unwrap();
+        let (packet, count) =
+            Packet::decode(&received).unwrap_or_else(|error| panic!("decode packet: {error:?}"));
         assert_eq!(dispatch(receiver, packet), Ok(()));
         received.drain(..count);
     }
@@ -355,7 +364,9 @@ fn scripted(state: NetState, reads: Vec<Vec<u8>>) -> (NetplaySession, Rc<RefCell
     let session = NetplaySession::with_net(ScriptNet(script.clone()));
     assert!(session.open_player_network_connection(0, &mut |_| panic!("open failed")));
     {
-        let mut conn = session.connection_mut(0).unwrap();
+        let mut conn = session
+            .connection_mut(0)
+            .unwrap_or_else(|| panic!("player 0 connection is open"));
         conn.state = state;
         conn.flags.connected = true;
     }

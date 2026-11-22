@@ -82,10 +82,12 @@ fn current_star_is_a_catalog_identity_and_foreign_pointers_are_rejected() {
         .world
         .identify_star(&game.world.catalog()[CATALOG_LEN - 1]);
     game.world.current_star = Some(selected);
-    assert_eq!(
-        game.world.star_pointer(),
-        std::ptr::from_ref(&game.world.catalog()[CATALOG_LEN - 1]).cast_mut()
-    );
+    assert!(std::ptr::eq(
+        game.world
+            .selected_star()
+            .unwrap_or_else(|| panic!("a star is selected")),
+        &game.world.catalog()[CATALOG_LEN - 1]
+    ));
     let selected = game.world.current_star;
     let foreign = star;
     let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

@@ -48,7 +48,7 @@ impl Alphabet {
         };
         let count = result.upper.len().min(result.lower.len());
         if result.upper.len() != result.lower.len() {
-            uqm_engine::log_abi::log_message(3, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({count})"));
+            uqm_engine::log_abi::log_message(uqm_engine::logging::LogLevel::Warning, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({count})"));
         }
         result.upper.truncate(count);
         result.lower.truncate(count);

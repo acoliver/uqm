@@ -61,7 +61,7 @@ fn fixture(files: &[(&str, &str)], names: Option<&[String]>, defs_only: bool) ->
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     }
-    let mut walker = Walker::new(root.path().into(), names, defs_only);
+    let mut walker = Walker::new(root.path().into(), names, defs_only).unwrap();
     walker.context = Context {
         package: "uqm".into(),
         module: "uqm".into(),
@@ -252,7 +252,7 @@ fn cfg_test_expressions_do_not_inflate_complexity_or_unsafe_lines() {
 #[test]
 fn stale_macro_registry_is_an_error() {
     let root = tempfile::tempdir().unwrap();
-    let walker = Walker::new(root.path().into(), None, false);
+    let walker = Walker::new(root.path().into(), None, false).unwrap();
     assert!(walker
         .finish(true)
         .unwrap_err()
@@ -837,7 +837,7 @@ fn moved_handoff_calls_keep_existing_bridge_accounting() {
     assert_eq!(measured.report("owner_projections", None).unwrap(), 1);
 
     let root = tempfile::tempdir().unwrap();
-    let mut walker = Walker::new(root.path().into(), None, false);
+    let mut walker = Walker::new(root.path().into(), None, false).unwrap();
     walker.context.package = "uqm-engine".into();
     assert!(walker.is_bridge_call("crate::handoff::publish"));
     walker.context.package = "uqm".into();

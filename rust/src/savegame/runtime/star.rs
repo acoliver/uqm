@@ -6,19 +6,19 @@
 //! FindStar (NULL, &SD.star_pt, 0, 0)`, which is the catalog entry at exactly
 //! that point or NULL when there is none.
 //!
-//! The pointer itself is a C global and the catalog is `starmap_array`
-//! (`planets::tables`), a Rust table that the C global `star_array` points at. This module reads them as borrowed data: `catalog` is the
-//! live table (`CATALOG_LEN` entries, both sentinels included), `current` is
-//! `CurStarDescPtr`. Capture requires the pointer to lie in that table, so the
-//! chunk always names a real catalog entry. Restore does not move the player:
-//! it checks the saved descriptor against the catalog as `FindStar` would and
-//! says which entry (or NULL) the game must point at; assigning
-//! `CurStarDescPtr`, and everything a new system needs (the solar-system
-//! state, the system's orbits), stays with the solar-system owner.
+//! The world owns the catalog (`starmap_array`, `planets::tables`) and the
+//! selected entry, `CurStarDescPtr` in the original, as a catalog index. This
+//! module reads them as borrowed data: `catalog` is the live table
+//! (`CATALOG_LEN` entries, both sentinels included) and `current` is the
+//! selected index. Capture requires the index to name an entry of that table,
+//! so the chunk always names a real catalog entry. Restore does not move the
+//! player: it checks the saved descriptor against the catalog as `FindStar`
+//! would and says which entry (or none) the game must select; selecting it,
+//! and everything a new system needs (the solar-system state, the system's
+//! orbits), stays with the solar-system owner.
 //!
-//! The wire form is 8 bytes (`StarDesc`); the runtime form is a pointer to a
-//! catalog entry of the same 8 bytes (`CStarDesc`). They are different types
-//! on purpose.
+//! The wire form is 8 bytes (`StarDesc`); the runtime form is a catalog entry
+//! (`CStarDesc`). They are different types on purpose.
 //!
 //! Where this differs from the C code on purpose: `LoadGame` took whatever
 //! `FindStar` returned, so a saved descriptor whose point matched a star but
@@ -40,17 +40,12 @@ pub use uqm_engine::world::NUM_SOLAR_SYSTEMS;
 
 pub use uqm_engine::world::CStarDesc;
 
-const _: () = {
-    assert!(std::mem::size_of::<CStarDesc>() == 8);
-    assert!(std::mem::align_of::<CStarDesc>() == 2);
-};
-
 /// Why the star section could not be captured or checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StarError {
     /// The catalog is not `CATALOG_LEN` entries.
     WrongCatalogLength { found: usize },
-    /// `CurStarDescPtr` points outside the catalog or between its entries.
+    /// The selected star is not an entry of the catalog.
     CurrentOutsideCatalog,
     /// No catalog entry sits at the saved point and the descriptor is not the
     /// all-zero NULL one.
@@ -89,15 +84,13 @@ fn wire(star: &CStarDesc) -> StarDesc {
     }
 }
 
-/// The "Star" chunk of a save made while `current` is `CurStarDescPtr`.
+/// The "Star" chunk of a save made while `current` is the selected catalog
+/// entry, `CurStarDescPtr` in the original.
 ///
-/// NULL gives the all-zero descriptor, as `SaveGame`'s `memset` does.
-pub fn capture_star(
-    catalog: &[CStarDesc],
-    current: *const CStarDesc,
-) -> Result<StarDesc, StarError> {
+/// No selection gives the all-zero descriptor, as `SaveGame`'s `memset` does.
+pub fn capture_star(catalog: &[CStarDesc], current: Option<usize>) -> Result<StarDesc, StarError> {
     check_catalog(catalog)?;
-    if current.is_null() {
+    let Some(index) = current else {
         return Ok(StarDesc {
             star_pt: Point { x: 0, y: 0 },
             star_type: 0,
@@ -105,23 +98,11 @@ pub fn capture_star(
             prefix: 0,
             postfix: 0,
         });
-    }
-    Ok(wire(&catalog[catalog_index(catalog, current)?]))
-}
-
-/// `CurStarDescPtr - star_array`: the position of `current` in `catalog`.
-/// Only addresses are compared; nothing is dereferenced. A NULL pointer, or
-/// one that is not exactly an entry of the table, is
-/// [`StarError::CurrentOutsideCatalog`].
-pub fn catalog_index(catalog: &[CStarDesc], current: *const CStarDesc) -> Result<usize, StarError> {
-    check_catalog(catalog)?;
-    let start = catalog.as_ptr() as usize;
-    let offset = (current as usize).wrapping_sub(start);
-    let entry = std::mem::size_of::<CStarDesc>();
-    if offset >= CATALOG_LEN * entry || !offset.is_multiple_of(entry) {
-        return Err(StarError::CurrentOutsideCatalog);
-    }
-    Ok(offset / entry)
+    };
+    catalog
+        .get(index)
+        .map(wire)
+        .ok_or(StarError::CurrentOutsideCatalog)
 }
 
 /// `FindStar (NULL, &point, 0, 0)` (starmap.c): the index of the catalog entry

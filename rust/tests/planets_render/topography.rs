@@ -393,7 +393,9 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_engine::math::Random
                 factor: case.factor,
             };
             let palette = (!case.missing).then_some(TopographyPalette {
-                translation: translation[6..].try_into().unwrap(),
+                translation: translation[6..]
+                    .try_into()
+                    .unwrap_or_else(|error| panic!("translation table holds the palette: {error}")),
                 colors: &colors,
                 planet_type: planet.type_,
                 base_elevation: planet.base_elevation,
@@ -407,7 +409,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_engine::math::Random
                 case.height,
                 palette,
             )
-            .unwrap();
+            .unwrap_or_else(|error| panic!("render topography: {error:?}"));
             let actual = ram.result(mode);
             let trace = take_trace();
             let mut record = (actual.len() as u32).to_le_bytes().to_vec();
@@ -442,7 +444,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_engine::math::Random
                     case.height,
                     owned.as_ref().map(SurfacePalette::view),
                 )
-                .unwrap();
+                .unwrap_or_else(|error| panic!("render native topography: {error:?}"));
                 assert_eq!(
                     ram.result(mode),
                     actual,

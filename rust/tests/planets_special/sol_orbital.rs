@@ -19,7 +19,8 @@ impl Ops for Harness {
         match case.body {
             Body::Planet(planet) => self.state.sys.planets[usize::from(planet)] = desc,
             Body::Moon { planet, moon } => {
-                self.state.sys.planets[usize::from(planet)] = parent.unwrap();
+                self.state.sys.planets[usize::from(planet)] =
+                    parent.unwrap_or_else(|| panic!("a moon has a parent planet"));
                 self.state.sys.moons[usize::from(moon)] = desc;
             }
         }

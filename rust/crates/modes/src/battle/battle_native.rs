@@ -384,7 +384,7 @@ pub(crate) mod engine {
         }
         if controls[0] & NETWORK_CONTROL != 0 && controls[1] & NETWORK_CONTROL != 0 {
             uqm_engine::log_abi::log_message(
-                2,
+                uqm_engine::logging::LogLevel::Error,
                 "Only one side at a time can be network controlled.\n",
             );
             return 0;

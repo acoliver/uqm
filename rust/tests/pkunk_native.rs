@@ -194,10 +194,19 @@ impl<'a> Ship<'a> {
             .phoenix
             .unwrap_or_else(|| panic!("allocated phoenix"));
         self.inner.descriptor_mut().ship_info.crew_level = 0;
-        hooks::invoke_element(battle::get(phoenix).death_func.unwrap(), phoenix);
-        let explode = battle::get(self.id).death_func.unwrap();
+        hooks::invoke_element(
+            battle::get(phoenix)
+                .death_func
+                .unwrap_or_else(|| panic!("phoenix has a death hook")),
+            phoenix,
+        );
+        let explode = battle::get(self.id)
+            .death_func
+            .unwrap_or_else(|| panic!("Pkunk has a death hook"));
         hooks::invoke_element(explode, self.id);
-        battle::get(self.id).death_func.unwrap()
+        battle::get(self.id)
+            .death_func
+            .unwrap_or_else(|| panic!("Pkunk has a death hook"))
     }
 
     fn drain(&self) {
@@ -256,7 +265,7 @@ fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
 fn seed_with_first_roll(wanted: impl Fn(u32) -> bool) -> u32 {
     (1..100_000u32)
         .find(|&seed| wanted(rolls(seed, 1)[0]))
-        .expect("a seed with the wanted first draw")
+        .unwrap_or_else(|| panic!("a seed with the wanted first draw"))
 }
 
 fn odd_seed() -> u32 {

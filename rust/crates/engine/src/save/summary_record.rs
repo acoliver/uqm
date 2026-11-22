@@ -2,7 +2,6 @@
 use super::super::world::SisState;
 use uqm_save::Summary;
 
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SummaryDesc {
     pub sis: SisState,

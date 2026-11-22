@@ -54,7 +54,7 @@ pub fn check(h: &mut Harness) {
             .catalog()
             .iter()
             .position(|star| star.index == 1)
-            .unwrap();
+            .unwrap_or_else(|| panic!("Sol is in the star catalog"));
         cx.world.current_star = Some(uqm_engine::StarId(sol));
     });
     crate::battle_context::with(|cx| cx.world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0));
@@ -96,12 +96,12 @@ pub fn check(h: &mut Harness) {
             uqm_engine::state::ffi::with_state_files(cx.world, |files| {
                 files
                     .get_file(uqm_engine::world::state_file::DEFGRPINFO_FILE)
-                    .unwrap()
+                    .unwrap_or_else(|| panic!("the DEFGRPINFO state file exists"))
                     .contents()
                     .to_vec()
             })
         })
-        .unwrap()
+        .unwrap_or_else(|error| panic!("read DEFGRPINFO: {error}"))
     };
     let saved_file = file();
     assert!(saved_file.len() > probe_ref as usize);

@@ -4,8 +4,8 @@ use std::ffi::c_int;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub const LOG_WARNING: i32 = 3;
-const LOG_DEBUG: i32 = 5;
+use crate::logging::LogLevel;
+
 const MAX_LOG_ENTRY_SIZE: usize = 256;
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -13,7 +13,7 @@ static SHOW_BOX: AtomicBool = AtomicBool::new(true);
 static ERROR_BOX: AtomicBool = AtomicBool::new(true);
 
 /// Level at or below which messages are echoed to the output stream.
-const MAX_STREAM_LEVEL: i32 = LOG_DEBUG;
+const MAX_STREAM_LEVEL: LogLevel = LogLevel::Debug;
 
 pub fn log_init(_max_lines: c_int) {
     INITIALIZED.store(true, Ordering::Relaxed);
@@ -32,7 +32,7 @@ pub fn log_show_box(show: bool, err: bool) {
 
 /// Logs a formatted message at the game log threshold. Messages are dropped
 /// until `log_init` has initialized the output.
-pub fn log_message(level: c_int, message: &str) {
+pub fn log_message(level: LogLevel, message: &str) {
     if !INITIALIZED.load(Ordering::Relaxed) || level > MAX_STREAM_LEVEL {
         return;
     }

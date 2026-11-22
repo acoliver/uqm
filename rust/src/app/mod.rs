@@ -62,6 +62,5 @@ mod catalog_tests {
             &uqm_modes::planets::tables::STARMAP_ARRAY,
         ));
         assert!(app.game.world.selected_star().is_none());
-        assert!(app.game.world.star_pointer().is_null());
     }
 }

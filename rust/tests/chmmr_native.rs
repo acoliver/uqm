@@ -620,7 +620,12 @@ fn target(satellite: ElementId, dx: i16, dy: i16, hp: u16) -> PoolElement {
 }
 
 fn defense(satellite: ElementId) -> ElementId {
-    hooks::invoke_element(battle::get(satellite).postprocess_func.unwrap(), satellite);
+    hooks::invoke_element(
+        battle::get(satellite)
+            .postprocess_func
+            .unwrap_or_else(|| panic!("satellite has a postprocess hook")),
+        satellite,
+    );
     let h = battle::tail().unwrap_or_else(|| panic!("queued element"));
     assert_eq!(battle::get(h).target, Some(satellite));
     assert_eq!(battle::get(h).life, 0);
@@ -1112,7 +1117,9 @@ fn delayed_spawn(ship: &mut Ship<'_>) -> ElementId {
 }
 fn satellites(ship: &mut Ship<'_>) -> Vec<ElementId> {
     let delay = delayed_spawn(ship);
-    let death = battle::get(delay).death_func.unwrap();
+    let death = battle::get(delay)
+        .death_func
+        .unwrap_or_else(|| panic!("delayed spawn has a death hook"));
     battle_context::unlink(delay);
     battle_context::dispose(delay);
     let tail = battle::tail().unwrap_or_else(|| panic!("queued element"));

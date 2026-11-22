@@ -140,7 +140,7 @@ fn scene_star_lookup_uses_the_unpublished_world() {
     world.set_catalog(std::borrow::Cow::Owned(*catalog));
     let result = uqm_modes::comm::dispatch::place_flagship_at_star(&mut world, (1752, 1450));
     assert_eq!(result, Ok(()));
-    assert_eq!(world.star_pointer(), world.catalog().as_ptr().cast_mut());
+    assert_eq!(world.current_star, Some(uqm_engine::StarId(0)));
 }
 
 #[test]

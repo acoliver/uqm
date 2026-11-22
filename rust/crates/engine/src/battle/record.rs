@@ -6,19 +6,16 @@ use crate::strings::owned_table::EntryRef;
 #[cfg(test)]
 use crate::World as WorldOwner;
 
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct ElementVisual {
     pub location: Point,
     pub image: ElementImage,
 }
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct ElementImage {
     pub frame: crate::battle::frames::FrameSelection,
     pub frames: crate::battle::frames::Frames,
 }
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct ElementRecord {
     pub preprocess_func: Option<crate::battle::hooks::ElementHook>,
@@ -43,7 +40,6 @@ pub struct ElementRecord {
     pub intersect_frame: crate::battle::frames::FrameSelection,
 }
 
-#[repr(C)]
 #[derive(Debug, Default)]
 pub struct ShipRecord {
     pub species_id: u32,
@@ -66,7 +62,6 @@ pub struct ShipRecord {
     pub control: u8,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SoundSampleRecord {
     _unused: [u8; 0],
@@ -74,7 +69,6 @@ pub struct SoundSampleRecord {
 
 pub type MusicSampleRef = *mut *mut SoundSampleRecord;
 
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct CaptainRecord {
     pub captain_rsc: ResourceKey,
@@ -85,14 +79,12 @@ pub struct CaptainRecord {
     pub special: crate::battle::frames::FrameSelection,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct IntelRecord {
     pub maneuverability_index: u16,
     pub weapon_range: u16,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CharacteristicRecord {
     pub max_thrust: u16,
@@ -108,7 +100,6 @@ pub struct CharacteristicRecord {
     pub ship_mass: u8,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ShipInfoRecord {
     pub ship_flags: u16,
@@ -125,14 +116,12 @@ pub struct ShipInfoRecord {
     pub melee_icon: FrameId,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FleetRecord {
     pub strength: u16,
     pub known_loc: Point,
 }
 
-#[repr(C)]
 #[derive(Debug)]
 pub struct DataRecord {
     pub ship_rsc: [ResourceKey; 3usize],
@@ -699,7 +688,6 @@ impl RaceDescriptor {
     }
 }
 
-#[repr(C)]
 #[repr(align(16))]
 #[derive(Debug)]
 pub struct RaceDescriptor {

@@ -12,7 +12,7 @@ pub fn check(h: &mut Harness) {
     let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../sc2/content")
         .canonicalize()
-        .unwrap();
+        .unwrap_or_else(|error| panic!("canonical content directory: {error}"));
     c_api::log_init(100);
     let mount = uqm_engine::test_support::native_session::ContentMount::new(&content);
     let Some(dir) = uqm_engine::io::content_dir() else {
@@ -35,7 +35,7 @@ pub fn check(h: &mut Harness) {
     let before_tint = frame_rgb(raw);
     let earth = earth
         .into_definition(MAP_WIDTH as i16, MAP_HEIGHT as i16)
-        .unwrap();
+        .unwrap_or_else(|error| panic!("normalize Earth's definition: {error}"));
     assert_eq!(
         (
             native_probe::frame_bounds(earth.first_frame()).0.width,
@@ -84,7 +84,9 @@ pub fn check(h: &mut Harness) {
     );
 
     let topography = sphere.topography();
-    let topo_frame = topography.frame(0).unwrap();
+    let topo_frame = topography
+        .frame(0)
+        .unwrap_or_else(|| panic!("topography has frame 0"));
     assert!(!topo_frame.is_null());
     assert_eq!(
         sphere.elevation().len(),
@@ -135,8 +137,8 @@ fn frame_rgb(frame: uqm_engine::graphics::drawable::FrameId) -> Vec<[u8; 3]> {
 }
 
 fn names(h: &mut Harness) {
-    let strings_owner =
-        uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.starcon").unwrap();
+    let strings_owner = uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.starcon")
+        .unwrap_or_else(|| panic!("text.starcon loads"));
     crate::battle_context::with(|cx| {
         assert!(cx.kernel.micro_font.is_none());
         cx.kernel.install_game_text(strings_owner);
@@ -154,7 +156,11 @@ fn names(h: &mut Harness) {
         let name = crate::battle_context::with(|cx| cx.world.data.flagship.planet_name);
         let name = std::ffi::CStr::from_bytes_until_nul(&name)
             .unwrap_or_else(|error| panic!("planet name: {error}"));
-        assert_eq!(name.to_str().unwrap(), expected);
+        assert_eq!(
+            name.to_str()
+                .unwrap_or_else(|error| panic!("planet name is UTF-8: {error}")),
+            expected
+        );
         assert_eq!(
             crate::battle_context::with(|cx| {
                 uqm_engine::state::game_state_keys::get_game_state(
@@ -178,9 +184,9 @@ fn names(h: &mut Harness) {
         let name = crate::battle_context::with(|cx| cx.world.data.flagship.planet_name);
         assert_eq!(
             std::ffi::CStr::from_bytes_until_nul(&name)
-                .unwrap()
+                .unwrap_or_else(|error| panic!("flagship planet name is terminated: {error}"))
                 .to_str()
-                .unwrap(),
+                .unwrap_or_else(|error| panic!("flagship planet name is UTF-8: {error}")),
             expected
         );
         assert_eq!(
@@ -304,7 +310,7 @@ fn indexed_rescale() {
     let height = MAP_HEIGHT / 2;
     let normalized = original
         .into_definition(width as i16, height as i16)
-        .unwrap();
+        .unwrap_or_else(|error| panic!("normalize the rescaled definition: {error}"));
     let mut actual = vec![0; usize::from(width) * usize::from(height)];
     uqm_engine::graphics::drawable::ContextFrame::retain(normalized.first_frame().at(1))
         .read_indexes(&mut actual, i32::from(width), i32::from(height));

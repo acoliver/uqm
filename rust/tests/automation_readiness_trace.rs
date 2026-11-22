@@ -33,8 +33,9 @@ const SCRIPT: &str = r#"{
 
 fn application_started(output_root: &Path) -> uqm_rust::app::Application {
     let document = parse_script(SCRIPT.as_bytes(), "readiness-trace.json")
-        .expect("the script fixture must parse");
-    let script = validate_script(document, "readiness-trace.json").expect("and must validate");
+        .unwrap_or_else(|error| panic!("the script fixture must parse: {error}"));
+    let script = validate_script(document, "readiness-trace.json")
+        .unwrap_or_else(|error| panic!("and must validate: {error}"));
     {
         let game = uqm_engine::Game::new();
         let input = uqm_engine::input::InputControls::default();

@@ -9,7 +9,6 @@ use std::ffi::c_int;
 /// producing repeat pulses inside that loop. Without this latch the loop
 /// reads those repeats as fresh presses, re-triggering its action and
 /// resetting its timeout indefinitely.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub(super) struct FreshPressLatch {
     armed: c_int,

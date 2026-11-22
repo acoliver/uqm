@@ -137,7 +137,9 @@ fn assert_rng_after(seed: u32, draws: usize) {
 
 fn collide(pulse: ElementId, target: ElementId) {
     hooks::invoke_collision(
-        battle::get(pulse).collision_func.unwrap(),
+        battle::get(pulse)
+            .collision_func
+            .unwrap_or_else(|| panic!("pulse has a collision hook")),
         pulse,
         &mut Point { x: 0, y: 0 },
         target,

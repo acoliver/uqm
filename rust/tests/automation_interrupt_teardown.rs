@@ -8,6 +8,7 @@
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use uqm_platform::os as sys;
 use uqm_rust::automation::child_session::{
     command_executable_digest, ChildSession, ChildSessionConfig,
 };
@@ -21,15 +22,16 @@ fn config(root: &std::path::Path, command: &Command) -> ChildSessionConfig {
         stderr_budget: 1 << 20,
         timeout: Duration::from_secs(30),
         grace: Duration::from_millis(500),
-        executable_digest: command_executable_digest(command).expect("shell digest"),
+        executable_digest: command_executable_digest(command)
+            .unwrap_or_else(|error| panic!("shell digest: {error}")),
     }
 }
 
 fn process_is_live(pid: u32) -> bool {
-    let Ok(pid) = libc::pid_t::try_from(pid) else {
+    let Ok(pid) = sys::Pid::try_from(pid) else {
         return false;
     };
-    uqm_platform::os::process::exists(pid).unwrap_or(false)
+    sys::process::exists(pid).unwrap_or(false)
 }
 
 #[test]
@@ -47,7 +49,7 @@ fn an_interrupted_supervisor_tears_down_the_process_it_supervises() {
     assert!(process_is_live(pid), "the child must be running");
 
     // The supervisor is interrupted mid-run.
-    uqm_platform::os::signal::raise(libc::SIGTERM).unwrap();
+    sys::signal::raise(sys::SIGTERM).unwrap();
 
     let started = Instant::now();
     let failure = session

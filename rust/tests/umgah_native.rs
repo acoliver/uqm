@@ -84,7 +84,9 @@ fn draws(seed: u32, n: usize) -> Vec<u32> {
 }
 
 fn seed_where(accept: impl Fn(&[u32]) -> bool) -> u32 {
-    (1..100_000).find(|&seed| accept(&draws(seed, 3))).unwrap()
+    (1..100_000)
+        .find(|&seed| accept(&draws(seed, 3)))
+        .unwrap_or_else(|| panic!("a suitable seed exists"))
 }
 
 fn with_rng<T>(seed: u32, used: usize, action: impl FnOnce() -> T) -> T {

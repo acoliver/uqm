@@ -161,8 +161,10 @@ pub fn retained_ovals_match_original_c_full_offscreen_buffers(
     // Standard tests require every full-buffer digest. A supplied original-C
     // capture adds a streaming byte-for-byte comparison without checking in or
     // duplicating the large capture.
-    let mut raw = std::env::var_os("UQM_OVAL_ORIGINAL_C_PIXELS")
-        .map(|path| std::fs::File::open(path).expect("read retained original-C pixels"));
+    let mut raw = std::env::var_os("UQM_OVAL_ORIGINAL_C_PIXELS").map(|path| {
+        std::fs::File::open(path)
+            .unwrap_or_else(|error| panic!("read retained original-C pixels: {error}"))
+    });
     let mut raw_digest = Sha256::new();
     let mut fixture = String::new();
     let mut compared_bytes = 0usize;
@@ -223,11 +225,11 @@ pub fn retained_ovals_match_original_c_full_offscreen_buffers(
                     );
                     let bytes = actual.as_flattened();
                     compared_bytes += bytes.len();
-                    writeln!(fixture, "{}x{} case{case} {x},{y},{width},{height} alpha{alpha} {mode:?} bytes{} {:x}", screen.0, screen.1, bytes.len(), Sha256::digest(bytes)).unwrap();
+                    let _ = writeln!(fixture, "{}x{} case{case} {x},{y},{width},{height} alpha{alpha} {mode:?} bytes{} {:x}", screen.0, screen.1, bytes.len(), Sha256::digest(bytes));
                     if let Some(raw) = raw.as_mut() {
                         let mut expected = vec![0; bytes.len()];
                         raw.read_exact(&mut expected)
-                            .expect("complete original-C buffer");
+                            .unwrap_or_else(|error| panic!("complete original-C buffer: {error}"));
                         raw_digest.update(&expected);
                         assert_eq!(bytes, expected, "retained renderer differs from original C: screen={screen:?} case={case} alpha={alpha} mode={mode:?}");
                     }
@@ -253,7 +255,12 @@ pub fn retained_ovals_match_original_c_full_offscreen_buffers(
         "exported Rust ABI differs from the retained original-C capture"
     );
     if let Some(mut raw) = raw {
-        assert_eq!(raw.read(&mut [0]).unwrap(), 0, "no extra original-C bytes");
+        assert_eq!(
+            raw.read(&mut [0])
+                .unwrap_or_else(|error| panic!("read original-C EOF: {error}")),
+            0,
+            "no extra original-C bytes"
+        );
         assert_eq!(
             format!("{:x}", raw_digest.finalize()),
             "2ef36aee9679faafb011be5e915bb5634637b6bd8ef7a5d1f6cd5091c34cc310"

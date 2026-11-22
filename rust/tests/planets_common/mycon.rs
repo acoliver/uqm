@@ -87,7 +87,7 @@ pub fn render(ops: &mut impl MyconOps) -> String {
                     let case = (size, color, seed);
                     let result = ops.layout(star, case, &mut planets);
                     // Debug includes every field, including null frame/parent handles.
-                    writeln!(out, "layout {star} {case:?} {result:?} {planets:?}").unwrap();
+                    let _ = writeln!(out, "layout {star} {case:?} {result:?} {planets:?}");
                 }
             }
         }
@@ -120,7 +120,7 @@ pub fn render(ops: &mut impl MyconOps) -> String {
                                         format!("{:?}", nodes[2]),
                                         format!("{:?}", fresh_node())
                                     );
-                                    writeln!(out, "scan {case:?} {result:?} {nodes:?}").unwrap();
+                                    let _ = writeln!(out, "scan {case:?} {result:?} {nodes:?}");
                                 }
                             }
                         }

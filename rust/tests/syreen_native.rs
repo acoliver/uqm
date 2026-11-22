@@ -219,7 +219,12 @@ fn queued_scan(ship: &mut Ship) -> (ElementId, uqm_engine::battle::ElementHook) 
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
     let scan = battle::tail().unwrap_or_else(|| panic!("queued scan"));
-    (scan, battle::get(scan).death_func.unwrap())
+    (
+        scan,
+        battle::get(scan)
+            .death_func
+            .unwrap_or_else(|| panic!("scan has a death hook")),
+    )
 }
 
 #[test]

@@ -10,6 +10,7 @@
 use std::process::Command;
 use std::time::Duration;
 
+use uqm_platform::os as sys;
 use uqm_rust::automation::child_session::{
     capture_identity, command_executable_digest, record_owned_process, ChildSession,
     ChildSessionConfig, StaleProcessScan,
@@ -29,12 +30,12 @@ fn config(root: &std::path::Path) -> ChildSessionConfig {
         timeout: Duration::from_secs(30),
         grace: Duration::from_millis(500),
         executable_digest: command_executable_digest(&Command::new("/bin/sh"))
-            .expect("shell digest"),
+            .unwrap_or_else(|error| panic!("shell digest: {error}")),
     }
 }
 
 fn process_is_live(pid: u32) -> bool {
-    let Ok(pid) = libc::pid_t::try_from(pid) else {
+    let Ok(pid) = sys::Pid::try_from(pid) else {
         return false;
     };
     uqm_platform::os::process::exists(pid).unwrap_or(false)
@@ -54,7 +55,7 @@ fn a_child_that_dies_by_signal_is_recorded_as_a_crash_not_an_exit() {
 
     assert_eq!(
         receipt.signal,
-        Some(libc::SIGSEGV),
+        Some(sys::SIGSEGV),
         "the terminating signal must be reported"
     );
     assert_eq!(

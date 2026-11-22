@@ -132,8 +132,7 @@ pub fn copy_state_bits_raw(dest: &mut [u8], target: usize, src: &[u8], begin: us
     }
 }
 
-/// Game state container with C-compatible bitfield layout.
-#[repr(C)]
+/// Game state bits, packed as the original `GAME_STATE` byte array.
 pub struct StoryState {
     bytes: [u8; NUM_GAME_STATE_BYTES],
 }

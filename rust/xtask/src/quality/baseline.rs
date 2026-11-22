@@ -410,7 +410,9 @@ fn transferred(
             }
             let source = format!(
                 "{}|{old}{}",
-                key.rsplit_once('|').unwrap().0,
+                key.rsplit_once('|')
+                    .ok_or_else(|| format!("debt key {key} has no identity"))?
+                    .0,
                 &id[new.len()..]
             );
             if current.contains_key(&source) {

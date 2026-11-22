@@ -12,12 +12,12 @@ use super::conversation::ConversationTable;
 use super::owned_table::{LoadedBinaryTable, LoadedTextTable};
 use crate::host::{FileStream, Files};
 use crate::io::Dir;
-use crate::log_abi::{log_message, LOG_WARNING};
+use crate::log_abi::log_message;
+use crate::logging::LogLevel;
 use std::io::Read;
 use std::path::Path;
 
 const MAX_STRINGS: usize = 2048;
-const LOG_INFO: i32 = 4;
 /// `CurrentLine` size in the original loader; longer lines are split.
 const LINE_SIZE: usize = 1024;
 
@@ -249,7 +249,7 @@ impl<T: LineSource> Companions<T> {
             Some(value) => self.timestamps.push_terminated(&[value]),
             None => {
                 log_message(
-                    LOG_WARNING,
+                    LogLevel::Warning,
                     &format!(
                         "Invalid timestamp data for '{}'.  Disabling timestamps",
                         String::from_utf8_lossy(name)
@@ -316,13 +316,13 @@ pub(super) fn load_conversation(path: &CStr) -> Option<ConversationTable> {
     let content = crate::io::content_dir()?;
     let Some((mut file, data_len)) = open_with_length(&content, phrases) else {
         log_message(
-            LOG_WARNING,
+            LogLevel::Warning,
             &format!("Warning: Can't open '{}'", String::from_utf8_lossy(phrases)),
         );
         return None;
     };
     log_message(
-        LOG_INFO,
+        LogLevel::Info,
         &format!(
             "\t'{}' -- conversation phrases -- {} bytes",
             String::from_utf8_lossy(phrases),
@@ -331,24 +331,24 @@ pub(super) fn load_conversation(path: &CStr) -> Option<ConversationTable> {
     );
     match clip_dir {
         Some(dir) => log_message(
-            LOG_INFO,
+            LogLevel::Info,
             &format!(
                 "\t'{}' -- voice clip directory",
                 String::from_utf8_lossy(dir)
             ),
         ),
-        None => log_message(LOG_INFO, "\tNo associated voice clips"),
+        None => log_message(LogLevel::Info, "\tNo associated voice clips"),
     }
     match ts_path {
         Some(ts) => log_message(
-            LOG_INFO,
+            LogLevel::Info,
             &format!("\t'{}' -- timestamps", String::from_utf8_lossy(ts)),
         ),
-        None => log_message(LOG_INFO, "\tNo associated timestamp file"),
+        None => log_message(LogLevel::Info, "\tNo associated timestamp file"),
     }
     if data_len == 0 {
         log_message(
-            LOG_WARNING,
+            LogLevel::Warning,
             &format!(
                 "Warning: Trying to load empty file '{}'.",
                 String::from_utf8_lossy(full)

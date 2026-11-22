@@ -148,7 +148,9 @@ fn check_drawable_ownership(h: &mut Harness) {
             assert!(both.0 > created.0 && both.1 > created.1);
             drop(scaled);
             assert_eq!(allocations(), created);
-            let normalized = definition.into_definition(map_width, map_height).unwrap();
+            let normalized = definition
+                .into_definition(map_width, map_height)
+                .unwrap_or_else(|error| panic!("normalize the definition: {error}"));
             assert_ne!(normalized.first_frame(), frame);
             let elevation = normalized.first_frame().at(1);
             assert_eq!(elevation.index(), 1);
@@ -162,7 +164,9 @@ fn check_drawable_ownership(h: &mut Harness) {
         let live = retained.first_frame();
         let (bounds, _) = native_probe::frame_bounds(live);
         assert_eq!((bounds.width, bounds.height), (map_width, map_height));
-        let owned = retained.into_drawable().unwrap();
+        let owned = retained
+            .into_drawable()
+            .unwrap_or_else(|| panic!("the retained drawable is owned"));
         assert_eq!(owned.lease().frame(0), Some(live));
         drop(owned);
         assert_eq!(

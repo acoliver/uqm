@@ -8,7 +8,7 @@ fn xtask_refuses_to_execute_against_another_checkout() {
     std::fs::write(other.path().join("rust/xtask/Cargo.toml"), "").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_uqm-xtask"))
         .current_dir(other.path())
-        .arg("abi-check")
+        .arg("quality")
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -23,7 +23,7 @@ fn xtask_refuses_a_foreign_target_for_child_builds() {
     let output = Command::new(env!("CARGO_BIN_EXE_uqm-xtask"))
         .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join(".."))
         .env("CARGO_TARGET_DIR", target.path())
-        .arg("abi-check")
+        .arg("quality")
         .output()
         .unwrap();
     assert!(!output.status.success());

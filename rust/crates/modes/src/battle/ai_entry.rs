@@ -63,7 +63,7 @@ pub(crate) fn computer_input(
         }
         Route::Unexpected => {
             uqm_engine::log_abi::log_message(
-                3,
+                uqm_engine::logging::LogLevel::Warning,
                 "Warning: Unexpected state in computer_intelligence().",
             );
             0

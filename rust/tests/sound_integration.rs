@@ -14,7 +14,7 @@ fn get_test_ogg_path() -> Option<PathBuf> {
     let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let content_path = project_root
         .parent()
-        .unwrap()
+        .unwrap_or_else(|| panic!("the crate directory has a parent"))
         .join("sc2/content/addons/3domusic/starbase.ogg");
 
     if content_path.exists() {

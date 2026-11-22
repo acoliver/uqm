@@ -11,7 +11,7 @@ use super::races::descriptor::{CommDescriptor, MAX_ANIMATIONS};
 use super::types::{CommData, TextAlign, TextValign};
 
 // ===========================================================================
-// C-compatible repr(C) types — mirror the C struct layout exactly
+// The original structure names, kept by the comm session
 // ===========================================================================
 
 /// C `Color` struct: { BYTE r, g, b, a } — 4 bytes.
@@ -21,28 +21,12 @@ pub use uqm_engine::graphics::geometry::Color as CColor;
 pub use uqm_engine::graphics::geometry::Point as CPoint;
 
 /// C `Rect` struct (units.h / comm.h).
-#[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct CRect {
     pub corner: CPoint,
     pub width: i16,
     pub height: i16,
 }
-
-const _: () = {
-    use uqm_engine::graphics::{geometry::Extent, geometry::Rect};
-    assert!(std::mem::size_of::<CRect>() == std::mem::size_of::<Rect>());
-    assert!(std::mem::align_of::<CRect>() == std::mem::align_of::<Rect>());
-    assert!(std::mem::offset_of!(CRect, corner) == std::mem::offset_of!(Rect, corner));
-    assert!(
-        std::mem::offset_of!(CRect, width)
-            == std::mem::offset_of!(Rect, extent) + std::mem::offset_of!(Extent, width)
-    );
-    assert!(
-        std::mem::offset_of!(CRect, height)
-            == std::mem::offset_of!(Rect, extent) + std::mem::offset_of!(Extent, height)
-    );
-};
 
 pub use uqm_engine::battle::schema::GameRecord as CGameState;
 pub use uqm_engine::world::SisState as CSisState;
@@ -170,19 +154,6 @@ mod tests {
             93
         );
         assert_eq!(session_view(&second).alien_ambient_array[12].block_mask, 0);
-    }
-
-    #[test]
-    fn retained_save_records_keep_their_abi_layout() {
-        assert_eq!(std::mem::size_of::<CSisState>(), 124);
-        assert_eq!(std::mem::offset_of!(CSisState, module_slots), 22);
-        assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
-        assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
-        // the retired display-array pointer no longer precedes the clock
-        assert_eq!(std::mem::size_of::<CGameState>(), 104);
-        assert_eq!(std::mem::offset_of!(CGameState, game_clock), 32);
-        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 48);
-        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 96);
     }
 
     #[test]

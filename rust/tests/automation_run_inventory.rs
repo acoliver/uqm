@@ -8,16 +8,17 @@
 use std::process::Command;
 use std::time::Duration;
 
+use uqm_platform::os as sys;
 use uqm_rust::automation::child_session::{
     command_executable_digest, ownership_artifacts, ChildSession, ChildSessionConfig, RunLock,
 };
 use uqm_rust::automation::inventory;
 
 fn process_is_live(pid: u32) -> bool {
-    let Ok(pid) = libc::pid_t::try_from(pid) else {
+    let Ok(pid) = sys::Pid::try_from(pid) else {
         return false;
     };
-    uqm_platform::os::process::exists(pid).unwrap_or(false)
+    sys::process::exists(pid).unwrap_or(false)
 }
 
 #[test]

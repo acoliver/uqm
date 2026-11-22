@@ -2824,7 +2824,7 @@ mod tests {
             let result = complete_run_with(&mut evidence, child_result, |evidence| {
                 finalize_config_with(evidence, write_config_snapshot_file, |path| {
                     if cleanup_fails {
-                        Err(std::io::Error::from_raw_os_error(libc::EACCES))
+                        Err(std::io::Error::from_raw_os_error(uqm_platform::os::EACCES))
                     } else {
                         fs::remove_dir_all(path)
                     }
@@ -2949,11 +2949,14 @@ mod tests {
                                 .open(path)
                                 .unwrap();
                             file.write_all(&bytes[..1]).unwrap();
-                            return Err(std::io::Error::from_raw_os_error(libc::ENOSPC).to_string());
+                            return Err(std::io::Error::from_raw_os_error(
+                                uqm_platform::os::ENOSPC,
+                            )
+                            .to_string());
                         }
                         write_config_snapshot_file(path, bytes)
                     },
-                    |_| Err(std::io::Error::from_raw_os_error(libc::EACCES)),
+                    |_| Err(std::io::Error::from_raw_os_error(uqm_platform::os::EACCES)),
                 )
             });
             let error = result.unwrap_err();

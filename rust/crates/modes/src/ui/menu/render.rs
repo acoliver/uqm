@@ -45,7 +45,7 @@ fn draw_pc_menu(
     context.fill_rectangle(INACTIVE_COLOR, *rect);
     if i16::from(count) * ITEM_HEIGHT > rect.extent.height {
         uqm_engine::log_abi::log_message(
-            uqm_engine::logging::LogLevel::Error as i32,
+            uqm_engine::logging::LogLevel::Error,
             "Warning, no room for all menu items!",
         );
     } else {

@@ -63,12 +63,7 @@ impl AudioFormat {
 ///
 /// Matches C `TFB_DecoderFormats` structure. Specifies which audio formats
 /// the decoder should use for output.
-///
-/// IMPORTANT: Field order MUST match C struct:
-///   bool big_endian; bool want_big_endian;
-///   uint32 mono8; uint32 stereo8; uint32 mono16; uint32 stereo16;
 #[derive(Debug, Clone, Copy)]
-#[repr(C)]
 pub struct DecoderFormats {
     /// Whether the audio is big-endian
     pub big_endian: bool,

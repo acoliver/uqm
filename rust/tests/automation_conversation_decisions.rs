@@ -31,11 +31,11 @@ const SCRIPT: &str = r#"{
 
 fn application_started() -> uqm_rust::app::Application {
     let document = parse_script(SCRIPT.as_bytes(), "conversation-decisions.json")
-        .expect("the script fixture must parse");
-    let script =
-        validate_script(document, "conversation-decisions.json").expect("and must validate");
+        .unwrap_or_else(|error| panic!("the script fixture must parse: {error}"));
+    let script = validate_script(document, "conversation-decisions.json")
+        .unwrap_or_else(|error| panic!("and must validate: {error}"));
     let output_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("conversation-decisions");
-    std::fs::create_dir_all(&output_root).expect("evidence root");
+    std::fs::create_dir_all(&output_root).unwrap_or_else(|error| panic!("evidence root: {error}"));
     {
         let game = uqm_engine::Game::new();
         let input = uqm_engine::input::InputControls::default();

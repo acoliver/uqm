@@ -3,7 +3,8 @@
 //! Decoding is strict: overlong forms and truncated sequences yield `0`
 //! after resynchronising on the next non-continuation byte.
 
-use crate::log_abi::{log_message, LOG_WARNING};
+use crate::log_abi::log_message;
+use crate::logging::LogLevel;
 use std::ffi::c_int;
 
 pub type UniChar = u32;
@@ -19,7 +20,7 @@ pub fn next_char(cursor: &mut &[u8]) -> UniChar {
         *cursor = cursor.get(1..).unwrap_or(&[]);
     }
     fn bad(cursor: &mut &[u8]) -> UniChar {
-        log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
+        log_message(LogLevel::Warning, "Warning: Invalid UTF8 sequence.");
         while byte(cursor) & 0xc0 == 0x80 {
             advance(cursor);
         }
@@ -114,7 +115,7 @@ pub fn utf8_character(bytes: &[u8]) -> Option<(UniChar, usize)> {
         value = (value << 6) | u32::from(byte & 0x3f);
     }
     if !valid || value < minimum {
-        log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
+        log_message(LogLevel::Warning, "Warning: Invalid UTF8 sequence.");
         return None;
     }
     Some((value, width))

@@ -313,7 +313,7 @@ impl BoundedNativeObserver {
         for log in ["stdout.log", "stderr.log"] {
             self.unlink_member(&supervision.join(log).into_os_string(), 0)?;
         }
-        self.unlink_member(&supervision.into_os_string(), libc::AT_REMOVEDIR)
+        self.unlink_member(&supervision.into_os_string(), sys::AT_REMOVEDIR)
     }
 
     fn next_path(
@@ -456,7 +456,7 @@ impl BoundedNativeObserver {
     fn unlink_member(
         &self,
         name: &std::ffi::OsStr,
-        flags: libc::c_int,
+        flags: std::ffi::c_int,
     ) -> Result<(), NativeWindowObserverError> {
         use std::os::fd::AsFd as _;
         use std::os::unix::ffi::OsStrExt as _;
@@ -510,7 +510,7 @@ fn read_bounded_regular(path: &Path, budget: u64) -> Result<Vec<u8>, NativeWindo
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
-    options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    options.custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_NONBLOCK);
     let file = options.open(path).map_err(|error| {
         NativeWindowObserverError::Os(format!("open native observer output: {error}"))
     })?;
@@ -531,7 +531,7 @@ fn read_bounded_regular_at(
     let descriptor = sys::fd::open_at(
         parent.as_fd(),
         &name_c,
-        libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+        sys::O_RDONLY | sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_NONBLOCK,
         0,
     )
     .map_err(|error| {
@@ -2464,7 +2464,7 @@ impl MaterializedContent {
                 let (parent, filename) = open_relative_parent(&self.root, &entry.relative_path)?;
                 let flags = match entry.kind {
                     MaterializedEntryKind::File => 0,
-                    MaterializedEntryKind::Directory => libc::AT_REMOVEDIR,
+                    MaterializedEntryKind::Directory => sys::AT_REMOVEDIR,
                 };
                 sys::fs::unlink_at(parent.as_fd(), &filename, flags).map_err(|error| {
                     format!(
@@ -2521,7 +2521,7 @@ fn materialize_content_package(
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
-    options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+    options.custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW);
     let mut package_file = options
         .open(package)
         .map_err(|error| format!("open content package {}: {error}", package.display()))?;
@@ -2664,11 +2664,11 @@ fn validate_archive_entry(
         ));
     }
     if let Some(mode) = entry.unix_mode() {
-        let kind = u64::from(mode) & u64::from(libc::S_IFMT);
+        let kind = u64::from(mode) & u64::from(sys::S_IFMT);
         let expected = if entry.is_dir() {
-            u64::from(libc::S_IFDIR)
+            u64::from(sys::S_IFDIR)
         } else {
-            u64::from(libc::S_IFREG)
+            u64::from(sys::S_IFREG)
         };
         if kind != 0 && kind != expected {
             return Err(format!(
@@ -2767,7 +2767,7 @@ fn ensure_directories(
                 });
                 true
             }
-            Err(error) if error.raw_os_error() == Some(libc::EEXIST) => false,
+            Err(error) if error.raw_os_error() == Some(sys::EEXIST) => false,
             Err(error) => {
                 return Err(format!(
                     "create content directory {}: {error}",
@@ -2842,7 +2842,7 @@ fn open_directory_raw(
 ) -> Result<std::os::fd::OwnedFd, String> {
     sys::fd::open(
         path,
-        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_RDONLY | sys::O_DIRECTORY | sys::O_CLOEXEC | sys::O_NOFOLLOW,
     )
     .map_err(|error| format!("open content directory {}: {error}", display.display()))
 }
@@ -2857,7 +2857,7 @@ fn open_directory_at(
     sys::fd::open_at(
         parent.as_fd(),
         name,
-        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_RDONLY | sys::O_DIRECTORY | sys::O_CLOEXEC | sys::O_NOFOLLOW,
         0,
     )
     .map_err(|error| format!("open content directory {}: {error}", display.display()))
@@ -2873,7 +2873,7 @@ fn create_file_at(
     sys::fd::open_at(
         parent.as_fd(),
         name,
-        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_WRONLY | sys::O_CREAT | sys::O_EXCL | sys::O_CLOEXEC | sys::O_NOFOLLOW,
         0o600,
     )
     .map(fs::File::from)
@@ -2940,21 +2940,20 @@ fn create_fresh_root(root: &Path) -> Result<FreshRoot, String> {
         .map_err(|_| "evidence root filename contains a NUL byte".to_string())?;
     let parent_fd = sys::fd::open(
         &parent,
-        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_RDONLY | sys::O_DIRECTORY | sys::O_CLOEXEC | sys::O_NOFOLLOW,
     )
     .map_err(|error| format!("open evidence root parent: {error}"))?;
-    let previous_directory =
-        sys::fd::open(c".", libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC)
-            .map_err(|error| format!("bind current directory: {error}"))?;
+    let previous_directory = sys::fd::open(c".", sys::O_RDONLY | sys::O_DIRECTORY | sys::O_CLOEXEC)
+        .map_err(|error| format!("bind current directory: {error}"))?;
     sys::fs::make_directory_at(parent_fd.as_fd(), &filename, 0o700)
         .map_err(|error| format!("create evidence root: {error}"))?;
     let remove_partial_root = || {
-        let _ = sys::fs::unlink_at(parent_fd.as_fd(), &filename, libc::AT_REMOVEDIR);
+        let _ = sys::fs::unlink_at(parent_fd.as_fd(), &filename, sys::AT_REMOVEDIR);
     };
     let directory = sys::fd::open_at(
         parent_fd.as_fd(),
         &filename,
-        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_RDONLY | sys::O_DIRECTORY | sys::O_CLOEXEC | sys::O_NOFOLLOW,
         0,
     )
     .map_err(|error| {
@@ -3225,7 +3224,7 @@ fn copy_executable_bounded(source: &Path, destination: &Path, limit: u64) -> Res
         let mut options = fs::OpenOptions::new();
         options
             .read(true)
-            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+            .custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW);
         let file = match options.open(destination) {
             Ok(file) => file,
             Err(error) => {
@@ -3282,7 +3281,7 @@ fn copy_regular_bounded(source: &Path, destination: &Path, limit: u64) -> Result
     let mut input_options = fs::OpenOptions::new();
     input_options.read(true);
     #[cfg(unix)]
-    input_options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+    input_options.custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW);
     let input = input_options
         .open(source)
         .map_err(|error| format!("open linked-build input {}: {error}", source.display()))?;
@@ -3394,7 +3393,7 @@ fn read_regular_file_nofollow_bounded(path: &Path, limit: u64) -> Result<Vec<u8>
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
-    options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+    options.custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW);
     let file = options
         .open(path)
         .map_err(|error| format!("open regular file {}: {error}", path.display()))?;
@@ -3464,7 +3463,7 @@ fn regular_file_identity(path: &Path) -> Result<(u64, String), String> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
-    options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+    options.custom_flags(sys::O_CLOEXEC | sys::O_NOFOLLOW);
     let mut file = options
         .open(path)
         .map_err(|error| format!("open regular file {}: {error}", path.display()))?;
@@ -3583,7 +3582,7 @@ fn sync_regular_file(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt as _;
     let file = fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .custom_flags(sys::O_NOFOLLOW | sys::O_NONBLOCK)
         .open(path)
         .map_err(|error| format!("open {} for sync: {error}", path.display()))?;
     let metadata = file
@@ -3638,7 +3637,7 @@ fn opened_parent(path: &Path) -> Result<(std::os::fd::OwnedFd, std::ffi::CString
         .map_err(|_| format!("path filename contains NUL: {}", path.display()))?;
     let descriptor = sys::fd::open(
         &parent,
-        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_RDONLY | sys::O_DIRECTORY | sys::O_CLOEXEC | sys::O_NOFOLLOW,
     )
     .map_err(|error| format!("open parent directory {}: {error}", path.display()))?;
     Ok((descriptor, filename))
@@ -3652,7 +3651,7 @@ fn relative_regular_file_identity(path: &Path) -> Result<(u64, String), String> 
     let descriptor = sys::fd::open_at(
         parent.as_fd(),
         &filename,
-        libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+        sys::O_RDONLY | sys::O_CLOEXEC | sys::O_NOFOLLOW | sys::O_NONBLOCK,
         0,
     )
     .map_err(|error| format!("open retained input {}: {error}", path.display()))?;
@@ -3711,7 +3710,7 @@ pub(super) fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<
     let descriptor = sys::fd::open_at(
         parent.as_fd(),
         &temporary_name,
-        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        sys::O_WRONLY | sys::O_CREAT | sys::O_EXCL | sys::O_CLOEXEC | sys::O_NOFOLLOW,
         0o600,
     )
     .map_err(|error| format!("create temporary for {}: {error}", path.display()))?;
@@ -4595,7 +4594,7 @@ mod tests {
     fn observer_helper_that_never_responds_is_terminated_killed_and_reaped() {
         let mut command = Command::new("/bin/sleep");
         command.arg("30");
-        sys::process::before_exec(&mut command, || sys::signal::ignore(libc::SIGTERM));
+        sys::process::before_exec(&mut command, || sys::signal::ignore(sys::SIGTERM));
         let scratch = tempfile::tempdir().unwrap();
         let executable = PathBuf::from("/bin/sleep");
         let mut observer = observer_for_helper_test(
@@ -5240,7 +5239,7 @@ mod tests {
             .success());
         assert!(fs::OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_NONBLOCK)
+            .custom_flags(sys::O_NONBLOCK)
             .open(&fifo)
             .is_ok());
         assert!(read_bounded_regular(&fifo, 1024).is_err());

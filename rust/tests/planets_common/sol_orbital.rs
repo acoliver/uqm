@@ -77,12 +77,12 @@ pub fn render(ops: &mut impl Ops, table: &[PlanetFrame]) -> String {
                         let index = table
                             .iter()
                             .position(|frame| std::ptr::eq(frame, info.planet_info.plan_data_ptr))
-                            .expect("analysis frame belongs to the live table");
+                            .unwrap_or_else(|| panic!("analysis frame belongs to the live table"));
                         // Only the address varies by process; all other fields,
                         // including all handles, masks and seeds, are retained.
                         info.planet_info.plan_data_ptr = std::ptr::null();
                         let (desc, parent) = input(case);
-                        writeln!(out, "{case:?} input={desc:?} parent={parent:?} => {result} frame={index} rng={rng} {info:?}").unwrap();
+                        let _ = writeln!(out, "{case:?} input={desc:?} parent={parent:?} => {result} frame={index} rng={rng} {info:?}");
                     }
                 }
             }

@@ -1,17 +1,14 @@
 use std::ffi::CString;
 
-/// Log levels matching the C enum
-#[allow(dead_code)]
-#[repr(i32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Game log levels, most severe first. A message is shown when its level is
+/// at or below the output threshold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
-    Nothing = 0,
-    User = 1,
-    Error = 2,
-    Warning = 3,
-    Info = 4,
-    Debug = 5,
-    All = 6,
+    User,
+    Error,
+    Warning,
+    Info,
+    Debug,
 }
 
 impl LogLevel {
@@ -20,27 +17,6 @@ impl LogLevel {
     /// @plan PLAN-20260224-MEM-SWAP.P03
     /// @requirement REQ-MEM-005
     pub const FATAL: LogLevel = LogLevel::User;
-
-    /// Create a LogLevel from an integer
-    #[allow(dead_code)]
-    pub fn from_i32(level: i32) -> Self {
-        match level {
-            0 => LogLevel::Nothing,
-            1 => LogLevel::User,
-            2 => LogLevel::Error,
-            3 => LogLevel::Warning,
-            4 => LogLevel::Info,
-            5 => LogLevel::Debug,
-            6 => LogLevel::All,
-            _ => LogLevel::Info,
-        }
-    }
-
-    /// Get the integer representation for the C interface
-    #[allow(dead_code)]
-    pub fn as_i32(&self) -> i32 {
-        *self as i32
-    }
 }
 
 /// Add a log entry by calling the C log_add function via FFI
@@ -121,32 +97,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_log_level_from_i32() {
-        assert_eq!(LogLevel::from_i32(0), LogLevel::Nothing);
-        assert_eq!(LogLevel::from_i32(1), LogLevel::User);
-        assert_eq!(LogLevel::from_i32(2), LogLevel::Error);
-        assert_eq!(LogLevel::from_i32(3), LogLevel::Warning);
-        assert_eq!(LogLevel::from_i32(4), LogLevel::Info);
-        assert_eq!(LogLevel::from_i32(5), LogLevel::Debug);
-        assert_eq!(LogLevel::from_i32(6), LogLevel::All);
-    }
-
-    #[test]
-    fn test_log_level_as_i32() {
-        assert_eq!(LogLevel::Nothing.as_i32(), 0);
-        assert_eq!(LogLevel::User.as_i32(), 1);
-        assert_eq!(LogLevel::Error.as_i32(), 2);
-        assert_eq!(LogLevel::Warning.as_i32(), 3);
-        assert_eq!(LogLevel::Info.as_i32(), 4);
-        assert_eq!(LogLevel::Debug.as_i32(), 5);
-        assert_eq!(LogLevel::All.as_i32(), 6);
-    }
-
-    #[test]
-    fn test_log_level_invalid() {
-        // Invalid values should default to Info
-        assert_eq!(LogLevel::from_i32(100), LogLevel::Info);
-        assert_eq!(LogLevel::from_i32(-1), LogLevel::Info);
+    fn levels_order_from_most_to_least_severe() {
+        assert!(LogLevel::User < LogLevel::Error);
+        assert!(LogLevel::Error < LogLevel::Warning);
+        assert!(LogLevel::Warning < LogLevel::Info);
+        assert!(LogLevel::Info < LogLevel::Debug);
     }
 
     #[test]
@@ -168,6 +123,5 @@ mod tests {
     #[test]
     fn test_fatal_alias() {
         assert_eq!(LogLevel::FATAL, LogLevel::User);
-        assert_eq!(LogLevel::FATAL.as_i32(), 1);
     }
 }

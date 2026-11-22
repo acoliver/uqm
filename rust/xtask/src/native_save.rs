@@ -359,11 +359,15 @@ fn saved_campaign_state(
     };
     let save = decode_save(bytes).map_err(|error| format!("decode produced save: {error}"))?;
     let story = |name: &str| {
-        let key = StoryKey::from_name(name).expect("known story key");
-        u32::from(get_state_bits_raw(&save.game_state, key.start(), key.end()))
+        let key = StoryKey::from_name(name).ok_or_else(|| format!("unknown story key {name}"))?;
+        Ok::<_, String>(u32::from(get_state_bits_raw(
+            &save.game_state,
+            key.start(),
+            key.end(),
+        )))
     };
     let catalog = &uqm_modes::planets::tables::STARMAP_ARRAY[..CATALOG_LEN];
-    let star = resolve_star(catalog, story("ARILOU_SPACE_SIDE") as u8, &save.star)
+    let star = resolve_star(catalog, story("ARILOU_SPACE_SIDE")? as u8, &save.star)
         .map_err(|error| format!("resolve produced star: {error}"))?;
     let mut state = std::collections::BTreeMap::from([
         ("activity".into(), u32::from(save.global.current_activity)),
@@ -418,7 +422,7 @@ fn saved_campaign_state(
     .into_iter()
     .chain(story_keys.iter().copied())
     {
-        state.insert(format!("story:{name}"), story(name));
+        state.insert(format!("story:{name}"), story(name)?);
     }
     Ok(state)
 }

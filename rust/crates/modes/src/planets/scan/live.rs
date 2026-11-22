@@ -270,14 +270,14 @@ fn dispatch_lander(
     match reply {
         Ok(_) => {}
         Err(TripError::Adapter(error)) => uqm_engine::log_abi::log_message(
-            uqm_engine::logging::LogLevel::Error.as_i32(),
+            uqm_engine::logging::LogLevel::Error,
             &format!(
                 "Rust PlanetSide adapter failed ({}); returning to orbit",
                 error.operation
             ),
         ),
         Err(TripError::FrameBudgetExceeded) => uqm_engine::log_abi::log_message(
-            uqm_engine::logging::LogLevel::Error.as_i32(),
+            uqm_engine::logging::LogLevel::Error,
             "Rust PlanetSide frame budget exhausted; returning to orbit",
         ),
     }

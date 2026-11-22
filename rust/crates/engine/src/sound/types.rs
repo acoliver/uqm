@@ -327,7 +327,6 @@ impl FadeState {
 }
 
 /// 3D position for sound effects.
-#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SoundPosition {
     /// Whether positional audio is enabled.
@@ -640,8 +639,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sound_position_repr_c_layout() {
-        // SoundPosition should be #[repr(C)] — verify fields are accessible and sized
+    fn sound_position_fields_and_copy() {
         let pos = SoundPosition {
             positional: true,
             x: 100,

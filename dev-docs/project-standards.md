@@ -105,12 +105,14 @@ pushes to `main`. Gates may be tightened. They must not be weakened.
 | Check | Contract |
 |---|---|
 | Formatting | `cargo fmt --all --check` |
-| Lints | Strict Clippy over all workspace targets with `audio_heart,debug-process` enabled. |
-| Tests | Workspace tests with `audio_heart,debug-process` enabled. |
-| C ratchet | The tracked C/C++/Objective-C file count must not exceed the base branch count. |
+| Quality | `cargo xtask quality` against the base branch: size, complexity, FFI, `unsafe`, `allow` and layer debt may not grow. |
+| Lints | `cargo xtask clippy`: strict Clippy over all workspace targets, with the debt lints (`unwrap_used`, `expect_used`, undocumented `unsafe`) held to the per-platform baseline. |
+| Tests | Workspace tests with `audio_heart,debug-process,native` enabled. |
+| Coverage | `cargo xtask coverage` against the base branch. |
+| Supply chain | `cargo xtask deny`. |
 | Game build | Release builds with `bundled-sdl` on macOS ARM64, Linux x64/ARM64 and Windows x64/ARM64. |
-| ABI declarations | `xtask abi-check` checks declarations against Rust providers. |
-| Failure scenarios | Four real-window failure scenarios on macOS. |
+| Parity | Replay parity against the committed goldens. Suspended until the idiomatic-Rust work finishes; runs when the repository variable `UQM_PARITY` is `on`. |
+| Failure scenarios | Four real-window failure scenarios on macOS, suspended with parity. |
 | Release tools | Packaging unit tests and Homebrew helper syntax. |
 
 Notes that matter:

@@ -45,17 +45,22 @@ pub fn render_layout(ops: &mut impl Ops) -> String {
         for color in 0..6 {
             for seed in [0, 1, 104_729, u32::MAX] {
                 let case = Layout { size, color, seed };
-                let mut planets: [PlanetDesc; 16] = descriptors(16).try_into().unwrap();
+                let mut planets: [PlanetDesc; 16] = descriptors(16)
+                    .try_into()
+                    .unwrap_or_else(|rest: Vec<_>| panic!("16 descriptors, got {}", rest.len()));
                 let result = ops.planets(case, &mut planets);
-                writeln!(out, "planets {case:?} {result:?} {planets:?}").unwrap();
+                let _ = writeln!(out, "planets {case:?} {result:?} {planets:?}");
                 for planet in 0..9 {
                     // Also test counts outside the usual Sol layout: overrides
                     // are unconditional, including writes to inactive slots.
                     for count in 0..=4 {
-                        let mut moons: [PlanetDesc; 4] = descriptors(4).try_into().unwrap();
+                        let mut moons: [PlanetDesc; 4] =
+                            descriptors(4).try_into().unwrap_or_else(|rest: Vec<_>| {
+                                panic!("4 descriptors, got {}", rest.len())
+                            });
                         let result = ops.moons(case, planet, count, &mut moons);
-                        writeln!(out, "moons {case:?} {planet} {count} {result:?} {moons:?}")
-                            .unwrap();
+                        let _ =
+                            writeln!(out, "moons {case:?} {planet} {count} {result:?} {moons:?}");
                     }
                 }
             }
@@ -112,7 +117,7 @@ pub fn render_scans(ops: &mut impl Ops) -> String {
                                     format!("{:?}", fresh_node())
                                 );
                                 assert_eq!(format!("{info:?}"), before);
-                                writeln!(out, "scan {case:?} {result:?} {nodes:?}").unwrap();
+                                let _ = writeln!(out, "scan {case:?} {result:?} {nodes:?}");
                             }
                         }
                     }
