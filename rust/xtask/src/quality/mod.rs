@@ -442,7 +442,7 @@ fn compare_base(
 ) -> Result<Option<Baseline>, String> {
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
-    baseline.retire_moves(&base);
+    baseline.retire_moves(&base, recorded.as_ref());
     let moves = transfers::pending(&baseline.moved, recorded.as_ref().map(|b| &b.moved));
     let base_budgets = recorded
         .as_ref()

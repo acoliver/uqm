@@ -171,6 +171,7 @@ impl Baseline {
         if let Some(base) = base {
             self.moved.retain(|source, target| {
                 super::tool::lint_uses_source(&self.lint, source)
+                    || super::tool::lint_uses_source(&base.lint, source)
                     || super::expect_sites::uses_source(&self.expect_sites, source)
                     || !base
                         .entries
@@ -180,7 +181,13 @@ impl Baseline {
         }
         Ok(())
     }
-    fn remaining_moves(&self, base: &Measurement) -> BTreeMap<String, String> {
+    /// Aliases stay while this baseline's lint bank or the comparison base's
+    /// archived lint bank still keys counters by the pre-move identity.
+    fn remaining_moves(
+        &self,
+        base: &Measurement,
+        recorded: Option<&Baseline>,
+    ) -> BTreeMap<String, String> {
         let mut moves = self.moved.clone();
         super::transfers::retire(&mut moves, base);
         moves.extend(
@@ -188,6 +195,7 @@ impl Baseline {
                 .iter()
                 .filter(|(source, _)| {
                     super::tool::lint_uses_source(&self.lint, source)
+                        || recorded.is_some_and(|b| super::tool::lint_uses_source(&b.lint, source))
                         || super::expect_sites::uses_source(&self.expect_sites, source)
                 })
                 .map(|(source, target)| (source.clone(), target.clone())),
@@ -220,8 +228,8 @@ impl Baseline {
         Ok(())
     }
 
-    pub fn retire_moves(&mut self, base: &Measurement) {
-        self.moved = self.remaining_moves(base);
+    pub fn retire_moves(&mut self, base: &Measurement, recorded: Option<&Baseline>) {
+        self.moved = self.remaining_moves(base, recorded);
     }
 
     #[cfg(test)]
@@ -256,7 +264,7 @@ impl Baseline {
             return Err("move needs at least one source and target".into());
         }
         let pending = super::transfers::pending(&self.moved, Some(&recorded.moved));
-        let mut previous = self.remaining_moves(base);
+        let mut previous = self.remaining_moves(base, Some(recorded));
         previous.retain(|source, _| pending.contains_key(source));
         let mut moves = previous.clone();
         for &(old, new) in steps {

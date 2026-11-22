@@ -745,7 +745,7 @@ mod tests {
             expect_sites: [("linux".into(), source()), ("macos".into(), target())].into(),
             ..Default::default()
         };
-        baseline.retire_moves(&measurement);
+        baseline.retire_moves(&measurement, None);
         assert_eq!(baseline.moved, moves());
         baseline.moved.clear();
         baseline.tighten(
