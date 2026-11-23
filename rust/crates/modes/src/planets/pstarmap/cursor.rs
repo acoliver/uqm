@@ -20,7 +20,6 @@ impl Frame for StarMap {
 impl StarMap {
     fn cursor_frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, input: &InputSession) -> bool {
         let time_in = get_time_counter();
-        let activity = cx.world.activity();
         if !self.initialized {
             self.initialized = true;
             self.flash(cx.kernel);
@@ -33,7 +32,7 @@ impl StarMap {
         if keys[10] != 0 {
             return false;
         } else if keys[9] != 0 {
-            if !self.select_destination(cx, activity) {
+            if !self.select_destination(cx) {
                 return false;
             }
         } else if keys[21] != 0 {
@@ -44,10 +43,11 @@ impl StarMap {
         self.flash(cx.kernel);
         cx.world.activity() & 0x4000 == 0
     }
-    fn select_destination(&mut self, cx: &mut Cx<'_>, activity: u16) -> bool {
+    fn select_destination(&mut self, cx: &mut Cx<'_>) -> bool {
         cx.world.data.game.autopilot = self.state.cursor;
         #[cfg(feature = "debug-process")]
         if cx.kernel.instant_move {
+            let activity = cx.world.activity();
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
             if activity & 0xff == 3 {
                 crate::front_end::uqmdebug::move_flagship(cx.world, self.dimensions());

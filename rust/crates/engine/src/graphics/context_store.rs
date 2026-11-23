@@ -40,6 +40,8 @@ impl Graphics {
 
     /// C: `CreateContextAux`.
     pub(crate) fn create_context(&mut self, name: &'static CStr) -> ContextId {
+        #[cfg(not(feature = "debug-process"))]
+        let _ = name;
         self.contexts.next += 1;
         let id = NonZeroU64::new(self.contexts.next).unwrap_or_else(|| unreachable!());
         self.contexts.entries.insert(
@@ -55,6 +57,7 @@ impl Graphics {
                 font_effect: FrameId::NULL,
                 font_backing: None,
                 backing_flags: 0,
+                #[cfg(feature = "debug-process")]
                 name,
                 held_target: FrameId::NULL,
                 held_font: None,

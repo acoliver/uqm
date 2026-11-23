@@ -68,6 +68,8 @@ mod native_publication_history;
 pub mod native_runner;
 pub mod native_timing;
 mod native_trace;
+#[cfg(feature = "debug-process")]
+mod native_trace_bound;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_trace_cursor;
 #[cfg(all(test, unix, feature = "debug-process"))]

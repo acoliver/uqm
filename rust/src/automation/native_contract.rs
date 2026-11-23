@@ -1,13 +1,9 @@
 //! Runtime deadlines and resource limits shared by a native child and its observer.
 
+use super::native_trace_bound::NativeTraceProfile;
 use super::native_window::{NativeInventoryLimits, NativeWindowBounds};
+use super::script::ValidatedScript;
 use serde::{Deserialize, Serialize};
-
-/// Bound on the native trace bytes one recorded input tick can add: measured
-/// 502 (118 for the `input_tick` record plus about two 192-byte `presentation`
-/// records) with headroom for checkpoints, readiness and the `native_graphics`
-/// records that are written only when the sampled graphics state changes.
-pub const NATIVE_TRACE_BYTES_PER_INPUT_TICK: u64 = 600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,23 +27,30 @@ pub struct NativeWindowRuntimeContract {
 }
 
 impl NativeWindowRuntimeContract {
-    /// Admission check for a scenario's contract, before any child launches.
+    /// Whether the deadlines are ordered so each outlives what it supervises.
     pub fn validate(self) -> Result<(), String> {
         if !self.has_valid_deadline_order() {
             return Err("native runtime contract has invalid deadline order".to_string());
         }
-        self.check_trace_fits()
+        Ok(())
+    }
+
+    /// Admission of a scenario's contract before any child launches: ordered
+    /// deadlines, and a trace that fits for the script's combat reach.
+    pub fn admit(self, script: &ValidatedScript) -> Result<(), String> {
+        self.validate()?;
+        self.check_trace_fits(NativeTraceProfile::of_script(script))
     }
 
     /// The trace of a scenario with a recorded length must fit one inventory
     /// member, since the journal, the live reader and retention all stop there.
     /// Rejecting it before launch beats a run that dies partway through.
-    fn check_trace_fits(self) -> Result<(), String> {
+    fn check_trace_fits(self, profile: NativeTraceProfile) -> Result<(), String> {
         let Some(ticks) = self.expected_input_ticks else {
             return Ok(());
         };
-        let bound = ticks
-            .checked_mul(NATIVE_TRACE_BYTES_PER_INPUT_TICK)
+        let bound = profile
+            .max_trace_bytes(ticks)
             .ok_or("native trace bound overflows")?;
         if bound > self.inventory_limits.member_bytes {
             return Err(format!(
@@ -122,9 +125,6 @@ impl NativeWindowRuntimeContract {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::automation::capture::capture_trace_record;
-    use crate::automation::scheduler::CaptureGeneration;
-    use crate::automation::trace::{PresentationEvidence, RecordKind};
 
     /// `campaign-s07c-war-cleared`, the longest connected-campaign scenario.
     const S07C_INPUT_TICKS: u64 = 101_050;
@@ -161,51 +161,24 @@ mod tests {
         }
     }
 
-    /// The serialized size of the two per-tick record kinds with every counter
-    /// at eight digits, which is wider than any run of s07c reaches.
-    fn widest_bytes_per_tick() -> u64 {
-        let record = |kind, presentation| {
-            let mut record = capture_trace_record(99_999_999, 99_999_999, CaptureGeneration(0), "");
-            record.run = 1;
-            record.input_seen = 99_999_999;
-            record.present_seen = 99_999_999;
-            record.label = None;
-            record.kind = kind;
-            record.presentation = presentation;
-            record.to_jsonl().unwrap().len() as u64
-        };
-        let presentation = record(
-            RecordKind::Presentation,
-            Some(PresentationEvidence {
-                count: 99_999_999,
-                generation: 99,
-                width: 1280,
-                height: 960,
-            }),
-        );
-        let input_tick = record(RecordKind::InputTick, None);
-        // About two presentations per input tick were measured in a native run.
-        2 * presentation + input_tick
-    }
-
-    #[test]
-    fn the_per_tick_bound_covers_the_widest_per_tick_records() {
-        assert!(widest_bytes_per_tick() <= NATIVE_TRACE_BYTES_PER_INPUT_TICK);
-    }
-
     #[test]
     fn a_trace_for_the_longest_campaign_scenario_fits_one_member() {
-        contract(Some(S07C_INPUT_TICKS)).check_trace_fits().unwrap();
-        assert!(S07C_INPUT_TICKS * widest_bytes_per_tick() < MEMBER_BYTES);
+        contract(Some(S07C_INPUT_TICKS))
+            .check_trace_fits(NativeTraceProfile::WITHOUT_COMBAT)
+            .unwrap();
     }
 
     #[test]
     fn a_scenario_whose_trace_cannot_fit_is_rejected_before_launch() {
-        let error = contract(Some(MEMBER_BYTES / NATIVE_TRACE_BYTES_PER_INPUT_TICK + 1))
-            .check_trace_fits()
+        let error = contract(Some(S07C_INPUT_TICKS))
+            .check_trace_fits(NativeTraceProfile::WITH_COMBAT)
             .unwrap_err();
         assert!(error.contains("member limit"), "{error}");
-        assert!(contract(Some(u64::MAX)).check_trace_fits().is_err());
-        contract(None).check_trace_fits().unwrap();
+        assert!(contract(Some(u64::MAX))
+            .check_trace_fits(NativeTraceProfile::WITHOUT_COMBAT)
+            .is_err());
+        contract(None)
+            .check_trace_fits(NativeTraceProfile::WITH_COMBAT)
+            .unwrap();
     }
 }
