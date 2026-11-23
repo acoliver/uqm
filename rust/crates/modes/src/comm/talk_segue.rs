@@ -1339,16 +1339,12 @@ fn sis_space_rect() -> uqm_engine::graphics::geometry::Rect {
     use crate::starbase::ids::{RadarLayout, SIS_ORG_X, SIS_ORG_Y};
     use uqm_engine::graphics::state::{SCREEN_HEIGHT, SCREEN_WIDTH};
     let layout = RadarLayout::for_screen(SCREEN_WIDTH, SCREEN_HEIGHT);
-    uqm_engine::graphics::geometry::Rect {
-        corner: crate::comm::locdata::CPoint {
-            x: SIS_ORG_X,
-            y: SIS_ORG_Y as i16,
-        },
-        extent: uqm_engine::graphics::geometry::Extent {
-            width: layout.sis_screen_width as i16,
-            height: layout.sis_screen_height as i16,
-        },
-    }
+    uqm_engine::graphics::geometry::Rect::new(
+        SIS_ORG_X,
+        SIS_ORG_Y as i16,
+        layout.sis_screen_width as i16,
+        layout.sis_screen_height as i16,
+    )
 }
 
 fn comm_intro_transition(_comm: &mut Comm) {
