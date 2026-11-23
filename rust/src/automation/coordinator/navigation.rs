@@ -73,6 +73,18 @@ impl AutomationObserver {
         }
     }
 
+    /// The phrase an interrupting patrol is answered with, for every
+    /// navigation step that can be hailed in flight.
+    pub(super) fn patrol_phrase(action: Option<&Action>) -> Option<&str> {
+        match action {
+            Some(Action::NavigateToPlanet(step)) => step.encounter_response.as_deref(),
+            Some(Action::NavigateToOrbit(step)) => step.encounter_response.as_deref(),
+            Some(Action::NavigateToHyperspace(step)) => step.encounter_response.as_deref(),
+            Some(Action::NavigateToMoon(step)) => step.encounter_response.as_deref(),
+            _ => None,
+        }
+    }
+
     pub(super) fn transit_budget(
         world: &campaign_state::CampaignView,
         action: Option<&Action>,
@@ -83,7 +95,8 @@ impl AutomationObserver {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
-                if world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(0) =>
+                if step.encounter_response.is_none()
+                    && world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(0) =>
             {
                 Some(step.max_ticks)
             }

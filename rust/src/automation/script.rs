@@ -355,7 +355,6 @@ pub struct NavigateToPlanetStep {
     pub planet: u8,
     pub max_ticks: u64,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
     #[serde(default)]
     pub patrol_policy: PatrolPolicy,
@@ -370,12 +369,14 @@ pub struct NavigateToContactStep {
 }
 
 /// A `navigate_to_moon` step targets a generated moon in a planet's inner system.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToMoonStep {
     pub planet: u8,
     pub moon: u8,
     pub max_ticks: u64,
+    /// Hail an interrupting patrol and leave using this offered phrase.
+    pub encounter_response: Option<String>,
 }
 
 /// A `navigate_to_orbit` step targets the planet itself from its inner system.
@@ -388,7 +389,6 @@ pub struct NavigateToOrbitStep {
     #[serde(default)]
     pub stop_at_encounter: bool,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
     #[serde(default)]
     pub patrol_policy: PatrolPolicy,
@@ -403,7 +403,6 @@ pub struct NavigateToHyperspaceStep {
     #[serde(default)]
     pub retreat_encounters: bool,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
 }
 
@@ -2313,6 +2312,20 @@ mod tests {
     }
 
     #[test]
+    fn moon_navigation_accepts_an_encounter_response() {
+        let script = validated_steps(r#"{"action":"navigate_to_moon","planet":1,"moon":2,"max_ticks":100,"encounter_response":"bye_ally"}"#).unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::NavigateToMoon(step) if step.encounter_response.as_deref() == Some("bye_ally"))
+        );
+        let script =
+            validated_steps(r#"{"action":"navigate_to_moon","planet":1,"moon":2,"max_ticks":100}"#)
+                .unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::NavigateToMoon(step) if step.encounter_response.is_none())
+        );
+    }
+
+    #[test]
     fn rejects_non_utf8_bytes() {
         let bad = b"version\xFF";
         let err = parse_script(bad, p()).unwrap_err();
@@ -2697,7 +2710,8 @@ mod tests {
                 Action::NavigateToMoon(NavigateToMoonStep {
                     planet: 2,
                     moon: 0,
-                    max_ticks: 10
+                    max_ticks: 10,
+                    encounter_response: None,
                 }),
                 Action::NavigateToOrbit(NavigateToOrbitStep {
                     planet: 3,

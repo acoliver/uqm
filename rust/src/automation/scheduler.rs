@@ -2999,6 +2999,7 @@ mod tests {
             planet: 2,
             moon: 0,
             max_ticks: 1,
+            encounter_response: None,
         })];
         let config = cfg(&actions);
         let started = scheduler_reduce(
@@ -3302,6 +3303,7 @@ mod tests {
             planet: 2,
             moon: 0,
             max_ticks: 1,
+            encounter_response: None,
         })];
         let navigation_config = cfg(&navigation);
         let navigation_waiting = scheduler_reduce(
@@ -3376,6 +3378,7 @@ mod budgeted_wait_tests {
                 planet: 1,
                 moon: 0,
                 max_ticks,
+                encounter_response: None,
             }),
             Action::NavigateToOrbit(NavigateToOrbitStep {
                 planet: 1,
