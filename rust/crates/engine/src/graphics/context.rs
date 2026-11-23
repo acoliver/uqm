@@ -38,6 +38,7 @@ pub struct Context {
     font_effect: FrameId,
     pub(crate) font_backing: Option<ImageId>,
     backing_flags: u16,
+    #[cfg(feature = "debug-process")]
     name: &'static CStr,
     // What the lease API holds for this context (its frame, font and font
     // effect), released when the context goes.

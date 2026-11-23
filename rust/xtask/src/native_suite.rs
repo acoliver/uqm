@@ -31,7 +31,7 @@ pub fn admit_script(root: &Path, scenario: &Scenario) -> Result<ScriptAdmission,
         crate::native_save::verify_start_save(root, &scenario.path, start_save)?;
     }
     let runtime = scenario.runtime_contract();
-    runtime.validate()?;
+    runtime.admit(&script)?;
     let script_budgets = script.budgets();
     // The script watchdog and ChildSession supervisor run concurrently. Neither
     // promises a minimum runtime; expiry of either fails the entire scenario.

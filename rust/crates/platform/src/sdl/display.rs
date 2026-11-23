@@ -37,6 +37,7 @@ fn scale_factor(flags: i32) -> Option<u32> {
 pub struct SdlDisplay {
     // Field order is drop order: renderer and window before SDL itself.
     canvas: sdl2::render::Canvas<sdl2::video::Window>,
+    #[cfg(feature = "debug-process")]
     video: sdl2::VideoSubsystem,
     sdl: sdl2::Sdl,
     flags: i32,
@@ -107,6 +108,7 @@ impl SdlDisplay {
         let _ = native_position;
         let mut display = Self {
             canvas,
+            #[cfg(feature = "debug-process")]
             video,
             sdl,
             flags,

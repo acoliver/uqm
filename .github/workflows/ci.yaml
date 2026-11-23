@@ -67,6 +67,12 @@ jobs:
           name: clippy-baseline-linux-x86_64
           path: rust/xtask/quality-baseline.toml
           retention-days: 3
+      # Clippy and the tests build with debug-process, so code that only that
+      # feature uses looks live there. The shipped configuration must be clean.
+      - name: Check the release configuration without warnings
+        run: cargo check --release --locked --bin uqm
+        env:
+          RUSTFLAGS: -Dwarnings
       - run: cargo test --locked --no-run
       - run: cargo test --workspace --locked --no-default-features --features "$FEATURES"
 

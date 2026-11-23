@@ -4,10 +4,12 @@ use uqm_engine::threading::pacing::yield_input_loop;
 
 #[cfg(feature = "debug-process")]
 use uqm_engine::battle::statistics::{delta_crew, delta_energy};
+#[cfg(feature = "debug-process")]
+use uqm_engine::input_port::frames::KEY_DEBUG;
 use uqm_engine::input_port::frames::{
-    KEY_DEBUG, KEY_EXIT, KEY_MENU_BACKSPACE, KEY_MENU_CANCEL, KEY_MENU_DELETE, KEY_MENU_DOWN,
-    KEY_MENU_LEFT, KEY_MENU_PAGE_DOWN, KEY_MENU_PAGE_UP, KEY_MENU_RIGHT, KEY_MENU_SELECT,
-    KEY_MENU_SPECIAL, KEY_MENU_UP, KEY_PAUSE,
+    KEY_EXIT, KEY_MENU_BACKSPACE, KEY_MENU_CANCEL, KEY_MENU_DELETE, KEY_MENU_DOWN, KEY_MENU_LEFT,
+    KEY_MENU_PAGE_DOWN, KEY_MENU_PAGE_UP, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_SPECIAL,
+    KEY_MENU_UP, KEY_PAUSE,
 };
 use uqm_engine::{
     battle::Cx,

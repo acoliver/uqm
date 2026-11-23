@@ -379,7 +379,15 @@ mod tests {
         )
         .expect("campaign scenario exists");
         assert_eq!(scenario.expected_input_ticks, Some(101_050));
-        scenario.runtime_contract().validate().unwrap();
+        crate::native_suite::admit_script(&root(), &scenario).unwrap();
+    }
+
+    #[test]
+    fn every_scenario_in_the_corpus_is_admitted() {
+        for scenario in scenarios(&root()).unwrap() {
+            crate::native_suite::admit_script(&root(), &scenario)
+                .unwrap_or_else(|error| panic!("{}: {error}", scenario.path));
+        }
     }
 
     #[test]
