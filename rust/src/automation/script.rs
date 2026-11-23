@@ -355,7 +355,6 @@ pub struct NavigateToPlanetStep {
     pub planet: u8,
     pub max_ticks: u64,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
     #[serde(default)]
     pub patrol_policy: PatrolPolicy,
@@ -377,7 +376,6 @@ pub struct NavigateToMoonStep {
     pub moon: u8,
     pub max_ticks: u64,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
 }
 
@@ -391,7 +389,6 @@ pub struct NavigateToOrbitStep {
     #[serde(default)]
     pub stop_at_encounter: bool,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
     #[serde(default)]
     pub patrol_policy: PatrolPolicy,
@@ -406,7 +403,6 @@ pub struct NavigateToHyperspaceStep {
     #[serde(default)]
     pub retreat_encounters: bool,
     /// Hail an interrupting patrol and leave using this offered phrase.
-    #[serde(default)]
     pub encounter_response: Option<String>,
 }
 
