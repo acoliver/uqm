@@ -11,8 +11,6 @@ pub struct Baseline {
     pub moved: BTreeMap<String, String>,
     pub budget: BTreeMap<String, super::budgets::Budget>,
     pub layers: bool,
-    pub lint: BTreeMap<String, BTreeMap<String, u64>>,
-    pub expect_sites: BTreeMap<String, super::expect_sites::Proof>,
     pub coverage_debt: BTreeMap<String, String>,
     pub coverage_moves: crate::coverage::moves::State,
 }
@@ -35,30 +33,6 @@ impl Baseline {
             coverage_moves: crate::coverage::moves::read(&document)?,
             ..Self::default()
         };
-        if let Some(table) = document.get("lint").and_then(toml_edit::Item::as_table) {
-            // Baselines at older git refs were measured on Linux only.
-            if table.iter().all(|(_, value)| value.is_integer()) {
-                result.lint.insert("linux".into(), lint_values(table)?);
-            } else {
-                for (host, value) in table {
-                    let values = value
-                        .as_table()
-                        .ok_or_else(|| format!("invalid lint host section: {host}"))?;
-                    result.lint.insert(host.into(), lint_values(values)?);
-                }
-            }
-        }
-        if let Some(table) = document
-            .get("expect_sites")
-            .and_then(toml_edit::Item::as_table)
-        {
-            for (host, value) in table {
-                let sites = value
-                    .as_table()
-                    .ok_or("invalid expect proof host section")?;
-                result.expect_sites.insert(host.into(), lint_values(sites)?);
-            }
-        }
         if let Some(item) = document.get("budget") {
             result.budget =
                 super::budgets::parse(item.as_table().ok_or("invalid budget section")?)?;
@@ -88,36 +62,6 @@ impl Baseline {
         document.insert("layers", toml_edit::value(self.layers));
         crate::coverage::debt::write(&mut document, &self.coverage_debt);
         crate::coverage::moves::write(&mut document, &self.coverage_moves)?;
-        if !self.lint.is_empty() {
-            let mut hosts = toml_edit::Table::new();
-            hosts.set_implicit(true);
-            for (host, values) in &self.lint {
-                let mut table = toml_edit::Table::new();
-                for (key, value) in values {
-                    table.insert(
-                        key,
-                        toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
-                    );
-                }
-                hosts.insert(host, toml_edit::Item::Table(table));
-            }
-            document.insert("lint", toml_edit::Item::Table(hosts));
-        }
-        if !self.expect_sites.is_empty() {
-            let mut hosts = toml_edit::Table::new();
-            hosts.set_implicit(true);
-            for (host, values) in &self.expect_sites {
-                let mut table = toml_edit::Table::new();
-                for (key, value) in values {
-                    table.insert(
-                        key,
-                        toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
-                    );
-                }
-                hosts.insert(host, toml_edit::Item::Table(table));
-            }
-            document.insert("expect_sites", toml_edit::Item::Table(hosts));
-        }
         if !self.budget.is_empty() {
             document.insert(
                 "budget",
@@ -145,7 +89,7 @@ impl Baseline {
     }
     pub fn rekey(&mut self, renames: &BTreeMap<String, String>) -> Result<(), String> {
         for (old, new) in renames.iter().rev() {
-            self.entries = move_entries(&self.entries, old, new, true)?;
+            self.entries = move_entries(&self.entries, old, new)?;
         }
         Ok(())
     }
@@ -165,71 +109,25 @@ impl Baseline {
                 false,
             )?;
         }
-        let empty = BTreeMap::new();
-        self.relocate_expect_sites(measurement, base.map(|b| &b.moved).unwrap_or(&empty))?;
         self.entries = measured;
         if let Some(base) = base {
-            self.moved.retain(|source, target| {
-                super::tool::lint_uses_source(&self.lint, source)
-                    || super::tool::lint_uses_source(&base.lint, source)
-                    || super::expect_sites::uses_source(&self.expect_sites, source)
-                    || !base
-                        .entries
-                        .keys()
-                        .any(|k| identity(k).is_some_and(|id| prefix_matches(id, target)))
+            self.moved.retain(|_, target| {
+                !base
+                    .entries
+                    .keys()
+                    .any(|k| identity(k).is_some_and(|id| prefix_matches(id, target)))
             });
         }
         Ok(())
     }
-    /// Aliases stay while this baseline's lint bank or the comparison base's
-    /// archived lint bank still keys counters by the pre-move identity.
-    fn remaining_moves(
-        &self,
-        base: &Measurement,
-        recorded: Option<&Baseline>,
-    ) -> BTreeMap<String, String> {
+    pub fn retire_moves(&mut self, base: &Measurement) {
+        self.moved = self.remaining_moves(base);
+    }
+
+    fn remaining_moves(&self, base: &Measurement) -> BTreeMap<String, String> {
         let mut moves = self.moved.clone();
         super::transfers::retire(&mut moves, base);
-        moves.extend(
-            self.moved
-                .iter()
-                .filter(|(source, _)| {
-                    super::tool::lint_uses_source(&self.lint, source)
-                        || recorded.is_some_and(|b| super::tool::lint_uses_source(&b.lint, source))
-                        || super::expect_sites::uses_source(&self.expect_sites, source)
-                })
-                .map(|(source, target)| (source.clone(), target.clone())),
-        );
         moves
-    }
-
-    pub(super) fn relocate_expect_sites(
-        &mut self,
-        measurement: &Measurement,
-        recorded_moves: &BTreeMap<String, String>,
-    ) -> Result<(), String> {
-        // An earlier tighten may have pruned aliases before another host refreshed its proofs.
-        let mut moves = recorded_moves.clone();
-        moves.extend(self.moved.clone());
-        let mut lint = self.lint.clone();
-        let mut proofs = self.expect_sites.clone();
-        for (host, proof) in &self.expect_sites {
-            let counts = self
-                .lint
-                .get(host)
-                .ok_or("expect proof has no host lint counters")?;
-            let (proof, counts) =
-                super::expect_sites::relocate(proof, counts, &moves, measurement)?;
-            lint.insert(host.clone(), counts);
-            proofs.insert(host.clone(), proof);
-        }
-        self.lint = lint;
-        self.expect_sites = proofs;
-        Ok(())
-    }
-
-    pub fn retire_moves(&mut self, base: &Measurement, recorded: Option<&Baseline>) {
-        self.moved = self.remaining_moves(base, recorded);
     }
 
     #[cfg(test)]
@@ -264,7 +162,7 @@ impl Baseline {
             return Err("move needs at least one source and target".into());
         }
         let pending = super::transfers::pending(&self.moved, Some(&recorded.moved));
-        let mut previous = self.remaining_moves(base, Some(recorded));
+        let mut previous = self.remaining_moves(base);
         previous.retain(|source, _| pending.contains_key(source));
         let mut moves = previous.clone();
         for &(old, new) in steps {
@@ -303,33 +201,14 @@ impl Baseline {
         let after = super::transfers::limits(&measured, current, base, &moves, &original_budgets)?;
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
         let mut budget = self.budget.clone();
-        let mut lint = self.lint.clone();
-        let mut proofs = self.expect_sites.clone();
         let mut coverage = self.coverage_moves.clone();
         for &(old, new) in steps {
             let rename = [(old.into(), new.into())].into();
             budget = super::budgets::relocated(&budget, &rename)?;
             coverage.debt = crate::coverage::moves::relocated(&coverage.debt, &rename)?;
-            for values in lint.values_mut() {
-                *values = move_entries(values, old, new, true)?;
-            }
-            for proof in proofs.values_mut() {
-                *proof = super::expect_sites::move_file(proof, old, new)?;
-            }
-        }
-        for (host, proof) in &mut proofs {
-            let counts = lint
-                .get(host)
-                .ok_or("expect proof has no host lint counters")?;
-            let (relocated, counts) =
-                super::expect_sites::relocate(proof, counts, &moves, current)?;
-            *proof = relocated;
-            lint.insert(host.clone(), counts);
         }
         self.entries = entries;
         self.budget = budget;
-        self.lint = lint;
-        self.expect_sites = proofs;
         self.coverage_moves = coverage;
         self.moved.retain(|source, _| !pending.contains_key(source));
         self.moved.extend(moves);
@@ -337,29 +216,15 @@ impl Baseline {
     }
 }
 
-fn lint_values(table: &toml_edit::Table) -> Result<BTreeMap<String, u64>, String> {
-    table
-        .iter()
-        .map(|(key, value)| {
-            let count = value
-                .as_integer()
-                .and_then(|v| u64::try_from(v).ok())
-                .ok_or_else(|| format!("invalid lint value: {key}"))?;
-            Ok((key.into(), count))
-        })
-        .collect()
-}
-
 fn move_entries(
     entries: &BTreeMap<String, u64>,
     old: &str,
     new: &str,
-    prefix: bool,
 ) -> Result<BTreeMap<String, u64>, String> {
     let mut result = entries.clone();
     for (key, value) in entries {
         let id = key.rsplit_once('|').map_or(key.as_str(), |(_, id)| id);
-        if (prefix && prefix_matches(id, old)) || (!prefix && id == old) {
+        if prefix_matches(id, old) {
             let target_id = format!("{new}{}", &id[old.len()..]);
             let target_key = key
                 .rsplit_once('|')
@@ -590,11 +455,7 @@ mod tests {
     fn move_baseline(baseline: &mut Baseline, old: &str, new: &str) -> Result<(), String> {
         use super::super::metrics::Finding;
         let mut base = Measurement::default();
-        for key in baseline
-            .entries
-            .keys()
-            .chain(baseline.lint.values().flat_map(|v| v.keys()))
-        {
+        for key in baseline.entries.keys() {
             let id = key.rsplit_once('|').unwrap().1;
             let parts: Vec<_> = key.split('|').collect();
             base.findings.push(Finding {
@@ -778,87 +639,11 @@ mod tests {
         assert!(validate_transfers(&base.baseline(), &current, &base, &moves).is_ok());
     }
     #[test]
-    fn legacy_baselines_are_linux_only_and_host_values_are_validated() {
-        let legacy = Baseline::parse(
-            r#"[lint]
-"unwrap|uqm::a" = 2
-"#,
-        )
-        .unwrap();
-        assert_eq!(legacy.lint.len(), 1);
-        assert_eq!(legacy.lint["linux"], entries(&[("unwrap|uqm::a", 2)]));
-        assert!(Baseline::parse(
-            r#"[lint.macos]
-"unwrap|uqm::a" = -1
-"#
-        )
-        .is_err());
-        assert!(Baseline::parse(
-            r#"[lint]
-macos = "invalid"
-"#
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn prefix_move_rewrites_lint_section() {
-        let mut baseline = Baseline {
-            lint: [
-                (
-                    "linux".into(),
-                    entries(&[("unwrap_used|uqm::graphics::draw::@file", 2)]),
-                ),
-                (
-                    "macos".into(),
-                    entries(&[("unwrap_used|uqm::graphics::draw::@file", 3)]),
-                ),
-            ]
-            .into(),
-            ..Baseline::default()
-        };
-        move_baseline(&mut baseline, "uqm::graphics", "uqm-engine::graphics").unwrap();
-        for (host, count) in [("linux", 2), ("macos", 3)] {
-            assert_eq!(
-                baseline.lint[host],
-                entries(&[("unwrap_used|uqm-engine::graphics::draw::@file", count)])
-            );
-        }
-        let root = super::super::tool::fixture_directory();
-        let path = root.path().join("baseline.toml");
-        baseline.write(&path).unwrap();
-        assert_eq!(Baseline::read(&path).unwrap(), baseline);
-    }
-    #[test]
     fn unsafe_transfers_use_each_workspace_metric_total() {
         let before = entries(&[("unsafe|unsafe_blocks|uqm::battle", 3)]);
         let after = entries(&[("unsafe|unsafe_blocks|uqm::engine", 3)]);
         assert!(check_limits(&after, &before, &BTreeMap::new(), true).is_ok());
         let growth = entries(&[("unsafe|unsafe_blocks|uqm::engine", 4)]);
         assert!(check_limits(&growth, &before, &BTreeMap::new(), true).is_err());
-    }
-
-    #[test]
-    fn expect_diagnostic_proof_round_trips_without_changing_counters() {
-        let root = super::super::tool::fixture_directory();
-        let path = root.path().join("baseline.toml");
-        let baseline = Baseline {
-            lint: [(
-                "macos".into(),
-                entries(&[("clippy::expect_used|old::@file", 2)]),
-            )]
-            .into(),
-            expect_sites: [(
-                "macos".into(),
-                entries(&[(
-                    "old::@file|old::callback|u16 :: try_from (r) . expect (\"COUNT\")",
-                    1,
-                )]),
-            )]
-            .into(),
-            ..Baseline::default()
-        };
-        baseline.write(&path).unwrap();
-        assert_eq!(Baseline::read(&path).unwrap(), baseline);
     }
 }

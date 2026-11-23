@@ -150,25 +150,6 @@ fn staged_fixture() -> Fixture {
         )]),
     )
     .unwrap();
-    let path = root.path().join("rust/xtask/quality-baseline.toml");
-    let mut baseline = Baseline::read(&path).unwrap();
-    for (host, left, right) in [("linux", 3, 4), ("macos", 5, 6)] {
-        baseline.lint.insert(
-            host.into(),
-            [
-                (
-                    "clippy::unwrap_used|uqm::battle::context_access::staged_left".into(),
-                    left,
-                ),
-                (
-                    "clippy::unwrap_used|uqm::battle::context_access::staged_right".into(),
-                    right,
-                ),
-            ]
-            .into(),
-        );
-    }
-    baseline.write(&path).unwrap();
     relocate(root.path(), "staged_left", "engine_left");
     relocate(root.path(), "staged_right", "engine_right");
     root
@@ -208,22 +189,6 @@ fn related_destinations_move_atomically_without_credit_growth() {
     .unwrap();
     let baseline = Baseline::read(&path).unwrap();
     let measured = walk::measure(root.path(), None, false).unwrap();
-    for (host, left, right) in [("linux", 3, 4), ("macos", 5, 6)] {
-        assert_eq!(
-            baseline.lint[host],
-            [
-                (
-                    "clippy::unwrap_used|uqm::battle::context_access::engine_left".into(),
-                    left
-                ),
-                (
-                    "clippy::unwrap_used|uqm::battle::context_access::engine_right".into(),
-                    right
-                ),
-            ]
-            .into()
-        );
-    }
     let nonzero = |entries: std::collections::BTreeMap<String, u64>| {
         entries
             .into_iter()
@@ -406,87 +371,4 @@ fn packaged_accessors_keep_only_their_existing_scoped_credit() {
         .into()
     )
     .is_err());
-}
-
-#[test]
-fn whole_file_move_keeps_expect_proofs_with_their_host_counters() {
-    let root = Fixture::new();
-    for (path, text) in [
-        ("rust/Cargo.toml", "[workspace]\n[package]\nname=\"uqm\"\nversion=\"0.1.0\"\nedition=\"2021\"\n"),
-        ("rust/Cargo.lock", "version = 4\n[[package]]\nname = \"uqm\"\nversion = \"0.1.0\"\n"),
-        ("rust/xtask/src/quality/macros.rs", "const HANDLERS: &[(&str, &str)] = &[];"),
-        ("rust/src/lib.rs", "pub mod old;\n"),
-        ("rust/src/old.rs", "pub struct Old; impl Old { pub fn response(r: u32) -> u16 { u16::try_from(r).expect(\"COUNT\") } }\n"),
-    ] {
-        write(root.path(), path, text);
-    }
-    let source = walk::measure(root.path(), None, false).unwrap();
-    let site = source.expect_sites.iter().next().unwrap();
-    let proof_key = format!("uqm::old::@file|{}|{}", site.owner, site.expression);
-    let mut baseline = Baseline {
-        entries: source.baseline(),
-        lint: [
-            (
-                "linux".into(),
-                [
-                    ("clippy::expect_used|uqm::old::@file".into(), 1),
-                    ("clippy::unwrap_used|untouched::@file".into(), 2),
-                ]
-                .into(),
-            ),
-            (
-                "macos".into(),
-                [
-                    ("clippy::expect_used|uqm::old::@file".into(), 1),
-                    ("clippy::unwrap_used|untouched::@file".into(), 3),
-                ]
-                .into(),
-            ),
-        ]
-        .into(),
-        expect_sites: [
-            ("linux".into(), [(proof_key.clone(), 1)].into()),
-            ("macos".into(), [(proof_key, 1)].into()),
-        ]
-        .into(),
-        ..Baseline::default()
-    };
-    let archived = Baseline {
-        entries: source.baseline(),
-        ..Baseline::default()
-    };
-    std::fs::remove_file(root.path().join("rust/src/old.rs")).unwrap();
-    write(root.path(), "rust/src/lib.rs", "pub mod host;\n");
-    write(root.path(), "rust/src/host.rs", "pub struct Host; impl Host { pub fn response(r: u32) -> u16 { u16::try_from(r).expect(\"COUNT\") } }\n");
-    let current = walk::measure(root.path(), None, false).unwrap();
-    baseline
-        .add_moves(
-            &[
-                ("uqm::old", "uqm::host"),
-                ("uqm::old::Old", "uqm::host::Host"),
-                ("uqm::old::<Old>", "uqm::host::<Host>"),
-            ],
-            &current,
-            &source,
-            &Default::default(),
-        )
-        .unwrap();
-    baseline.tighten(&current, Some(&archived)).unwrap();
-    for (host, untouched) in [("linux", 2), ("macos", 3)] {
-        assert_eq!(
-            baseline.lint[host]["clippy::expect_used|uqm::host::@file"],
-            1
-        );
-        assert!(!baseline.lint[host].contains_key("clippy::expect_used|uqm::old::@file"));
-        assert_eq!(
-            baseline.lint[host]["clippy::unwrap_used|untouched::@file"],
-            untouched
-        );
-        assert_eq!(baseline.expect_sites[host].len(), 1);
-        assert_eq!(baseline.expect_sites[host].values().sum::<u64>(), 1);
-        super::expect_sites::validate(&baseline.expect_sites[host], &current).unwrap();
-        let mut grown = baseline.lint[host].clone();
-        grown.insert("clippy::expect_used|uqm::host::@file".into(), 2);
-        assert!(tool::compare(&grown, &baseline.lint[host], &baseline.moved).is_err());
-    }
 }

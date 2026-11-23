@@ -13,7 +13,6 @@ fn recording_exact_counters_preserves_other_sections() {
             ("unsafe|unsafe_fn|uqm::app", 2),
         ]),
         moved: [("uqm::old".into(), "uqm::new".into())].into(),
-        lint: [("linux".into(), entries(&[("unwrap|uqm::app", 2)]))].into(),
         coverage_debt: [("src/shim.rs".into(), "U7-02".into())].into(),
         layers: true,
         ..Default::default()

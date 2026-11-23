@@ -106,7 +106,7 @@ pushes to `main`. Gates may be tightened. They must not be weakened.
 |---|---|
 | Formatting | `cargo fmt --all --check` |
 | Quality | `cargo xtask quality` against the base branch: size, complexity, FFI, `unsafe`, `allow` and layer debt may not grow. |
-| Lints | `cargo xtask clippy`: strict Clippy over all workspace targets, with the debt lints (`unwrap_used`, `expect_used`, undocumented `unsafe`) held to the per-platform baseline. |
+| Lints | `cargo xtask clippy`: strict Clippy over all workspace targets. `unwrap_used`, `expect_used`, `mem_forget`, undocumented `unsafe` blocks and `unsafe_op_in_unsafe_fn` are `deny` in `[workspace.lints]`, so any hit fails; there is no baseline for them. |
 | Tests | Workspace tests with `audio_heart,debug-process,native` enabled. |
 | Coverage | `cargo xtask coverage` against the base branch. |
 | Supply chain | `cargo xtask deny`. |
