@@ -1558,12 +1558,7 @@ impl AutomationObserver {
                 return scheduler_event;
             }
         }
-        let patrol_phrase = match self.actions.get(inner.sched_state.step_index) {
-            Some(Action::NavigateToPlanet(step)) => step.encounter_response.as_deref(),
-            Some(Action::NavigateToOrbit(step)) => step.encounter_response.as_deref(),
-            Some(Action::NavigateToHyperspace(step)) => step.encounter_response.as_deref(),
-            _ => None,
-        };
+        let patrol_phrase = Self::patrol_phrase(self.actions.get(inner.sched_state.step_index));
         if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(world, inner, phrase)) {
             return scheduler_event;
         }
@@ -3313,6 +3308,61 @@ mod tests {
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
         assert!(process_supplied(&coord));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
+    }
+
+    #[test]
+    fn moon_navigation_answers_an_interrupting_patrol() {
+        const CHILD: &str = "UQM_MOON_PATROL_RESPONSE_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::moon_navigation_answers_an_interrupting_patrol", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let source = br#"{"version":1,"name":"moon-patrol","budgets":{"max_input_ticks":2000,"max_presentations":2000,"max_wallclock_seconds":60},"steps":[{"action":"navigate_to_moon","planet":1,"moon":2,"max_ticks":500,"encounter_response":"bye_ally"},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let app = {
+            let game = uqm_engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().into(),
+                game.world.activity_control(),
+                uqm_engine::input::InputControls::default(),
+                Default::default(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
+        let coord = app.observer().cloned().unwrap();
+        // An allied patrol hails mid-route and offers its response list.
+        let ui = &coord.ui;
+        ui.begin_communication();
+        ui.observe_choices(&uqm_engine::observe::ResponseChoices(vec![
+            Some("whats_up_ally".into()),
+            Some("bye_ally".into()),
+        ]));
+        ui.observe_communication_responses(2);
+        ui.set_communication_responses_ready(true);
+        for _ in 0..4 {
+            let _ = process_supplied(&coord);
+        }
+        assert_eq!(
+            ui.take_response_request(),
+            Some(1),
+            "the moon route must answer the patrol with its encounter_response"
+        );
+        assert_eq!(coord.inner.lock().sched_state.step_index, 0);
+        assert!(coord.inner.lock().terminal_class.is_none());
     }
 
     #[test]
