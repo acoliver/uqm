@@ -99,7 +99,7 @@ fn check_values<'a>(
     Ok(())
 }
 
-/// Record measured source counts, retaining budgets, transfers, lint debt and coverage exceptions.
+/// Record measured source counts, retaining budgets, transfers and coverage exceptions.
 pub fn growth(baseline: &mut Baseline, measured: &Entries, engine_only: bool) {
     for (key, value) in &mut baseline.entries {
         *value = (*value).min(measured.get(key).copied().unwrap_or(0));

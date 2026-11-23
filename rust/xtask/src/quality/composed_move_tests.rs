@@ -1,105 +1,5 @@
 use super::baseline::Baseline;
 use super::metrics::{Finding, Measurement};
-use std::collections::BTreeMap;
-
-#[test]
-fn landed_moves_keep_test_only_lint_credits_until_every_host_migrates() {
-    let old = "uqm::graphics";
-    let new = "uqm-engine::graphics";
-    let old_key = "clippy::undocumented_unsafe_blocks|uqm::@path::src::graphics::tests.rs";
-    let new_key = "clippy::undocumented_unsafe_blocks|uqm-engine::@path::src::graphics::tests.rs";
-    let measurement = Measurement {
-        findings: vec![Finding {
-            counter: "loc".into(),
-            metric: "loc".into(),
-            identity: format!("{new}::@file"),
-            file: "crates/engine/src/graphics/mod.rs".into(),
-            package: "uqm-engine".into(),
-            subsystem: "graphics".into(),
-            value: 1,
-        }],
-        ..Default::default()
-    };
-    let mut baseline = Baseline {
-        moved: [(old.into(), new.into())].into(),
-        lint: [
-            ("linux".into(), [(old_key.into(), 2)].into()),
-            ("macos".into(), [(new_key.into(), 2)].into()),
-        ]
-        .into(),
-        ..Default::default()
-    };
-    baseline.retire_moves(&measurement, None);
-    assert_eq!(baseline.moved.get(old).map(String::as_str), Some(new));
-    baseline
-        .tighten(
-            &measurement,
-            Some(&Baseline {
-                entries: [(format!("loc|loc|{new}::@file"), 1)].into(),
-                ..Default::default()
-            }),
-        )
-        .unwrap();
-    assert_eq!(baseline.moved.get(old).map(String::as_str), Some(new));
-    baseline
-        .lint
-        .insert("linux".into(), [(new_key.into(), 2)].into());
-    baseline
-        .tighten(
-            &measurement,
-            Some(&Baseline {
-                entries: [(format!("loc|loc|{new}::@file"), 1)].into(),
-                ..Default::default()
-            }),
-        )
-        .unwrap();
-    assert_eq!(baseline.moved, BTreeMap::new());
-    baseline.moved.insert(old.into(), new.into());
-    baseline.retire_moves(&measurement, None);
-    assert!(baseline.moved.is_empty());
-}
-
-#[test]
-fn registering_another_move_preserves_pending_lint_credits() {
-    let finding = |identity: &str, subsystem: &str| Finding {
-        counter: "ffi".into(),
-        metric: "static_mut".into(),
-        identity: identity.into(),
-        file: "src/lib.rs".into(),
-        package: "uqm".into(),
-        subsystem: subsystem.into(),
-        value: 1,
-    };
-    let engine = finding("uqm-engine::graphics::existing", "graphics");
-    let base = Measurement {
-        findings: vec![engine.clone(), finding("uqm::battle::old", "battle")],
-        ..Default::default()
-    };
-    let current = Measurement {
-        findings: vec![engine, finding("uqm::app::new", "app")],
-        ..Default::default()
-    };
-    let mut baseline = Baseline {
-        entries: base.baseline(),
-        moved: [("uqm::graphics".into(), "uqm-engine::graphics".into())].into(),
-        lint: [(
-            "linux".into(),
-            [(
-                "clippy::unwrap_used|uqm::@path::src::graphics::tests.rs".into(),
-                2,
-            )]
-            .into(),
-        )]
-        .into(),
-        ..Default::default()
-    };
-    baseline
-        .add_move("uqm::battle::old", "uqm::app::new", &current, &base)
-        .unwrap();
-    assert_eq!(baseline.moved.len(), 2);
-    assert_eq!(baseline.entries["ffi|static_mut|uqm::app"], 1);
-    assert!(!baseline.entries.contains_key("ffi|static_mut|uqm::battle"));
-}
 
 #[test]
 fn enclosing_move_composes_a_prior_declaration_rename() {
@@ -225,7 +125,7 @@ fn composition_state(namespace: &str, item: &str) -> Measurement {
 }
 
 #[test]
-fn composed_moves_conserve_budgets_allows_lints_and_workspace_unsafe() {
+fn composed_moves_conserve_budgets_allows_and_workspace_unsafe() {
     let old = "uqm-engine::observe";
     let new = "uqm-engine::observe_port";
     let base = composition_state(old, "Io");
@@ -243,9 +143,6 @@ fn composed_moves_conserve_budgets_allows_lints_and_workspace_unsafe() {
     )
     .unwrap();
     baseline.entries = super::budgets::scoped_entries(&base, &baseline.budget);
-    let old_lint = format!("clippy::unwrap_used|{old}::Io");
-    let new_lint = format!("clippy::unwrap_used|{new}::ObservationIo");
-    baseline.lint = [("macos".into(), [(old_lint.clone(), 1)].into())].into();
     baseline
         .add_move(
             &format!("{old}::Io"),
@@ -261,19 +158,6 @@ fn composed_moves_conserve_budgets_allows_lints_and_workspace_unsafe() {
         baseline.entries,
         super::budgets::scoped_entries(&current, &baseline.budget)
     );
-    assert_eq!(baseline.lint["macos"], [(new_lint.clone(), 1)].into());
-    super::tool::compare(
-        &[(new_lint.clone(), 1)].into(),
-        &[(old_lint, 1)].into(),
-        &baseline.moved,
-    )
-    .unwrap();
-    assert!(super::tool::compare(
-        &[(new_lint, 2)].into(),
-        &baseline.lint["macos"],
-        &baseline.moved
-    )
-    .is_err());
     current.findings[0].value = 2;
     assert!(super::budgets::check(&current, &baseline.budget).is_err());
     current.findings[0].value = 1;
@@ -308,7 +192,6 @@ fn composed_moves_reject_missing_targets_and_retained_sources_atomically() {
         (
             baseline.entries.clone(),
             baseline.budget.clone(),
-            baseline.lint.clone(),
             baseline.moved.clone(),
         )
     };
@@ -338,13 +221,6 @@ fn specific_move_credit_cannot_be_reused_at_the_old_target_name() {
         ("uqm::old::Io".into(), "uqm::new::ObservationIo".into()),
     ]
     .into();
-    let before = [("clippy::unwrap_used|uqm::old::Io".into(), 1)].into();
-    let current = [
-        ("clippy::unwrap_used|uqm::new::Io".into(), 1),
-        ("clippy::unwrap_used|uqm::new::ObservationIo".into(), 1),
-    ]
-    .into();
-    assert!(super::tool::compare(&current, &before, &moves).is_err());
     let before = [("loc|loc|uqm::old::Io".into(), 1000)].into();
     let current = [("loc|loc|uqm::new::Io".into(), 1000)].into();
     assert!(super::baseline::check_limits(&current, &before, &moves, true).is_err());
@@ -400,11 +276,6 @@ fn final_child_destination_can_be_registered_before_its_enclosing_move() {
     )
     .unwrap();
     baseline.entries = super::budgets::scoped_entries(&base, &baseline.budget);
-    baseline.lint = [(
-        "macos".into(),
-        [(format!("clippy::unwrap_used|{old}::Io"), 1)].into(),
-    )]
-    .into();
     baseline
         .add_move(
             &format!("{old}::Io"),
@@ -422,10 +293,6 @@ fn final_child_destination_can_be_registered_before_its_enclosing_move() {
     assert_eq!(
         baseline.budget["stage_b_raw"].scopes,
         [(format!("ffi|raw_records|{new}::ObservationIo"), 1)].into()
-    );
-    assert_eq!(
-        baseline.lint["macos"],
-        [(format!("clippy::unwrap_used|{new}::ObservationIo"), 1)].into()
     );
     assert_eq!(baseline.moved[old], new);
     assert_eq!(
@@ -553,15 +420,6 @@ fn vacated_observation_namespace_accepts_independently_owned_campaign_data() {
     ]);
     let mut baseline = Baseline {
         entries: base.baseline(),
-        lint: [(
-            "macos".into(),
-            [
-                ("clippy::unwrap_used|uqm-engine::observe::Io".into(), 1),
-                ("clippy::unwrap_used|uqm::engine::observe::Io".into(), 3),
-            ]
-            .into(),
-        )]
-        .into(),
         ..Default::default()
     };
     baseline
@@ -575,183 +433,6 @@ fn vacated_observation_namespace_accepts_independently_owned_campaign_data() {
     baseline.add_move(old, port, &prepared, &base).unwrap();
     baseline.add_move(core, old, &current, &base).unwrap();
     assert_eq!(baseline.entries, current.baseline());
-    assert_eq!(
-        baseline.lint["macos"],
-        [
-            (
-                "clippy::unwrap_used|uqm-engine::observe_port::ObservationIo".into(),
-                1
-            ),
-            ("clippy::unwrap_used|uqm-engine::observe::Io".into(), 3),
-        ]
-        .into()
-    );
     assert_eq!(baseline.moved[old], port);
     assert_eq!(baseline.moved[core], old);
-}
-
-fn landed_input_move() -> (Baseline, Measurement, Measurement) {
-    let old = "uqm-engine::input";
-    let base = composition_state(old, "Io");
-    let current = composition_state("uqm-engine::input_port", "Io");
-    let mut baseline = Baseline {
-        moved: [("uqm::input".into(), old.into())].into(),
-        lint: [
-            (
-                "linux".into(),
-                [
-                    ("clippy::unwrap_used|uqm::input::Io".into(), 1),
-                    (
-                        "clippy::unwrap_used|uqm::@path::src::input::tests.rs".into(),
-                        2,
-                    ),
-                ]
-                .into(),
-            ),
-            (
-                "macos".into(),
-                [(format!("clippy::unwrap_used|{old}::Io"), 1)].into(),
-            ),
-        ]
-        .into(),
-        ..Default::default()
-    };
-    super::budgets::set_scoped(
-        &mut baseline.budget,
-        "stage_b_raw",
-        1,
-        [(format!("ffi|raw_records|{old}::Io"), 1)].into(),
-        false,
-    )
-    .unwrap();
-    baseline.entries = super::budgets::scoped_entries(&base, &baseline.budget);
-    (baseline, base, current)
-}
-
-#[test]
-fn a_landed_module_can_move_again_with_pending_host_lint_credits() {
-    let (mut baseline, base, current) = landed_input_move();
-    let old = "uqm-engine::input";
-    let new = "uqm-engine::input_port";
-    let prior_lint = baseline.lint.clone();
-    baseline.add_move(old, new, &current, &base).unwrap();
-    assert_eq!(baseline.moved["uqm::input"], new);
-    assert_eq!(baseline.moved[old], new);
-    assert_eq!(baseline.budget["stage_b_raw"].limit, 1);
-    assert_eq!(
-        baseline.budget["stage_b_raw"].scopes,
-        [(format!("ffi|raw_records|{new}::Io"), 1)].into()
-    );
-    assert_eq!(
-        baseline.entries,
-        super::budgets::scoped_entries(&current, &baseline.budget)
-    );
-    assert_eq!(baseline.lint["linux"], prior_lint["linux"]);
-    let measured = [(format!("clippy::unwrap_used|{new}::Io"), 1)].into();
-    assert_eq!(baseline.lint["macos"], measured);
-    for host in ["linux", "macos"] {
-        super::tool::compare(&measured, &prior_lint[host], &baseline.moved).unwrap();
-        assert!(super::tool::compare(
-            &[(format!("clippy::unwrap_used|{new}::Io"), 2)].into(),
-            &prior_lint[host],
-            &baseline.moved
-        )
-        .is_err());
-    }
-    super::tool::compare(
-        &[(
-            "clippy::unwrap_used|uqm-engine::@path::src::input_port::tests.rs".into(),
-            2,
-        )]
-        .into(),
-        &prior_lint["linux"],
-        &baseline.moved,
-    )
-    .unwrap();
-    let duplicate = [
-        ("clippy::unwrap_used|uqm::input::Io".into(), 1),
-        (format!("clippy::unwrap_used|{old}::Io"), 1),
-    ]
-    .into();
-    assert!(super::tool::compare(&measured, &duplicate, &baseline.moved)
-        .unwrap_err()
-        .contains("multiple transfer credits"));
-}
-
-#[test]
-fn landed_lint_history_does_not_permit_missing_targets_or_retained_sources() {
-    for retain_source in [false, true] {
-        let (mut baseline, base, mut current) = landed_input_move();
-        if retain_source {
-            current.findings.extend(base.findings.clone());
-        } else {
-            current.findings.clear();
-        }
-        let previous = (
-            baseline.entries.clone(),
-            baseline.budget.clone(),
-            baseline.lint.clone(),
-            baseline.moved.clone(),
-        );
-        assert!(baseline
-            .add_move(
-                "uqm-engine::input",
-                "uqm-engine::input_port",
-                &current,
-                &base
-            )
-            .is_err());
-        assert_eq!(
-            (
-                baseline.entries,
-                baseline.budget,
-                baseline.lint,
-                baseline.moved,
-            ),
-            previous
-        );
-    }
-}
-
-#[test]
-fn tightening_keeps_an_alias_while_the_comparison_base_lint_bank_uses_it() {
-    let old = "uqm-engine::input";
-    let new = "uqm-engine::input_port";
-    let old_key = "clippy::undocumented_unsafe_blocks|uqm-engine::@path::src::input::tests.rs";
-    let new_key = "clippy::undocumented_unsafe_blocks|uqm-engine::@path::src::input_port::tests.rs";
-    let measurement = Measurement {
-        findings: vec![Finding {
-            counter: "loc".into(),
-            metric: "loc".into(),
-            identity: format!("{new}::@file"),
-            file: "crates/engine/src/input_port/mod.rs".into(),
-            package: "uqm-engine".into(),
-            subsystem: "input".into(),
-            value: 1,
-        }],
-        ..Default::default()
-    };
-    let entries: BTreeMap<String, u64> = [(format!("loc|loc|{new}::@file"), 1)].into();
-    let mut main = Baseline {
-        entries: entries.clone(),
-        moved: [(old.into(), new.into())].into(),
-        lint: [("macos".into(), [(old_key.into(), 49)].into())].into(),
-        ..Default::default()
-    };
-    let mut branch = Baseline {
-        entries,
-        moved: main.moved.clone(),
-        lint: [("macos".into(), [(new_key.into(), 49)].into())].into(),
-        ..Default::default()
-    };
-    branch.retire_moves(&measurement, Some(&main));
-    branch.tighten(&measurement, Some(&main)).unwrap();
-    assert_eq!(branch.moved.get(old).map(String::as_str), Some(new));
-    super::tool::compare(&branch.lint["macos"], &main.lint["macos"], &branch.moved).unwrap();
-    // Once main's own bank is rekeyed nothing needs the alias any more.
-    main.lint
-        .insert("macos".into(), [(new_key.into(), 49)].into());
-    branch.retire_moves(&measurement, Some(&main));
-    branch.tighten(&measurement, Some(&main)).unwrap();
-    assert!(branch.moved.is_empty());
 }

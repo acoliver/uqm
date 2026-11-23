@@ -2,10 +2,6 @@
 layers = true
 coverage_capture = ["uqm::comm::races"]
 
-[lint.linux]
-
-[lint.macos]
-
 [entry]
 "complexity|cognitive|uqm-content::comm::races::arilou::<Dialogue<'_,A>>::arilou_home" = 80
 "complexity|cognitive|uqm-content::comm::races::arilou::<Dialogue<'_,A>>::friendly_space_arilou" = 33

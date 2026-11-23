@@ -29,17 +29,17 @@ every xtask command compiles the whole game first. The workspace has two members
 
 ```toml
 [workspace.lints.rust]
-unsafe_op_in_unsafe_fn = "warn"          # debt lint (2.3)
+unsafe_op_in_unsafe_fn = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
-mem_forget = "warn"                     # debt lint (ownership transfers)
-undocumented_unsafe_blocks = "warn"      # debt lint
-unwrap_used = "warn"                     # debt lint
-expect_used = "warn"                     # debt lint
+mem_forget = "deny"
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
 
 [lints]
 workspace = true                         # in every workspace member
@@ -60,52 +60,24 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 ```
 
-Phase 0 runs each `deny` lint once. Any lint with hits is either fixed in Phase 0
-(when the hits are few) or moved to the debt set. U0-02 adds the deny set only, while
-CI still runs raw clippy with `-D warnings`; the four debt lints arrive in U0-03
-together with `cargo xtask clippy`, which baselines them and replaces the raw step in
-the same PR, so no PR runs a debt lint under `-D warnings`.
+Phase 0 ran each `deny` lint once. Lints with hits were either fixed in Phase 0 or
+carried as a counted debt set until Phase 8 (U8-01), when the debt reached zero and
+every one of them became `deny` (2.3).
 
-### 2.3 Deny set and debt set
+### 2.3 Deny set
 
-`cargo xtask clippy` runs clippy once with `--message-format=json` and
-`--force-warn` for each debt lint, then sorts the diagnostics:
-- an error, or a warning from any lint outside the debt set, fails (the effect of
-  `-D warnings` today);
-- warnings from the **debt set** (`unsafe_op_in_unsafe_fn`,
-  `clippy::undocumented_unsafe_blocks`, `clippy::unwrap_used`, `clippy::expect_used`,
-  `clippy::mem_forget`)
-  are counted per file against the baseline `[lint.<target_os>]` section for the
-  host running Clippy (`[lint.linux]` or `[lint.macos]` in CI). `--force-warn`
-  overrides in-source `allow`s, so a broad suppression such as
-  `allow(clippy::all)` over the ABI include (`ships/native.rs:4-12`) cannot hide
-  debt moved under it.
+Every lint in 2.1 is `deny`, including the former debt lints `unsafe_op_in_unsafe_fn`,
+`clippy::undocumented_unsafe_blocks`, `clippy::unwrap_used`, `clippy::expect_used`
+and `clippy::mem_forget`. `cargo xtask clippy` runs plain Clippy over all workspace
+targets with `-D warnings` and the CI feature set; the workspace levels decide, so
+any hit fails the build. There is no per-file debt baseline, no `--force-warn` and no
+`[lint.<target_os>]` baseline section. Clippy runs in CI on Linux (the `rust` job)
+and macOS (the `aarch64-apple-darwin` game-build job). An `allow` of one of these
+lints is an `allows|...` quality finding and cannot grow.
 
-Debt baselines are generated per host `target_os`, because Clippy sees only
-compiled `cfg` branches. CI checks Linux in the `rust` job and macOS in the
-`aarch64-apple-darwin` game-build job, with Rust 1.98.0 and features
-`audio_heart,debug-process,native`. Local runs check their own host section;
-`--tighten` updates only that section and preserves every other host's counts.
-A missing host section must be initialized with `--tighten`; existing counts
-cannot rise. The original unqualified baseline is read as Linux when comparing
-older base refs. File/crate moves transfer lint debt in every host section.
-Decision [#709](https://github.com/acoliver/uqm/issues/709) replaces the Linux-only
-measurement policy of [#708](https://github.com/acoliver/uqm/issues/708).
-Without an approved growth label, the Linux CI job runs Clippy with `--tighten`
-after checking the recorded limits and publishes `clippy-baseline-linux-x86_64`.
-Download that generated baseline when recording Linux reductions; use the same
-command on macOS for macOS reductions. Do not edit counts.
-
-When introducing a previously unenforced lint, the base comparison accepts its
-initial game-only counts only if the base manifest and classifier did not enable
-it, game sources are unchanged, and the host's recorded counts equal its Clippy
-measurement. Previously enabled zero-hit lints still have a zero limit. The
-`mem_forget` ownership-transfer hit deferred in #663 is counted this way; it is not
-an exception to later regression checks.
-
-In Phase 8 the debt set becomes `deny`. Where a compiler lint can enforce a rule it
-is used instead of a count: when a phase closes a subsystem, that subsystem's module
-root gets `#![deny(unsafe_code)]`, and a crate root gets `forbid` as above.
+Where a compiler lint can enforce a rule it is used instead of a count: when a phase
+closes a subsystem, that subsystem's module root gets `#![deny(unsafe_code)]`, and a
+crate root gets `forbid` as above.
 
 Not adopted: crate-wide `pedantic`/`nursery` (thousands of hits in ported code), and
 jefe's 60-line and cognitive-15 thresholds, which would force splits of functions that
@@ -130,7 +102,7 @@ Production code is defined by the source walk of section 3.2.
 | `quality layers` | Crate graph (section 3.5): workspace edges, OS crates per crate, references that block a planned crate, banned `std` APIs; inside the root, imports against the layer table (architecture.md section 2) | edges: absolute; others baseline, 0 when absent |
 | `quality native-files` | Tracked files ending `.c .h .cc .cpp .hpp .m .mm .s .S .asm` (`git ls-files`) | 0, absolute |
 | `quality deps` | Section 3.4 | absolute |
-| `clippy` | Section 2.3 | deny set: 0; debt set: baseline |
+| `clippy` | Section 2.3 | deny set: 0 |
 | `coverage` | `cargo llvm-cov --workspace --no-default-features --features audio_heart,debug-process,native --summary-only`; workspace and added production files (section 4 rule 4, [#708](https://github.com/acoliver/uqm/issues/708)) | workspace ≥ 70%; each added production file with executable lines ≥ 70%, absolute |
 | `deny` | `cargo deny --locked check advisories bans licenses sources` with `rust/deny.toml` | 0 findings |
 | `parity record\|check` | Replay corpus (plan.md section 2) against `rust/tests/golden/parity/` | exact match |
@@ -342,11 +314,6 @@ planned_engine_core = { limit = 0, ends = "phase-4" }
 "uqm::graphics" = "uqm-engine::graphics"           # prefix move
 "uqm::game_init::kernel_abi::disp_q" = "uqm::engine::battle::legacy::disp_q"
 
-[lint.linux]                 # independent debt counts for each CI host
-"clippy::unwrap_used|uqm::graphics::draw::@file" = 1
-
-[lint.macos]
-"clippy::unwrap_used|uqm::graphics::draw::@file" = 1
 ```
 
 Rules enforced by xtask:
@@ -461,7 +428,7 @@ Rules enforced by xtask:
    `cargo xtask quality --allow-growth --record` (or `--allow-engine-os --record`
    for the scoped engine allowance). Recording raises only measured ordinary entries
    that exceed their recorded limits; it leaves reductions, finite budgets, transfers,
-   lint debt and coverage exceptions unchanged. It cannot be combined with `--tighten`.
+   and coverage exceptions unchanged. It cannot be combined with `--tighten`.
    The approval flag is the local counterpart of the owner-applied label, not permission
    for an agent to apply that label or approve unrelated growth.
    CI's existing labelled `quality --base` invocation verifies that each grown
@@ -511,11 +478,11 @@ unlabeled]` so a label change re-runs. `GROWTH` and `GOLDEN` stand for
 
 | Job | Runner | Steps |
 |---|---|---|
-| `rust` | ubuntu | `cargo fmt --all --check`; `cargo xtask quality $BASE_ARG GROWTH`; `cargo xtask clippy $BASE_ARG GROWTH` (replaces the raw clippy step in U0-03); `cargo test --workspace --locked --no-default-features --features audio_heart,debug-process,native`; `cargo xtask abi-check` until U8-01 |
+| `rust` | ubuntu | `cargo fmt --all --check`; `cargo xtask quality $BASE_ARG GROWTH`; `cargo xtask clippy`; `cargo test --workspace --locked --no-default-features --features audio_heart,debug-process,native`; `cargo xtask abi-check` until U8-01 |
 | `supply` | ubuntu | install pinned cargo-deny (`--locked`); `cargo xtask deny` |
 | `coverage` | ubuntu | install Clippy, llvm-tools-preview and pinned cargo-llvm-cov; `cargo xtask coverage $BASE_ARG` under SDL dummy drivers |
 | `parity` | ubuntu | `cargo xtask parity check $BASE_ARG GOLDEN` and `parity counts check --all`; fails if a file under `rust/tests/golden/` that exists at base is modified or deleted without `parity-golden-update`, or a new golden arrives without its corpus manifest entry (U0-06 creates the first set with the owner's approval) |
-| `game-build` | 5 targets | `aarch64-apple-darwin` also runs `cargo xtask clippy $BASE_ARG GROWTH` against the macOS baseline; release build and smoke checks unchanged until U7-06, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
+| `game-build` | 5 targets | `aarch64-apple-darwin` also runs `cargo xtask clippy`; release build and smoke checks unchanged until U7-06, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
 | `failure-scenarios` | macOS | unchanged (4 scenarios) |
 | `release-tools` | ubuntu | unchanged |
 

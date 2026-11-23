@@ -57,16 +57,7 @@ jobs:
       - run: cargo xtask quality $BASE_ARG $GROWTH
         env:
           GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && (env.ENGINE_SPLIT == 'true' && '--allow-engine-os' || '--allow-growth') || '' }}
-      - run: cargo xtask clippy $BASE_ARG $GROWTH $TIGHTEN
-        env:
-          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && env.ENGINE_SPLIT != 'true' && '--allow-growth' || '' }}
-          TIGHTEN: ${{ !contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--tighten' || '' }}
-      - uses: actions/upload-artifact@v4
-        if: ${{ !contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') }}
-        with:
-          name: clippy-baseline-linux-x86_64
-          path: rust/xtask/quality-baseline.toml
-          retention-days: 3
+      - run: cargo xtask clippy
       # Clippy and the tests build with debug-process, so code that only that
       # feature uses looks live there. The shipped configuration must be clean.
       - name: Check the release configuration without warnings
@@ -153,14 +144,8 @@ jobs:
       run:
         working-directory: rust
         shell: bash
-    env:
-      BASE: ${{ github.base_ref }}
     steps:
       - uses: actions/checkout@v4
-      - if: matrix.target == 'aarch64-apple-darwin' && github.event_name == 'pull_request'
-        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
-      - if: matrix.target == 'aarch64-apple-darwin'
-        run: echo "BASE_ARG=${BASE:+--base origin/$BASE}" >> "$GITHUB_ENV"
       - name: Install macOS Clippy dependencies
         if: matrix.target == 'aarch64-apple-darwin'
         run: brew install pkg-config sdl2
@@ -175,17 +160,9 @@ jobs:
         with:
           workspaces: rust
           key: game-${{ matrix.target }}
-      - name: Scope engine-crate approval on macOS
-        if: matrix.target == 'aarch64-apple-darwin' && contains(github.event.pull_request.labels.*.name, 'quality-growth-approved')
-        run: |
-          if test -f crates/engine/Cargo.toml && ! git cat-file -e "origin/$BASE:rust/crates/engine/Cargo.toml" 2>/dev/null; then
-            echo "ENGINE_SPLIT=true" >> "$GITHUB_ENV"
-          fi
-      - name: Check macOS Clippy baseline
+      - name: Clippy
         if: matrix.target == 'aarch64-apple-darwin'
-        run: cargo xtask clippy $BASE_ARG $GROWTH
-        env:
-          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && env.ENGINE_SPLIT != 'true' && '--allow-growth' || '' }}
+        run: cargo xtask clippy
       - run: cargo build --release --locked --bin uqm --features bundled-sdl --target ${{ matrix.target }}
       - name: Check version, content and native networking without user state
         run: |
