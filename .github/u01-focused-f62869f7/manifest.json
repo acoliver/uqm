@@ -1,0 +1,85 @@
+{
+  "base": "82dc645dde622835c73431d471d1333191bf403a",
+  "payload_sha256": {
+    "combined.patch": "29a5511f86a5c33a5efacba8906b6d89c9e8a7eef72be6acd1ded4d5e72a3b5e",
+    "expected.json": "2138f1d7bf40bff840a9fd2a9e5e16154b972102497f30f6caf76f74f546759f",
+    "indexed-positive.patch": "9e1a92b04876c2f517fd11af042bf4aba533b1ada73a0d4df7afebc4c195f076",
+    "original_seed_guard.py": "01aeda068f41e4b24d8266c15ef1a0eade3863298ce23d449d78cc81db1fbeb5",
+    "original_seed_run.sh": "f176f2ff990d1182247d42a801ab254dbfb5ba2dad2564bb4ab9207f885830f3",
+    "original_u01_driver.py": "d349d5e710337f02dcb94f66f8de43e374606c37b15dd3cfdba95aed6d33158a",
+    "retained-seed-parent.patch": "9de6418b7460054e0215c5211ae0842d2974c9ea86c9608684c4c08b20c3ed07",
+    "seed_assertions.py": "f5b261a76f0f7a198f1d51d7fede806614254d7bbf56d1ff94312501d52e0882",
+    "startup-addons.patch": "2d1a36cc0529351a086c6a2aeaf3cb53800b9e9c382bd0cabf3b89c3e7af9b3c"
+  },
+  "scope": "Temporary off-host evidence only. Never merge this helper branch.",
+  "seed": {
+    "commands": [
+      [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "uqm",
+        "--lib",
+        "-j",
+        "2",
+        "--no-default-features",
+        "--features",
+        "audio_heart,debug-process",
+        "automation::coordinator::tests::retained_seed_callback_after_finalize_parent_characterization",
+        "--",
+        "--exact",
+        "--nocapture",
+        "--test-threads=2"
+      ]
+    ],
+    "files": {
+      "rust/src/automation/coordinator.rs": "8d73302c33cb99854dc769e9958e2f2cd40c4af83cddce081a66b03db3a4a7bd"
+    },
+    "head": "41e6d8c37a42cd36a23deee8e487a1c7e19a6064",
+    "head_tree": "ad1885b984f8408828725689c8c4f6ae3196373c",
+    "numstat": "166\t0\trust/src/automation/coordinator.rs",
+    "overlay_tree": "564c22b00bedad903213c3db3a4f83e1be2fc829",
+    "patch": "retained-seed-parent.patch"
+  },
+  "u01": {
+    "commands": [
+      [
+        "cargo",
+        "test",
+        "-p",
+        "uqm-engine",
+        "--lib",
+        "--locked",
+        "--jobs",
+        "2",
+        "indexed_positive_",
+        "--",
+        "--test-threads=1"
+      ],
+      [
+        "cargo",
+        "test",
+        "-p",
+        "uqm",
+        "--locked",
+        "--jobs",
+        "2",
+        "--test",
+        "startup_addons",
+        "--",
+        "--test-threads=1"
+      ]
+    ],
+    "files": {
+      "rust/crates/engine/src/sound/owned_bank.rs": "fc8ad6c62e136a7408f6c13c13959124ef81eec64af830d5538d5a2171e93374",
+      "rust/crates/engine/src/strings/conversation.rs": "ba7e462d274e7f5bac1f93cbcc5f02b287cd00bdfc984d78b82e047660409f1c",
+      "rust/tests/startup_addons.rs": "eb92078bde4749a2252b7d25c002f78e6b2e2f91e10480a19ffda38e7bf53186"
+    },
+    "head": "f62869f7a5f4b6285dee6ce9bd3c83638db944c9",
+    "head_tree": "b2a23bcd55116611ee1b4b9f5414a93e66f5e788",
+    "numstat": "111\t0\trust/crates/engine/src/sound/owned_bank.rs\n38\t0\trust/crates/engine/src/strings/conversation.rs\n211\t0\trust/tests/startup_addons.rs",
+    "overlay_tree": "a4bb219bbb8c2dc03325593c9751ea01d8ed3aa0",
+    "patch": "combined.patch"
+  }
+}

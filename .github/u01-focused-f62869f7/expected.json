@@ -1,0 +1,21 @@
+{
+  "base": "82dc645dde622835c73431d471d1333191bf403a",
+  "files": {
+    "rust/crates/engine/src/sound/owned_bank.rs": "fc8ad6c62e136a7408f6c13c13959124ef81eec64af830d5538d5a2171e93374",
+    "rust/crates/engine/src/strings/conversation.rs": "ba7e462d274e7f5bac1f93cbcc5f02b287cd00bdfc984d78b82e047660409f1c",
+    "rust/tests/startup_addons.rs": "eb92078bde4749a2252b7d25c002f78e6b2e2f91e10480a19ffda38e7bf53186"
+  },
+  "head": "f62869f7a5f4b6285dee6ce9bd3c83638db944c9",
+  "modified": [
+    "rust/crates/engine/src/sound/owned_bank.rs",
+    "rust/crates/engine/src/strings/conversation.rs"
+  ],
+  "patches": {
+    "combined.patch": "29a5511f86a5c33a5efacba8906b6d89c9e8a7eef72be6acd1ded4d5e72a3b5e",
+    "indexed-positive.patch": "9e1a92b04876c2f517fd11af042bf4aba533b1ada73a0d4df7afebc4c195f076",
+    "startup-addons.patch": "2d1a36cc0529351a086c6a2aeaf3cb53800b9e9c382bd0cabf3b89c3e7af9b3c"
+  },
+  "untracked": [
+    "rust/tests/startup_addons.rs"
+  ]
+}

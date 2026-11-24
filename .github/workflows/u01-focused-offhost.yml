@@ -1,0 +1,88 @@
+name: Temporary U01 focused off-host evidence
+run-name: U01 f62869f7 focused (off-host only)
+
+on:
+  push:
+    branches: ['tmp/u01-focused-f62869f7']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temporary-u01-focused-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  U01_OFFHOST_EVIDENCE: 'yes'
+  PYTHONDONTWRITEBYTECODE: '1'
+  HOMEBREW_NO_AUTO_UPDATE: '1'
+
+jobs:
+  u01:
+    name: 'U01 exact overlay: 3 indexed + 3 startup tests'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Initialize diagnostics
+        run: |
+          mkdir "$GITHUB_WORKSPACE/diagnostics"
+          printf '%s\n' 'Off-host evidence only. The reserved Mac is not released or qualified.' > "$GITHUB_WORKSPACE/diagnostics/scope.txt"
+      - name: Checkout isolated helper commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: helper
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Checkout exact u01 source
+        uses: actions/checkout@v4
+        with:
+          ref: f62869f7a5f4b6285dee6ce9bd3c83638db944c9
+          path: source
+          fetch-depth: 16
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install macOS dependencies from CI provisioning
+        run: |
+          set -euo pipefail
+          brew install pkg-config sdl2 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/provisioning.log"
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - name: Admit exact source and execute u01 only
+        id: focused
+        run: |
+          set -euo pipefail
+          trap 'rc=$?; printf "%s\n" "$rc" > "$GITHUB_WORKSPACE/diagnostics/driver.exit-status"' EXIT
+          python3 -B "$GITHUB_WORKSPACE/helper/.github/u01-focused-f62869f7/hosted.py" u01 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/driver.log"
+      - name: Retain step outcomes and scope
+        if: always()
+        env:
+          STEP_OUTCOMES: ${{ toJSON(steps) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'diagnostics'
+          root.mkdir(exist_ok=True)
+          (root / 'step-outcomes.json').write_text(os.environ['STEP_OUTCOMES'] + '\n')
+          (root / 'launch.json').write_text(json.dumps({
+              'run_id': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'helper_sha': os.environ['GITHUB_SHA'], 'ref': os.environ['GITHUB_REF'],
+              'mode': 'u01', 'source': 'f62869f7a5f4b6285dee6ce9bd3c83638db944c9', 'runner': os.environ['RUNNER_NAME'],
+              'scope': 'Off-host only; not reserved-host or full candidate qualification'
+          }, indent=2) + '\n')
+          PY
+          printf '%s\n' 'U01 exact overlay: 3 indexed + 3 startup tests: off-host evidence only, not reserved-host qualification.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload logs, command exits, source admission and actual named-test admission
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: u01-f62869f7-focused-offhost-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics
+          if-no-files-found: error
+          retention-days: 3
