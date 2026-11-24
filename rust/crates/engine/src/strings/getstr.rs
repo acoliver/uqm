@@ -313,7 +313,7 @@ pub(super) fn load_conversation(content: &Dir, path: &CStr) -> Option<Conversati
     let full = path.to_bytes();
     let paths = &full[..full.len().min(LINE_SIZE - 1)];
     let (phrases, clip_dir, ts_path) = split_conversation_path(paths);
-    let Some((mut file, data_len)) = open_with_length(&content, phrases) else {
+    let Some((mut file, data_len)) = open_with_length(content, phrases) else {
         log_message(
             LogLevel::Warning,
             &format!("Warning: Can't open '{}'", String::from_utf8_lossy(phrases)),
@@ -388,7 +388,7 @@ fn split_conversation_path(paths: &[u8]) -> (&[u8], Option<&[u8]>, Option<&[u8]>
 /// extra_words, lens[count], ..., string data]`, with the data starting after
 /// `extra_words` more words.
 pub(super) fn load_binary_table(content: &Dir, path: &CStr) -> Option<LoadedBinaryTable> {
-    let (mut file, length) = open_resource(&content, path.to_bytes())?;
+    let (mut file, length) = open_resource(content, path.to_bytes())?;
     let mut marker = [0; 4];
     file.read_exact(&mut marker).ok()?;
     if u32::from_ne_bytes(marker) != u32::MAX {

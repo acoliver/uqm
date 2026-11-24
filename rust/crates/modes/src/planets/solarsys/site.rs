@@ -33,7 +33,9 @@ pub struct Site<'a, 'game, 'observer> {
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     fn content(&self) -> &uqm_engine::resource::Content {
-        self.content.as_ref().expect("site content not admitted")
+        self.content
+            .as_ref()
+            .unwrap_or_else(|| panic!("site content not admitted"))
     }
 
     pub fn new(

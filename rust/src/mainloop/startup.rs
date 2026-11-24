@@ -50,19 +50,31 @@ pub fn initialize(
         return Err(1);
     }
     let vfs = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk());
-    let mut settings = Settings::default();
+    let settings = Settings::default();
     let mut bindings = Bindings::default();
-    apply_options(input, parsed, &mut settings);
+    apply_options(input, parsed);
     let addons = match prepare_directories(&vfs, parsed) {
         Some(addons) => addons,
         None => {
             return Err(1);
         }
     };
-    let content = vfs.content_dir().expect("prepared content").snapshot();
-    let config = vfs.config_dir().expect("prepared config").snapshot();
-    let saves = vfs.save_dir().expect("prepared saves").snapshot();
-    let teams = vfs.melee_dir().expect("prepared teams").snapshot();
+    let content = vfs
+        .content_dir()
+        .unwrap_or_else(|| panic!("prepared content"))
+        .snapshot();
+    let config = vfs
+        .config_dir()
+        .unwrap_or_else(|| panic!("prepared config"))
+        .snapshot();
+    let saves = vfs
+        .save_dir()
+        .unwrap_or_else(|| panic!("prepared saves"))
+        .snapshot();
+    let teams = vfs
+        .melee_dir()
+        .unwrap_or_else(|| panic!("prepared teams"))
+        .snapshot();
     if !start_media(input, parsed, observer, &mut bindings, &content, &config) {
         return Err(1);
     }
@@ -154,14 +166,9 @@ fn prepare_directories(
 
 /// Copy the parsed options into the sound options, the player controls and the
 /// preferences the game reads.
-fn apply_options(
-    input: &uqm_engine::input::InputSession,
-    parsed: &options::ParsedOptions,
-    settings: &mut Settings,
-) {
+fn apply_options(input: &uqm_engine::input::InputSession, parsed: &options::ParsedOptions) {
     input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
     input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
-    uqm_engine::input_port::sdl_input::forget_template_names(settings);
     update_sound_options(|options| {
         options.driver = parsed.sound_driver;
         options.flags = parsed.sound_quality;

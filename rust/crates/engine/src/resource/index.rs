@@ -226,7 +226,7 @@ impl CatalogBuilder {
                     .revision
                     .generation
                     .checked_add(1)
-                    .expect("catalog revision exhausted");
+                    .unwrap_or_else(|| panic!("catalog revision exhausted"));
             }
         });
     }
@@ -244,7 +244,7 @@ impl CatalogBuilder {
                 .revision
                 .generation
                 .checked_add(1)
-                .expect("catalog revision exhausted");
+                .unwrap_or_else(|| panic!("catalog revision exhausted"));
         }
         removed
     }

@@ -55,6 +55,6 @@ impl crate::Kernel {
         self.services
             .save_slots
             .clone()
-            .expect("save slots were not installed")
+            .unwrap_or_else(|| panic!("save slots were not installed"))
     }
 }

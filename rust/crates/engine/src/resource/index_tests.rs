@@ -205,16 +205,7 @@ fn sibling_revisions_with_equal_edit_counts_have_distinct_identities() {
         &base.revision().session,
         &left.revision().session
     ));
-    assert_eq!(
-        left.descriptor(c"same", AssetKind::Text).as_deref(),
-        Some("left")
-    );
-    assert_eq!(
-        right.descriptor(c"same", AssetKind::Text).as_deref(),
-        Some("right")
-    );
-    assert_eq!(
-        base.descriptor(c"same", AssetKind::Text).as_deref(),
-        Some("base")
-    );
+    assert_eq!(left.descriptor(c"same", AssetKind::Text), Some("left"));
+    assert_eq!(right.descriptor(c"same", AssetKind::Text), Some("right"));
+    assert_eq!(base.descriptor(c"same", AssetKind::Text), Some("base"));
 }

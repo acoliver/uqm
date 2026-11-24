@@ -70,10 +70,15 @@ impl crate::Kernel {
         &mut self,
         radar_clip: Rect,
     ) -> Result<(), NavigationLoadError> {
-        let content = self.content();
-        self.assets
-            .navigation
-            .load_display_with(|key| LoadedDrawable::load(&content, key))?;
+        let content = self.admitted_content();
+        self.assets.navigation.load_display_with(|key| {
+            LoadedDrawable::load(
+                content
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("content not admitted")),
+                key,
+            )
+        })?;
         let display = self
             .assets
             .navigation

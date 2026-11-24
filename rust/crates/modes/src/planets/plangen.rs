@@ -203,6 +203,29 @@ pub mod live {
         }
     }
 
+    fn render_generated_topography(
+        state: &mut SphereState,
+        context: &uqm_engine::graphics::context::ContextLease,
+        width: usize,
+        content: &uqm_engine::resource::Content,
+        planet: &uqm_engine::world::planet::PlanetDesc,
+        info: &uqm_engine::world::planet::PlanetInfo,
+    ) -> crate::planets::sphere::palette::SurfacePalette {
+        let topography = crate::planets::sphere::images::image(2, width, 75, 1);
+        let palette = load_surface_palette(content, planet.data_index & !128, info.temperature);
+        render_native_topography(
+            context,
+            topography.lease().context_frame(0),
+            &state.elevation,
+            width as i32,
+            75,
+            Some(palette.view()),
+        )
+        .unwrap_or_else(|error| panic!("render planet topography: {error:?}"));
+        state.images_mut().topography = Some(topography);
+        palette
+    }
+
     pub struct SurfaceInputs<'a> {
         pub content: &'a uqm_engine::resource::Content,
         pub rng: &'a mut uqm_engine::math::RandomContext,
@@ -241,19 +264,14 @@ pub mod live {
             } else {
                 let depth = &mut state.elevation;
                 generate_elevation(rng, depth, width, &data);
-                let topography = crate::planets::sphere::images::image(2, width, 75, 1);
-                let palette =
-                    load_surface_palette(content, planet.data_index & !128, info.temperature);
-                render_native_topography(
+                let palette = render_generated_topography(
+                    state,
                     &retained_context,
-                    topography.lease().context_frame(0),
-                    depth,
-                    width as i32,
-                    75,
-                    Some(palette.view()),
-                )
-                .unwrap_or_else(|error| panic!("render planet topography: {error:?}"));
-                state.images_mut().topography = Some(topography);
+                    width,
+                    content,
+                    planet,
+                    info,
+                );
                 Some(palette)
             };
             if !shielded && info.atmo_density != 65535 {

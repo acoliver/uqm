@@ -300,7 +300,7 @@ fn scenes(h: &mut Harness) {
 }
 
 fn indexed_rescale(content: &uqm_engine::resource::Content) {
-    let original = CapturedSurface::load(&content, c"graphics.earthmask");
+    let original = CapturedSurface::load(content, c"graphics.earthmask");
     let mut pixels = vec![0; usize::from(MAP_WIDTH) * usize::from(MAP_HEIGHT)];
     uqm_engine::graphics::drawable::ContextFrame::retain(original.first_frame().at(1))
         .read_indexes(&mut pixels, i32::from(MAP_WIDTH), i32::from(MAP_HEIGHT));

@@ -15,6 +15,7 @@ fn editor_keeps_initial_49_bytes_but_inserts_only_up_to_48_utf8_bytes() {
         session.options_mut().peer[0].host = original;
         let mut state = ConnectDialogState::new(&mut session, 0, display.resources());
         let mut game = Game::new();
+        game.kernel.admit_content(display.content.clone());
         let mut battle = Battle::new();
         let driver = std::rc::Rc::new(Driver {
             input: InputSession::default(),
@@ -179,6 +180,7 @@ fn input_priority_keeps_the_first_pressed_menu_key() {
 }
 
 struct Display {
+    content: uqm_engine::resource::Content,
     context: uqm_engine::graphics::context::LoadedContext,
     screen: uqm_engine::graphics::drawable::LoadedDrawable,
     player: Option<LoadedFont>,
@@ -192,10 +194,11 @@ impl Display {
         files.write_font(32..=127);
         files.write("fixture.rmp", "fixture.font = FONTRES:font\n");
         let graphics = uqm_engine::test_support::native_session::Graphics::start();
-        let (player, button) = {
+        let (content, player, button) = {
             let mount = uqm_engine::test_support::native_session::ContentMount::new(files.path());
             mount.load_index("fixture.rmp");
             (
+                mount.content(),
                 LoadedFont::load(&mount.content(), c"fixture.font").unwrap(),
                 LoadedFont::load(&mount.content(), c"fixture.font").unwrap(),
             )
@@ -205,6 +208,7 @@ impl Display {
             uqm_engine::graphics::drawable::LoadedDrawable::create(8, 320, 240, 1).unwrap();
         context.lease().set_frame(screen.lease().context_frame(0));
         Self {
+            content,
             context,
             screen,
             player: Some(player),
@@ -354,6 +358,7 @@ fn dialog_frames_commit_cancel_and_abort_with_independent_sessions() {
         let mut session = NetplaySession::default();
         let mut state = ConnectDialogState::new(&mut session, side, display.resources());
         let mut game = Game::new();
+        game.kernel.admit_content(display.content.clone());
         let mut battle = Battle::new();
         let driver = std::rc::Rc::new(Driver {
             input: InputSession::default(),
@@ -391,6 +396,7 @@ fn safe_editor_applies_utf8_deletions_and_rolls_back_cancelled_edits() {
         session.options_mut().peer[1].host = "é漢".into();
         let mut state = ConnectDialogState::new(&mut session, 1, display.resources());
         let mut game = Game::new();
+        game.kernel.admit_content(display.content.clone());
         let mut battle = Battle::new();
         let driver = std::rc::Rc::new(Driver {
             input: InputSession::default(),

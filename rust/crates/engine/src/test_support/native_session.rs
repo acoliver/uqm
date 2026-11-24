@@ -116,7 +116,7 @@ impl ContentMount {
         self.catalog
             .borrow()
             .clone()
-            .expect("fixture index not loaded")
+            .unwrap_or_else(|| panic!("fixture index not loaded"))
     }
 
     pub fn load_index(&self, index: &str) -> crate::resource::Content {

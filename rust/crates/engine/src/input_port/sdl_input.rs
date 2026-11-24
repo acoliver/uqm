@@ -14,10 +14,7 @@ use super::frames::{Target, FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
 use super::gesture::Gesture;
 use super::keynames::{key_name, sdl2_keys};
 use super::templates::bounded_template_name;
-use crate::{
-    io::Dir,
-    resource::settings::{Bindings, Settings},
-};
+use crate::{io::Dir, resource::settings::Bindings};
 
 const ALTERNATES: usize = 2;
 const MENU_NAMES: &[&str] = &[
@@ -322,14 +319,6 @@ pub fn uninit_input() {
         controls.vcontrol(|vc| vc.uninit());
     }
     state.configured = Vec::new();
-}
-
-/// Forget the template names the configuration file defined, so the
-/// resources loaded next provide them.
-pub fn forget_template_names(settings: &mut Settings) {
-    for template in 1..=TEMPLATES {
-        settings.remove(&format!("config.keys.{template}.name"));
-    }
 }
 
 pub fn enter_character_mode() {

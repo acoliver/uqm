@@ -406,7 +406,11 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
     }
     fn setup_menu(&mut self) {
         let context = self.menu.context().clone();
-        let font = self.cx.kernel.battle_font().expect("setup font not loaded");
+        let font = self
+            .cx
+            .kernel
+            .battle_font()
+            .unwrap_or_else(|| panic!("setup font not loaded"));
         self.host.setup(self.cx, self.io, context, font);
     }
     fn free_game_data(&mut self) {

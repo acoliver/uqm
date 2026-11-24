@@ -23,7 +23,7 @@ impl TempMount {
 
     fn build(read_only: bool) -> Self {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tmp");
-        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&root).unwrap_or_else(|error| panic!("fixture root: {error}"));
         let files =
             TempDir::new_in(root).unwrap_or_else(|error| panic!("fixture directory: {error}"));
         let vfs = Vfs::new();

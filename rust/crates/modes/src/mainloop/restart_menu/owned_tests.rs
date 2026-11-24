@@ -219,7 +219,9 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
                     .any(|y| (300..320).any(|x| rgba(Point { x, y }) == (255, 255, 255, 255))),
                 "the version label must render with the retained tiny font"
             );
+            let content = game.kernel.content();
             drop(std::mem::replace(game, Game::new()));
+            game.kernel.admit_content(content);
             let mut cx = Cx::new(
                 &mut battle,
                 &mut game.world,

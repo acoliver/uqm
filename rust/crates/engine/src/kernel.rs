@@ -180,7 +180,9 @@ impl Kernel {
         self.content.clone()
     }
     pub fn content(&self) -> crate::resource::Content {
-        self.content.clone().expect("content not admitted")
+        self.content
+            .clone()
+            .unwrap_or_else(|| panic!("content not admitted"))
     }
     pub fn install_game_text(&mut self, text: crate::strings::owned_table::LoadedTextTable) {
         self.assets.game_text = Some(text);
