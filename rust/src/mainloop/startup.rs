@@ -35,7 +35,7 @@ pub fn initialize(
     if !start_services(parsed, args) {
         return 1;
     }
-    let vfs = uqm_engine::io::Vfs::new();
+    let vfs = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk());
     uqm_engine::io::install(vfs.clone());
     apply_options(input, parsed);
     if !prepare_directories(&vfs, input, parsed) {

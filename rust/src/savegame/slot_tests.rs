@@ -7,7 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use uqm_engine::host::{FileStat, FileStream, Files};
-use uqm_engine::io::Vfs;
+use uqm_engine::io::Dir;
 
 /// The save game the C game wrote (epic 20 load/save evidence).
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/legacy-save.00");
@@ -15,17 +15,17 @@ const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/lega
 /// An isolated Vfs rooted in an owned scratch directory.
 pub(super) struct SaveDirFixture {
     scratch: TempDir,
-    vfs: Vfs,
+    files: Dir,
 }
 
 impl SaveDirFixture {
     pub(super) fn new() -> Self {
         let temp = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
         fs::create_dir_all(&temp).unwrap();
-        Self {
-            scratch: TempDir::new_in(temp).unwrap(),
-            vfs: Vfs::default(),
-        }
+        let scratch = TempDir::new_in(temp).unwrap();
+        let files = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk())
+            .open_host_dir(scratch.path());
+        Self { scratch, files }
     }
 
     pub(super) fn slots(&self) -> SaveSlots<'_> {
@@ -48,19 +48,19 @@ impl SaveDirFixture {
 
 impl Files for SaveDirFixture {
     fn open_read(&self, path: &Path) -> std::io::Result<FileStream> {
-        self.vfs.open_read(&self.scratch.path().join(path))
+        self.files.open_read(path)
     }
     fn open_write(&self, path: &Path) -> std::io::Result<FileStream> {
-        self.vfs.open_write(&self.scratch.path().join(path))
+        self.files.open_write(path)
     }
     fn remove(&self, path: &Path) -> std::io::Result<()> {
-        self.vfs.remove(&self.scratch.path().join(path))
+        self.files.remove(path)
     }
     fn list(&self, path: &Path) -> std::io::Result<Vec<String>> {
-        self.vfs.list(&self.scratch.path().join(path))
+        self.files.list(path)
     }
     fn stat(&self, path: &Path) -> std::io::Result<FileStat> {
-        self.vfs.stat(&self.scratch.path().join(path))
+        self.files.stat(path)
     }
 }
 

@@ -15,6 +15,10 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(test)]
+#[path = "mount_owner_tests.rs"]
+mod owner_tests;
+
 /// Mount positions start here so `Top` insertions cannot underflow.
 const ORIGIN_POSITION: usize = 1000;
 
@@ -41,11 +45,13 @@ pub enum Match {
     Regex,
 }
 
+#[derive(Clone)]
 enum Backing {
     Directory,
     Archive(Arc<ZipIndex>),
 }
 
+#[derive(Clone)]
 struct Mount {
     id: MountId,
     point: String,
@@ -55,6 +61,7 @@ struct Mount {
     read_only: bool,
 }
 
+#[derive(Clone)]
 struct MountTable {
     mounts: Vec<Mount>,
     next_id: usize,
@@ -70,7 +77,7 @@ struct Resolution<'a> {
 /// Mounts plus the retained content, config, save and melee directories.
 #[derive(Clone)]
 pub struct Vfs {
-    table: Arc<Mutex<MountTable>>,
+    table: Arc<Mutex<Arc<MountTable>>>,
     dirs: Arc<Mutex<Retained>>,
 }
 
@@ -92,12 +99,17 @@ impl Default for Vfs {
 impl Vfs {
     /// A file system with no mounts over the platform's host files.
     pub fn new() -> Self {
+        Self::with_disk(crate::host::platform().disk())
+    }
+
+    /// A run-local mount builder over an explicitly supplied host file system.
+    pub fn with_disk(disk: Disk) -> Self {
         Self {
-            table: Arc::new(Mutex::new(MountTable {
+            table: Arc::new(Mutex::new(Arc::new(MountTable {
                 mounts: Vec::new(),
                 next_id: 0,
-                disk: crate::host::platform().disk(),
-            })),
+                disk,
+            }))),
             dirs: Arc::default(),
         }
     }
@@ -110,7 +122,7 @@ impl Vfs {
         placement: Placement,
         read_only: bool,
     ) -> MountId {
-        self.table.lock().add(
+        Arc::make_mut(&mut self.table.lock()).add(
             point,
             host.to_path_buf(),
             Backing::Directory,
@@ -129,9 +141,9 @@ impl Vfs {
         read_only: bool,
     ) -> io::Result<MountId> {
         let archive = normalize(&source.path, name);
-        let mut table = self.table.lock();
-        let index = Arc::new(ZipIndex::new(table.disk.clone(), &archive)?);
-        Ok(table.add(
+        let disk = self.table.lock().disk.clone();
+        let index = Arc::new(ZipIndex::new(disk, &archive)?);
+        Ok(Arc::make_mut(&mut self.table.lock()).add(
             point,
             archive,
             Backing::Archive(index),
@@ -142,7 +154,7 @@ impl Vfs {
 
     /// Mount the host directory behind `source` at `point` as read-only content.
     pub fn transplant(&self, point: &str, source: &Dir, placement: Placement) -> MountId {
-        self.table.lock().add(
+        Arc::make_mut(&mut self.table.lock()).add(
             point,
             source.path.clone(),
             Backing::Directory,
@@ -154,6 +166,7 @@ impl Vfs {
     /// Remove one mount. Returns false when it was already gone.
     pub fn unmount(&self, id: MountId) -> bool {
         let mut table = self.table.lock();
+        let table = Arc::make_mut(&mut table);
         let before = table.mounts.len();
         table.mounts.retain(|mount| mount.id != id);
         table.mounts.len() != before
@@ -162,25 +175,22 @@ impl Vfs {
     /// Remove every mount. Removed IDs are never issued again.
     pub fn unmount_all(&self) {
         let mut table = self.table.lock();
-        table.mounts.clear();
+        Arc::make_mut(&mut table).mounts.clear();
     }
 
-    /// Open the directory at virtual or host path `path`. The directory need
-    /// not exist yet.
+    /// Open a virtual directory in this run's overlay. It need not exist yet.
     pub fn open_dir(&self, path: &Path) -> Dir {
-        let table = self.table.lock();
-        let resolved = table.resolve_dir(path);
-        let virtual_path = normalize(Path::new("/"), path);
-        let write_read_only = table.mounts.iter().find_map(|mount| {
-            let suffix = virtual_path.strip_prefix(&mount.point).ok()?;
-            (confine(&mount.root, suffix) == resolved)
-                .then_some(mount.read_only || matches!(mount.backing, Backing::Archive(_)))
-        });
+        Dir::at(MountView::Building(self.table.clone()), path)
+    }
+
+    /// Admit an explicit host directory, independent of the virtual namespace.
+    pub fn open_host_dir(&self, path: &Path) -> Dir {
         Dir {
-            table: self.table.clone(),
-            path: resolved,
-            virtual_path,
-            write_read_only,
+            table: MountView::Ready(self.table.lock().clone()),
+            path: path.to_path_buf(),
+            virtual_path: path.to_path_buf(),
+            write_read_only: Some(false),
+            host: true,
         }
     }
 
@@ -228,33 +238,54 @@ impl Vfs {
 impl Files for Vfs {
     fn open_read(&self, path: &Path) -> io::Result<FileStream> {
         let root = Path::new("/");
-        self.table.lock().open_at(root, root, path, false)
+        let table = self.table.lock().clone();
+        table.open_at(root, root, path, false, false)
     }
     fn open_write(&self, path: &Path) -> io::Result<FileStream> {
         let root = Path::new("/");
-        self.table.lock().open_at(root, root, path, true)
+        let table = self.table.lock().clone();
+        table.open_at(root, root, path, true, false)
     }
     fn remove(&self, path: &Path) -> io::Result<()> {
         let root = Path::new("/");
-        self.table.lock().remove_at(root, root, path)
+        let table = self.table.lock().clone();
+        table.remove_at(root, path)
     }
     fn list(&self, path: &Path) -> io::Result<Vec<String>> {
         let root = Path::new("/");
-        self.table.lock().list_at(root, root, path)
+        let table = self.table.lock().clone();
+        table.list_at(root, root, path, false)
     }
     fn stat(&self, path: &Path) -> io::Result<FileStat> {
         let root = Path::new("/");
-        self.table.lock().stat_at(root, root, path)
+        let table = self.table.lock().clone();
+        table.stat_at(root, root, path, false)
+    }
+}
+
+#[derive(Clone)]
+enum MountView {
+    Building(Arc<Mutex<Arc<MountTable>>>),
+    Ready(Arc<MountTable>),
+}
+
+impl MountView {
+    fn snapshot(&self) -> Arc<MountTable> {
+        match self {
+            Self::Building(table) => table.lock().clone(),
+            Self::Ready(table) => table.clone(),
+        }
     }
 }
 
 /// A retained directory: cheap to clone, valid after its mount is removed.
 #[derive(Clone)]
 pub struct Dir {
-    table: Arc<Mutex<MountTable>>,
+    table: MountView,
     path: PathBuf,
     virtual_path: PathBuf,
     write_read_only: Option<bool>,
+    host: bool,
 }
 
 impl std::fmt::Debug for Dir {
@@ -267,23 +298,62 @@ impl std::fmt::Debug for Dir {
 }
 
 impl Dir {
-    /// The subdirectory `path`. An absolute `path` names a host path directly.
-    pub fn open_relative(&self, path: &Path) -> Dir {
-        if path.is_absolute() {
-            return Dir {
-                table: self.table.clone(),
-                path: path.to_path_buf(),
-                virtual_path: path.to_path_buf(),
-                write_read_only: Some(false),
-            };
+    /// Retain the current overlay revision, independent of later mount edits.
+    pub fn snapshot(&self) -> Self {
+        Self {
+            table: MountView::Ready(self.table.snapshot()),
+            ..self.clone()
         }
-        let joined = normalize(&self.path, path);
-        let resolved = self.table.lock().resolve_dir(&joined);
+    }
+
+    /// A package overlay private to this acquisition and its child directories.
+    pub fn with_package(&self, point: &str, name: &Path) -> io::Result<Self> {
+        assert!(!self.host, "package overlays require a virtual directory");
+        let mut table = self.table.snapshot();
+        let archive = name.to_path_buf();
+        let index = Arc::new(ZipIndex::new(Arc::new(self.snapshot()), &archive)?);
+        Arc::make_mut(&mut table).add(
+            point,
+            archive,
+            Backing::Archive(index),
+            Placement::Top,
+            true,
+        );
+        Ok(Self {
+            table: MountView::Ready(table),
+            ..self.clone()
+        })
+    }
+
+    fn at(view: MountView, path: &Path) -> Self {
+        let table = view.snapshot();
+        let resolved = table.resolve_dir(path);
+        let virtual_path = normalize(Path::new("/"), path);
+        let write_read_only = table.mounts.iter().find_map(|mount| {
+            let suffix = virtual_path.strip_prefix(&mount.point).ok()?;
+            (confine(&mount.root, suffix) == resolved)
+                .then_some(mount.read_only || matches!(mount.backing, Backing::Archive(_)))
+        });
+        Self {
+            table: view,
+            path: resolved,
+            virtual_path,
+            write_read_only,
+            host: false,
+        }
+    }
+
+    /// A child directory in the same namespace; absolute virtual names stay virtual.
+    pub fn open_relative(&self, path: &Path) -> Dir {
+        if path.is_absolute() && !self.host {
+            return Self::at(self.table.clone(), path);
+        }
         Dir {
             table: self.table.clone(),
-            path: resolved,
+            path: normalize(&self.path, path),
             virtual_path: normalize(&self.virtual_path, path),
             write_read_only: self.write_read_only,
+            host: self.host,
         }
     }
 
@@ -340,35 +410,57 @@ fn c_path(name: &CStr) -> io::Result<&Path> {
 
 impl Files for Dir {
     fn open_read(&self, path: &Path) -> io::Result<FileStream> {
-        self.table
-            .lock()
-            .open_at(&self.path, &self.virtual_path, path, false)
+        let table = self.table.snapshot();
+        if self.host {
+            return table.disk.open_read(&normalize(&self.path, path));
+        }
+        table.open_at(
+            &self.path,
+            &self.virtual_path,
+            path,
+            false,
+            self.write_read_only.is_some(),
+        )
     }
     fn open_write(&self, path: &Path) -> io::Result<FileStream> {
-        let table = self.table.lock();
+        let table = self.table.snapshot();
         match self.write_read_only {
             Some(true) => Err(io::Error::from(io::ErrorKind::PermissionDenied)),
             Some(false) => table.disk.open_write(&normalize(&self.path, path)),
-            None => table.open_at(&self.path, &self.virtual_path, path, true),
+            None => table.open_at(&self.path, &self.virtual_path, path, true, false),
         }
     }
     fn remove(&self, path: &Path) -> io::Result<()> {
-        let table = self.table.lock();
+        let table = self.table.snapshot();
         match self.write_read_only {
             Some(true) => Err(io::Error::from(io::ErrorKind::PermissionDenied)),
             Some(false) => table.disk.remove(&normalize(&self.path, path)),
-            None => table.remove_at(&self.path, &self.virtual_path, path),
+            None => table.remove_at(&self.virtual_path, path),
         }
     }
     fn list(&self, path: &Path) -> io::Result<Vec<String>> {
-        self.table
-            .lock()
-            .list_at(&self.path, &self.virtual_path, path)
+        let table = self.table.snapshot();
+        if self.host {
+            return table.disk.list(&normalize(&self.path, path));
+        }
+        table.list_at(
+            &self.path,
+            &self.virtual_path,
+            path,
+            self.write_read_only.is_some(),
+        )
     }
     fn stat(&self, path: &Path) -> io::Result<FileStat> {
-        self.table
-            .lock()
-            .stat_at(&self.path, &self.virtual_path, path)
+        let table = self.table.snapshot();
+        if self.host {
+            return table.disk.stat(&normalize(&self.path, path));
+        }
+        table.stat_at(
+            &self.path,
+            &self.virtual_path,
+            path,
+            self.write_read_only.is_some(),
+        )
     }
 }
 
@@ -441,17 +533,8 @@ impl MountTable {
         })
     }
 
-    /// The host path a directory opened at `path` refers to. Host paths pass
-    /// through; virtual paths map through the topmost covering mount.
+    /// Capture the host backing of the top covering virtual mount.
     fn resolve_dir(&self, path: &Path) -> PathBuf {
-        if names_host_path(path)
-            || self
-                .mounts
-                .iter()
-                .any(|mount| path.starts_with(&mount.root))
-        {
-            return path.to_path_buf();
-        }
         let normalized = normalize(Path::new("/"), path);
         self.mounts
             .iter()
@@ -472,10 +555,11 @@ impl MountTable {
         base: &Path,
         path: &Path,
         write: bool,
+        retained: bool,
     ) -> io::Result<FileStream> {
         let virtual_path = normalize(base, path);
         if write {
-            let target = self.write_path(host, base, &virtual_path, path)?;
+            let target = self.write_path(&virtual_path)?;
             return self.disk.open_write(&target);
         }
         let mut covered = false;
@@ -496,36 +580,14 @@ impl MountTable {
                 Err(error) => return Err(error),
             }
         }
-        if covered {
+        if covered || !retained {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
         self.disk.open_read(&normalize(host, path))
     }
 
-    fn write_path(
-        &self,
-        host: &Path,
-        base: &Path,
-        virtual_path: &Path,
-        path: &Path,
-    ) -> io::Result<PathBuf> {
-        // A retained config/save directory keeps its host target when content
-        // is subsequently mounted at the same virtual root.
-        let owner = self.mounts.iter().find(|mount| {
-            matches!(mount.backing, Backing::Directory)
-                && base
-                    .strip_prefix(&mount.point)
-                    .is_ok_and(|suffix| confine(&mount.root, suffix) == host)
-        });
-        let resolved = owner
-            .and_then(|mount| {
-                let suffix = virtual_path.strip_prefix(&mount.point).ok()?;
-                Some(Resolution {
-                    mount,
-                    host_path: confine(&mount.root, suffix),
-                })
-            })
-            .or_else(|| self.resolve(virtual_path));
+    fn write_path(&self, virtual_path: &Path) -> io::Result<PathBuf> {
+        let resolved = self.resolve(virtual_path);
         match resolved {
             Some(resolved)
                 if resolved.mount.read_only
@@ -534,17 +596,22 @@ impl MountTable {
                 Err(io::Error::from(io::ErrorKind::PermissionDenied))
             }
             Some(resolved) => Ok(resolved.host_path),
-            None => Ok(normalize(host, path)),
+            None => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
     }
 
-    fn remove_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<()> {
+    fn remove_at(&self, base: &Path, path: &Path) -> io::Result<()> {
         let virtual_path = normalize(base, path);
-        self.disk
-            .remove(&self.write_path(host, base, &virtual_path, path)?)
+        self.disk.remove(&self.write_path(&virtual_path)?)
     }
 
-    fn stat_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<FileStat> {
+    fn stat_at(
+        &self,
+        host: &Path,
+        base: &Path,
+        path: &Path,
+        retained: bool,
+    ) -> io::Result<FileStat> {
         let virtual_path = normalize(base, path);
         let mut covered = false;
         for mount in &self.mounts {
@@ -577,13 +644,19 @@ impl MountTable {
                 }
             }
         }
-        if covered {
+        if covered || !retained {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
         self.disk.stat(&normalize(host, path))
     }
 
-    fn list_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<Vec<String>> {
+    fn list_at(
+        &self,
+        host: &Path,
+        base: &Path,
+        path: &Path,
+        retained: bool,
+    ) -> io::Result<Vec<String>> {
         let virtual_path = normalize(base, path);
         let mut covered = false;
         let mut seen = BTreeSet::new();
@@ -608,33 +681,12 @@ impl MountTable {
         }
         if covered {
             Ok(names)
-        } else {
+        } else if retained {
             self.disk.list(&normalize(host, path))
+        } else {
+            Err(io::Error::from(io::ErrorKind::NotFound))
         }
     }
-}
-
-/// Top-level host directories that a directory is opened on directly instead
-/// of through the virtual mount table.
-fn names_host_path(path: &Path) -> bool {
-    if !path.is_absolute() {
-        return false;
-    }
-    let Some(component) = path.components().nth(1) else {
-        return false;
-    };
-    matches!(
-        component.as_os_str().to_string_lossy().as_ref(),
-        "Users"
-            | "home"
-            | "tmp"
-            | "var"
-            | "opt"
-            | "private"
-            | "System"
-            | "Library"
-            | "Applications"
-    )
 }
 
 /// Resolve `.`, `..` and repeated separators of `input` against `base`.

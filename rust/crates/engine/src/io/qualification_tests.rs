@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 fn scratch() -> tempfile::TempDir {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tmp/u01-owners");
     std::fs::create_dir_all(&root).unwrap();
-    tempfile::tempdir_in(root).unwrap()
+    tempfile::tempdir_in(root.canonicalize().unwrap()).unwrap()
 }
 
 fn directory(root: &Path, name: &str, files: &[(&str, &[u8])]) -> PathBuf {
@@ -49,7 +49,7 @@ fn loose_zip_and_two_shadows_preserve_precedence_and_miss_fallback() {
         &[("shared", b"zip"), ("zip-only", b"fallback")],
     );
     let vfs = Vfs::new();
-    let source = vfs.open_dir(scratch.path());
+    let source = vfs.open_host_dir(scratch.path());
     let loose = vfs.mount_dir("/", &base, Placement::Top, true);
     let zip = vfs
         .mount_zip(
@@ -120,7 +120,7 @@ fn corrupt_top_archive_does_not_retry_valid_lower_member() {
     let lower = directory(scratch.path(), "lower", &[("shared", b"lower")]);
     let archive = archive(scratch.path(), &[("shared", b"stored-payload")]);
     let vfs = Vfs::new();
-    let source = vfs.open_dir(scratch.path());
+    let source = vfs.open_host_dir(scratch.path());
     vfs.mount_dir("/", &lower, Placement::Bottom, true);
     vfs.mount_zip("/", &source, Path::new("package.zip"), Placement::Top, true)
         .unwrap();
@@ -238,4 +238,125 @@ fn zip_stream_read_past_eof_and_invalid_seek_preserve_position() {
     let mut bytes = [b'.'; 4];
     assert_eq!(stream.read(&mut bytes).unwrap(), 2);
     assert_eq!(&bytes, b"89..");
+}
+
+#[test]
+fn immutable_mount_views_and_open_streams_survive_other_runs_and_revisions() {
+    let scratch = scratch();
+    let a = directory(scratch.path(), "a", &[("same", b"a")]);
+    let b = directory(scratch.path(), "b", &[("same", b"b")]);
+    let repaired = directory(scratch.path(), "repaired", &[("same", b"repaired")]);
+    let disk = crate::host::platform().disk();
+    let first = Vfs::with_disk(disk.clone());
+    let second = Vfs::with_disk(disk);
+    first.mount_dir("/", &a, Placement::Top, true);
+    second.mount_dir("/", &b, Placement::Top, true);
+    let first_files = first.open_dir(Path::new("/")).snapshot();
+    let second_files = second.open_dir(Path::new("/")).snapshot();
+    let mut opened = first_files.open_read(Path::new("same")).unwrap();
+    first.mount_dir("/", &repaired, Placement::Top, true);
+    assert_eq!(read(&first_files, "same"), b"a");
+    assert_eq!(read(&second_files, "same"), b"b");
+    assert_eq!(
+        read(&first.open_dir(Path::new("/")).snapshot(), "same"),
+        b"repaired"
+    );
+    first.unmount_all();
+    drop(first);
+    assert_eq!(read(&first_files, "same"), b"a");
+    assert_eq!(read(&second_files, "same"), b"b");
+    let mut bytes = Vec::new();
+    opened.read_to_end(&mut bytes).unwrap();
+    assert_eq!(bytes, b"a");
+}
+
+#[test]
+fn a_scoped_package_overlays_only_its_own_file_view() {
+    let scratch = scratch();
+    let base = directory(
+        scratch.path(),
+        "base",
+        &[("same", b"base"), ("fallback", b"base-only")],
+    );
+    archive(&base, &[("same", b"package")]);
+    let vfs = Vfs::with_disk(crate::host::platform().disk());
+    vfs.mount_dir("/", &base, Placement::Top, true);
+    let parent = vfs.open_dir(Path::new("/")).snapshot();
+    let scoped = parent.with_package("/", Path::new("package.zip")).unwrap();
+    assert_eq!(read(&scoped, "same"), b"package");
+    assert_eq!(read(&scoped, "fallback"), b"base-only");
+    assert_eq!(read(&parent, "same"), b"base");
+    assert_eq!(read(&vfs.open_dir(Path::new("/")), "same"), b"base");
+    assert!(parent.with_package("/", Path::new("missing.zip")).is_err());
+    let child = scoped.open_relative(Path::new("."));
+    drop(scoped);
+    vfs.unmount_all();
+    assert_eq!(read(&child, "same"), b"package");
+    assert_eq!(read(&parent, "same"), b"base");
+}
+
+#[test]
+fn final_overlay_binding_retains_the_original_config_write_target() {
+    let scratch = scratch();
+    let config = directory(scratch.path(), "config", &[("same", b"config")]);
+    let content = directory(scratch.path(), "content", &[("same", b"content")]);
+    let vfs = Vfs::with_disk(crate::host::platform().disk());
+    vfs.mount_dir("/", &config, Placement::Top, false);
+    let retained = vfs.open_dir(Path::new("/"));
+    vfs.mount_dir("/", &content, Placement::Top, true);
+    let final_view = retained.snapshot();
+    assert_eq!(read(&final_view, "same"), b"content");
+    vfs.unmount_all();
+    final_view
+        .write_or_remove(Path::new("new"), b"config-write")
+        .unwrap();
+    assert_eq!(std::fs::read(config.join("new")).unwrap(), b"config-write");
+    assert!(!content.join("new").exists());
+    assert_eq!(read(&final_view, "same"), b"content");
+}
+
+#[test]
+fn host_shaped_virtual_names_stay_in_the_admitted_overlay() {
+    let scratch = scratch();
+    let root = directory(
+        scratch.path(),
+        "root",
+        &[
+            ("Users/data", b"users"),
+            ("tmp/data", b"tmp"),
+            ("private/data", b"private"),
+        ],
+    );
+    let vfs = Vfs::with_disk(crate::host::platform().disk());
+    vfs.mount_dir("/", &root, Placement::Top, true);
+    for (path, expected) in [
+        ("/Users", b"users".as_slice()),
+        ("/tmp", b"tmp".as_slice()),
+        ("/private", b"private".as_slice()),
+    ] {
+        let virtual_dir = vfs.open_dir(Path::new(path));
+        assert_eq!(read(&virtual_dir, "data"), expected);
+        assert_eq!(
+            virtual_dir
+                .open_write(Path::new("data"))
+                .err()
+                .unwrap()
+                .kind(),
+            ErrorKind::PermissionDenied
+        );
+        let absolute_child = vfs.open_dir(Path::new("/")).open_relative(Path::new(path));
+        assert_eq!(read(&absolute_child, "data"), expected);
+    }
+    assert_eq!(
+        vfs.open_read(&root.join("tmp/data")).err().unwrap().kind(),
+        ErrorKind::NotFound
+    );
+    let explicit = vfs.open_host_dir(&root);
+    assert_eq!(read(&explicit, "tmp/data"), b"tmp");
+    vfs.unmount_all();
+    assert_eq!(
+        vfs.open_read(&root.join("tmp/data")).err().unwrap().kind(),
+        ErrorKind::NotFound
+    );
+    assert_eq!(read(&explicit, "tmp/data"), b"tmp");
 }

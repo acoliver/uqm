@@ -1,15 +1,15 @@
 //! Byte and line operations formerly exercised through the UIO stream API.
-use super::Vfs;
-use crate::host::{FileStream, Files};
+use super::zip_reader::Disk;
+use crate::host::FileStream;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-fn fixture(bytes: &[u8]) -> (tempfile::TempDir, Vfs, std::path::PathBuf) {
+fn fixture(bytes: &[u8]) -> (tempfile::TempDir, Disk, std::path::PathBuf) {
     let root = concat!(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."), "/../tmp");
     std::fs::create_dir_all(root).unwrap();
     let directory = tempfile::tempdir_in(root).unwrap();
     let path = directory.path().join("data");
     std::fs::write(&path, bytes).unwrap();
-    (directory, Vfs::default(), path)
+    (directory, crate::host::platform().disk(), path)
 }
 
 fn lines(input: &mut FileStream, capacity: usize) -> Vec<Vec<u8>> {

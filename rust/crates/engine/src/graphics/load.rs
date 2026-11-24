@@ -12,8 +12,8 @@ use super::geometry::HotSpot;
 use super::image::Image;
 use super::state;
 use crate::host::{FileStream, Files};
-use crate::io::{Dir, MountId, Placement, Vfs};
-use std::ffi::{CStr, CString};
+use crate::io::Dir;
+use std::ffi::CStr;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -140,44 +140,6 @@ fn load_image(files: &dyn Files, name: &[u8]) -> Option<Decoded> {
     png::decode(&bytes).ok()
 }
 
-/// A zip package mounted over its own directory while it is read.
-struct PackageMount {
-    dir: Dir,
-    mount: Option<(Vfs, MountId)>,
-}
-
-impl PackageMount {
-    /// Mount the package `name` in `parent` at `at`. A package that cannot
-    /// be mounted leaves its files absent, as the original loader did.
-    fn mount(parent: &[u8], at: &CStr, name: &[u8]) -> Self {
-        let vfs = crate::io::installed().unwrap_or_else(|| panic!("file system not installed"));
-        let dir = vfs.open_dir(Path::new(String::from_utf8_lossy(parent).as_ref()));
-        let mount = vfs
-            .mount_zip(
-                &at.to_string_lossy(),
-                &dir,
-                Path::new(String::from_utf8_lossy(name).as_ref()),
-                Placement::Top,
-                true,
-            )
-            .ok()
-            .map(|id| (vfs, id));
-        Self { dir, mount }
-    }
-
-    fn files(&self) -> Dir {
-        self.dir.clone()
-    }
-}
-
-impl Drop for PackageMount {
-    fn drop(&mut self) {
-        if let Some((vfs, id)) = self.mount.take() {
-            vfs.unmount(id);
-        }
-    }
-}
-
 /// The content directory; loads find nothing before one is mounted.
 fn content_files() -> Option<Dir> {
     crate::io::content_dir()
@@ -194,21 +156,23 @@ pub(crate) fn load_cel(
     let (parent, name, prefix) = path_parts(path);
     let mut header = [0u8; 4];
     let _ = stream.read(&mut header);
-    let mut package = None;
+    let content = content_files()?.snapshot();
     let mut package_stream;
     let (files, file, prefix): (Box<dyn Files>, &mut FileStream, &[u8]) =
         if !path.is_empty() && u32::from_le_bytes(header) == 0x0403_4b50 {
-            let parent_path = CString::new(parent).unwrap_or_else(|_| panic!("NUL in path"));
-            let mount = PackageMount::mount(parent, &parent_path, name);
-            let files = mount.files();
+            let parent = String::from_utf8_lossy(parent);
+            let package_path = String::from_utf8_lossy(path);
+            let files = content
+                .with_package(&parent, Path::new(package_path.as_ref()))
+                .unwrap_or(content)
+                .open_relative(Path::new(parent.as_ref()));
             package_stream = files
                 .open_read(Path::new(String::from_utf8_lossy(name).as_ref()))
                 .ok()?;
-            package = Some(mount);
             position = 0;
             (Box::new(files), &mut package_stream, b"")
         } else {
-            (Box::new(content_files()?), stream, prefix)
+            (Box::new(content), stream, prefix)
         };
     file.seek(SeekFrom::Start(position)).ok()?;
     let mut images = Vec::new();
@@ -225,7 +189,6 @@ pub(crate) fn load_cel(
             break;
         }
     }
-    drop(package);
     if images.is_empty() {
         log::warn!("Couldn't get cel data");
         return None;
@@ -251,13 +214,15 @@ pub(crate) fn load_cel(
 
 /// C: `get_font_data`: load the font directory or package `path`.
 pub(crate) fn load_font(path: &CStr, package: bool) -> Option<LoadedFont> {
-    let bytes = path.to_bytes();
-    let _mount = package.then(|| {
-        let (parent, name, _) = path_parts(bytes);
-        PackageMount::mount(parent, path, name)
-    });
-    let content = content_files()?;
+    let content = content_files()?.snapshot();
     let directory = Path::new(path.to_str().ok()?);
+    let content = if package {
+        content
+            .with_package(path.to_str().ok()?, directory)
+            .unwrap_or(content)
+    } else {
+        content
+    };
     let names: Vec<String> = content
         .list(directory)
         .unwrap_or_default()

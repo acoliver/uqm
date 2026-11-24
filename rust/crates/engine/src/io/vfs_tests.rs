@@ -49,7 +49,7 @@ impl Stack {
     fn mount_zip(&mut self, files: &[(&str, &[u8])], placement: Placement) -> MountId {
         let dir = TempDir::new().unwrap();
         write_zip(&dir.path().join("pack.zip"), files);
-        let source = self.vfs.open_dir(dir.path());
+        let source = self.vfs.open_host_dir(dir.path());
         let id = self
             .vfs
             .mount_zip("/", &source, Path::new("pack.zip"), placement, true)
@@ -77,7 +77,7 @@ fn write_zip(path: &Path, files: &[(&str, &[u8])]) {
 #[test]
 fn files_port_roundtrips_and_removes_bytes() {
     let temp = TempDir::new().unwrap();
-    let files = Vfs::default();
+    let files = crate::host::platform().disk();
     let path = temp.path().join("slot.sav");
     let mut output = files.open_write(&path).unwrap();
     output.write_all(b"\0save\xff\n").unwrap();
@@ -124,7 +124,7 @@ fn files_listing_preserves_lossy_native_names() {
     let name = OsString::from_vec(b"ship-\xff.ogg".to_vec());
     std::fs::write(temp.path().join(name), b"sound").unwrap();
     assert_eq!(
-        Vfs::default().list(temp.path()).unwrap(),
+        crate::host::platform().disk().list(temp.path()).unwrap(),
         ["ship-\u{fffd}.ogg"]
     );
 }
@@ -138,7 +138,7 @@ fn listing_an_unmounted_missing_path_is_empty_through_a_directory() {
         vfs.list(&missing).unwrap_err().kind(),
         std::io::ErrorKind::NotFound
     );
-    let directory = vfs.open_dir(&missing);
+    let directory = vfs.open_host_dir(&missing);
     assert!(directory
         .list_matching(Path::new(""), "", Match::Prefix)
         .is_empty());
@@ -261,7 +261,7 @@ fn unmounting_removes_the_files_it_provided() {
 fn a_transplanted_directory_exposes_its_files_at_the_new_mount_point() {
     let mut stack = Stack::new();
     let (_, host) = stack.mount_dir(&[("a.txt", b"transplanted")], Placement::Top, true);
-    let source = stack.vfs.open_dir(&host);
+    let source = stack.vfs.open_host_dir(&host);
     stack.vfs.transplant("/copy", &source, Placement::Top);
     assert_eq!(
         stack.read("copy/a.txt").as_deref(),
@@ -413,7 +413,7 @@ fn a_retained_directory_and_its_streams_outlive_the_mount() {
 #[test]
 fn a_retained_directory_creates_clones_and_removes_files() {
     let scratch = TempDir::new().unwrap();
-    let directory = Vfs::new().open_dir(scratch.path());
+    let directory = Vfs::new().open_host_dir(scratch.path());
     let clone = directory.clone();
     let mut output = directory.create(c"fleet.mle").unwrap();
     drop(directory);
@@ -430,7 +430,7 @@ fn a_retained_directory_creates_clones_and_removes_files() {
 #[test]
 fn directory_operations_preserve_errors_and_truncated_reads() {
     let scratch = TempDir::new().unwrap();
-    let directory = Vfs::new().open_dir(scratch.path());
+    let directory = Vfs::new().open_host_dir(scratch.path());
     assert!(directory.open(c"missing.mle").is_err());
     let mut output = directory.create(c"short.mle").unwrap();
     output.write_all(b"abc").unwrap();
