@@ -78,11 +78,8 @@ impl Request {
             "missing save {}",
             self.source.display()
         );
-        let loaded = crate::savegame::live::load::load_game(
-            0,
-            crate::savegame::live::load::LoadRequest::Restore(cx),
-        );
-        anyhow::ensure!(loaded != 0, "LoadGame failed for {}", self.source.display());
+        let loaded = cx.kernel.save_slots().load(cx, 0);
+        anyhow::ensure!(loaded, "LoadGame failed for {}", self.source.display());
         let activity = cx.world.next_activity;
         self.loaded_activity = Some(activity);
         self.loaded_tick = uqm_engine::host::now_ms();

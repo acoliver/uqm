@@ -111,7 +111,16 @@ fn non_missing_open_errors_keep_their_cause_and_do_not_try_lower_mounts() {
     let files = vfs.open_dir(Path::new("/")).snapshot();
     let error = files.open_read(Path::new("data")).err().unwrap();
     assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-    assert_eq!(error.to_string(), "fixture denied read");
+    let context = error
+        .get_ref()
+        .unwrap()
+        .downcast_ref::<super::OpenError>()
+        .unwrap();
+    assert_eq!(context.virtual_path, Path::new("/data"));
+    assert_eq!(context.mount_path, upper);
+    assert_eq!(context.member, Path::new("data"));
+    assert_eq!(context.source.to_string(), "fixture denied read");
+    assert_eq!(context.source.kind(), io::ErrorKind::PermissionDenied);
     assert_eq!(*disk.reads.lock(), [upper.join("data")]);
     assert!(files.stat(Path::new("data")).unwrap().is_file);
     assert_eq!(files.list(Path::new("")).unwrap(), ["data"]);

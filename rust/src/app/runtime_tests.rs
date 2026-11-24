@@ -14,11 +14,12 @@ use uqm_engine::{
 fn required_navigation_failure_returns_before_clock_events_or_dispatch_and_allows_retry() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/content");
     let content = ContentMount::new(&directory);
-    content.init_resources("uqm.rmp");
+    content.load_index("uqm.rmp");
     let screen = LoadedDrawable::create(8, 320, 240, 1).unwrap();
     let status = LoadedContext::create(c"admission status");
     let space = LoadedContext::create(c"admission space");
     let mut game = Game::new();
+    game.kernel.admit_content(content.content());
     let mut battle = Battle::new();
     game.kernel.screen = screen.first_frame();
     game.kernel.player_control = [1, 1];
@@ -27,7 +28,7 @@ fn required_navigation_failure_returns_before_clock_events_or_dispatch_and_allow
     for species in SpeciesId::Arilou as u32..=SpeciesId::KohrAh as u32 {
         engine::load_entry(&mut game.world, &mut game.kernel, species);
     }
-    remove_resource("graphics.miscdata");
+    remove_resource(&mut game.kernel, "graphics.miscdata");
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
     let mut observer = uqm_engine::observe_port::Unobserved;
     let mut io = Io {
@@ -45,5 +46,4 @@ fn required_navigation_failure_returns_before_clock_events_or_dispatch_and_allow
         assert!(cx.kernel.misc_data_frame.is_null());
     }
     engine::free(cx.world, cx.kernel);
-    uqm_engine::resource::uninit();
 }

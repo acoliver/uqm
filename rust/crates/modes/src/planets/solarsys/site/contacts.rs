@@ -219,7 +219,7 @@ impl vux::VuxSite for Site<'_, '_, '_> {
                 Site::load_scene(self, system, c"graphics.maidens", c"text.maidens", 0)
             }
             vux::Scene::Beast => {
-                self.report_resources.load();
+                self.report_resources.load(self.content());
                 system.frames[1] = None;
                 self.load_report(system, c"text.vuxbeast", 0);
             }

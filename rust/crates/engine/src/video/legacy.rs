@@ -92,8 +92,8 @@ struct Clip {
 impl Clip {
     /// Probe the movie named by `path` in the content directory; only `.duk`
     /// movies have a decoder.
-    fn probe(path: &CStr) -> Option<Self> {
-        let dir = crate::io::content_dir()?;
+    fn probe(files: &Dir, path: &CStr) -> Option<Self> {
+        let dir = files.clone();
         let filename = path.to_str().ok()?;
         let (_, extension) = filename.rsplit_once('.')?;
         if extension != "duk" {
@@ -169,21 +169,32 @@ impl Clip {
 
 /// A movie resource: the clip, its optional music and speech tracks and the
 /// frame it loops back to.
-pub struct LoadedVideo(Descriptor);
+pub struct LoadedVideo(Descriptor, Dir);
 
 impl LoadedVideo {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        let descriptor = crate::resource::descriptor(resource, "3DOVID")?;
-        Some(Self(Descriptor::parse(descriptor.as_bytes())))
+    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        let descriptor = content.descriptor(resource, crate::resource::AssetKind::Video)?;
+        Some(Self(
+            Descriptor::parse(descriptor.as_bytes()),
+            content.files().clone(),
+        ))
     }
 
     /// Stop the movie that is playing and start this one centred on the
     /// screen.
     pub fn play(&self) -> Option<VideoPlayback> {
-        let clip = Clip::probe(&self.0.video)?;
+        let clip = Clip::probe(&self.1, &self.0.video)?;
         let playback = VideoPlayback {
-            audio: self.0.audio.as_deref().and_then(LoadedMusic::load_file),
-            speech: self.0.speech.as_deref().and_then(LoadedMusic::load_file),
+            audio: self
+                .0
+                .audio
+                .as_deref()
+                .and_then(|path| LoadedMusic::load_file(&self.1, path)),
+            speech: self
+                .0
+                .speech
+                .as_deref()
+                .and_then(|path| LoadedMusic::load_file(&self.1, path)),
         };
         let mut current = current();
         current.stop();

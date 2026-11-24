@@ -18,7 +18,6 @@ const ENV_KEYS: [&str; 4] = ["HOME", "UQM_CONFIG_DIR", "UQM_SAVE_DIR", "UQM_MELE
 struct Fixture {
     home: TempDir,
     vfs: Vfs,
-    configuration: uqm_engine::configuration::Configuration,
     saved_env: Vec<(&'static str, Option<String>)>,
 }
 
@@ -37,7 +36,6 @@ impl Fixture {
             home,
             vfs: Vfs::new(),
             saved_env,
-            configuration: Default::default(),
         }
     }
 
@@ -245,12 +243,7 @@ fn explicit_content_dir_without_version_file_is_rejected() {
     let bare = fx.home().join("bare_content");
     std::fs::create_dir_all(&bare).unwrap();
 
-    let result = prepare_content_dir(
-        &fx.vfs,
-        &fx.configuration,
-        Some(bare.to_str().unwrap()),
-        None,
-    );
+    let result = prepare_content_dir(&fx.vfs, Some(bare.to_str().unwrap()), None);
 
     match result {
         Err(DirPrepError::NotFound(message)) => {
@@ -269,17 +262,8 @@ fn content_dir_is_mounted_with_packages_and_addon_packs() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
 
-    prepare_content_dir(
-        &fx.vfs,
-        &fx.configuration,
-        Some(content.to_str().unwrap()),
-        None,
-    )
-    .unwrap();
-
-    let recorded = fx.configuration.content_path().unwrap();
-    let recorded = recorded.to_str().unwrap();
-    assert_eq!(recorded, content.to_str().unwrap());
+    let recorded = prepare_content_dir(&fx.vfs, Some(content.to_str().unwrap()), None).unwrap();
+    assert_eq!(recorded, content);
     assert!(fx.vfs.content_mount().is_some());
     let dir = fx.vfs.content_dir();
     assert!(dir.is_some());
@@ -312,7 +296,6 @@ fn explicit_addon_dir_is_mounted_under_addons() {
 
     prepare_content_dir(
         &fx.vfs,
-        &fx.configuration,
         Some(content.to_str().unwrap()),
         Some(extra.to_str().unwrap()),
     )
@@ -332,13 +315,7 @@ fn content_dir_without_an_addons_directory_still_prepares() {
     std::fs::create_dir_all(&content).unwrap();
     std::fs::write(content.join("version"), b"0.8.0\n").unwrap();
 
-    prepare_content_dir(
-        &fx.vfs,
-        &fx.configuration,
-        Some(content.to_str().unwrap()),
-        None,
-    )
-    .unwrap();
+    prepare_content_dir(&fx.vfs, Some(content.to_str().unwrap()), None).unwrap();
 
     assert_eq!(
         read_through_files(fx.vfs.content_dir(), "version").as_deref(),
@@ -362,13 +339,7 @@ fn shadow_addons_without_content_dir_do_nothing() {
 fn shadow_content_of_a_listed_addon_overlays_the_content_dir() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
-    prepare_content_dir(
-        &fx.vfs,
-        &fx.configuration,
-        Some(content.to_str().unwrap()),
-        None,
-    )
-    .unwrap();
+    prepare_content_dir(&fx.vfs, Some(content.to_str().unwrap()), None).unwrap();
     let dir = fx.vfs.content_dir();
     assert_eq!(read_through_files(dir.clone(), "shadowed.txt"), None);
 
@@ -385,13 +356,7 @@ fn shadow_content_of_a_listed_addon_overlays_the_content_dir() {
 fn the_mounted_content_dir_lists_its_top_level_entries() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
-    prepare_content_dir(
-        &fx.vfs,
-        &fx.configuration,
-        Some(content.to_str().unwrap()),
-        None,
-    )
-    .unwrap();
+    prepare_content_dir(&fx.vfs, Some(content.to_str().unwrap()), None).unwrap();
 
     let names = list_names(fx.vfs.content_dir().unwrap(), "", Match::Prefix);
 

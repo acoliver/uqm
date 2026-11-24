@@ -9,12 +9,15 @@ use super::types::MusicRef;
 pub struct LoadedMusic(MusicRef);
 
 impl LoadedMusic {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        Self::load_file(&crate::resource::path_of(resource, "MUSICRES")?)
+    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        Self::load_file(
+            content.files(),
+            &content.path_of(resource, crate::resource::AssetKind::Music)?,
+        )
     }
 
-    pub fn load_file(path: &CStr) -> Option<Self> {
-        load_music(path.to_str().ok()?).map(Self)
+    pub fn load_file(files: &crate::io::Dir, path: &CStr) -> Option<Self> {
+        load_music(files, path.to_str().ok()?).map(Self)
     }
 
     pub fn playback(&self) -> MusicRef {
@@ -54,16 +57,13 @@ mod tests {
             "wrong.rmp",
             b"test.sound.resource-types.not-music = INT32:42\n",
         );
-        crate::resource::load_index(
-            &mount.dir(),
-            c"wrong.rmp",
-            None,
-            &mut Default::default(),
-            &mut Default::default(),
-        );
-        let rejected = std::panic::catch_unwind(|| LoadedMusic::load(key));
+        let content = mount.content(c"wrong.rmp");
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            LoadedMusic::load(&content, key)
+        }));
         assert!(rejected.is_err());
-        assert!(crate::resource::remove(key.to_str().unwrap()));
+        let mut revised = content.revise();
+        assert!(revised.remove(key.to_str().unwrap()));
     }
 
     #[test]

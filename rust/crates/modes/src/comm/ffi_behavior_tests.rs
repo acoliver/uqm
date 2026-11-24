@@ -528,7 +528,7 @@ fn updating_with_time_does_not_disturb_an_idle_conversation() {
 #[test]
 #[serial]
 fn the_speech_graphics_and_subtitle_display_refresh_on_the_real_renderer() {
-    super::sis_graphics_font_tests::with_display("comm::ffi_behavior_tests::the_speech_graphics_and_subtitle_display_refresh_on_the_real_renderer", |comm, _| {
+    super::sis_graphics_font_tests::with_display("comm::ffi_behavior_tests::the_speech_graphics_and_subtitle_display_refresh_on_the_real_renderer", |comm, _, _content| {
     let line = CString::new("Subtitle text").unwrap();
     rust_init_speech_graphics(comm);
     rust_update_speech_graphics(comm);

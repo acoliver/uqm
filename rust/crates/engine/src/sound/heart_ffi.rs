@@ -19,9 +19,8 @@ use super::trackplayer;
 use super::types::*;
 
 /// The bytes of a content file, absent when unreadable or empty.
-fn read_content_file(path: &str) -> Option<Vec<u8>> {
-    use crate::host::Files;
-    crate::io::content_dir()?
+fn read_content_file(files: &dyn crate::host::Files, path: &str) -> Option<Vec<u8>> {
+    files
         .read(Path::new(path))
         .ok()
         .filter(|data| !data.is_empty())
@@ -78,6 +77,7 @@ fn file_extension(name: &str) -> Option<&str> {
 /// Each page gets its own decoder that seeks to the correct offset and
 /// limits decoding to its timestamp duration.
 fn create_per_page_decoders(
+    files: Option<&crate::io::Dir>,
     track_name: Option<&str>,
     track_text: Option<&str>,
     timestamp: Option<&str>,
@@ -161,7 +161,7 @@ fn create_per_page_decoders(
         }
     }
 
-    let file_data = read_content_file(name);
+    let file_data = files.and_then(|files| read_content_file(files, name));
     page_decoders(name, file_data.as_deref(), &page_run_times)
 }
 
@@ -283,6 +283,7 @@ pub fn set_music_stream_fade(how_long: i32, end_volume: c_int) -> bool {
 
 /// Decode and append speech while retaining the supplied callback for playback and seeking.
 pub fn splice_track(
+    files: Option<&crate::io::Dir>,
     track_name: Option<&CStr>,
     track_text: Option<&CStr>,
     timestamp: Option<&CStr>,
@@ -306,7 +307,12 @@ pub fn splice_track(
     );
 
     // Create per-page decoders with time-limited ranges (like C's SoundDecoder_Load)
-    let decoders = create_per_page_decoders(name.as_deref(), text.as_deref(), timestamp.as_deref());
+    let decoders = create_per_page_decoders(
+        files,
+        name.as_deref(),
+        text.as_deref(),
+        timestamp.as_deref(),
+    );
 
     let _ = trackplayer::splice_track(
         name.as_deref(),
@@ -318,7 +324,11 @@ pub fn splice_track(
 }
 
 /// Append complete number clips, preserving the timed null decoder for absent voice content.
-pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
+pub fn splice_multi_track(
+    files: Option<&crate::io::Dir>,
+    track_names: &[&CStr],
+    track_text: Option<&CStr>,
+) {
     let Some(text) = track_text
         .filter(|s| !s.is_empty())
         .map(CStr::to_string_lossy)
@@ -328,7 +338,7 @@ pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
     let mut decoders = Vec::new();
     for clip in track_names.iter().take(trackplayer::MAX_MULTI_TRACKS) {
         let name = clip.to_string_lossy();
-        let data = read_content_file(&name);
+        let data = files.and_then(|files| read_content_file(files, &name));
         // C loads the complete clip, or its timed null decoder when voice
         // content is absent. Never append an audio chunk without a decoder.
         decoders.extend(page_decoders(
@@ -480,9 +490,12 @@ pub fn set_speech_volume(volume: f32) {
 
 /// Load a sound bank listing: each line names a clip next to the listing, and
 /// every clip is decoded to PCM up front.
-pub fn load_sound_bank(name: &str) -> Option<super::owned_bank::LoadedSoundBank> {
+pub fn load_sound_bank(
+    files: &dyn crate::host::Files,
+    name: &str,
+) -> Option<super::owned_bank::LoadedSoundBank> {
     eprintln!("load_sound_bank: loading bank {name}");
-    let Some(listing) = read_content_file(name) else {
+    let Some(listing) = read_content_file(files, name) else {
         eprintln!("load_sound_bank({name}): failed to read file");
         return None;
     };
@@ -507,7 +520,7 @@ pub fn load_sound_bank(name: &str) -> Option<super::owned_bank::LoadedSoundBank>
             eprintln!("load_sound_bank: no decoder for .{ext}, skipping {snd_name}");
             continue;
         };
-        let Some(snd_data) = read_content_file(&full_path) else {
+        let Some(snd_data) = read_content_file(files, &full_path) else {
             eprintln!("load_sound_bank: couldn't read {full_path}");
             continue;
         };
@@ -564,10 +577,10 @@ pub fn load_sound_bank(name: &str) -> Option<super::owned_bank::LoadedSoundBank>
 }
 
 /// Load a streaming music file with 64 buffers.
-pub fn load_music(name: &str) -> Option<MusicRef> {
+pub fn load_music(files: &dyn crate::host::Files, name: &str) -> Option<MusicRef> {
     eprintln!("load_music: loading {name}");
     let kind = Kind::of(file_extension(name)?)?;
-    let data = read_content_file(name)?;
+    let data = read_content_file(files, name)?;
     let decoder = match kind.open(&data, name) {
         Ok(decoder) => decoder,
         Err(e) => {

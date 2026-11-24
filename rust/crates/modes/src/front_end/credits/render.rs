@@ -28,16 +28,16 @@ pub(super) struct Resources {
     pub fonts: [Option<LoadedFont>; 3],
 }
 impl Resources {
-    pub fn load() -> Option<Self> {
+    pub fn load(content: &uqm_engine::resource::Content) -> Option<Self> {
         Some(Self {
-            table: LoadedTextTable::load(c"credits.credits")?,
-            background: LoadedDrawable::load(c"credits.background"),
+            table: LoadedTextTable::load(content, c"credits.credits")?,
+            background: LoadedDrawable::load(content, c"credits.background"),
             fonts: [
                 c"credits.font.pt13",
                 c"credits.font.pt17",
                 c"credits.font.pt45",
             ]
-            .map(LoadedFont::load),
+            .map(|key| LoadedFont::load(content, key)),
         })
     }
     pub fn background_frame(&self) -> ContextFrame {

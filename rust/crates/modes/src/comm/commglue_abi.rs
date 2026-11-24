@@ -123,9 +123,19 @@ pub(crate) mod runtime {
                         .clip
                 })
                 .collect();
-            uqm_engine::sound::heart_ffi::splice_multi_track(&tracks, Some(&text));
+            uqm_engine::sound::heart_ffi::splice_multi_track(
+                comm.phrase_files.as_ref(),
+                &tracks,
+                Some(&text),
+            );
         } else {
-            uqm_engine::sound::heart_ffi::splice_track(None, Some(&text), None, None);
+            uqm_engine::sound::heart_ffi::splice_track(
+                comm.phrase_files.as_ref(),
+                None,
+                Some(&text),
+                None,
+                None,
+            );
         }
     }
 }

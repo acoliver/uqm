@@ -23,6 +23,10 @@ pub fn run(
             Err(status) => return status.max(0),
         };
 
+    application
+        .game
+        .kernel
+        .install_save_slots(crate::savegame::live::slots(prepared.saves.clone()));
     let observer = application.observer().cloned();
     let result = match run_game(&mut application.game, observer, &mut prepared) {
         Ok(()) => 0,
@@ -98,7 +102,7 @@ impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices
     ) {
         use uqm_modes::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
         let runtime = uqm_engine::configuration::runtime::RuntimeSettings::capture(&context);
-        let resources = SetupResources::load(context, font);
+        let resources = SetupResources::load(&cx.kernel.content(), context, font);
         let configuration = SetupConfiguration {
             input: cx.kernel.input_runtime().input().clone(),
             runtime,

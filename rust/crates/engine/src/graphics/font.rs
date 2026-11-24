@@ -505,13 +505,16 @@ impl LoadedFont {
     }
 
     /// Load a font resource.
-    pub fn load(resource: &CStr) -> Option<Self> {
-        crate::resource::cache::load_font(resource)
+    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        Self::load_file(
+            content.files(),
+            &content.path_of(resource, crate::resource::AssetKind::Font)?,
+        )
     }
 
     /// Load a font directory or package.
-    pub fn load_file(path: &CStr) -> Option<Self> {
-        super::load::load_font_file(path)
+    pub fn load_file(files: &crate::io::Dir, path: &CStr) -> Option<Self> {
+        super::load::load_font_file(files, path)
     }
 
     pub fn lease(&self) -> FontLease {

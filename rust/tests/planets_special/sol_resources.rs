@@ -15,24 +15,15 @@ pub fn check(h: &mut Harness) {
         .unwrap_or_else(|error| panic!("canonical content directory: {error}"));
     c_api::log_init(100);
     let mount = uqm_engine::test_support::native_session::ContentMount::new(&content);
-    let Some(dir) = uqm_engine::io::content_dir() else {
-        panic!("checked-in content directory must open");
-    };
-    uqm_engine::resource::init();
-    uqm_engine::resource::load_index(
-        &dir,
-        c"uqm.rmp",
-        None,
-        &mut Default::default(),
-        &mut Default::default(),
-    );
-    names(h);
-    binary_palettes();
+    let content = mount.load_index("uqm.rmp");
+    crate::battle_context::with(|cx| cx.kernel.admit_content(content.clone()));
+    names(h, &content);
+    binary_palettes(&content);
     scenes(h);
     uqm_engine::graphics::state::flush_ex(true);
     let baseline = native_probe::allocations();
-    indexed_rescale();
-    let earth = CapturedSurface::load(c"graphics.earthmask");
+    indexed_rescale(&content);
+    let earth = CapturedSurface::load(&content, c"graphics.earthmask");
     assert!(
         !earth.first_frame().is_null(),
         "real Earth definition must load"
@@ -72,6 +63,7 @@ pub fn check(h: &mut Harness) {
         &animation,
         false,
         uqm_modes::planets::plangen::live::SurfaceInputs {
+            content: &content,
             rng: &mut h.state.sys.rng,
             planet: &h.state.sys.planets[2],
             info: &h.state.sys.info.planet_info,
@@ -129,7 +121,6 @@ pub fn check(h: &mut Harness) {
         baseline,
         "real Earth generation/rescale/cleanup must release all graphics allocations"
     );
-    uqm_engine::resource::uninit();
     drop(mount);
 }
 
@@ -142,9 +133,10 @@ fn frame_rgb(frame: uqm_engine::graphics::drawable::FrameId) -> Vec<[u8; 3]> {
         .collect()
 }
 
-fn names(h: &mut Harness) {
-    let strings_owner = uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.starcon")
-        .unwrap_or_else(|| panic!("text.starcon loads"));
+fn names(h: &mut Harness, content: &uqm_engine::resource::Content) {
+    let strings_owner =
+        uqm_engine::strings::owned_table::LoadedTextTable::load(content, c"text.starcon")
+            .unwrap_or_else(|| panic!("text.starcon loads"));
     crate::battle_context::with(|cx| {
         assert!(cx.kernel.micro_font.is_none());
         cx.kernel.install_game_text(strings_owner);
@@ -307,8 +299,8 @@ fn scenes(h: &mut Harness) {
     }
 }
 
-fn indexed_rescale() {
-    let original = CapturedSurface::load(c"graphics.earthmask");
+fn indexed_rescale(content: &uqm_engine::resource::Content) {
+    let original = CapturedSurface::load(&content, c"graphics.earthmask");
     let mut pixels = vec![0; usize::from(MAP_WIDTH) * usize::from(MAP_HEIGHT)];
     uqm_engine::graphics::drawable::ContextFrame::retain(original.first_frame().at(1))
         .read_indexes(&mut pixels, i32::from(MAP_WIDTH), i32::from(MAP_HEIGHT));
@@ -339,15 +331,15 @@ fn indexed_rescale() {
 
 use uqm_modes::planets::generate::SystemGenerator;
 
-fn binary_palettes() {
+fn binary_palettes(content: &uqm_engine::resource::Content) {
     use uqm_engine::strings::sresins;
     for planet in &uqm_modes::planets::tables::PLANET_ARRAY {
         for resource in [planet.cmap_instance, planet.xlat_tab_instance] {
-            let entries = sresins::load_binary_entries(resource)
+            let entries = sresins::load_binary_entries(content, resource)
                 .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
             assert!(!entries.is_empty());
             for index in [0, 1, 2, 3, u16::MAX] {
-                let owned = sresins::load_binary_entry(resource, index)
+                let owned = sresins::load_binary_entry(content, resource, index)
                     .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
                 assert_eq!(
                     owned,

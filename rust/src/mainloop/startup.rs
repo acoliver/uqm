@@ -35,10 +35,11 @@ pub struct Prepared {
     pub config: Dir,
     pub saves: Dir,
     pub teams: Dir,
+    pub addons: Vec<CString>,
 }
 
 /// Bring every subsystem up on the SDL owner thread, once, after command-line
-/// parsing. Returns the process exit status: zero when the game may start.
+/// parsing. Returns the prepared run, or the startup failure status.
 pub fn initialize(
     input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
@@ -49,13 +50,15 @@ pub fn initialize(
         return Err(1);
     }
     let vfs = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk());
-    uqm_engine::io::install(vfs.clone());
     let mut settings = Settings::default();
     let mut bindings = Bindings::default();
     apply_options(input, parsed, &mut settings);
-    if !prepare_directories(&vfs, input, parsed) {
-        return Err(1);
-    }
+    let addons = match prepare_directories(&vfs, parsed) {
+        Some(addons) => addons,
+        None => {
+            return Err(1);
+        }
+    };
     let content = vfs.content_dir().expect("prepared content").snapshot();
     let config = vfs.config_dir().expect("prepared config").snapshot();
     let saves = vfs.save_dir().expect("prepared saves").snapshot();
@@ -70,6 +73,7 @@ pub fn initialize(
         config,
         saves,
         teams,
+        addons,
     })
 }
 
@@ -110,44 +114,42 @@ fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
 /// The config, content, melee and save directories and the addon shadows.
 fn prepare_directories(
     vfs: &uqm_engine::io::Vfs,
-    input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
-) -> bool {
+) -> Option<Vec<CString>> {
     if let Err(error) = dir_prep::prepare_config_dir(vfs, parsed.config_dir.as_deref()) {
         log::error!("Config directory: {error:?}");
-        return false;
+        return None;
     }
     let addons: Result<Vec<_>, _> = parsed
         .addons
         .iter()
         .map(|name| CString::new(name.as_str()))
         .collect();
-    match addons {
-        Ok(addons) => input.configuration.set_addons(addons),
+    let addons = match addons {
+        Ok(addons) => addons,
         Err(error) => {
             log::error!("Addon name: {error}");
-            return false;
+            return None;
         }
-    }
+    };
     if let Err(error) = dir_prep::prepare_content_dir(
         vfs,
-        &input.configuration,
         parsed.content_dir.as_deref(),
         parsed.addon_dir.as_deref(),
     ) {
         log::error!("Content directory: {error:?}");
-        return false;
+        return None;
     }
     if let Err(error) = dir_prep::prepare_melee_dir(vfs) {
         log::error!("Melee directory: {error:?}");
-        return false;
+        return None;
     }
     if let Err(error) = dir_prep::prepare_save_dir(vfs) {
         log::error!("Save directory: {error:?}");
-        return false;
+        return None;
     }
     dir_prep::prepare_shadow_addons(vfs, &parsed.addons);
-    true
+    Some(addons)
 }
 
 /// Copy the parsed options into the sound options, the player controls and the

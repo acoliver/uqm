@@ -6,7 +6,12 @@ use uqm_engine::io::{Dir, Match};
 use uqm_engine::resource::settings::{Bindings, Settings};
 
 /// Load every `.rmp` resource index in `dir`; returns how many were loaded.
-pub fn load_indices(dir: &Dir, settings: &mut Settings, bindings: &mut Bindings) -> usize {
+pub fn load_indices(
+    catalog: &mut uqm_engine::resource::CatalogBuilder,
+    dir: &Dir,
+    settings: &mut Settings,
+    bindings: &mut Bindings,
+) -> usize {
     let indices = dir.list_matching(Path::new(""), "\\.[rR][mM][pP]$", Match::Regex);
     for name in &indices {
         log::debug!("Loading resource index '{name}'");
@@ -14,13 +19,14 @@ pub fn load_indices(dir: &Dir, settings: &mut Settings, bindings: &mut Bindings)
             log::warn!("Skipping resource index '{name}': name contains NUL");
             continue;
         };
-        uqm_engine::resource::load_index(dir, &name, None, settings, bindings);
+        catalog.import_index(dir, &name, None, settings, bindings);
     }
     indices.len()
 }
 
 /// Load the resource indices of `addon` below the content directory's `addons` directory.
 pub fn load_addon(
+    catalog: &mut uqm_engine::resource::CatalogBuilder,
     content: &Dir,
     addon: &str,
     settings: &mut Settings,
@@ -36,7 +42,7 @@ pub fn load_addon(
         log::warn!("Addon '{addon}' not found");
         return false;
     }
-    let loaded = load_indices(&dir, settings, bindings);
+    let loaded = load_indices(catalog, &dir, settings, bindings);
     if loaded == 0 {
         log::error!("No RMP index files were loaded for addon '{addon}'");
     }
@@ -45,6 +51,7 @@ pub fn load_addon(
 
 /// Load each named addon in order, stopping at the first that fails.
 pub fn prepare_addons(
+    catalog: &mut uqm_engine::resource::CatalogBuilder,
     content: &Dir,
     addons: &[CString],
     settings: &mut Settings,
@@ -53,7 +60,7 @@ pub fn prepare_addons(
     for addon in addons {
         let name = addon.to_string_lossy();
         log::info!("Loading addon '{name}'");
-        if !load_addon(content, &name, settings, bindings) {
+        if !load_addon(catalog, content, &name, settings, bindings) {
             break;
         }
     }

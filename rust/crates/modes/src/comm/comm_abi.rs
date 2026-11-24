@@ -274,7 +274,7 @@ mod owner_tests {
     #[test]
     #[serial_test::serial]
     fn subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes() {
-        super::super::sis_graphics_font_tests::with_display("comm::comm_abi::owner_tests::subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes", |comm, context| {
+        super::super::sis_graphics_font_tests::with_display("comm::comm_abi::owner_tests::subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes", |comm, context, _content| {
             use uqm_engine::graphics::context::LoadedContext;
 use uqm_engine::graphics::{drawable::LoadedDrawable, geometry::Color, geometry::Point};
             use uqm_engine::sound::trackplayer;

@@ -828,8 +828,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             use uqm_engine::graphics::drawable::LoadedDrawable;
             let content =
                 uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-            let font = uqm_engine::graphics::font::LoadedFont::load_file(c"font")
-                .unwrap_or_else(|| panic!("font fixture"));
+            let font = uqm_engine::graphics::font::LoadedFont::load_file(
+                content.content_directory(),
+                c"font",
+            )
+            .unwrap_or_else(|| panic!("font fixture"));
             drop(content);
             let context = uqm_engine::graphics::context::LoadedContext::create(c"melee-death-test");
             let screens = uqm_engine::test_support::native_probe::DrawQueue::init();

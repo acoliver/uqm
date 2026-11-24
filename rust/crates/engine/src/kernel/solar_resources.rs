@@ -25,12 +25,16 @@ pub struct SolarResources {
 }
 
 impl SolarResources {
-    pub fn load() -> Result<Self, &'static str> {
-        Self::load_with(LoadedDrawable::load, load_binary_entries, LoadedMusic::load)
+    pub fn load(content: &crate::resource::Content) -> Result<Self, &'static str> {
+        Self::load_with(
+            |key| LoadedDrawable::load(content, key),
+            |key| load_binary_entries(content, key),
+            |key| LoadedMusic::load(content, key),
+        )
     }
 
-    pub fn retain(slot: &mut Option<Self>) -> &Self {
-        Self::retain_with(slot, Self::load)
+    pub fn retain<'a>(content: &crate::resource::Content, slot: &'a mut Option<Self>) -> &'a Self {
+        Self::retain_with(slot, || Self::load(content))
     }
 
     fn retain_with(
@@ -103,7 +107,10 @@ mod tests {
     #[serial_test::serial]
     fn missing_resources_fail_at_their_original_load_position() {
         assert!(matches!(
-            SolarResources::load(),
+            SolarResources::load(
+                &crate::resource::CatalogBuilder::new(crate::io::fixture::TempMount::new().dir())
+                    .finish()
+            ),
             Err("graphics.orbitbackground")
         ));
         for failed in 0..6 {

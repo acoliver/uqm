@@ -47,9 +47,9 @@ impl LoadedSoundBank {
         }))
     }
 
-    pub fn load(resource: &CStr) -> Option<Self> {
-        let path = crate::resource::path_of(resource, "SNDRES")?;
-        super::heart_ffi::load_sound_bank(path.to_str().ok()?)
+    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        let path = content.path_of(resource, crate::resource::AssetKind::Sound)?;
+        super::heart_ffi::load_sound_bank(content.files(), path.to_str().ok()?)
     }
 
     pub fn len(&self) -> usize {

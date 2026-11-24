@@ -6,14 +6,17 @@ use uqm_engine::graphics::{
     geometry::Point, geometry::Rect,
 };
 
-pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLease)) {
+pub(super) fn with_display(
+    name: &str,
+    call: impl FnOnce(&mut Comm, &ContextLease, &uqm_engine::resource::Content),
+) {
     if !uqm_engine::test_support::native_process::own_graphics_process(name) {
         return;
     }
     let mut game = uqm_engine::Game::new();
     let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_| {},
         |game| {
             let context = ContextLease::require(game.kernel.status_context);
             context.set_frame(ContextFrame::retain(game.kernel.screen));
@@ -27,7 +30,7 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
             let original =
                 uqm_engine::graphics::font::FontLease::retain(game.kernel.tiny_font.unwrap());
             context.set_font(&original);
-            let font = LoadedFont::load(c"fixture.tiny").unwrap();
+            let font = LoadedFont::load(&game.kernel.content(), c"fixture.tiny").unwrap();
             let mut comm = Comm::new();
             comm.init().unwrap();
             comm.presentation.space_context = Some(context.context());
@@ -53,7 +56,7 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
             comm.presentation.activity_frame = activity.lease().frame(0).unwrap();
             comm.presentation.radar_context = Some(context.context());
             comm.presentation.off_screen_context = Some(context.context());
-            call(&mut comm, &context);
+            call(&mut comm, &context, &game.kernel.content());
             drop(comm.display.resources.as_mut().unwrap().display.take());
             context.flush();
             drop(font);
@@ -77,7 +80,7 @@ fn has_text(context: &ContextLease) -> bool {
 #[test]
 #[serial_test::serial]
 fn refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed() {
-    with_display("comm::sis_graphics_font_tests::refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed", |comm, context| {
+    with_display("comm::sis_graphics_font_tests::refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed", |comm, context, _content| {
         comm.add_response(1, "A", None);
         comm.add_response(2, "A A", None);
         super::sis_graphics::refresh_responses(comm, 0, 0, 2, 0);
@@ -91,7 +94,7 @@ fn refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed() {
 fn admitted_display_renders_without_recovering_raw_resources() {
     with_display(
         "comm::sis_graphics_font_tests::admitted_display_renders_without_recovering_raw_resources",
-        |comm, context| {
+        |comm, context, _content| {
             comm.presentation.space_context = None;
             comm.presentation.tiny_font = None;
             comm.add_response(1, "A A", None);
@@ -106,7 +109,7 @@ fn admitted_display_renders_without_recovering_raw_resources() {
 #[test]
 #[serial_test::serial]
 fn player_phrase_feedback_keeps_the_font_alive_until_queued_draws_are_consumed() {
-    with_display("comm::sis_graphics_font_tests::player_phrase_feedback_keeps_the_font_alive_until_queued_draws_are_consumed", |comm, context| {
+    with_display("comm::sis_graphics_font_tests::player_phrase_feedback_keeps_the_font_alive_until_queued_draws_are_consumed", |comm, context, _content| {
         super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A"));
         assert!(has_text(context));
         super::sis_graphics::feedback_player_phrase(comm, 0, None);
@@ -119,7 +122,7 @@ fn player_phrase_feedback_keeps_the_font_alive_until_queued_draws_are_consumed()
 fn rendering_restores_the_context_font_it_found() {
     with_display(
         "comm::sis_graphics_font_tests::rendering_restores_the_context_font_it_found",
-        |comm, context| {
+        |comm, context, _content| {
             let original = uqm_engine::test_support::native_probe::context_font(context.context());
             comm.add_response(1, "A", None);
             super::sis_graphics::refresh_responses(comm, 0, 0, 1, 0);
@@ -135,7 +138,7 @@ fn rendering_restores_the_context_font_it_found() {
 #[test]
 #[serial_test::serial]
 fn a_conversation_draws_with_one_font_and_frees_it_only_at_teardown() {
-    with_display("comm::sis_graphics_font_tests::a_conversation_draws_with_one_font_and_frees_it_only_at_teardown", |comm, context| {
+    with_display("comm::sis_graphics_font_tests::a_conversation_draws_with_one_font_and_frees_it_only_at_teardown", |comm, context, _content| {
         let original = comm.conversation_display().player_font.clone();
         comm.add_response(1, "A", None);
         comm.add_response(2, "A A", None);

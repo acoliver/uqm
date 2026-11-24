@@ -94,10 +94,16 @@ fn subtitle_history_skips_untagged_number_audio_without_changing_page_order() {
 #[test]
 fn speech_admission_requires_borrowed_strings_and_bounded_clip_slices() {
     use std::ffi::CStr;
-    type SpeechAdmission =
-        fn(Option<&CStr>, Option<&CStr>, Option<&CStr>, Option<Box<dyn Fn(i32) + Send>>);
+    type SpeechAdmission = fn(
+        Option<&crate::io::Dir>,
+        Option<&CStr>,
+        Option<&CStr>,
+        Option<&CStr>,
+        Option<Box<dyn Fn(i32) + Send>>,
+    );
     let _: SpeechAdmission = crate::sound::heart_ffi::splice_track;
-    let _: fn(&[&CStr], Option<&CStr>) = crate::sound::heart_ffi::splice_multi_track;
+    let _: fn(Option<&crate::io::Dir>, &[&CStr], Option<&CStr>) =
+        crate::sound::heart_ffi::splice_multi_track;
 }
 
 /// A decoder with `pcm_chunks` blocks of audio that lasts `secs` seconds.
@@ -394,13 +400,15 @@ fn a_second_track_continues_the_numbering_and_the_decoder_offset() {
 fn numbered_sale_speech_has_decoders_for_the_number_and_continuation() {
     let _engine = engine();
     crate::sound::heart_ffi::splice_track(
+        None,
         Some(c"comm/melnorme/prefix.ogg"),
         Some(c"You have "),
         None,
         None,
     );
-    crate::sound::heart_ffi::splice_multi_track(&[c"comm/melnorme/seven.ogg"], Some(c"7"));
+    crate::sound::heart_ffi::splice_multi_track(None, &[c"comm/melnorme/seven.ogg"], Some(c"7"));
     crate::sound::heart_ffi::splice_track(
+        None,
         Some(c"comm/melnorme/suffix.ogg"),
         Some(c" credits"),
         None,

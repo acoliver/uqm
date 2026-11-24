@@ -488,11 +488,12 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
     menu.page = OutfitPage::Main;
     menu.initialized = true;
     cx.kernel.naming_callback = Some(on_naming_done);
-    menu.assets.art = LoadedDrawable::load(c"graphics.modulesmenu");
-    menu.assets.music = uqm_engine::sound::resource_types::LoadedMusic::load(c"music.outfit");
+    menu.assets.art = LoadedDrawable::load(&cx.kernel.content(), c"graphics.modulesmenu");
+    menu.assets.music =
+        uqm_engine::sound::resource_types::LoadedMusic::load(&cx.kernel.content(), c"music.outfit");
     menu.state = OUTFIT_FUEL;
-    menu.assets.modules = LoadedDrawable::load(c"graphics.outfitmodules");
-    let background = LoadedDrawable::load(c"graphics.outfit")
+    menu.assets.modules = LoadedDrawable::load(&cx.kernel.content(), c"graphics.outfitmodules");
+    let background = LoadedDrawable::load(&cx.kernel.content(), c"graphics.outfit")
         .unwrap_or_else(|| panic!("outfit background missing"));
     let mut s = Stamp {
         origin: Point { x: 0, y: 0 },

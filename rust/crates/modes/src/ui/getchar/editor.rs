@@ -55,8 +55,8 @@ impl Alphabet {
         result
     }
 
-    fn load() -> Self {
-        uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.joyalpha")
+    fn load(content: &uqm_engine::resource::Content) -> Self {
+        uqm_engine::strings::owned_table::LoadedTextTable::load(content, c"text.joyalpha")
             .map_or_else(Self::default, |table| {
                 Self::new(table.label(0).0, table.label(1).0, table.label(2).0)
             })
@@ -365,7 +365,7 @@ pub fn edit_text(
         return false;
     }
     let mut editor = Editor::new(buffer, capacity, cursor);
-    let alphabet = Alphabet::load();
+    let alphabet = Alphabet::load(&cx.kernel.content());
     enter_character_mode();
     cx.run_input(io, true, |cx, io| {
         editor.frame(cx, io, input, &alphabet, callbacks)

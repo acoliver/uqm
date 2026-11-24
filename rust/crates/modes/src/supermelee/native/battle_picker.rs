@@ -289,10 +289,11 @@ pub mod live {
         drawable: uqm_engine::graphics::drawable::LoadedDrawable,
     }
     impl FleetPicker {
-        pub(crate) fn new(context: &ContextLease) -> Self {
+        pub(crate) fn new(content: &uqm_engine::resource::Content, context: &ContextLease) -> Self {
             let drawable = uqm_engine::graphics::drawable::LoadedDrawable::create(2, 149, 55, 2)
                 .unwrap_or_else(|| panic!("fleet picker allocation"));
             let mask = uqm_engine::graphics::drawable::LoadedDrawable::load(
+                content,
                 std::ffi::CStr::from_bytes_with_nul(MELEE_PICK_MASK_PMAP_ANIM)
                     .unwrap_or_else(|error| panic!("fleet mask resource: {error}")),
             )

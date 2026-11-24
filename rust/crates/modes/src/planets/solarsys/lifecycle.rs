@@ -389,11 +389,12 @@ fn prepare_solar_sys(
     next_activity: u16,
 ) -> SolarSystemStart {
     uqm_engine::kernel::solar_resources::SolarResources::retain(
+        &cx.kernel.content(),
         &mut cx.kernel.solar_presentation.assets,
     );
     if cx.kernel.lander_resources.is_none() {
         cx.kernel.lander_resources = Some(
-            uqm_engine::kernel::lander_resources::LanderResources::load()
+            uqm_engine::kernel::lander_resources::LanderResources::load(&cx.kernel.content())
                 .unwrap_or_else(|key| panic!("missing lander resource {key}")),
         );
     }

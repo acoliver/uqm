@@ -92,6 +92,7 @@ pub mod live {
     }
 
     fn load_surface_palette(
+        content: &uqm_engine::resource::Content,
         index: u8,
         temperature: i16,
     ) -> crate::planets::sphere::palette::SurfacePalette {
@@ -99,9 +100,9 @@ pub mod live {
         use uqm_engine::strings::sresins::load_binary_entry;
         let data = &crate::planets::tables::PLANET_ARRAY[usize::from(index)];
         let variant = temperature_index(temperature);
-        let colors = load_binary_entry(data.cmap_instance, variant)
+        let colors = load_binary_entry(content, data.cmap_instance, variant)
             .unwrap_or_else(|| panic!("planet color map is missing"));
-        let translation = load_binary_entry(data.xlat_tab_instance, variant)
+        let translation = load_binary_entry(content, data.xlat_tab_instance, variant)
             .unwrap_or_else(|| panic!("planet translation table is missing"));
         SurfacePalette::from_bytes(index, &translation, colors)
             .unwrap_or_else(|error| panic!("planet palette: {error:?}"))
@@ -203,6 +204,7 @@ pub mod live {
     }
 
     pub struct SurfaceInputs<'a> {
+        pub content: &'a uqm_engine::resource::Content,
         pub rng: &'a mut uqm_engine::math::RandomContext,
         pub planet: &'a uqm_engine::world::planet::PlanetDesc,
         pub info: &'a uqm_engine::world::planet::PlanetInfo,
@@ -218,6 +220,7 @@ pub mod live {
         definition: Option<uqm_engine::graphics::drawable::LoadedDrawable>,
     ) {
         let SurfaceInputs {
+            content,
             rng,
             planet,
             info,
@@ -239,7 +242,8 @@ pub mod live {
                 let depth = &mut state.elevation;
                 generate_elevation(rng, depth, width, &data);
                 let topography = crate::planets::sphere::images::image(2, width, 75, 1);
-                let palette = load_surface_palette(planet.data_index & !128, info.temperature);
+                let palette =
+                    load_surface_palette(content, planet.data_index & !128, info.temperature);
                 render_native_topography(
                     &retained_context,
                     topography.lease().context_frame(0),

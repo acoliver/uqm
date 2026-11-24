@@ -68,10 +68,10 @@ impl andro::AndrosynthSite for Site<'_, '_, '_> {
         use uqm_engine::graphics::drawable::LoadedDrawable;
         use uqm_engine::strings::owned_table::LoadedTextTable;
         use uqm_engine::world::generation::ReportSlot;
-        self.report_resources.load();
+        self.report_resources.load(self.content());
         {
-            system.frames[1] = LoadedDrawable::load(c"graphics.ruins");
-            let table = LoadedTextTable::load(c"text.androsynthruins");
+            system.frames[1] = LoadedDrawable::load(self.content(), c"graphics.ruins");
+            let table = LoadedTextTable::load(self.content(), c"text.androsynthruins");
             system.report = ReportSlot::new(table.and_then(|table| {
                 if visits >= table.len() as u32 {
                     None
@@ -102,7 +102,7 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
             let width = crate::planets::generate::consts::MAP_WIDTH as i16;
             let height = crate::planets::generate::consts::MAP_HEIGHT as i16;
             // SAFETY: this thread owns the detached resource through normalization and transfer.
-            CapturedSurface::load(c"graphics.earthmask")
+            CapturedSurface::load(self.content(), c"graphics.earthmask")
                 .into_definition(width, height)
                 .unwrap_or_else(|error| {
                     panic!("Earth surface definition could not be rescaled: {error:?}")

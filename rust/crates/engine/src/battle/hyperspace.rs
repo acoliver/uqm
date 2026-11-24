@@ -24,11 +24,11 @@ pub fn load(kernel: &mut Kernel) {
     use crate::battle::frames::load_graphic;
     use crate::graphics::palette_cycle::PaletteCycle;
     if kernel.hyperstars[0].is_null() {
-        kernel.hyperstars[0] = load_graphic(c"graphics.ambient");
-        kernel.hyperstars[1] = load_graphic(c"graphics.hyperstars");
-        kernel.cmaps[0] = PaletteCycle::load(c"colortable.hyperspace");
-        kernel.hyperstars[2] = load_graphic(c"graphics.quasispace");
-        kernel.cmaps[1] = PaletteCycle::load(c"colortable.quasispace");
+        kernel.hyperstars[0] = load_graphic(&kernel.content(), c"graphics.ambient");
+        kernel.hyperstars[1] = load_graphic(&kernel.content(), c"graphics.hyperstars");
+        kernel.cmaps[0] = PaletteCycle::load(&kernel.content(), c"colortable.hyperspace");
+        kernel.hyperstars[2] = load_graphic(&kernel.content(), c"graphics.quasispace");
+        kernel.cmaps[1] = PaletteCycle::load(&kernel.content(), c"colortable.quasispace");
     }
 }
 

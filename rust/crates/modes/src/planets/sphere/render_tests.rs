@@ -91,6 +91,7 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
             &game.kernel.planet_animation,
             true,
             crate::planets::plangen::live::SurfaceInputs {
+                content: &game.kernel.content(),
                 rng: &mut rng,
                 planet: &planet,
                 info: &info,

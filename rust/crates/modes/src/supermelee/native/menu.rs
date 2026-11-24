@@ -50,9 +50,14 @@ pub mod live {
         context.finish_color_transforms();
     }
 
-    fn load_menu_graphics(state: &mut MeleeSession, offscreen: ContextLease) {
+    fn load_menu_graphics(
+        content: &uqm_engine::resource::Content,
+        state: &mut MeleeSession,
+        offscreen: ContextLease,
+    ) {
         state.menu_graphic = Some(
             LoadedDrawable::load(
+                content,
                 std::ffi::CStr::from_bytes_with_nul(MELEE_SCREEN_PMAP_ANIM)
                     .unwrap_or_else(|error| panic!("menu graphic resource: {error}")),
             )
@@ -183,7 +188,10 @@ pub mod live {
             }
             let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
                 .unwrap_or_else(|error| panic!("melee music resource name: {error}"));
-            state.h_music = uqm_engine::sound::resource_types::LoadedMusic::load(music_name);
+            state.h_music = uqm_engine::sound::resource_types::LoadedMusic::load(
+                &cx.kernel.content(),
+                music_name,
+            );
             state.initialized = 1;
             state.melee_option = 4;
             crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
@@ -302,11 +310,17 @@ pub mod live {
             team.rename(cx.kernel.game_text(MELEE_STRING_BASE as usize + 4 + index));
         }
         cx.world.set_activity(SUPER_MELEE);
-        cx.kernel.game_sounds =
-            uqm_engine::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
-        state.fleet_picker =
-            Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
-        load_menu_graphics(&mut state, offscreen);
+        cx.kernel.game_sounds = uqm_engine::sound::owned_bank::LoadedSoundBank::load(
+            &cx.kernel.content(),
+            c"sounds.battle",
+        );
+        state.fleet_picker = Some(
+            crate::supermelee::native::battle_picker::live::FleetPicker::new(
+                &cx.kernel.content(),
+                &offscreen,
+            ),
+        );
+        load_menu_graphics(&cx.kernel.content(), &mut state, offscreen);
         cx.kernel.init_space(cx.world.activity());
         load_team_list(&mut state);
         load_setup(&mut state, cx);

@@ -1,16 +1,14 @@
-//! A temporary host directory mounted at `/` of a fresh process file system.
+//! A temporary directory and its independent mount table.
 
-use super::{install, Dir, Placement, Vfs};
+use super::{Dir, Placement, Vfs};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// Installs a new [`Vfs`] with one temporary directory mounted at `/`, and
-/// puts the previously installed file system back on drop.
+/// Owns a new [`Vfs`] with one temporary directory mounted at `/`.
 pub struct TempMount {
     files: TempDir,
     vfs: Vfs,
     root: Dir,
-    previous: Option<Vfs>,
 }
 
 impl TempMount {
@@ -24,17 +22,14 @@ impl TempMount {
     }
 
     fn build(read_only: bool) -> Self {
-        let files = TempDir::new().unwrap_or_else(|error| panic!("fixture directory: {error}"));
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tmp");
+        std::fs::create_dir_all(&root).unwrap();
+        let files =
+            TempDir::new_in(root).unwrap_or_else(|error| panic!("fixture directory: {error}"));
         let vfs = Vfs::new();
         vfs.mount_dir("/", files.path(), Placement::Top, read_only);
         let root = vfs.open_dir(Path::new("/"));
-        let previous = install(vfs.clone());
-        Self {
-            files,
-            vfs,
-            root,
-            previous,
-        }
+        Self { files, vfs, root }
     }
 
     pub fn vfs(&self) -> &Vfs {
@@ -44,12 +39,6 @@ impl TempMount {
     /// The directory mounted at `/`.
     pub fn dir(&self) -> Dir {
         self.root.clone()
-    }
-
-    /// Make the mounted directory the content directory.
-    pub fn as_content(self) -> Self {
-        self.vfs.set_content_dir(self.root.clone());
-        self
     }
 
     pub fn write(&self, name: &str, bytes: &[u8]) {
@@ -72,15 +61,16 @@ impl Default for TempMount {
     }
 }
 
-impl Drop for TempMount {
-    fn drop(&mut self) {
-        match self.previous.take() {
-            Some(previous) => {
-                install(previous);
-            }
-            None => {
-                super::uninstall();
-            }
-        }
+impl TempMount {
+    pub fn content(&self, index: &std::ffi::CStr) -> crate::resource::Content {
+        let mut builder = crate::resource::CatalogBuilder::new(self.dir());
+        builder.import_index(
+            &self.dir(),
+            index,
+            None,
+            &mut Default::default(),
+            &mut Default::default(),
+        );
+        builder.finish()
     }
 }

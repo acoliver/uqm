@@ -203,7 +203,7 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
     let mut game = Game::new();
     let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_| {},
         |game| {
             let context = ContextLease::require(game.kernel.status_context);
             game.kernel.screen_context = game.kernel.status_context;
@@ -271,7 +271,8 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                 context.clone(),
                 false,
             );
-            state.fonts[0] = uqm_engine::graphics::font::LoadedFont::load(c"fixture.tiny");
+            state.fonts[0] =
+                uqm_engine::graphics::font::LoadedFont::load(&cx.kernel.content(), c"fixture.tiny");
             assert!(matches!(
                 commands::advance(&mut cx, &mut io, &mut state),
                 commands::Step::Input(true)

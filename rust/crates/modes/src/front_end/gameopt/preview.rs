@@ -115,8 +115,10 @@ mod tests {
                 save_name: [0; 64],
             };
             lander(&game.kernel, &summary);
-            game.kernel.lander_resources =
-                Some(uqm_engine::kernel::lander_resources::LanderResources::load().unwrap());
+            game.kernel.lander_resources = Some(
+                uqm_engine::kernel::lander_resources::LanderResources::load(&game.kernel.content())
+                    .unwrap(),
+            );
             let current = game.world.data.flagship;
             let mut saved = current;
             saved.num_landers = 1;

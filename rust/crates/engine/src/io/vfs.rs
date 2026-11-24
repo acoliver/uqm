@@ -74,6 +74,17 @@ struct Resolution<'a> {
     host_path: PathBuf,
 }
 
+/// A failed content open, including the backing that was actually attempted.
+#[derive(Debug, thiserror::Error)]
+#[error("open {virtual_path:?} from {mount_path:?} member {member:?}: {source}")]
+pub struct OpenError {
+    pub virtual_path: PathBuf,
+    pub mount_path: PathBuf,
+    pub member: PathBuf,
+    #[source]
+    pub source: io::Error,
+}
+
 /// Mounts plus the retained content, config, save and melee directories.
 #[derive(Clone)]
 pub struct Vfs {
@@ -191,6 +202,7 @@ impl Vfs {
             virtual_path: path.to_path_buf(),
             write_read_only: Some(false),
             host: true,
+            read_only_view: false,
         }
     }
 
@@ -286,6 +298,7 @@ pub struct Dir {
     virtual_path: PathBuf,
     write_read_only: Option<bool>,
     host: bool,
+    read_only_view: bool,
 }
 
 impl std::fmt::Debug for Dir {
@@ -303,6 +316,15 @@ impl Dir {
         Self {
             table: MountView::Ready(self.table.snapshot()),
             ..self.clone()
+        }
+    }
+
+    /// Freeze the overlay and withhold write/remove authority from its children.
+    pub fn read_only(&self) -> Self {
+        Self {
+            write_read_only: Some(true),
+            read_only_view: true,
+            ..self.snapshot()
         }
     }
 
@@ -340,13 +362,19 @@ impl Dir {
             virtual_path,
             write_read_only,
             host: false,
+            read_only_view: false,
         }
     }
 
     /// A child directory in the same namespace; absolute virtual names stay virtual.
     pub fn open_relative(&self, path: &Path) -> Dir {
         if path.is_absolute() && !self.host {
-            return Self::at(self.table.clone(), path);
+            let child = Self::at(self.table.clone(), path);
+            return if self.read_only_view {
+                child.read_only()
+            } else {
+                child
+            };
         }
         Dir {
             table: self.table.clone(),
@@ -354,6 +382,7 @@ impl Dir {
             virtual_path: normalize(&self.virtual_path, path),
             write_read_only: self.write_read_only,
             host: self.host,
+            read_only_view: self.read_only_view,
         }
     }
 
@@ -563,6 +592,7 @@ impl MountTable {
             return self.disk.open_write(&target);
         }
         let mut covered = false;
+        let mut last_missing = None;
         for mount in &self.mounts {
             let Ok(suffix) = virtual_path.strip_prefix(&mount.point) else {
                 continue;
@@ -576,12 +606,26 @@ impl MountTable {
             };
             match opened {
                 Ok(file) => return Ok(file),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error),
+                Err(source) => {
+                    let kind = source.kind();
+                    let error = io::Error::new(
+                        kind,
+                        OpenError {
+                            virtual_path: virtual_path.clone(),
+                            mount_path: mount.root.clone(),
+                            member: suffix.to_path_buf(),
+                            source,
+                        },
+                    );
+                    if kind != io::ErrorKind::NotFound {
+                        return Err(error);
+                    }
+                    last_missing = Some(error);
+                }
             }
         }
         if covered || !retained {
-            return Err(io::Error::from(io::ErrorKind::NotFound));
+            return Err(last_missing.unwrap_or_else(|| io::Error::from(io::ErrorKind::NotFound)));
         }
         self.disk.open_read(&normalize(host, path))
     }

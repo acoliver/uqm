@@ -269,7 +269,8 @@ pub(crate) mod engine {
             } else {
                 c"music.battle"
             };
-            kernel.battle_music = uqm_engine::sound::resource_types::LoadedMusic::load(resource);
+            kernel.battle_music =
+                uqm_engine::sound::resource_types::LoadedMusic::load(&kernel.content(), resource);
         }
         if play {
             crate::ui::settings::play_loaded_music(world, kernel.battle_music.as_ref(), 1, 1);

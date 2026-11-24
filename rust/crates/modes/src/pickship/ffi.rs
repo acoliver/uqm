@@ -410,7 +410,7 @@ pub(crate) fn draw_armada_pick_ship_in(
                 .context_frame(3),
         )
     };
-    let owner = LoadedDrawable::load(c"graphics.pickship")
+    let owner = LoadedDrawable::load(&kernel.content(), c"graphics.pickship")
         .unwrap_or_else(|| panic!("missing picker graphic"));
     let frames = owner.lease();
     let frame = frames.context_frame(0);

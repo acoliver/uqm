@@ -33,7 +33,7 @@ fn with_game_options(
     let fixture =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared_with_options(
             &mut game,
-            || {},
+            |_| {},
             |game| {
                 let space = ContextLease::require(game.kernel.status_context);
                 space.set_frame(ContextFrame::retain(game.kernel.screen));

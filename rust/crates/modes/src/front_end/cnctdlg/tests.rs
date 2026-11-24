@@ -194,10 +194,10 @@ impl Display {
         let graphics = uqm_engine::test_support::native_session::Graphics::start();
         let (player, button) = {
             let mount = uqm_engine::test_support::native_session::ContentMount::new(files.path());
-            mount.init_resources("fixture.rmp");
+            mount.load_index("fixture.rmp");
             (
-                LoadedFont::load(c"fixture.font").unwrap(),
-                LoadedFont::load(c"fixture.font").unwrap(),
+                LoadedFont::load(&mount.content(), c"fixture.font").unwrap(),
+                LoadedFont::load(&mount.content(), c"fixture.font").unwrap(),
             )
         };
         let context = uqm_engine::graphics::context::LoadedContext::create(c"connection fixture");

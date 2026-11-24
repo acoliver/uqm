@@ -309,11 +309,10 @@ fn load_conversation_table<T: LineSource>(
 }
 
 /// Loads a `phrases[:clip_dir[:timestamps]]` conversation resource.
-pub(super) fn load_conversation(path: &CStr) -> Option<ConversationTable> {
+pub(super) fn load_conversation(content: &Dir, path: &CStr) -> Option<ConversationTable> {
     let full = path.to_bytes();
     let paths = &full[..full.len().min(LINE_SIZE - 1)];
     let (phrases, clip_dir, ts_path) = split_conversation_path(paths);
-    let content = crate::io::content_dir()?;
     let Some((mut file, data_len)) = open_with_length(&content, phrases) else {
         log_message(
             LogLevel::Warning,
@@ -388,8 +387,7 @@ fn split_conversation_path(paths: &[u8]) -> (&[u8], Option<&[u8]>, Option<&[u8]>
 /// uncompressed resource), then a big-endian binary table: `[count,
 /// extra_words, lens[count], ..., string data]`, with the data starting after
 /// `extra_words` more words.
-pub(super) fn load_binary_table(path: &CStr) -> Option<LoadedBinaryTable> {
-    let content = crate::io::content_dir()?;
+pub(super) fn load_binary_table(content: &Dir, path: &CStr) -> Option<LoadedBinaryTable> {
     let (mut file, length) = open_resource(&content, path.to_bytes())?;
     let mut marker = [0; 4];
     file.read_exact(&mut marker).ok()?;
@@ -580,7 +578,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn resource_files_load_through_the_content_directory() {
-        let mount = crate::io::fixture::TempMount::new().as_content();
+        let mount = crate::io::fixture::TempMount::new();
         mount.write("text.txt", b"#(A)\nalpha\n");
         mount.write("empty.txt", b"");
         let mut binary = u32::MAX.to_ne_bytes().to_vec();
@@ -596,18 +594,20 @@ mod tests {
         assert!(load_text_table(&mount.dir(), c"empty.txt").is_none());
         assert!(load_text_table(&mount.dir(), c"missing.txt").is_none());
         assert_eq!(
-            load_binary_table(c"table.bin").unwrap().entries(),
+            load_binary_table(&mount.dir(), c"table.bin")
+                .unwrap()
+                .entries(),
             [b"hi".to_vec()]
         );
-        assert!(load_binary_table(c"packed.bin").is_none());
-        let talk = load_conversation(c"talk.txt:voice/").unwrap();
+        assert!(load_binary_table(&mount.dir(), c"packed.bin").is_none());
+        let talk = load_conversation(&mount.dir(), c"talk.txt:voice/").unwrap();
         let phrase = talk.phrase(0).unwrap();
         assert_eq!(
             (phrase.text, phrase.clip),
             (Some(c"Hello"), Some(c"voice/hi.ogg"))
         );
-        assert!(load_conversation(c"missing.txt").is_none());
-        assert!(load_conversation(c"empty.txt").is_none());
+        assert!(load_conversation(&mount.dir(), c"missing.txt").is_none());
+        assert!(load_conversation(&mount.dir(), c"empty.txt").is_none());
     }
 
     #[test]

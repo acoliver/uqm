@@ -61,8 +61,9 @@ pub mod engine {
         if species == uqm_engine::species::species_id::SPECIES_ID_ARILOU_ID {
             assert_eq!(kernel.master_queue.count(), 0, "catalog already loaded");
         }
-        let descriptor = uqm_engine::battle::RaceDesc::load(world, species, false)
-            .unwrap_or_else(|| panic!("master species {species}"));
+        let descriptor =
+            uqm_engine::battle::RaceDesc::load(&kernel.content(), world, species, false)
+                .unwrap_or_else(|| panic!("master species {species}"));
         let name = descriptor.catalog_name().to_vec();
         let queue = &mut kernel.master_queue;
         let id = queue

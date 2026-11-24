@@ -179,9 +179,11 @@ pub(crate) mod live {
         {
             if mode == WAIT {
                 scan.context().select();
-                let frame =
-                    uqm_engine::graphics::drawable::LoadedDrawable::load(c"graphics.orbitenter")
-                        .unwrap_or_else(|| panic!("missing orbit entry graphic"));
+                let frame = uqm_engine::graphics::drawable::LoadedDrawable::load(
+                    &cx.kernel.content(),
+                    c"graphics.orbitenter",
+                )
+                .unwrap_or_else(|| panic!("missing orbit entry graphic"));
                 scan.context().draw_stamp(
                     &frame.lease().context_frame(0),
                     uqm_engine::graphics::geometry::Point { x: 0, y: 0 },
@@ -266,6 +268,7 @@ pub(crate) mod live {
                     &animation,
                     pulsing_shield,
                     crate::planets::plangen::live::SurfaceInputs {
+                        content: &game.borrow().kernel.content(),
                         rng: data.rng,
                         planet: data.world,
                         info: &data.info.planet_info,

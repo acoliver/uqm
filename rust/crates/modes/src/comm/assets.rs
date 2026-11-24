@@ -23,23 +23,36 @@ pub(crate) struct Assets {
 }
 
 impl Assets {
-    pub fn load(descriptor: &CommDescriptor, dimensions: (i32, i32)) -> Result<Self, &'static str> {
-        let player = LoadedFont::load(c"font.player").ok_or("font.player failed to load")?;
+    pub fn load(
+        content: &uqm_engine::resource::Content,
+        descriptor: &CommDescriptor,
+        dimensions: (i32, i32),
+    ) -> Result<Self, &'static str> {
+        let player =
+            LoadedFont::load(content, c"font.player").ok_or("font.player failed to load")?;
         let frame = descriptor
             .alien_frame_res
-            .and_then(LoadedDrawable::load)
+            .and_then(|key| LoadedDrawable::load(content, key))
             .ok_or("alien graphics failed to load")?;
         let font = descriptor
             .alien_font_res
-            .and_then(LoadedFont::load)
+            .and_then(|key| LoadedFont::load(content, key))
             .ok_or("alien font failed to load")?;
-        let palette = descriptor.alien_colormap_res.and_then(PaletteCycle::load);
+        let palette = descriptor
+            .alien_colormap_res
+            .and_then(|key| PaletteCycle::load(content, key));
         let song = if descriptor.alien_song_flags & 1 != 0 {
-            descriptor.alien_alt_song_res.and_then(LoadedMusic::load)
+            descriptor
+                .alien_alt_song_res
+                .and_then(|key| LoadedMusic::load(content, key))
         } else {
             None
         }
-        .or_else(|| descriptor.alien_song_res.and_then(LoadedMusic::load));
+        .or_else(|| {
+            descriptor
+                .alien_song_res
+                .and_then(|key| LoadedMusic::load(content, key))
+        });
         let cache_context = LoadedContext::create(c"TextCacheContext");
         let cache_frame = LoadedDrawable::create(
             2,

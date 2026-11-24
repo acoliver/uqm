@@ -172,7 +172,7 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
     };
     let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_| {},
         |game| {
             let context = ContextLease::require(game.kernel.status_context);
             game.kernel.screen_context = game.kernel.status_context;

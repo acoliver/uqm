@@ -98,8 +98,8 @@ fn update_starbase_screen(
             menu.music = None;
         }
         menu.initialized = true;
-        menu.art = LoadedDrawable::load(c"graphics.starbase");
-        menu.music = LoadedMusic::load(c"music.starbase");
+        menu.art = LoadedDrawable::load(&cx.kernel.content(), c"graphics.starbase");
+        menu.music = LoadedMusic::load(&cx.kernel.content(), c"music.starbase");
         draw::select(cx.kernel.screen_context);
         draw::transition_source();
         draw::batch();

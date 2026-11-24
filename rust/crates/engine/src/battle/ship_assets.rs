@@ -125,9 +125,12 @@ impl RaceDescriptor {
     }
 }
 
-fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<FrameArray> {
+fn load_animation_set(
+    content: &crate::resource::Content,
+    keys: [Option<&'static std::ffi::CStr>; 3],
+) -> Option<FrameArray> {
     let mut raw = [FrameId::NULL; 3];
-    if load_animation(&mut raw, keys, "animation") == 0 {
+    if load_animation(content, &mut raw, keys, "animation") == 0 {
         free_image(&mut raw, "animation");
         return None;
     }
@@ -137,9 +140,9 @@ fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<Fram
 }
 
 impl RaceDesc {
-    pub fn initialize_assets(&mut self, battle: bool) -> bool {
-        let navigation = self.initialize_icons();
-        let loaded = !battle || self.initialize_battle_assets();
+    pub fn initialize_assets(&mut self, content: &crate::resource::Content, battle: bool) -> bool {
+        let navigation = self.initialize_icons(content);
+        let loaded = !battle || self.initialize_battle_assets(content);
         let data = &self.raw.ship_data;
         self.raw.assets = Some(Box::new(ShipAssets {
             navigation,
@@ -151,11 +154,17 @@ impl RaceDesc {
         loaded
     }
 
-    fn initialize_icons(&mut self) -> ShipNavigationAssets {
+    fn initialize_icons(&mut self, content: &crate::resource::Content) -> ShipNavigationAssets {
         let resources = &self.raw.resources;
-        let icons = resources.icons.and_then(LoadedDrawable::load);
-        let melee_icon = resources.melee_icon.and_then(LoadedDrawable::load);
-        let strings = resources.strings.and_then(LoadedTextTable::load);
+        let icons = resources
+            .icons
+            .and_then(|key| LoadedDrawable::load(content, key));
+        let melee_icon = resources
+            .melee_icon
+            .and_then(|key| LoadedDrawable::load(content, key));
+        let strings = resources
+            .strings
+            .and_then(|key| LoadedTextTable::load(content, key));
         let info = &mut self.raw.ship_info;
         info.icons = icon_frame(&icons);
         info.melee_icon = icon_frame(&melee_icon);
@@ -167,9 +176,9 @@ impl RaceDesc {
         }
     }
 
-    fn initialize_battle_assets(&mut self) -> bool {
+    fn initialize_battle_assets(&mut self, content: &crate::resource::Content) -> bool {
         let data = &mut self.raw.ship_data;
-        let Some(ship) = load_animation_set(self.raw.resources.ship) else {
+        let Some(ship) = load_animation_set(content, self.raw.resources.ship) else {
             return false;
         };
         data.ship = ship;
@@ -178,25 +187,25 @@ impl RaceDesc {
             (self.raw.resources.special, &mut data.special),
         ] {
             if keys[0].is_some() {
-                let Some(loaded) = load_animation_set(keys) else {
+                let Some(loaded) = load_animation_set(content, keys) else {
                     return false;
                 };
                 *frames = loaded;
             }
         }
-        self.initialize_battle_audio_and_captain()
+        self.initialize_battle_audio_and_captain(content)
     }
 
-    fn initialize_battle_audio_and_captain(&mut self) -> bool {
+    fn initialize_battle_audio_and_captain(&mut self, content: &crate::resource::Content) -> bool {
         let data = &mut self.raw.ship_data;
         if let Some(key) = self.raw.resources.captain {
-            data.captain_control.background = crate::battle::frames::load_graphic(key);
+            data.captain_control.background = crate::battle::frames::load_graphic(content, key);
             if data.captain_control.background.is_null() {
                 return false;
             }
         }
         if let Some(key) = self.raw.resources.victory {
-            self.raw.loaded_victory = crate::sound::resource_types::LoadedMusic::load(key);
+            self.raw.loaded_victory = crate::sound::resource_types::LoadedMusic::load(content, key);
             data.victory_ditty = self
                 .raw
                 .loaded_victory
@@ -207,7 +216,7 @@ impl RaceDesc {
             }
         }
         if let Some(key) = self.raw.resources.sounds {
-            self.raw.loaded_sounds = crate::sound::owned_bank::LoadedSoundBank::load(key);
+            self.raw.loaded_sounds = crate::sound::owned_bank::LoadedSoundBank::load(content, key);
             data.ship_sounds = self
                 .raw
                 .loaded_sounds

@@ -33,9 +33,11 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
     let _graphics = DrawQueue::init();
     {
         let content = uqm_engine::test_support::native_session::ContentMount::new(&base);
-        let drawable = LoadedDrawable::load_file(c"ui/miscdata.ani").unwrap();
+        let drawable =
+            LoadedDrawable::load_file(content.content_directory(), c"ui/miscdata.ani").unwrap();
         let frames = drawable.first_frame();
         let mut visuals = CffiSurfaceVisuals::new(
+            uqm_engine::resource::CatalogBuilder::new(content.content_directory().clone()).finish(),
             ContextFrame::retain(frames),
             None,
             std::array::from_fn(|_| None),

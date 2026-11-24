@@ -65,13 +65,16 @@ fn command(
         }
         b"TVA" => state.text_vpos = source.first().copied().unwrap_or(0).to_ascii_uppercase(),
         b"TE" => state.text_effect = source.first().copied().unwrap_or(0).to_ascii_uppercase(),
-        b"DIMS" | b"ANI" | b"LINE" => graphics_command(state, opcode, source),
+        b"DIMS" | b"ANI" | b"LINE" => {
+            graphics_command(cx.kernel.content().files(), state, opcode, source)
+        }
         b"MUSIC" => {
             if state.music.is_some() {
                 music::stop_requested_music();
                 drop(state.music.take());
             }
-            state.music = LoadedMusic::load_file(&bounded(source, 511));
+            state.music =
+                LoadedMusic::load_file(cx.kernel.content().files(), &bounded(source, 511));
             music::remember_music(
                 state
                     .music
@@ -170,7 +173,7 @@ fn text_command(cx: &mut Cx<'_>, state: &mut PresentationState, opcode: &[u8], s
             let font = &mut state.fonts[index as usize];
             if let Some(path) = args.line(255) {
                 drop(font.take());
-                *font = LoadedFont::load_file(&bounded(path, 255));
+                *font = LoadedFont::load_file(cx.kernel.content().files(), &bounded(path, 255));
             }
             state
                 .context
@@ -219,7 +222,12 @@ fn text_command(cx: &mut Cx<'_>, state: &mut PresentationState, opcode: &[u8], s
     }
 }
 
-fn graphics_command(state: &mut PresentationState, opcode: &[u8], source: &[u8]) {
+fn graphics_command(
+    files: &uqm_engine::io::Dir,
+    state: &mut PresentationState,
+    opcode: &[u8],
+    source: &[u8],
+) {
     let mut args = Arguments::new(source);
     match opcode {
         b"DIMS" => {
@@ -240,7 +248,7 @@ fn graphics_command(state: &mut PresentationState, opcode: &[u8], source: &[u8])
         }
         b"ANI" => {
             drop(state.frame.take());
-            state.frame = LoadedDrawable::load_file(&bounded(source, 511));
+            state.frame = LoadedDrawable::load_file(files, &bounded(source, 511));
         }
         b"LINE" => {
             if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (

@@ -31,14 +31,14 @@ impl Fixture {
         let graphics = uqm_engine::test_support::native_session::Graphics::start();
         let mount = uqm_engine::test_support::native_session::ContentMount::new(files.path())
             .with_config(files.path());
-        mount.init_resources("fixture.rmp");
+        mount.load_index("fixture.rmp");
         let native_input = uqm_engine::test_support::native_session::NativeInput::bind(
             &input,
             &mut mount.bindings.borrow_mut(),
             Some(mount.content_directory()),
             mount.config_directory().as_ref(),
         );
-        let font = LoadedFont::load(c"fixture.font").unwrap();
+        let font = LoadedFont::load(&mount.content(), c"fixture.font").unwrap();
         let context = LoadedContext::create(c"setup fixture");
         let screen = LoadedDrawable::create(8, 320, 240, 1).unwrap();
         context.lease().set_frame(screen.lease().context_frame(0));
@@ -191,6 +191,7 @@ fn root_cancel_applies_and_persists_on_the_actual_input_loop() {
         sleeps: Cell::new(0),
     });
     let mut game = uqm_engine::Game::new();
+    game.kernel.admit_content(fixture._mount.content());
     game.kernel.install_input_runtime(driver.clone());
     let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
@@ -221,6 +222,7 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
     );
     drop(fixture.font.take());
     let mut game = uqm_engine::Game::new();
+    game.kernel.admit_content(fixture._mount.content());
     game.kernel.install_input_runtime(Rc::new(Driver {
         input: fixture.input.clone(),
         keys: RefCell::default(),
@@ -282,6 +284,7 @@ fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
         sleeps: Cell::new(0),
     });
     let mut game = uqm_engine::Game::new();
+    game.kernel.admit_content(fixture._mount.content());
     game.kernel.install_input_runtime(driver.clone());
     let mut observer = uqm_engine::observe::Unobserved;
     let mut io = Io {
@@ -329,6 +332,7 @@ fn scripted_audio_changes_apply_on_return_and_abort_clears_the_activity_bit() {
             sleeps: Cell::new(0),
         });
         let mut game = uqm_engine::Game::new();
+        game.kernel.admit_content(fixture._mount.content());
         game.kernel.install_input_runtime(driver.clone());
         if abort {
             game.world.set_activity(0x4000);

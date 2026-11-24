@@ -140,14 +140,10 @@ fn load_image(files: &dyn Files, name: &[u8]) -> Option<Decoded> {
     png::decode(&bytes).ok()
 }
 
-/// The content directory; loads find nothing before one is mounted.
-fn content_files() -> Option<Dir> {
-    crate::io::content_dir()
-}
-
 /// C: `get_cel_data`: load the animation `path`, whose stream is `stream`
 /// (the first `length` bytes from its position).
 pub(crate) fn load_cel(
+    files: &Dir,
     stream: &mut FileStream,
     length: u32,
     path: &[u8],
@@ -156,7 +152,7 @@ pub(crate) fn load_cel(
     let (parent, name, prefix) = path_parts(path);
     let mut header = [0u8; 4];
     let _ = stream.read(&mut header);
-    let content = content_files()?.snapshot();
+    let content = files.snapshot();
     let mut package_stream;
     let (files, file, prefix): (Box<dyn Files>, &mut FileStream, &[u8]) =
         if !path.is_empty() && u32::from_le_bytes(header) == 0x0403_4b50 {
@@ -213,8 +209,8 @@ pub(crate) fn load_cel(
 }
 
 /// C: `get_font_data`: load the font directory or package `path`.
-pub(crate) fn load_font(path: &CStr, package: bool) -> Option<LoadedFont> {
-    let content = content_files()?.snapshot();
+pub(crate) fn load_font(files: &Dir, path: &CStr, package: bool) -> Option<LoadedFont> {
+    let content = files.snapshot();
     let directory = Path::new(path.to_str().ok()?);
     let content = if package {
         content
@@ -260,20 +256,18 @@ pub(crate) fn load_font(path: &CStr, package: bool) -> Option<LoadedFont> {
 
 /// C: `LoadGraphicFile`: an animation or image file outside the resource
 /// index.
-pub(crate) fn load_graphic_file(path: &CStr) -> Option<LoadedDrawable> {
-    let mut stream = content_files()?
-        .open_read(Path::new(path.to_str().ok()?))
-        .ok()?;
+pub(crate) fn load_graphic_file(files: &Dir, path: &CStr) -> Option<LoadedDrawable> {
+    let mut stream = files.open_read(Path::new(path.to_str().ok()?)).ok()?;
     let length = stream.len().ok()? as u32;
-    load_cel(&mut stream, length, path.to_bytes())
+    load_cel(files, &mut stream, length, path.to_bytes())
 }
 
 /// C: `LoadFontFile`.
-pub(crate) fn load_font_file(path: &CStr) -> Option<LoadedFont> {
-    let content = content_files()?;
+pub(crate) fn load_font_file(files: &Dir, path: &CStr) -> Option<LoadedFont> {
+    let content = files;
     let directory = Path::new(path.to_str().ok()?);
     let package = !content.stat(directory).ok()?.is_dir;
-    load_font(path, package)
+    load_font(files, path, package)
 }
 
 #[cfg(test)]

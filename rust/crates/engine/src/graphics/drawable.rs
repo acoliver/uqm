@@ -625,13 +625,16 @@ impl LoadedDrawable {
     }
 
     /// Load a graphics resource.
-    pub fn load(resource: &std::ffi::CStr) -> Option<Self> {
-        crate::resource::cache::load_graphic(resource)
+    pub fn load(content: &crate::resource::Content, resource: &std::ffi::CStr) -> Option<Self> {
+        Self::load_file(
+            content.files(),
+            &content.path_of(resource, crate::resource::AssetKind::Graphic)?,
+        )
     }
 
     /// Load an animation or image file.
-    pub fn load_file(path: &std::ffi::CStr) -> Option<Self> {
-        super::load::load_graphic_file(path)
+    pub fn load_file(files: &crate::io::Dir, path: &std::ffi::CStr) -> Option<Self> {
+        super::load::load_graphic_file(files, path)
     }
 
     /// C: `CreateDrawable`.

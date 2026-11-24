@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::io::Read;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::Arc;
 
 /// Types whose descriptor is a file their owner loads.
 const FILE_TYPES: [&str; 8] = [
@@ -69,60 +69,6 @@ impl Entry {
     }
 }
 
-static INDEX: Mutex<Option<HashMap<String, Entry>>> = Mutex::new(None);
-
-fn with_index<R>(access: impl FnOnce(&mut HashMap<String, Entry>) -> R) -> R {
-    let mut index = INDEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    access(index.get_or_insert_with(HashMap::new))
-}
-
-/// Define `key` from a `TYPE:descriptor` index value, replacing any entry.
-pub(super) fn define(index: &mut HashMap<String, Entry>, key: &str, value: &str) {
-    let Some((kind, descriptor)) = value.split_once(':') else {
-        log::warn!("Invalid resource descriptor '{value}' for key '{key}'");
-        return;
-    };
-    if !matches!(kind, "STRING" | "INT32" | "BOOLEAN" | "COLOR") && !FILE_TYPES.contains(&kind) {
-        log::warn!("Unknown resource type '{kind}' for key '{key}', storing as UNKNOWNRES");
-    }
-    index.insert(key.to_owned(), Entry::parse(kind, descriptor));
-}
-
-/// Start an empty index (C: `InitResourceSystem`); an index already started
-/// is kept.
-pub fn init() {
-    with_index(|_| ());
-}
-
-/// Drop every entry (C: `UninitResourceSystem`).
-pub fn uninit() {
-    *INDEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
-}
-
-/// Read the index file `file` in `dir`, prefixing every key with `prefix`
-/// (C: `LoadResourceIndex`). A missing, empty or non-UTF-8 file adds nothing.
-pub fn load_index(
-    dir: &Dir,
-    file: &CStr,
-    prefix: Option<&CStr>,
-    settings: &mut super::settings::Settings,
-    bindings: &mut super::settings::Bindings,
-) {
-    read_index(dir, file, prefix, |key, value| {
-        if key.starts_with("config.") {
-            settings.define(key, value);
-        } else if key.starts_with("keys.") || key.starts_with("menu.") {
-            bindings.define(key, value);
-        } else {
-            with_index(|index| define(index, key, value));
-        }
-    });
-}
-
 pub(super) fn read_index(
     dir: &Dir,
     file: &CStr,
@@ -147,13 +93,21 @@ pub(super) fn read_index(
     );
 }
 
-/// The index lines of the value entries under `prefix`, sorted by key and
-/// with the prefix removed when `strip` (C: `SaveResourceIndex`).
-#[cfg(test)]
-pub(super) fn serialize(prefix: &str, strip: bool) -> Vec<String> {
-    with_index(|index| serialize_entries(index, prefix, strip))
+pub(super) fn define(index: &mut HashMap<String, Entry>, key: &str, value: &str) {
+    if let Some(entry) = parse_entry(key, value) {
+        index.insert(key.to_owned(), entry);
+    }
 }
-
+fn parse_entry(key: &str, value: &str) -> Option<Entry> {
+    let Some((kind, descriptor)) = value.split_once(':') else {
+        log::warn!("Invalid resource descriptor '{value}' for key '{key}'");
+        return None;
+    };
+    if !matches!(kind, "STRING" | "INT32" | "BOOLEAN" | "COLOR") && !FILE_TYPES.contains(&kind) {
+        log::warn!("Unknown resource type '{kind}' for key '{key}', storing as UNKNOWNRES");
+    }
+    Some(Entry::parse(kind, descriptor))
+}
 pub(super) fn serialize_entries(
     index: &HashMap<String, Entry>,
     prefix: &str,
@@ -175,138 +129,212 @@ pub(super) fn serialize_entries(
         .collect()
 }
 
-/// The type name of `key`.
-pub fn kind(key: &str) -> Option<String> {
-    with_index(|index| index.get(key).map(|entry| entry.kind.clone()))
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AssetKind {
+    Graphic,
+    Font,
+    Text,
+    Binary,
+    Conversation,
+    Sound,
+    Music,
+    Video,
 }
-
-/// The descriptor of `key`, which must be of type `expected`.
-pub fn descriptor(key: &CStr, expected: &str) -> Option<String> {
-    let key = key.to_str().ok()?;
-    with_index(|index| {
-        let entry = index.get(key)?;
-        assert_eq!(entry.kind, expected, "unexpected resource type for {key}");
-        Some(entry.descriptor.clone())
-    })
-}
-
-/// The file `key` names, which must be of type `expected`.
-pub fn path_of(key: &CStr, expected: &str) -> Option<CString> {
-    descriptor(key, expected).and_then(|path| CString::new(path).ok())
-}
-
-/// The value of a `STRING` entry.
-pub fn string(key: &str) -> Option<String> {
-    with_index(|index| {
-        let entry = index.get(key).filter(|entry| entry.kind == "STRING")?;
-        Some(entry.descriptor.clone())
-    })
-}
-
-/// The value of an entry of type `kind` (`INT32`, `BOOLEAN` or `COLOR`).
-#[cfg(test)]
-pub(super) fn value(key: &str, kind: &str) -> Option<u32> {
-    with_index(|index| {
-        let entry = index.get(key).filter(|entry| entry.kind == kind)?;
-        Some(entry.value)
-    })
-}
-
-pub fn has_key(key: &str) -> bool {
-    with_index(|index| index.contains_key(key))
-}
-
-/// Define `key` as `kind:descriptor` (C: `res_Put*`).
-#[cfg(test)]
-pub(super) fn put(key: &str, kind: &str, descriptor: &str) {
-    assert!(
-        !key.contains('\0') && !descriptor.contains('\0'),
-        "setting contains NUL"
-    );
-    with_index(|index| define(index, key, &format!("{kind}:{descriptor}")));
-}
-
-/// Remove `key`; `false` when it was not defined (C: `res_Remove`).
-pub fn remove(key: &str) -> bool {
-    with_index(|index| index.remove(key).is_some())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serial_test::serial;
-
-    fn fresh() {
-        uninit();
-        init();
-    }
-
-    #[test]
-    #[serial]
-    fn index_files_define_typed_values_and_file_entries() {
-        fresh();
-        let mount = crate::io::fixture::TempMount::new();
-        mount.write(
-            "a.rmp",
-            b"name = STRING:hello\ncount = INT32:-7\nflag = BOOLEAN:TRUE\n\
-              tint = COLOR:rgb15(31, 0, 16)\ntext = STRTAB:base/text.txt\n\
-              odd = WEIRD:thing\nbroken\n",
-        );
-        load_index(
-            &mount.dir(),
-            c"a.rmp",
-            Some(c"p."),
-            &mut Default::default(),
-            &mut Default::default(),
-        );
-        assert_eq!(string("p.name").as_deref(), Some("hello"));
-        assert_eq!(value("p.count", "INT32"), Some(-7i32 as u32));
-        assert_eq!(value("p.flag", "BOOLEAN"), Some(1));
-        assert_eq!(value("p.tint", "COLOR"), Some(0xff00_84ff));
-        assert_eq!(value("p.name", "INT32"), None);
-        assert_eq!(string("p.count"), None);
-        assert_eq!(
-            path_of(c"p.text", "STRTAB").as_deref(),
-            Some(c"base/text.txt")
-        );
-        assert_eq!(kind("p.odd").as_deref(), Some("WEIRD"));
-        assert!(!has_key("broken"));
-        assert!(std::panic::catch_unwind(|| path_of(c"p.text", "BINTAB")).is_err());
-        load_index(
-            &mount.dir(),
-            c"missing.rmp",
-            None,
-            &mut Default::default(),
-            &mut Default::default(),
-        );
-        uninit();
-        assert!(!has_key("p.name"));
-    }
-
-    #[test]
-    #[serial]
-    fn puts_replace_entries_and_serialize_only_values() {
-        fresh();
-        put("cfg.b", "BOOLEAN", "false");
-        put("cfg.a", "INT32", "12");
-        put("cfg.c", "COLOR", "rgba(1, 2, 3, 4)");
-        put("cfg.d", "STRING", "text");
-        put("cfg.e", "STRTAB", "file.txt");
-        put("other", "INT32", "1");
-        put("cfg.a", "STRING", "replaced");
-        assert_eq!(
-            serialize("cfg.", true),
-            [
-                "a = STRING:replaced\n",
-                "b = BOOLEAN:false\n",
-                "c = COLOR:rgba(0x01, 0x02, 0x03, 0x04)\n",
-                "d = STRING:text\n",
-            ]
-        );
-        assert_eq!(serialize("oth", false), ["other = INT32:1\n"]);
-        assert!(remove("cfg.a"));
-        assert!(!remove("cfg.a"));
-        assert!(std::panic::catch_unwind(|| put("bad\0", "STRING", "x")).is_err());
-        uninit();
+impl AssetKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Graphic => "GFXRES",
+            Self::Font => "FONTRES",
+            Self::Text => "STRTAB",
+            Self::Binary => "BINTAB",
+            Self::Conversation => "CONVERSATION",
+            Self::Sound => "SNDRES",
+            Self::Music => "MUSICRES",
+            Self::Video => "3DOVID",
+        }
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct IndexSource {
+    pub directory: Dir,
+    pub index: CString,
+}
+#[derive(Clone)]
+struct Definition {
+    entry: Entry,
+    source: IndexSource,
+}
+
+/// Identity includes the run, so two first revisions cannot alias.
+#[derive(Clone, Debug)]
+pub struct Revision {
+    session: Arc<()>,
+    generation: u64,
+    identity: Arc<()>,
+}
+impl PartialEq for Revision {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.session, &other.session) && Arc::ptr_eq(&self.identity, &other.identity)
+    }
+}
+impl Eq for Revision {}
+
+pub struct CatalogBuilder {
+    entries: HashMap<String, Definition>,
+    files: Dir,
+    revision: Revision,
+}
+impl CatalogBuilder {
+    pub fn new(files: Dir) -> Self {
+        Self {
+            entries: HashMap::new(),
+            files: files.read_only(),
+            revision: Revision {
+                session: Arc::new(()),
+                generation: 0,
+                identity: Arc::new(()),
+            },
+        }
+    }
+    pub fn import_index(
+        &mut self,
+        dir: &Dir,
+        file: &CStr,
+        prefix: Option<&CStr>,
+        settings: &mut super::settings::Settings,
+        bindings: &mut super::settings::Bindings,
+    ) {
+        let source = IndexSource {
+            directory: dir.read_only(),
+            index: file.to_owned(),
+        };
+        read_index(dir, file, prefix, |key, value| {
+            if key.starts_with("config.") {
+                settings.define(key, value);
+            } else if key.starts_with("keys.") || key.starts_with("menu.") {
+                bindings.define(key, value);
+            } else if let Some(entry) = parse_entry(key, value) {
+                self.entries.insert(
+                    key.to_owned(),
+                    Definition {
+                        entry,
+                        source: source.clone(),
+                    },
+                );
+                self.revision.generation = self
+                    .revision
+                    .generation
+                    .checked_add(1)
+                    .expect("catalog revision exhausted");
+            }
+        });
+    }
+    pub fn finish(self) -> Content {
+        Content(Arc::new(ContentData {
+            entries: self.entries,
+            files: self.files,
+            revision: self.revision,
+        }))
+    }
+    pub fn remove(&mut self, key: &str) -> bool {
+        let removed = self.entries.remove(key).is_some();
+        if removed {
+            self.revision.generation = self
+                .revision
+                .generation
+                .checked_add(1)
+                .expect("catalog revision exhausted");
+        }
+        removed
+    }
+}
+struct ContentData {
+    entries: HashMap<String, Definition>,
+    files: Dir,
+    revision: Revision,
+}
+#[derive(Clone)]
+pub struct Content(Arc<ContentData>);
+
+#[derive(Debug, thiserror::Error)]
+pub enum ResolveError {
+    #[error("resource {key} is not defined")]
+    Missing { key: String },
+    #[error("unexpected resource type for {key}: expected {expected}, found {actual}")]
+    WrongKind {
+        key: String,
+        expected: &'static str,
+        actual: String,
+    },
+}
+pub struct Resolved<'a> {
+    pub kind: AssetKind,
+    pub descriptor: &'a str,
+    pub source: &'a IndexSource,
+    pub revision: &'a Revision,
+    pub files: &'a Dir,
+}
+impl Content {
+    pub fn files(&self) -> &Dir {
+        &self.0.files
+    }
+    pub fn revision(&self) -> &Revision {
+        &self.0.revision
+    }
+    pub fn revise(&self) -> CatalogBuilder {
+        CatalogBuilder {
+            entries: self.0.entries.clone(),
+            files: self.0.files.clone(),
+            revision: Revision {
+                session: self.0.revision.session.clone(),
+                generation: self.0.revision.generation,
+                identity: Arc::new(()),
+            },
+        }
+    }
+    pub fn kind(&self, key: &str) -> Option<&str> {
+        self.0
+            .entries
+            .get(key)
+            .map(|entry| entry.entry.kind.as_str())
+    }
+    pub fn resolve(&self, key: &CStr, expected: AssetKind) -> Result<Resolved<'_>, ResolveError> {
+        let key = key.to_string_lossy();
+        let definition = self
+            .0
+            .entries
+            .get(key.as_ref())
+            .ok_or_else(|| ResolveError::Missing {
+                key: key.to_string(),
+            })?;
+        if definition.entry.kind != expected.name() {
+            return Err(ResolveError::WrongKind {
+                key: key.to_string(),
+                expected: expected.name(),
+                actual: definition.entry.kind.clone(),
+            });
+        }
+        Ok(Resolved {
+            kind: expected,
+            descriptor: &definition.entry.descriptor,
+            source: &definition.source,
+            revision: &self.0.revision,
+            files: &self.0.files,
+        })
+    }
+    pub fn descriptor(&self, key: &CStr, expected: AssetKind) -> Option<&str> {
+        match self.resolve(key, expected) {
+            Ok(resolved) => Some(resolved.descriptor),
+            Err(ResolveError::Missing { .. }) => None,
+            Err(error @ ResolveError::WrongKind { .. }) => panic!("{error}"),
+        }
+    }
+    pub fn path_of(&self, key: &CStr, expected: AssetKind) -> Option<CString> {
+        CString::new(self.descriptor(key, expected)?).ok()
+    }
+}
+
+#[cfg(test)]
+#[path = "index_tests.rs"]
+mod tests;

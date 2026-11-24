@@ -464,15 +464,17 @@ fn the_track_player_exports_are_quiet_with_no_track() {
     assert_eq!(get_track_position(1), 0);
     assert!(trackplayer::subtitle_snapshot().is_none());
     assert!(trackplayer::subtitle_history().is_empty());
-    splice_multi_track(&[], None);
+    splice_multi_track(None, &[], None);
 }
 
 #[test]
 fn loading_files_that_are_not_there_gives_nothing() {
+    let mount = crate::io::fixture::TempMount::new();
+    let files = mount.dir();
     let _engine = Engine::start();
-    assert!(load_sound_bank("no/such/bank.snd").is_none());
-    assert!(load_music("no/such/music.ogg").is_none());
-    assert!(load_music("noextension").is_none());
+    assert!(load_sound_bank(&files, "no/such/bank.snd").is_none());
+    assert!(load_music(&files, "no/such/music.ogg").is_none());
+    assert!(load_music(&files, "noextension").is_none());
 }
 
 #[test]

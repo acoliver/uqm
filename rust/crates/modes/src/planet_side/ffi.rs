@@ -228,6 +228,7 @@ fn retained_assets(
         super::runtime::AdapterError::new("lander_assets_not_loaded"),
     )?);
     let visuals = CffiSurfaceVisuals::new(
+        game.borrow().kernel.content(),
         context.misc_data_frame.clone(),
         context.energy_frame.clone(),
         context.life_frames.clone(),

@@ -9,12 +9,13 @@ use uqm_engine::graphics::{
 };
 use uqm_engine::{battle::Cx, observe::Io, StoryKey};
 
-pub(super) fn load_conversation_text(comm: &mut Comm) {
+pub(super) fn load_conversation_text(content: &uqm_engine::resource::Content, comm: &mut Comm) {
+    comm.phrase_files = Some(content.files().clone());
     let phrases = comm
         .data
         .definition
         .conversation_phrases_res
-        .and_then(uqm_engine::strings::conversation::ConversationTable::load);
+        .and_then(|key| uqm_engine::strings::conversation::ConversationTable::load(content, key));
     comm.set_conversation_phrases(phrases);
 }
 
@@ -35,10 +36,10 @@ pub fn prepare(
     comm.set_talking_finished(false);
     let space = ContextLease::require(comm.presentation.space_context);
     let mut assets = space
-        .with_selected(|| Assets::load(&comm.data.definition, dimensions))
+        .with_selected(|| Assets::load(&kernel.content(), &comm.data.definition, dimensions))
         .map_err(str::to_owned)?;
     let display = ConversationDisplay::new(comm, &assets, kernel)?;
-    load_conversation_text(comm);
+    load_conversation_text(&kernel.content(), comm);
     comm.set_comm_data(super::locdata::session_view(&comm.data));
     super::comm_abi::setup_subtitle_text_from_comm_data(comm);
     assets.old_font = space.font_lease();
@@ -235,8 +236,8 @@ mod tests {
     fn conversation_text_admission_retains_the_supplied_game_labels() {
         super::super::sis_graphics_font_tests::with_display(
             "comm::hail::tests::conversation_text_admission_retains_the_supplied_game_labels",
-            |comm, _| {
-                super::load_conversation_text(comm);
+            |comm, _, _content| {
+                super::load_conversation_text(_content, comm);
                 assert_eq!(comm.conversation_display().game_strings.label(256).0, c"A");
                 assert!(comm.display.phrases.is_none());
             },

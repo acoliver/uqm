@@ -62,7 +62,7 @@ impl crate::Kernel {
             self.assets.navigation.play.is_none(),
             "campaign play art already loaded"
         );
-        self.assets.navigation.play = LoadedDrawable::load(c"graphics.playmenu");
+        self.assets.navigation.play = LoadedDrawable::load(&self.content(), c"graphics.playmenu");
         self.play_frame = first_frame(&self.assets.navigation.play);
     }
 
@@ -70,9 +70,10 @@ impl crate::Kernel {
         &mut self,
         radar_clip: Rect,
     ) -> Result<(), NavigationLoadError> {
+        let content = self.content();
         self.assets
             .navigation
-            .load_display_with(LoadedDrawable::load)?;
+            .load_display_with(|key| LoadedDrawable::load(&content, key))?;
         let display = self
             .assets
             .navigation

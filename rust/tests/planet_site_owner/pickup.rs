@@ -223,9 +223,10 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
     };
     let mut game = campaign();
     let resources = ReportResources::default();
-    let display =
-        campaign_display::CampaignDisplay::install_with_resources(&mut game, || resources.load())
-            .unwrap();
+    let display = campaign_display::CampaignDisplay::install_with_resources(&mut game, |content| {
+        resources.load(content)
+    })
+    .unwrap();
     game.kernel.space_context = game.kernel.off_screen_context;
     let context = ContextLease::require(game.kernel.space_context);
     context.set_frame(ContextFrame::retain(game.kernel.screen));

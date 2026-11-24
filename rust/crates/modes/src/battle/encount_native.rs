@@ -417,10 +417,16 @@ pub(crate) mod engine {
             .unwrap_or_else(|| panic!("encounter requires the tiny font"));
         context.select();
         context.set_font(&font);
-        let music = uqm_engine::sound::resource_types::LoadedMusic::load(c"music.redalert");
+        let music = uqm_engine::sound::resource_types::LoadedMusic::load(
+            &cx.kernel.content(),
+            c"music.redalert",
+        );
         crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
-        let segue = uqm_engine::graphics::drawable::LoadedDrawable::load(c"graphics.segue")
-            .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
+        let segue = uqm_engine::graphics::drawable::LoadedDrawable::load(
+            &cx.kernel.content(),
+            c"graphics.segue",
+        )
+        .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
         uqm_engine::sound::heart_ffi::wait_for_sound_end(u16::MAX);
         crate::ui::settings::stop_loaded_music(music.as_ref());
         drop(music);
@@ -570,8 +576,10 @@ pub(crate) mod engine {
             saved = cx.kernel.replace_player_input(0, None);
             cx.kernel.install_player_input(0);
         }
-        cx.kernel.game_sounds =
-            uqm_engine::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
+        cx.kernel.game_sounds = uqm_engine::sound::owned_bank::LoadedSoundBank::load(
+            &cx.kernel.content(),
+            c"sounds.battle",
+        );
         battle(cx, io, None);
         cx.kernel.game_sounds = None;
         if cx.world.activity() & CHECK_ABORT != 0 {

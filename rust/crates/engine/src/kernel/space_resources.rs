@@ -38,8 +38,9 @@ impl Kernel {
         let old = self.space_init_count;
         self.space_init_count = self.space_init_count.wrapping_add(1);
         if old == 0 && loads_space_graphics(activity) {
+            let content = self.content();
             let stars = &mut self.stars_in_space;
-            *stars = load_graphic(c"graphics.stars");
+            *stars = load_graphic(&content, c"graphics.stars");
             if stars.is_null() {
                 return false;
             }
@@ -55,7 +56,12 @@ impl Kernel {
                     "engine-global:asteroid",
                 ])
                 .any(|((frames, [big, medium, small]), role)| {
-                    load_animation(frames, [Some(big), Some(medium), Some(small)], role) == 0
+                    load_animation(
+                        &content,
+                        frames,
+                        [Some(big), Some(medium), Some(small)],
+                        role,
+                    ) == 0
                 })
             {
                 return false;

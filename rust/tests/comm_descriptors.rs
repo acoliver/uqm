@@ -149,7 +149,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
     let mut result = Ok(());
     let display = campaign_display_test::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_content| {},
         |game| {
             result = (|| -> Result<(), Box<dyn std::error::Error>> {
                 game.kernel.space_context = game.kernel.status_context;

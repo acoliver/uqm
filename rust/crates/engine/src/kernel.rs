@@ -101,6 +101,7 @@ struct KernelAssets {
 }
 
 pub struct Kernel {
+    content: Option<crate::resource::Content>,
     pub(crate) services: KernelServices,
     pub diagnostics: diagnostics::Diagnostics,
     pub configuration: crate::configuration::Configuration,
@@ -172,6 +173,15 @@ pub struct Kernel {
     pub star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
+    pub fn admit_content(&mut self, content: crate::resource::Content) {
+        self.content = Some(content);
+    }
+    pub fn admitted_content(&self) -> Option<crate::resource::Content> {
+        self.content.clone()
+    }
+    pub fn content(&self) -> crate::resource::Content {
+        self.content.clone().expect("content not admitted")
+    }
     pub fn install_game_text(&mut self, text: crate::strings::owned_table::LoadedTextTable) {
         self.assets.game_text = Some(text);
     }
@@ -293,6 +303,7 @@ impl Kernel {
 
     pub fn new() -> Self {
         Self {
+            content: None,
             services: KernelServices::default(),
             diagnostics: diagnostics::Diagnostics::default(),
             configuration: crate::configuration::Configuration::default(),

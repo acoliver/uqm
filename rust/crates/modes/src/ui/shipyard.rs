@@ -594,7 +594,7 @@ fn draw_blue_print(
     flagship: &uqm_engine::world::SisState,
     context: &uqm_engine::graphics::context::ContextLease,
 ) {
-    let blueprints = LoadedDrawable::load(c"graphics.blueprints")
+    let blueprints = LoadedDrawable::load(&cx.kernel.content(), c"graphics.blueprints")
         .unwrap_or_else(|| panic!("blueprints missing"));
     let frame = blueprints
         .lease()
@@ -695,15 +695,17 @@ fn do_shipyard(
         let context = uqm_engine::graphics::context::ContextLease::require(cx.kernel.space_context);
         {
             menu.page = ShipyardPage::Main;
-            menu.assets.modules = LoadedDrawable::load(c"graphics.shipyard");
+            menu.assets.modules = LoadedDrawable::load(&cx.kernel.content(), c"graphics.shipyard");
             menu.power = Some(Rc::new(RefCell::new(PowerLines {
                 frame: ContextFrame::retain(draw::frame(menu.assets.modules(), 24)),
-                palette: PaletteCycle::load(c"colortable.hangar")
+                palette: PaletteCycle::load(&cx.kernel.content(), c"colortable.hangar")
                     .unwrap_or_else(|| panic!("hangar palette missing")),
                 next_time: 0,
             })));
-            menu.assets.music =
-                uqm_engine::sound::resource_types::LoadedMusic::load(c"music.shipyard");
+            menu.assets.music = uqm_engine::sound::resource_types::LoadedMusic::load(
+                &cx.kernel.content(),
+                c"music.shipyard",
+            );
             draw::transition_source();
             draw::batch();
             crate::ui::border::draw_sis_frame(cx.kernel, cx.world, size);

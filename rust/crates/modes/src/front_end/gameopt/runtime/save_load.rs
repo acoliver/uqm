@@ -38,14 +38,14 @@ fn save_load_game(
         let name = std::ffi::CStr::from_bytes_until_nul(&name)
             .unwrap_or_else(|error| panic!("invalid entered save name: {error}"));
         let slots = cx.kernel.save_slots();
-        let success = (slots.save)(cx, solar, slot, &mut state.summary[usize::from(slot)], name);
+        let success = slots.save(cx, solar, slot, &mut state.summary[usize::from(slot)], name);
         if let Some(saved) = background {
             saved.restore();
         }
         (success, false)
     } else {
         crate::ui::save_problem::save_confirmation(cx.kernel, &display.context, false);
-        ((cx.kernel.save_slots().load)(cx, slot), false)
+        (cx.kernel.save_slots().load(cx, slot), false)
     }
 }
 
@@ -120,7 +120,7 @@ pub(super) fn pick_game(
         input,
         callback: input.replace_callback(None),
     };
-    (cx.kernel.save_slots().describe)(&mut summaries);
+    cx.kernel.save_slots().describe(&mut summaries);
     let mut state = PickerState::new(summaries, saving != 0, cx.kernel.last_save_slot);
     display.context.with_selected(|| {
         display.context.with_text_state(|| {
@@ -197,7 +197,7 @@ fn run_picker(
         if state.saving && !cancelled {
             crate::ui::save_problem::save_problem(cx, io);
         }
-        (cx.kernel.save_slots().describe)(&mut state.summary);
+        cx.kernel.save_slots().describe(&mut state.summary);
         display.redraw(cx.kernel, cx.world, cx.screen_dimensions(), cx.rng, state);
     }
 }

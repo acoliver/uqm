@@ -210,7 +210,8 @@ mod tests {
             use uqm_engine::graphics::{
                 context::ContextLease, drawable::ContextFrame, drawable::LoadedDrawable,
             };
-            let frames = LoadedDrawable::load(c"graphics.flagshipstatus").unwrap();
+            let frames =
+                LoadedDrawable::load(&owners.kernel.content(), c"graphics.flagshipstatus").unwrap();
             owners.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
             let context = ContextLease::require(owners.kernel.status_context);
             context.set_frame(ContextFrame::retain(owners.kernel.screen));

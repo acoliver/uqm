@@ -15,30 +15,33 @@ pub fn load_kernel(
     world: &mut uqm_engine::World,
     prepared: &mut crate::mainloop::startup::Prepared,
 ) -> u32 {
-    if !kernel.open_screen() || !kernel.init_resources() {
+    if !kernel.open_screen() {
         return 0;
     }
     let content = &prepared.content;
+    let mut catalog = uqm_engine::resource::CatalogBuilder::new(content.clone());
     let settings = &mut prepared.settings;
     let bindings = &mut prepared.bindings;
-    if load_indices(content, settings, bindings) == 0 {
+    if load_indices(&mut catalog, content, settings, bindings) == 0 {
         return 0;
     }
     let preferences = kernel.configuration.preferences();
     if preferences.music_3do != 0 {
-        load_addon(content, "3domusic", settings, bindings);
+        load_addon(&mut catalog, content, "3domusic", settings, bindings);
     }
     kernel.using_speech = preferences.speech;
-    if preferences.speech != 0 && !load_addon(content, "3dovoice", settings, bindings) {
+    if preferences.speech != 0 && !load_addon(&mut catalog, content, "3dovoice", settings, bindings)
+    {
         kernel.using_speech = 0;
     }
     if preferences.music_remix != 0 {
-        load_addon(content, "remix", settings, bindings);
+        load_addon(&mut catalog, content, "remix", settings, bindings);
     }
     if preferences.intro == OPT_3DO as i32 {
-        load_addon(content, "3dovideo", settings, bindings);
+        load_addon(&mut catalog, content, "3dovideo", settings, bindings);
     }
-    prepare_addons(content, &kernel.configuration.addons(), settings, bindings);
+    prepare_addons(&mut catalog, content, &prepared.addons, settings, bindings);
+    kernel.admit_content(catalog.finish());
     if !kernel.load_main_colormap() {
         return 0;
     }
@@ -52,27 +55,30 @@ fn init_contexts(kernel: &mut uqm_engine::Kernel) -> bool {
 
 fn init_kernel(kernel: &mut uqm_engine::Kernel, activity: u16) -> bool {
     kernel.reset_race_capacities(MAX_SHIPS_PER_SIDE as usize);
-    let Some(font) = LoadedFont::load(c"font.starcon") else {
+    let Some(font) = LoadedFont::load(&kernel.content(), c"font.starcon") else {
         return false;
     };
     kernel.install_battle_font(font);
-    let Some(font) = LoadedFont::load(c"font.tiny") else {
+    let Some(font) = LoadedFont::load(&kernel.content(), c"font.tiny") else {
         return false;
     };
     kernel.install_tiny_font(font);
     if !kernel.load_status_frames() {
         return false;
     }
-    let Some(text) = uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.starcon")
+    let Some(text) =
+        uqm_engine::strings::owned_table::LoadedTextTable::load(&kernel.content(), c"text.starcon")
     else {
         return false;
     };
     kernel.install_game_text(text);
-    let Some(font) = LoadedFont::load(c"font.micro") else {
+    let Some(font) = LoadedFont::load(&kernel.content(), c"font.micro") else {
         return false;
     };
     kernel.install_micro_font(font);
-    let Some(bank) = uqm_engine::sound::owned_bank::LoadedSoundBank::load(c"sounds.menu") else {
+    let Some(bank) =
+        uqm_engine::sound::owned_bank::LoadedSoundBank::load(&kernel.content(), c"sounds.menu")
+    else {
         return false;
     };
     kernel.install_menu_sounds(bank);

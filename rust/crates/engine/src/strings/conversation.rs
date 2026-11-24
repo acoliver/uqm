@@ -43,8 +43,11 @@ fn column(entries: &Option<Vec<Vec<u8>>>, index: usize) -> Option<&CStr> {
 }
 
 impl ConversationTable {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        super::getstr::load_conversation(&crate::resource::path_of(resource, "CONVERSATION")?)
+    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        super::getstr::load_conversation(
+            content.files(),
+            &content.path_of(resource, crate::resource::AssetKind::Conversation)?,
+        )
     }
 
     pub fn len(&self) -> usize {

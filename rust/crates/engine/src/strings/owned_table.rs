@@ -44,8 +44,11 @@ impl LoadedBinaryTable {
         Self(Rc::new(entries))
     }
 
-    pub(crate) fn load(resource: &CStr) -> Option<Self> {
-        super::getstr::load_binary_table(&crate::resource::path_of(resource, "BINTAB")?)
+    pub(crate) fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        super::getstr::load_binary_table(
+            content.files(),
+            &content.path_of(resource, crate::resource::AssetKind::Binary)?,
+        )
     }
 
     pub(crate) fn entries(&self) -> &[Vec<u8>] {
@@ -120,13 +123,16 @@ impl LoadedTextTable {
         })
     }
 
-    pub fn load(resource: &CStr) -> Option<Self> {
-        Self::load_file(&crate::resource::path_of(resource, "STRTAB")?)
+    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
+        Self::load_file(
+            content.files(),
+            &content.path_of(resource, crate::resource::AssetKind::Text)?,
+        )
     }
 
     /// A `STRTAB`-format file in the content directory.
-    pub fn load_file(path: &CStr) -> Option<Self> {
-        super::getstr::load_text_table(&crate::io::content_dir()?, path)
+    pub fn load_file(files: &crate::io::Dir, path: &CStr) -> Option<Self> {
+        super::getstr::load_text_table(files, path)
     }
 
     pub(super) fn from_strings(strings: Vec<Vec<u8>>) -> Self {
@@ -223,26 +229,20 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn indexed_string_tables_release_by_drop_and_load_again() {
-        let mount = crate::io::fixture::TempMount::new().as_content();
+        let mount = crate::io::fixture::TempMount::new();
         mount.write("text.rmp", b"test.strings = STRTAB:strings.txt\n");
         mount.write("strings.txt", b"#(first)\nhello\n#(second)\nworld\n");
-        crate::resource::init();
-        crate::resource::load_index(
-            &mount.dir(),
-            c"text.rmp",
-            None,
-            &mut Default::default(),
-            &mut Default::default(),
-        );
+        let content = mount.content(c"text.rmp");
         for _ in 0..2 {
-            let table = LoadedTextTable::load(c"test.strings")
+            let table = LoadedTextTable::load(&content, c"test.strings")
                 .unwrap_or_else(|| panic!("indexed string table"));
             assert_eq!(table.text(1), Some(c"world"));
             let storage = Rc::downgrade(&table.0);
             drop(table);
             assert!(storage.upgrade().is_none(), "dropping frees the table");
         }
-        assert!(crate::resource::remove("test.strings"));
+        let mut revised = content.revise();
+        assert!(revised.remove("test.strings"));
     }
 
     #[test]
