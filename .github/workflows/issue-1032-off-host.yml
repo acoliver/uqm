@@ -1,0 +1,77 @@
+name: Issue 1032 off-host engine qualification
+
+on:
+  push:
+    branches: [tmp/issue-1032-off-host-receipts]
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    if: github.ref == 'refs/heads/tmp/issue-1032-off-host-receipts'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PARENT_SHA: 82dc645dde622835c73431d471d1333191bf403a
+    steps:
+      - name: Check out helper commit
+        uses: actions/checkout@v4
+        with:
+          path: helper
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Admit only the helper delta on the verified parent
+        working-directory: helper
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = "$PARENT_SHA"
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 2
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          diff -u <(printf '%s\n' \
+            $'A\t.github/issue-1032/heart-ffi-module-boundary.patch' \
+            $'A\t.github/issue-1032/patch-validation.json' \
+            $'A\t.github/issue-1032/run-off-host-tests.sh' \
+            $'A\t.github/issue-1032/verify-off-host.py' \
+            $'A\t.github/workflows/issue-1032-off-host.yml') \
+            <(git diff --no-renames --name-status "$PARENT_SHA" HEAD)
+      - name: Check out disposable parent separately, detached at the exact SHA
+        uses: actions/checkout@v4
+        with:
+          ref: 82dc645dde622835c73431d471d1333191bf403a
+          path: parent
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install the repository CI toolchain
+        uses: dtolnay/rust-toolchain@1.98.0
+      - name: Qualify using the unchanged harness from the first checkout
+        shell: bash
+        run: |
+          test "$(git -C "$GITHUB_WORKSPACE/parent" rev-parse HEAD)" = "$PARENT_SHA"
+          if git -C "$GITHUB_WORKSPACE/parent" symbolic-ref -q HEAD; then
+            echo 'Parent checkout must be detached' >&2
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/helper/tmp/issue-1032-driver"
+          driver="$GITHUB_WORKSPACE/helper/tmp/issue-1032-driver"
+          rc=0
+          bash "$GITHUB_WORKSPACE/helper/.github/issue-1032/run-off-host-tests.sh" \
+            "$GITHUB_WORKSPACE/parent" "$PARENT_SHA" \
+            "$GITHUB_WORKSPACE/parent/tmp/issue-1032-receipts" \
+            > "$driver/harness.log" 2>&1 || rc=$?
+          printf '%s\n' "$rc" > "$driver/harness.exit"
+          cat "$driver/harness.log"
+          exit "$rc"
+      - name: Upload harness logs and exits, never build outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-1032-engine-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            helper/tmp/issue-1032-driver/harness.log
+            helper/tmp/issue-1032-driver/harness.exit
+            parent/tmp/issue-1032-receipts/*.log
+            parent/tmp/issue-1032-receipts/*.exit
+            parent/tmp/issue-1032-receipts/exits.tsv
