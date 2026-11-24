@@ -5,6 +5,9 @@ use crate::mainloop::MainLoopError;
 use std::sync::Arc;
 use uqm_engine::battle::{Battle, Cx};
 use uqm_engine::observe::{CheckpointView, Io, Observer};
+#[cfg(test)]
+#[path = "runtime_tests.rs"]
+mod tests;
 
 /// Run initialization, the campaign loop and subsystem teardown on the game thread.
 pub fn run(
@@ -54,6 +57,7 @@ fn run_game(
         observer: input_observer.as_mut(),
     };
     crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(&mut cx, &mut io);
+    let mut result = Ok(());
     while {
         let mut menu = crate::mainloop::restart_menu::restart_ops::RestartMenu::default();
         let mut host = RestartServices;
@@ -62,13 +66,16 @@ fn run_game(
         );
         started
     } {
-        run_campaign(&mut cx, &mut io, observer.as_ref());
+        if let Err(error) = run_campaign(&mut cx, &mut io, observer.as_ref()) {
+            result = Err(error);
+            break;
+        }
     }
     crate::game_init::cleanup::uninit_game_kernel(&mut cx);
     uqm_content::ships::master_native::engine::free(cx.world, cx.kernel);
     crate::game_init::cleanup::free_kernel(cx.kernel);
     uqm_engine::log_abi::log_show_box(false, false);
-    Ok(())
+    result
 }
 
 struct RestartServices;
@@ -87,9 +94,12 @@ impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices
     }
 }
 
-fn initialize_campaign(cx: &mut Cx<'_>) {
+fn initialize_campaign(cx: &mut Cx<'_>) -> Result<(), MainLoopError> {
     cx.kernel.install_player_inputs();
-    uqm_modes::navigation::globals::init_game_structures(cx);
+    if let Err(error) = uqm_modes::navigation::globals::init_game_structures(cx) {
+        cx.kernel.clear_player_inputs();
+        return Err(error.into());
+    }
     crate::time::clock_bridge::rust_clock_init(cx.world);
     let mut random = cx.rng;
     let mut services = uqm_modes::navigation::events::EventServices {
@@ -97,6 +107,7 @@ fn initialize_campaign(cx: &mut Cx<'_>) {
         random: &mut random,
     };
     uqm_modes::navigation::events::schedule_initial_events(cx.world, &mut services);
+    Ok(())
 }
 
 fn activate_start_scene(
@@ -129,8 +140,8 @@ fn run_campaign(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     observer: Option<&Arc<crate::automation::AutomationObserver>>,
-) {
-    initialize_campaign(cx);
+) -> Result<(), MainLoopError> {
+    initialize_campaign(cx)?;
     activate_start_scene(cx, observer);
     loop {
         cx.kernel.set_status_message_mode(1);
@@ -166,6 +177,7 @@ fn run_campaign(
     crate::time::clock_bridge::rust_clock_uninit(cx.world);
     uqm_modes::navigation::globals::uninit_game_structures(cx);
     cx.kernel.clear_player_inputs();
+    Ok(())
 }
 
 fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {

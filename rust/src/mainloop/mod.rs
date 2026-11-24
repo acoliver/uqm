@@ -55,6 +55,8 @@ pub enum MainLoopError {
     /// A Starbase or Outfit route ended with an error.
     #[error("starbase: {0}")]
     Starbase(#[from] uqm_modes::starbase::StarbaseError),
+    #[error(transparent)]
+    Navigation(#[from] uqm_engine::kernel::NavigationLoadError),
 }
 
 pub mod input_abi;

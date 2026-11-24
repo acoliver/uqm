@@ -90,13 +90,13 @@ impl World {
     }
 
     /// Resource preparation observes the reset World before campaign values are installed.
-    pub fn new_game(
+    pub fn new_game<E>(
         &mut self,
-        prepare: impl FnOnce(&mut Self) -> NewGameInputs,
+        prepare: impl FnOnce(&mut Self) -> Result<NewGameInputs, E>,
         pick_name: impl FnMut() -> u8,
-    ) {
+    ) -> Result<(), E> {
         self.reset_game_data();
-        let inputs = prepare(self);
+        let inputs = prepare(self)?;
         self.data.game.glob_flags = 0;
         self.data.game.element_worth = [1, 2, 3, 4, 5, 6, 8, 25];
         self.data.flagship.element_amounts = [0; 8];
@@ -121,6 +121,7 @@ impl World {
         self.data.flagship.log_y = inputs.log_position.1;
         self.current_star = None;
         self.data.game.autopilot = Point { x: -1, y: -1 };
+        Ok(())
     }
 }
 

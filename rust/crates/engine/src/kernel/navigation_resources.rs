@@ -9,10 +9,20 @@ use crate::graphics::{
 pub(super) struct NavigationResources {
     // Field order also preserves release order if the Kernel itself is dropped.
     radar: Option<LoadedContext>,
-    gradient: Option<LoadedDrawable>,
-    misc: Option<LoadedDrawable>,
-    status: Option<LoadedDrawable>,
+    display: Option<NavigationDisplay>,
     play: Option<LoadedDrawable>,
+}
+
+struct NavigationDisplay {
+    gradient: Option<LoadedDrawable>,
+    misc: LoadedDrawable,
+    status: LoadedDrawable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("required navigation graphic could not be loaded: {resource}")]
+pub struct NavigationLoadError {
+    pub resource: &'static str,
 }
 
 fn first_frame(drawable: &Option<LoadedDrawable>) -> FrameId {
@@ -27,19 +37,22 @@ impl NavigationResources {
     fn load_display_with(
         &mut self,
         mut load: impl FnMut(&std::ffi::CStr) -> Option<LoadedDrawable>,
-    ) -> bool {
-        if self.status.is_none() {
-            self.status = load(c"graphics.flagshipstatus");
-            if self.status.is_none() {
-                return false;
-            }
-            self.misc = load(c"graphics.miscdata");
-            if self.misc.is_none() {
-                return false;
-            }
-            self.gradient = load(c"graphics.fontgradient");
+    ) -> Result<(), NavigationLoadError> {
+        if self.display.is_none() {
+            let status = load(c"graphics.flagshipstatus").ok_or(NavigationLoadError {
+                resource: "graphics.flagshipstatus",
+            })?;
+            let misc = load(c"graphics.miscdata").ok_or(NavigationLoadError {
+                resource: "graphics.miscdata",
+            })?;
+            let gradient = load(c"graphics.fontgradient");
+            self.display = Some(NavigationDisplay {
+                gradient,
+                misc,
+                status,
+            });
         }
-        true
+        Ok(())
     }
 }
 
@@ -53,17 +66,22 @@ impl crate::Kernel {
         self.play_frame = first_frame(&self.assets.navigation.play);
     }
 
-    pub fn load_navigation_graphics(&mut self, radar_clip: Rect) -> bool {
-        let loaded = self
+    pub fn load_navigation_graphics(
+        &mut self,
+        radar_clip: Rect,
+    ) -> Result<(), NavigationLoadError> {
+        self.assets
+            .navigation
+            .load_display_with(LoadedDrawable::load)?;
+        let display = self
             .assets
             .navigation
-            .load_display_with(LoadedDrawable::load);
-        self.flag_stat_frame = first_frame(&self.assets.navigation.status);
-        self.misc_data_frame = first_frame(&self.assets.navigation.misc);
-        self.font_grad_frame = first_frame(&self.assets.navigation.gradient);
-        if !loaded {
-            return false;
-        }
+            .display
+            .as_ref()
+            .unwrap_or_else(|| panic!("navigation display is not initialized"));
+        self.flag_stat_frame = display.status.first_frame();
+        self.misc_data_frame = display.misc.first_frame();
+        self.font_grad_frame = first_frame(&display.gradient);
         if self.assets.navigation.radar.is_none() {
             let radar = LoadedContext::create(c"RadarContext");
             let context = radar.lease();
@@ -81,17 +99,15 @@ impl crate::Kernel {
                 .unwrap_or_else(|| panic!("navigation radar is not initialized"))
                 .context(),
         );
-        true
+        Ok(())
     }
 
     pub fn release_navigation_graphics(&mut self) {
         drop(self.assets.navigation.radar.take());
         self.radar_context = None;
-        drop(self.assets.navigation.gradient.take());
+        drop(self.assets.navigation.display.take());
         self.font_grad_frame = crate::graphics::drawable::FrameId::NULL;
-        drop(self.assets.navigation.misc.take());
         self.misc_data_frame = crate::graphics::drawable::FrameId::NULL;
-        drop(self.assets.navigation.status.take());
         self.flag_stat_frame = crate::graphics::drawable::FrameId::NULL;
     }
 
@@ -122,37 +138,49 @@ mod tests {
                 keys.push(key.to_owned());
                 (index != failed).then(|| LoadedDrawable::create(2, 0, 0, 1).unwrap())
             });
-            assert_eq!(loaded, failed >= 2);
+            assert_eq!(loaded.is_ok(), failed >= 2);
             assert_eq!(keys, expected[..(failed + 1).min(3)]);
-            assert_eq!(assets.status.is_some(), failed != 0);
-            assert_eq!(assets.misc.is_some(), failed > 1);
-            assert_eq!(assets.gradient.is_some(), failed == 3);
+            assert_eq!(assets.display.is_some(), failed >= 2);
+            if let Some(display) = &assets.display {
+                assert!(!display.status.first_frame().is_null());
+                assert!(!display.misc.first_frame().is_null());
+                assert_eq!(display.gradient.is_some(), failed == 3);
+            }
         }
     }
 
     #[test]
     #[serial_test::serial]
-    fn partial_load_keeps_authority_and_does_not_reload_existing_status() {
+    fn failed_required_load_releases_staged_status_before_retry() {
+        use crate::collections::observation::{self, Event};
+        observation::enable();
+        observation::drain();
         let mut assets = NavigationResources::default();
-        let mut keys = Vec::new();
-        assert!(!assets.load_display_with(|key| {
-            keys.push(key.to_bytes().to_vec());
-            (keys.len() == 1).then(|| LoadedDrawable::create(2, 0, 0, 1).unwrap())
-        }));
+        let error = assets
+            .load_display_with(|key| {
+                (key == c"graphics.flagshipstatus")
+                    .then(|| LoadedDrawable::create(2, 0, 0, 1).unwrap())
+            })
+            .unwrap_err();
+        assert_eq!(error.resource, "graphics.miscdata");
+        assert!(assets.display.is_none());
         assert_eq!(
-            keys,
-            [
-                b"graphics.flagshipstatus".to_vec(),
-                b"graphics.miscdata".to_vec()
-            ]
+            observation::drain()
+                .iter()
+                .filter(|event| matches!(event, Event::DrawableFree(_)))
+                .count(),
+            1
         );
-        let status = assets.status.as_ref().unwrap().lease().frame(0).unwrap();
-        assert!(assets.misc.is_none());
-        assert!(assets.gradient.is_none());
-        assert!(assets.load_display_with(|_| panic!("status already loaded")));
+        assets
+            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1))
+            .unwrap();
+        let status = assets.display.as_ref().unwrap().status.first_frame();
+        assets
+            .load_display_with(|_| panic!("complete display already loaded"))
+            .unwrap();
         assert_eq!(
-            assets.status.as_ref().unwrap().lease().frame(0),
-            Some(status)
+            assets.display.as_ref().unwrap().status.first_frame(),
+            status
         );
     }
 
@@ -166,10 +194,11 @@ mod tests {
         selected.select();
         let mut kernel = crate::Kernel::new();
         kernel.screen = screen.lease().frame(0).unwrap();
-        assert!(kernel
+        kernel
             .assets
             .navigation
-            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1)));
+            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1))
+            .unwrap();
         let clip = Rect {
             corner: Point { x: 256, y: 184 },
             extent: Extent {
@@ -177,7 +206,7 @@ mod tests {
                 height: 53,
             },
         };
-        assert!(kernel.load_navigation_graphics(clip));
+        kernel.load_navigation_graphics(clip).unwrap();
         assert_eq!(
             selected.selected_context().unwrap().context(),
             selected.context()
@@ -196,18 +225,32 @@ mod tests {
         );
         assert_eq!(
             kernel.flag_stat_frame,
-            first_frame(&kernel.assets.navigation.status)
+            kernel
+                .assets
+                .navigation
+                .display
+                .as_ref()
+                .unwrap()
+                .status
+                .first_frame()
         );
         assert_eq!(
             kernel.misc_data_frame,
-            first_frame(&kernel.assets.navigation.misc)
+            kernel
+                .assets
+                .navigation
+                .display
+                .as_ref()
+                .unwrap()
+                .misc
+                .first_frame()
         );
         assert_eq!(
             kernel.font_grad_frame,
-            first_frame(&kernel.assets.navigation.gradient)
+            first_frame(&kernel.assets.navigation.display.as_ref().unwrap().gradient)
         );
         let address = kernel.radar_context;
-        assert!(kernel.load_navigation_graphics(clip));
+        kernel.load_navigation_graphics(clip).unwrap();
         assert_eq!(kernel.radar_context, address);
         kernel.release_navigation_graphics();
         drop(screen);
@@ -226,16 +269,18 @@ mod tests {
         observation::drain();
         let mut kernel = crate::Kernel::new();
         kernel.assets.navigation.play = LoadedDrawable::create(2, 0, 0, 1);
-        assert!(kernel
+        kernel
             .assets
             .navigation
-            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1)));
+            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1))
+            .unwrap();
         kernel.assets.navigation.radar = Some(LoadedContext::create(c"navigation-test"));
         let radar = kernel.assets.navigation.radar.as_ref().unwrap().lease();
         let play = kernel.assets.navigation.play.as_ref().unwrap().lease();
-        let gradient = kernel.assets.navigation.gradient.as_ref().unwrap().lease();
-        let misc = kernel.assets.navigation.misc.as_ref().unwrap().lease();
-        let status = kernel.assets.navigation.status.as_ref().unwrap().lease();
+        let display = kernel.assets.navigation.display.as_ref().unwrap();
+        let gradient = display.gradient.as_ref().unwrap().lease();
+        let misc = display.misc.lease();
+        let status = display.status.lease();
         let allocations = observation::drain();
         let address = |lease: &crate::graphics::drawable::DrawableLease| {
             allocations
