@@ -360,3 +360,54 @@ fn host_shaped_virtual_names_stay_in_the_admitted_overlay() {
     );
     assert_eq!(read(&explicit, "tmp/data"), b"tmp");
 }
+
+#[test]
+fn explicit_host_zip_admission_ignores_root_mount_and_lexical_path_spelling() {
+    let scratch = scratch();
+    let mounted = directory(scratch.path(), "mounted", &[("data", b"virtual")]);
+    let host = directory(scratch.path(), "host", &[("data", b"host")]);
+    archive(&host, &[("packaged", b"explicit host archive")]);
+    let vfs = Vfs::new();
+    vfs.mount_dir("/", &mounted, Placement::Top, true);
+    // A virtual directory with the identical absolute spelling is deliberately different.
+    let shadow = mounted.join(host.strip_prefix(Path::new("/")).unwrap());
+    std::fs::create_dir_all(&shadow).unwrap();
+    std::fs::write(shadow.join("data"), b"shadow").unwrap();
+    std::fs::write(shadow.join("package.zip"), b"not an archive").unwrap();
+    let virtual_dir = vfs.open_dir(&host);
+    assert_eq!(read(&virtual_dir, "data"), b"shadow");
+    let source = vfs.open_host_dir(&host);
+    assert_eq!(read(&source, "data"), b"host");
+    vfs.mount_zip("/", &source, Path::new("package.zip"), Placement::Top, true)
+        .unwrap();
+    assert_eq!(
+        read(&vfs.open_dir(Path::new("/")), "packaged"),
+        b"explicit host archive"
+    );
+    let mut output = source.open_write(Path::new("data")).unwrap();
+    output.write_all(b"saved to host").unwrap();
+    output.finish().unwrap();
+    assert_eq!(std::fs::read(host.join("data")).unwrap(), b"saved to host");
+    assert_eq!(std::fs::read(shadow.join("data")).unwrap(), b"shadow");
+}
+
+#[test]
+fn exhausted_metadata_and_listing_keep_original_host_errors_and_context() {
+    let mount = crate::io::fixture::TempMount::new();
+    let files = mount.dir();
+    for error in [
+        files.stat(Path::new("missing")).unwrap_err(),
+        files.list(Path::new("missing")).unwrap_err(),
+    ] {
+        let context = error
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<super::vfs::OpenError>()
+            .unwrap();
+        assert_eq!(context.virtual_path, Path::new("/missing"));
+        assert_eq!(context.mount_path, mount.path_of(""));
+        assert_eq!(context.member, Path::new("missing"));
+        assert_eq!(context.source.kind(), ErrorKind::NotFound);
+        assert!(context.source.raw_os_error().is_some());
+    }
+}

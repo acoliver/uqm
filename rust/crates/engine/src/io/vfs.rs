@@ -658,6 +658,7 @@ impl MountTable {
     ) -> io::Result<FileStat> {
         let virtual_path = normalize(base, path);
         let mut covered = false;
+        let mut failure = None;
         for mount in &self.mounts {
             let Ok(suffix) = virtual_path.strip_prefix(&mount.point) else {
                 continue;
@@ -681,15 +682,24 @@ impl MountTable {
                         });
                     }
                 }
-                Backing::Directory => {
-                    if let Ok(stat) = self.disk.stat(&confine(&mount.root, suffix)) {
-                        return Ok(stat);
+                Backing::Directory => match self.disk.stat(&confine(&mount.root, suffix)) {
+                    Ok(stat) => return Ok(stat),
+                    Err(source) => {
+                        failure = Some(io::Error::new(
+                            source.kind(),
+                            OpenError {
+                                virtual_path: virtual_path.clone(),
+                                mount_path: mount.root.clone(),
+                                member: suffix.to_owned(),
+                                source,
+                            },
+                        ));
                     }
-                }
+                },
             }
         }
         if covered || !retained {
-            return Err(io::Error::from(io::ErrorKind::NotFound));
+            return Err(failure.unwrap_or_else(|| io::Error::from(io::ErrorKind::NotFound)));
         }
         self.disk.stat(&normalize(host, path))
     }
@@ -703,6 +713,8 @@ impl MountTable {
     ) -> io::Result<Vec<String>> {
         let virtual_path = normalize(base, path);
         let mut covered = false;
+        let mut listed = false;
+        let mut failure = None;
         let mut seen = BTreeSet::new();
         let mut names = Vec::new();
         for mount in &self.mounts {
@@ -711,10 +723,27 @@ impl MountTable {
             };
             covered = true;
             let entries = match &mount.backing {
-                Backing::Archive(zip) => zip.list_directory(&suffix.to_string_lossy()),
+                Backing::Archive(zip) => {
+                    listed |= zip.is_directory(&suffix.to_string_lossy());
+                    zip.list_directory(&suffix.to_string_lossy())
+                }
                 Backing::Directory => match self.disk.list(&confine(&mount.root, suffix)) {
-                    Ok(names) => names,
-                    Err(_) => continue,
+                    Ok(names) => {
+                        listed = true;
+                        names
+                    }
+                    Err(source) => {
+                        failure = Some(io::Error::new(
+                            source.kind(),
+                            OpenError {
+                                virtual_path: virtual_path.clone(),
+                                mount_path: mount.root.clone(),
+                                member: suffix.to_owned(),
+                                source,
+                            },
+                        ));
+                        continue;
+                    }
                 },
             };
             for name in entries {
@@ -724,6 +753,11 @@ impl MountTable {
             }
         }
         if covered {
+            if !listed {
+                if let Some(error) = failure {
+                    return Err(error);
+                }
+            }
             Ok(names)
         } else if retained {
             self.disk.list(&normalize(host, path))
