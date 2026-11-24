@@ -498,6 +498,8 @@ fn classify_supervision(
         FaultClass::Timeout
     } else if captured.signal.is_some() {
         FaultClass::Signal
+    } else if captured.supervision_error.is_some() {
+        FaultClass::SupervisionFailed
     } else if captured.succeeded() {
         FaultClass::Completed
     } else {

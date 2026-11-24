@@ -15,6 +15,7 @@ pub struct Captured {
     pub signal: Option<i32>,
     pub timed_out: bool,
     pub launch_error: Option<String>,
+    pub supervision_error: Option<String>,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub stdout_bytes_seen: u64,
@@ -34,6 +35,7 @@ impl Captured {
             signal: None,
             timed_out: false,
             launch_error: Some(error),
+            supervision_error: None,
             stdout: Vec::new(),
             stderr: Vec::new(),
             stdout_bytes_seen: 0,
@@ -49,6 +51,7 @@ impl Captured {
     #[must_use]
     pub fn succeeded(&self) -> bool {
         self.launch_error.is_none()
+            && self.supervision_error.is_none()
             && self.exit_code == Some(0)
             && self.signal.is_none()
             && !self.timed_out
@@ -59,6 +62,9 @@ impl Captured {
     pub fn failure_detail(&self, label: &str) -> String {
         if let Some(error) = &self.launch_error {
             return format!("{label} did not launch: {error}");
+        }
+        if let Some(error) = &self.supervision_error {
+            return format!("{label} supervision failed: {error}");
         }
         if self.timed_out {
             return format!("{label} timed out and was killed");
@@ -82,19 +88,45 @@ impl Captured {
     }
 }
 
-fn drain(mut pipe: impl Read + Send + 'static, limit: usize) -> JoinHandle<(Vec<u8>, u64)> {
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Drained {
+    bytes: Vec<u8>,
+    seen: u64,
+    error: Option<String>,
+}
+
+fn drain(mut pipe: impl Read + Send + 'static, limit: usize) -> JoinHandle<Drained> {
     std::thread::spawn(move || {
-        let (mut kept, mut seen) = (Vec::new(), 0u64);
+        let mut result = Drained::default();
         let mut chunk = [0u8; 64 * 1024];
-        while let Ok(count) = pipe.read(&mut chunk) {
-            if count == 0 {
-                break;
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(count) => {
+                    result.seen += count as u64;
+                    result.bytes.extend_from_slice(
+                        &chunk[..count.min(limit.saturating_sub(result.bytes.len()))],
+                    );
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => {
+                    result.error = Some(error.to_string());
+                    break;
+                }
             }
-            seen += count as u64;
-            kept.extend_from_slice(&chunk[..count.min(limit.saturating_sub(kept.len()))]);
         }
-        (kept, seen)
+        result
     })
+}
+
+fn joined(handle: Option<JoinHandle<Drained>>) -> Drained {
+    match handle.map(JoinHandle::join) {
+        Some(Ok(result)) => result,
+        _ => Drained {
+            error: Some("pipe reader did not join".into()),
+            ..Drained::default()
+        },
+    }
 }
 
 /// Run `command` to completion in its own process group, capturing its output.
@@ -148,23 +180,28 @@ pub(crate) fn run_bounded(
     if survivors {
         let _ = crate::parity::process::kill_group(&child);
     }
-    let (stdout, stdout_bytes_seen) =
-        stdout.map_or_else(Default::default, |h| h.join().unwrap_or_default());
-    let (stderr, stderr_bytes_seen) =
-        stderr.map_or_else(Default::default, |h| h.join().unwrap_or_default());
+    let stdout = joined(stdout);
+    let stderr = joined(stderr);
+    let supervision_error = stdout.error.as_ref().or(stderr.error.as_ref()).cloned();
+    let pipe_cleanup = if supervision_error.is_none() {
+        "complete"
+    } else {
+        "failed"
+    };
     Captured {
         exit_code: status.and_then(|status| status.code()),
         signal: status.and_then(|status| status.signal()),
         timed_out,
         launch_error: None,
-        stdout,
-        stderr,
-        stdout_bytes_seen,
-        stderr_bytes_seen,
+        supervision_error,
+        stdout: stdout.bytes,
+        stderr: stderr.bytes,
+        stdout_bytes_seen: stdout.seen,
+        stderr_bytes_seen: stderr.seen,
         termination_reason: if timed_out { "timeout" } else { "none" },
         termination_signal: if timed_out { "SIGKILL" } else { "none" },
         process_group_cleanup: "verified-empty",
-        pipe_cleanup: "complete",
+        pipe_cleanup,
         descendant_survivors: survivors
             .then(|| format!("process group {pid} still had members after the child exited")),
     }
@@ -173,6 +210,45 @@ pub(crate) fn run_bounded(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_read_is_not_reported_as_clean_eof() {
+        struct FailedRead;
+        impl std::io::Read for FailedRead {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("injected pipe read failure"))
+            }
+        }
+        let failed = drain(FailedRead, 4).join().unwrap();
+        let complete = drain(std::io::empty(), 4).join().unwrap();
+        assert_ne!(
+            failed, complete,
+            "failed drain cannot certify complete output"
+        );
+    }
+
+    #[test]
+    fn interrupted_read_does_not_discard_child_output() {
+        struct InterruptedOnce(bool);
+        impl std::io::Read for InterruptedOnce {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                if !self.0 {
+                    self.0 = true;
+                    return Err(std::io::ErrorKind::Interrupted.into());
+                }
+                if buffer[0] == 0 {
+                    buffer[0] = b'x';
+                    Ok(1)
+                } else {
+                    Ok(0)
+                }
+            }
+        }
+        let result = drain(InterruptedOnce(false), 4).join().unwrap();
+        assert_eq!(result.bytes, b"x");
+        assert_eq!(result.seen, 1);
+        assert!(result.error.is_none());
+    }
 
     #[test]
     fn a_command_that_cannot_start_names_its_program_and_directory() {
