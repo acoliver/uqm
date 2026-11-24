@@ -190,7 +190,7 @@ impl ZipIndex {
     /// Check if a path is a directory
     pub fn is_directory(&self, path: &str) -> bool {
         let normalized = normalize_zip_path(path);
-        self.directories.contains(&normalized)
+        normalized.is_empty() || self.directories.contains(&normalized)
     }
 
     /// List all entries in a directory (non-recursive)
