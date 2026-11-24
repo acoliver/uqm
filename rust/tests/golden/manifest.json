@@ -19,7 +19,7 @@
     },
     "parity/campaign-battle/parity.trace": {
       "bytes": 1349954,
-      "sha256": "9171839ff2a7eea60f98afe3f1f4fef46e9f03a7e0acfbee914e77cee686a3f0"
+      "sha256": "920c2d796d90cd1477e72785ba9443f85304b6b41ad83db08ad825c42dd9c583"
     },
     "parity/campaign-battle/summary.json": {
       "bytes": 1496936,
@@ -43,7 +43,7 @@
     },
     "parity/comm/parity.trace": {
       "bytes": 1500852,
-      "sha256": "eafec3e72987d61377f93b448bf5cf7f4a1a2ba83cbdacfe5a0dc959231f7567"
+      "sha256": "2327877f7af3b3eedce8608671eab7903f40ced5e06ef8bfd04950b9e1d48dd8"
     },
     "parity/comm/summary.json": {
       "bytes": 2406079,
@@ -983,7 +983,7 @@
     },
     "parity/samatra/parity.trace": {
       "bytes": 1850751,
-      "sha256": "96972bd745be1c9735ac9f7f75effcfc7362296b3b4a37c335d72a0434e3a12f"
+      "sha256": "ff9b5345a31f0c7a1da3faa9a5e3327d9b8b9f385589879ee88207109226bad0"
     },
     "parity/samatra/summary.json": {
       "bytes": 2879477,

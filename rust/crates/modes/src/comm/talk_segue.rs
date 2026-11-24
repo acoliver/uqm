@@ -1333,6 +1333,20 @@ fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
     }
 }
 
+/// The `CIM_CROSSFADE_SPACE` clip: the whole SIS space window
+/// (`SIS_ORG_X`, `SIS_ORG_Y`, `SIS_SCREEN_WIDTH`, `SIS_SCREEN_HEIGHT`).
+fn sis_space_rect() -> uqm_engine::graphics::geometry::Rect {
+    use crate::starbase::ids::{RadarLayout, SIS_ORG_X, SIS_ORG_Y};
+    use uqm_engine::graphics::state::{SCREEN_HEIGHT, SCREEN_WIDTH};
+    let layout = RadarLayout::for_screen(SCREEN_WIDTH, SCREEN_HEIGHT);
+    uqm_engine::graphics::geometry::Rect::new(
+        SIS_ORG_X,
+        SIS_ORG_Y as i16,
+        layout.sis_screen_width as i16,
+        layout.sis_screen_height as i16,
+    )
+}
+
 fn comm_intro_transition(_comm: &mut Comm) {
     #[cfg(not(test))]
     {
@@ -1345,12 +1359,6 @@ fn comm_intro_transition(_comm: &mut Comm) {
 
         // CIM_DEFAULT from comm.h
         const CIM_DEFAULT: c_uint = 0;
-
-        // SIS constants from units.h
-        let sis_org_x: c_int = 12; // SAFE_X + SIS_X_OFFSET
-        let sis_org_y: c_int = 13; // SAFE_Y + SIS_Y_OFFSET
-        let sis_screen_width: c_int = 320 - 64 - 14; // SPACE_WIDTH - 14
-        let sis_screen_height: c_int = 240 - 13; // SPACE_HEIGHT - 13
 
         let context = _comm.animation_context();
         let intro_batch = _comm
@@ -1367,17 +1375,7 @@ fn comm_intro_transition(_comm: &mut Comm) {
                 drop(intro_batch);
             }
             IntroTransition::CrossfadeSpace => {
-                let rect = uqm_engine::graphics::geometry::Rect {
-                    corner: crate::comm::locdata::CPoint {
-                        x: sis_org_x as i16,
-                        y: sis_org_y as i16,
-                    },
-                    extent: uqm_engine::graphics::geometry::Extent {
-                        width: sis_screen_width as i16,
-                        height: sis_screen_height as i16,
-                    },
-                };
-                context.transition(Some(rect));
+                context.transition(Some(sis_space_rect()));
                 drop(intro_batch);
             }
             IntroTransition::CrossfadeWindow => {
@@ -2464,6 +2462,24 @@ mod tests {
         assert_eq!(
             intro_transition(3, 1680),
             IntroTransition::FadeInScreen { fade_time: 1680 }
+        );
+    }
+
+    /// `CommIntroTransition` clips `CIM_CROSSFADE_SPACE` to the whole SIS
+    /// space window, `(SIS_ORG_X, SIS_ORG_Y, SIS_SCREEN_WIDTH,
+    /// SIS_SCREEN_HEIGHT)` = (7, 10, 242, 227). A clip that starts later leaves
+    /// strips of the window showing the new screen for the whole fade (#1026).
+    #[test]
+    fn crossfade_space_clip_is_the_whole_sis_space_window() {
+        let rect = sis_space_rect();
+        assert_eq!(
+            (
+                rect.corner.x,
+                rect.corner.y,
+                rect.extent.width,
+                rect.extent.height
+            ),
+            (7, 10, 242, 227)
         );
     }
 
