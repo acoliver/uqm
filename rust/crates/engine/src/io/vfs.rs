@@ -159,21 +159,28 @@ impl Vfs {
         table.mounts.len() != before
     }
 
-    /// Remove every mount and restart mount numbering.
+    /// Remove every mount. Removed IDs are never issued again.
     pub fn unmount_all(&self) {
         let mut table = self.table.lock();
         table.mounts.clear();
-        table.next_id = 0;
     }
 
     /// Open the directory at virtual or host path `path`. The directory need
     /// not exist yet.
     pub fn open_dir(&self, path: &Path) -> Dir {
-        let resolved = self.table.lock().resolve_dir(path);
+        let table = self.table.lock();
+        let resolved = table.resolve_dir(path);
+        let virtual_path = normalize(Path::new("/"), path);
+        let write_read_only = table.mounts.iter().find_map(|mount| {
+            let suffix = virtual_path.strip_prefix(&mount.point).ok()?;
+            (confine(&mount.root, suffix) == resolved)
+                .then_some(mount.read_only || matches!(mount.backing, Backing::Archive(_)))
+        });
         Dir {
             table: self.table.clone(),
             path: resolved,
-            virtual_path: normalize(Path::new("/"), path),
+            virtual_path,
+            write_read_only,
         }
     }
 
@@ -247,6 +254,7 @@ pub struct Dir {
     table: Arc<Mutex<MountTable>>,
     path: PathBuf,
     virtual_path: PathBuf,
+    write_read_only: Option<bool>,
 }
 
 impl std::fmt::Debug for Dir {
@@ -266,6 +274,7 @@ impl Dir {
                 table: self.table.clone(),
                 path: path.to_path_buf(),
                 virtual_path: path.to_path_buf(),
+                write_read_only: Some(false),
             };
         }
         let joined = normalize(&self.path, path);
@@ -274,6 +283,7 @@ impl Dir {
             table: self.table.clone(),
             path: resolved,
             virtual_path: normalize(&self.virtual_path, path),
+            write_read_only: self.write_read_only,
         }
     }
 
@@ -335,14 +345,20 @@ impl Files for Dir {
             .open_at(&self.path, &self.virtual_path, path, false)
     }
     fn open_write(&self, path: &Path) -> io::Result<FileStream> {
-        self.table
-            .lock()
-            .open_at(&self.path, &self.virtual_path, path, true)
+        let table = self.table.lock();
+        match self.write_read_only {
+            Some(true) => Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+            Some(false) => table.disk.open_write(&normalize(&self.path, path)),
+            None => table.open_at(&self.path, &self.virtual_path, path, true),
+        }
     }
     fn remove(&self, path: &Path) -> io::Result<()> {
-        self.table
-            .lock()
-            .remove_at(&self.path, &self.virtual_path, path)
+        let table = self.table.lock();
+        match self.write_read_only {
+            Some(true) => Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+            Some(false) => table.disk.remove(&normalize(&self.path, path)),
+            None => table.remove_at(&self.path, &self.virtual_path, path),
+        }
     }
     fn list(&self, path: &Path) -> io::Result<Vec<String>> {
         self.table

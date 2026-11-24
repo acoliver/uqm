@@ -10,6 +10,8 @@ pub use vfs::{matches_pattern, Dir, Match, MountId, Placement, Vfs};
 #[cfg(any(test, feature = "test-support"))]
 pub mod fixture;
 #[cfg(test)]
+mod qualification_tests;
+#[cfg(test)]
 mod vfs_stream_tests;
 #[cfg(test)]
 mod vfs_tests;

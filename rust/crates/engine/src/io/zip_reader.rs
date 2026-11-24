@@ -339,7 +339,7 @@ impl ZipEntryReader {
 
 impl Read for ZipEntryReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let remaining = self.data.len() as u64 - self.position;
+        let remaining = (self.data.len() as u64).saturating_sub(self.position);
         if remaining == 0 {
             return Ok(0);
         }
@@ -354,19 +354,17 @@ impl Read for ZipEntryReader {
 impl Seek for ZipEntryReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let new_pos = match pos {
-            SeekFrom::Start(offset) => offset as i64,
-            SeekFrom::Current(offset) => self.position as i64 + offset,
-            SeekFrom::End(offset) => self.data.len() as i64 + offset,
+            SeekFrom::Start(offset) => i128::from(offset),
+            SeekFrom::Current(offset) => i128::from(self.position) + i128::from(offset),
+            SeekFrom::End(offset) => self.data.len() as i128 + i128::from(offset),
         };
-
-        if new_pos < 0 {
-            return Err(std::io::Error::new(
+        let new_pos = u64::try_from(new_pos).map_err(|_| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Invalid seek to negative position",
-            ));
-        }
-
-        self.position = new_pos as u64;
+                "ZIP seek outside u64 range",
+            )
+        })?;
+        self.position = new_pos;
         Ok(self.position)
     }
 }
