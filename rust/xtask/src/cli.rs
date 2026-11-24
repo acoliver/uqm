@@ -158,10 +158,18 @@ mod tests {
         let built = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
         assert!(require_build_source(built.path(), built.path()).is_ok());
+        let expected_built = std::fs::canonicalize(built.path()).unwrap();
+        let expected_other = std::fs::canonicalize(other.path()).unwrap();
+        assert_ne!(expected_built, expected_other);
         let error = require_build_source(other.path(), built.path()).unwrap_err();
-        assert!(error.contains("xtask was built from"), "{error}");
-        assert!(error.contains(&built.path().display().to_string()));
-        assert!(error.contains(&other.path().display().to_string()));
+        assert_eq!(
+            error,
+            format!(
+                "xtask was built from {}, but this checkout is {}; rebuild it with a separate rust/target",
+                expected_built.display(),
+                expected_other.display()
+            )
+        );
     }
 
     #[cfg(unix)]

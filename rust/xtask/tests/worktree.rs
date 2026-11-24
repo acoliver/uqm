@@ -13,8 +13,17 @@ fn xtask_refuses_to_execute_against_another_checkout() {
         .unwrap();
     assert!(!output.status.success());
     let error = String::from_utf8(output.stderr).unwrap();
-    assert!(error.contains("xtask was built from"), "{error}");
-    assert!(error.contains(&other.path().display().to_string()));
+    let expected_built =
+        std::fs::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();
+    let expected_other = std::fs::canonicalize(other.path()).unwrap();
+    assert_eq!(
+        error,
+        format!(
+            "uqm: xtask was built from {}, but this checkout is {}; rebuild it with a separate rust/target\n",
+            expected_built.display(),
+            expected_other.display()
+        )
+    );
 }
 
 #[test]

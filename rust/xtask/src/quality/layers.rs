@@ -5,10 +5,11 @@ use super::metrics::{Finding, Measurement};
 
 pub const CRATE_DEPS: &[(&str, &[&str])] = &[
     ("uqm-save", &[]),
+    ("uqm-process-support", &[]),
     ("uqm-engine", &["uqm-save"]),
     ("uqm-content", &["uqm-engine"]),
     ("uqm-modes", &["uqm-engine", "uqm-content", "uqm-save"]),
-    ("uqm-platform", &["uqm-engine"]),
+    ("uqm-platform", &["uqm-engine", "uqm-process-support"]),
     (
         "uqm",
         &[
@@ -17,9 +18,19 @@ pub const CRATE_DEPS: &[(&str, &[&str])] = &[
             "uqm-modes",
             "uqm-save",
             "uqm-platform",
+            "uqm-process-support",
         ],
     ),
-    ("uqm-xtask", &["uqm", "uqm-engine", "uqm-modes", "uqm-save"]),
+    (
+        "uqm-xtask",
+        &[
+            "uqm",
+            "uqm-engine",
+            "uqm-modes",
+            "uqm-save",
+            "uqm-process-support",
+        ],
+    ),
 ];
 
 pub const OS_CRATES: &[&str] = &[
@@ -301,6 +312,11 @@ fn allowed_edge(from: &str, to: &str) -> bool {
         .is_some_and(|(_, deps)| deps.contains(&to))
 }
 
+fn allowed_os_dependency(package: &str, dependency: &str) -> bool {
+    matches!(package, "uqm-platform" | "uqm-xtask")
+        || (package == "uqm-process-support" && dependency == "libc")
+}
+
 pub fn graph(root: &Path, measurement: &mut Measurement) -> Result<(), String> {
     measurement.findings.push(Finding {
         counter: "layers".into(),
@@ -341,7 +357,7 @@ pub fn graph(root: &Path, measurement: &mut Measurement) -> Result<(), String> {
                 ));
             }
             if OS_CRATES.contains(&dependency.name.as_str())
-                && !["uqm-platform", "uqm-xtask"].contains(&package.name.as_str())
+                && !allowed_os_dependency(&package.name, &dependency.name)
             {
                 if !["uqm", "uqm-engine"].contains(&package.name.as_str()) {
                     return Err(format!("OS crate {} in {}", dependency.name, package.name));
@@ -498,6 +514,11 @@ mod tests {
     #[test]
     fn every_workspace_edge_must_be_in_the_reviewed_table() {
         assert!(allowed_edge("uqm-modes", "uqm-engine"));
+        assert!(allowed_edge("uqm-xtask", "uqm-process-support"));
+        assert!(allowed_edge("uqm-platform", "uqm-process-support"));
+        assert!(allowed_edge("uqm", "uqm-process-support"));
+        assert!(!allowed_edge("uqm-process-support", "uqm"));
+        assert!(!allowed_edge("uqm-process-support", "uqm-platform"));
         assert!(allowed_edge("uqm-platform", "uqm-engine"));
         assert!(allowed_edge("uqm-xtask", "uqm-save"));
         assert!(allowed_edge("uqm-xtask", "uqm-engine"));
@@ -506,6 +527,15 @@ mod tests {
         assert!(!allowed_edge("uqm-content", "uqm-platform"));
         assert!(!allowed_edge("unknown", "uqm-save"));
     }
+    #[test]
+    fn process_support_admits_only_its_low_level_os_dependency() {
+        assert!(allowed_os_dependency("uqm-process-support", "libc"));
+        for dependency in OS_CRATES.iter().filter(|name| **name != "libc") {
+            assert!(!allowed_os_dependency("uqm-process-support", dependency));
+        }
+        assert!(!allowed_os_dependency("uqm-engine", "libc"));
+    }
+
     #[test]
     fn relative_imports_resolve_from_lexical_modules() {
         assert_eq!(

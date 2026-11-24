@@ -742,22 +742,11 @@ fn classify_session_error(error: &ChildSessionError) -> FailedContract {
 }
 
 fn unavailable_receipt(executable_digest: &str) -> ChildSessionReceipt {
-    ChildSessionReceipt {
-        exit_code: None,
-        signal: None,
-        term_sent: false,
-        kill_sent: false,
-        stdout_bytes: 0,
-        stderr_bytes: 0,
-        output_drained: false,
-        orphan_check_passed: false,
-        cleanup_diagnostics: Vec::new(),
-        identity: uqm_rust::automation::ProcessIdentity {
-            pid: 0,
-            start_time: String::new(),
-            executable_digest: executable_digest.into(),
-        },
-    }
+    ChildSessionReceipt::unobserved(uqm_rust::automation::ProcessIdentity {
+        pid: 0,
+        start_time: String::new(),
+        executable_digest: executable_digest.into(),
+    })
 }
 
 fn validate_manifest(path: &Path) -> Result<(), String> {

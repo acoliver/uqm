@@ -26,7 +26,7 @@ pub mod battle_observer;
 pub mod battle_outcome;
 pub mod campaign_state;
 pub mod capture;
-pub mod child_session;
+pub use uqm_process_support::child_session;
 pub mod coordinator;
 pub mod ending;
 pub mod error;

@@ -1653,6 +1653,7 @@ dependencies = [
  "uqm-engine",
  "uqm-modes",
  "uqm-platform",
+ "uqm-process-support",
  "uqm-save",
  "zip",
 ]
@@ -1722,8 +1723,20 @@ dependencies = [
  "sdl2-sys",
  "tempfile",
  "uqm-engine",
+ "uqm-process-support",
  "windows-sys 0.61.2",
  "xbrz-rs",
+]
+
+[[package]]
+name = "uqm-process-support"
+version = "0.9.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -1752,6 +1765,7 @@ dependencies = [
  "uqm",
  "uqm-engine",
  "uqm-modes",
+ "uqm-process-support",
 ]
 
 [[package]]
