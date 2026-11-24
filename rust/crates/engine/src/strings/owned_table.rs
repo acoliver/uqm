@@ -44,11 +44,15 @@ impl LoadedBinaryTable {
         Self(Rc::new(entries))
     }
 
-    pub(crate) fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
-        super::getstr::load_binary_table(
-            content.files(),
-            &content.path_of(resource, crate::resource::AssetKind::Binary)?,
-        )
+    pub(crate) fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Binary)?;
+        let path = std::ffi::CString::new(resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))?;
+        super::getstr::load_binary_table(resolved.files, &path)
+            .map_err(|error| resolved.load_error(resource, error))
     }
 
     pub(crate) fn entries(&self) -> &[Vec<u8>] {
@@ -123,15 +127,21 @@ impl LoadedTextTable {
         })
     }
 
-    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
-        Self::load_file(
-            content.files(),
-            &content.path_of(resource, crate::resource::AssetKind::Text)?,
-        )
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Text)?;
+        let path = std::ffi::CString::new(resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))?;
+        Self::load_file(resolved.files, &path).map_err(|error| resolved.load_error(resource, error))
     }
 
     /// A `STRTAB`-format file in the content directory.
-    pub fn load_file(files: &crate::io::Dir, path: &CStr) -> Option<Self> {
+    pub fn load_file(
+        files: &crate::io::Dir,
+        path: &CStr,
+    ) -> Result<Self, crate::resource::FileError> {
         super::getstr::load_text_table(files, path)
     }
 
@@ -235,7 +245,7 @@ mod tests {
         let content = mount.content(c"text.rmp");
         for _ in 0..2 {
             let table = LoadedTextTable::load(&content, c"test.strings")
-                .unwrap_or_else(|| panic!("indexed string table"));
+                .unwrap_or_else(|error| panic!("indexed string table: {error}"));
             assert_eq!(table.text(1), Some(c"world"));
             let storage = Rc::downgrade(&table.0);
             drop(table);

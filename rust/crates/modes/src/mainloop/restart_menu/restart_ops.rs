@@ -262,7 +262,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
     fn load_menu_graphic(&mut self) {
         self.menu.graphic = Some(
             LoadedDrawable::load(&self.cx.kernel.content(), c"graphics.newgame")
-                .unwrap_or_else(|| panic!("restart graphic")),
+                .unwrap_or_else(|error| panic!("restart graphic: {error}")),
         );
         self.menu.font = Some(
             self.cx
@@ -352,7 +352,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         self.menu.music.is_some()
     }
     fn load_menu_music(&mut self) -> bool {
-        self.menu.music = LoadedMusic::load(&self.cx.kernel.content(), c"music.mainmenu");
+        self.menu.music = LoadedMusic::load(&self.cx.kernel.content(), c"music.mainmenu").ok();
         self.menu.music.is_some()
     }
     fn play_music(&mut self) {

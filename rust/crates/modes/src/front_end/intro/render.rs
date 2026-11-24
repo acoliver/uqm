@@ -51,8 +51,8 @@ pub(super) fn text_transition(state: &PresentationState, fore: Color, back: Colo
 
 pub(super) fn generate_sis(cx: &Cx<'_>) -> Option<LoadedDrawable> {
     let context = ContextLease::require(cx.kernel.off_screen_context);
-    let skeleton = LoadedDrawable::load(&cx.kernel.content(), c"graphics.flagshipskeleton")?;
-    let modules = LoadedDrawable::load(&cx.kernel.content(), c"graphics.outfitmodules")?;
+    let skeleton = LoadedDrawable::load(&cx.kernel.content(), c"graphics.flagshipskeleton").ok()?;
+    let modules = LoadedDrawable::load(&cx.kernel.content(), c"graphics.outfitmodules").ok()?;
     let skeleton_frame = skeleton.lease().context_frame(0);
     let bounds = skeleton_frame.rect();
     let sis = LoadedDrawable::create(2, bounds.extent.width, bounds.extent.height, 1)?;

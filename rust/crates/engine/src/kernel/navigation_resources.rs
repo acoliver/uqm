@@ -19,10 +19,12 @@ struct NavigationDisplay {
     status: LoadedDrawable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("required navigation graphic could not be loaded: {resource}")]
+#[derive(Debug, thiserror::Error)]
+#[error("required navigation graphic could not be loaded: {resource}: {source}")]
 pub struct NavigationLoadError {
     pub resource: &'static str,
+    #[source]
+    pub source: crate::resource::AssetLoadError,
 }
 
 fn first_frame(drawable: &Option<LoadedDrawable>) -> FrameId {
@@ -36,16 +38,19 @@ fn first_frame(drawable: &Option<LoadedDrawable>) -> FrameId {
 impl NavigationResources {
     fn load_display_with(
         &mut self,
-        mut load: impl FnMut(&std::ffi::CStr) -> Option<LoadedDrawable>,
+        mut load: impl FnMut(&std::ffi::CStr) -> Result<LoadedDrawable, crate::resource::AssetLoadError>,
     ) -> Result<(), NavigationLoadError> {
         if self.display.is_none() {
-            let status = load(c"graphics.flagshipstatus").ok_or(NavigationLoadError {
-                resource: "graphics.flagshipstatus",
-            })?;
-            let misc = load(c"graphics.miscdata").ok_or(NavigationLoadError {
+            let status =
+                load(c"graphics.flagshipstatus").map_err(|source| NavigationLoadError {
+                    resource: "graphics.flagshipstatus",
+                    source,
+                })?;
+            let misc = load(c"graphics.miscdata").map_err(|source| NavigationLoadError {
                 resource: "graphics.miscdata",
+                source,
             })?;
-            let gradient = load(c"graphics.fontgradient");
+            let gradient = load(c"graphics.fontgradient").ok();
             self.display = Some(NavigationDisplay {
                 gradient,
                 misc,
@@ -62,7 +67,8 @@ impl crate::Kernel {
             self.assets.navigation.play.is_none(),
             "campaign play art already loaded"
         );
-        self.assets.navigation.play = LoadedDrawable::load(&self.content(), c"graphics.playmenu");
+        self.assets.navigation.play =
+            LoadedDrawable::load(&self.content(), c"graphics.playmenu").ok();
         self.play_frame = first_frame(&self.assets.navigation.play);
     }
 
@@ -128,6 +134,16 @@ mod tests {
     use super::*;
     use crate::graphics::{context::LoadedContext, drawable::LoadedDrawable};
 
+    fn missing(key: &std::ffi::CStr) -> crate::resource::AssetLoadError {
+        let content =
+            crate::resource::CatalogBuilder::new(crate::io::fixture::TempMount::new().dir())
+                .finish();
+        content
+            .require(key, crate::resource::AssetKind::Graphic)
+            .err()
+            .unwrap()
+    }
+
     #[test]
     #[serial_test::serial]
     fn load_failures_preserve_resource_order_and_the_optional_gradient() {
@@ -142,7 +158,11 @@ mod tests {
             let loaded = assets.load_display_with(|key| {
                 let index = keys.len();
                 keys.push(key.to_owned());
-                (index != failed).then(|| LoadedDrawable::create(2, 0, 0, 1).unwrap())
+                if index != failed {
+                    Ok(LoadedDrawable::create(2, 0, 0, 1).unwrap())
+                } else {
+                    Err(missing(key))
+                }
             });
             assert_eq!(loaded.is_ok(), failed >= 2);
             assert_eq!(keys, expected[..(failed + 1).min(3)]);
@@ -164,8 +184,11 @@ mod tests {
         let mut assets = NavigationResources::default();
         let error = assets
             .load_display_with(|key| {
-                (key == c"graphics.flagshipstatus")
-                    .then(|| LoadedDrawable::create(2, 0, 0, 1).unwrap())
+                if key == c"graphics.flagshipstatus" {
+                    Ok(LoadedDrawable::create(2, 0, 0, 1).unwrap())
+                } else {
+                    Err(missing(key))
+                }
             })
             .unwrap_err();
         assert_eq!(error.resource, "graphics.miscdata");
@@ -178,7 +201,7 @@ mod tests {
             1
         );
         assets
-            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1))
+            .load_display_with(|_| Ok(LoadedDrawable::create(2, 0, 0, 1).unwrap()))
             .unwrap();
         let status = assets.display.as_ref().unwrap().status.first_frame();
         assets
@@ -203,7 +226,7 @@ mod tests {
         kernel
             .assets
             .navigation
-            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1))
+            .load_display_with(|_| Ok(LoadedDrawable::create(2, 0, 0, 1).unwrap()))
             .unwrap();
         let clip = Rect {
             corner: Point { x: 256, y: 184 },
@@ -278,7 +301,7 @@ mod tests {
         kernel
             .assets
             .navigation
-            .load_display_with(|_| LoadedDrawable::create(2, 0, 0, 1))
+            .load_display_with(|_| Ok(LoadedDrawable::create(2, 0, 0, 1).unwrap()))
             .unwrap();
         kernel.assets.navigation.radar = Some(LoadedContext::create(c"navigation-test"));
         let radar = kernel.assets.navigation.radar.as_ref().unwrap().lease();

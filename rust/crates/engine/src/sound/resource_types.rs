@@ -9,15 +9,24 @@ use super::types::MusicRef;
 pub struct LoadedMusic(MusicRef);
 
 impl LoadedMusic {
-    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
-        Self::load_file(
-            content.files(),
-            &content.path_of(resource, crate::resource::AssetKind::Music)?,
-        )
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Music)?;
+        let path = std::ffi::CString::new(resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))?;
+        Self::load_file(resolved.files, &path).map_err(|error| resolved.load_error(resource, error))
     }
 
-    pub fn load_file(files: &crate::io::Dir, path: &CStr) -> Option<Self> {
-        load_music(files, path.to_str().ok()?).map(Self)
+    pub fn load_file(
+        files: &crate::io::Dir,
+        path: &CStr,
+    ) -> Result<Self, crate::resource::FileError> {
+        let name = path.to_str().map_err(|error| {
+            crate::resource::FileError::at(path.to_string_lossy().as_ref(), error)
+        })?;
+        load_music(files, name).map(Self)
     }
 
     pub fn playback(&self) -> MusicRef {
@@ -59,7 +68,7 @@ mod tests {
         );
         let content = mount.content(c"wrong.rmp");
         let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            LoadedMusic::load(&content, key)
+            LoadedMusic::load(&content, key).ok()
         }));
         assert!(rejected.is_err());
         let mut revised = content.revise();

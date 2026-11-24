@@ -84,14 +84,17 @@ impl CampaignDisplay {
             game.kernel.admit_content(content.clone());
             game.kernel.install_tiny_font(
                 LoadedFont::load(&content, c"fixture.tiny")
+                    .ok()
                     .ok_or("tiny-font fixture did not load")?,
             );
             game.kernel.install_micro_font(
                 LoadedFont::load(&content, c"fixture.tiny")
+                    .ok()
                     .ok_or("micro-font fixture did not load")?,
             );
             game.kernel.install_battle_font(
                 LoadedFont::load(&content, c"fixture.tiny")
+                    .ok()
                     .ok_or("battle-font fixture did not load")?,
             );
             load(&content);

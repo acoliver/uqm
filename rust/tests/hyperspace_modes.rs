@@ -292,10 +292,12 @@ fn load_palette_fixture() -> Result<
         let palettes = [
             Some(
                 PaletteCycle::load(&content.content(), c"fixture.hyper")
+                    .ok()
                     .ok_or("hyperspace fixture palette failed to load")?,
             ),
             Some(
                 PaletteCycle::load(&content.content(), c"fixture.quasi")
+                    .ok()
                     .ok_or("quasispace fixture palette failed to load")?,
             ),
         ];

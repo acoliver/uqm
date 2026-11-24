@@ -59,7 +59,7 @@ pub fn splash_screen(cx: &mut Cx<'_>, io: &mut Io<'_>, process: impl FnOnce(&mut
     let context = ContextLease::require(cx.kernel.screen_context);
     fade(cx, &context, 252, ONE_SECOND / 120);
     context.select();
-    if let Some(title) = LoadedDrawable::load(&cx.kernel.content(), c"graphics.title") {
+    if let Some(title) = LoadedDrawable::load(&cx.kernel.content(), c"graphics.title").ok() {
         context.draw_stamp(&title.lease().context_frame(0), Point { x: 0, y: 0 });
     }
     let timeout = context.fade_screen(253, (ONE_SECOND / 2) as i16);

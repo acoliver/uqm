@@ -61,7 +61,7 @@ pub mod live {
                 std::ffi::CStr::from_bytes_with_nul(MELEE_SCREEN_PMAP_ANIM)
                     .unwrap_or_else(|error| panic!("menu graphic resource: {error}")),
             )
-            .unwrap_or_else(|| panic!("melee menu graphic")),
+            .unwrap_or_else(|error| panic!("melee menu graphic: {error}")),
         );
         state.build_picker = Some(
             crate::supermelee::native::build_picker::live::build_build_pick_frame(
@@ -191,7 +191,8 @@ pub mod live {
             state.h_music = uqm_engine::sound::resource_types::LoadedMusic::load(
                 &cx.kernel.content(),
                 music_name,
-            );
+            )
+            .ok();
             state.initialized = 1;
             state.melee_option = 4;
             crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
@@ -313,7 +314,8 @@ pub mod live {
         cx.kernel.game_sounds = uqm_engine::sound::owned_bank::LoadedSoundBank::load(
             &cx.kernel.content(),
             c"sounds.battle",
-        );
+        )
+        .ok();
         state.fleet_picker = Some(
             crate::supermelee::native::battle_picker::live::FleetPicker::new(
                 &cx.kernel.content(),

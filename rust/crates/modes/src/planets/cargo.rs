@@ -127,7 +127,7 @@ mod tests {
             uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
                 &mut game,
                 |content| {
-                    heading = LoadedFont::load(content, c"fixture.tiny");
+                    heading = LoadedFont::load(content, c"fixture.tiny").ok();
                 },
             )
             .unwrap();

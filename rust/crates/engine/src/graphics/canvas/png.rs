@@ -23,19 +23,19 @@ fn samples(row: &[u8], depth: BitDepth, count: usize) -> Vec<u16> {
 }
 
 /// Decode a PNG file.
-pub fn decode(bytes: &[u8]) -> Result<Decoded, String> {
+pub fn decode(bytes: &[u8]) -> Result<Decoded, crate::resource::Cause> {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
-    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let mut reader = decoder.read_info()?;
     let info = reader.info().clone();
-    let width = i32::try_from(info.width).map_err(|e| e.to_string())?;
-    let height = i32::try_from(info.height).map_err(|e| e.to_string())?;
+    let width = i32::try_from(info.width)?;
+    let height = i32::try_from(info.height)?;
     let mut buffer = vec![
         0;
         reader
             .output_buffer_size()
             .ok_or("PNG dimensions overflow")?
     ];
-    let output = reader.next_frame(&mut buffer).map_err(|e| e.to_string())?;
+    let output = reader.next_frame(&mut buffer)?;
     let trns = info.trns.as_deref();
     let mut key: Option<u32> = None;
     let mut expand_palette = false;
@@ -71,7 +71,8 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, String> {
             return Err(format!(
                 "unsupported PNG transparency for {:?} images",
                 info.color_type
-            ));
+            )
+            .into());
         }
     }
     let format = match info.color_type {

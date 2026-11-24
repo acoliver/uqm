@@ -136,7 +136,7 @@ fn frame_rgb(frame: uqm_engine::graphics::drawable::FrameId) -> Vec<[u8; 3]> {
 fn names(h: &mut Harness, content: &uqm_engine::resource::Content) {
     let strings_owner =
         uqm_engine::strings::owned_table::LoadedTextTable::load(content, c"text.starcon")
-            .unwrap_or_else(|| panic!("text.starcon loads"));
+            .unwrap_or_else(|error| panic!("text.starcon loads: {error}"));
     crate::battle_context::with(|cx| {
         assert!(cx.kernel.micro_font.is_none());
         cx.kernel.install_game_text(strings_owner);

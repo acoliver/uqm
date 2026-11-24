@@ -57,6 +57,7 @@ impl Alphabet {
 
     fn load(content: &uqm_engine::resource::Content) -> Self {
         uqm_engine::strings::owned_table::LoadedTextTable::load(content, c"text.joyalpha")
+            .ok()
             .map_or_else(Self::default, |table| {
                 Self::new(table.label(0).0, table.label(1).0, table.label(2).0)
             })

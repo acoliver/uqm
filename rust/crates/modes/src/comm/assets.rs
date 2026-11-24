@@ -27,31 +27,34 @@ impl Assets {
         content: &uqm_engine::resource::Content,
         descriptor: &CommDescriptor,
         dimensions: (i32, i32),
-    ) -> Result<Self, &'static str> {
-        let player =
-            LoadedFont::load(content, c"font.player").ok_or("font.player failed to load")?;
-        let frame = descriptor
-            .alien_frame_res
-            .and_then(|key| LoadedDrawable::load(content, key))
-            .ok_or("alien graphics failed to load")?;
-        let font = descriptor
-            .alien_font_res
-            .and_then(|key| LoadedFont::load(content, key))
-            .ok_or("alien font failed to load")?;
+    ) -> Result<Self, uqm_engine::resource::Cause> {
+        let player = LoadedFont::load(content, c"font.player")?;
+        let frame = LoadedDrawable::load(
+            content,
+            descriptor
+                .alien_frame_res
+                .ok_or_else(|| uqm_engine::resource::Cause::from("alien graphics not defined"))?,
+        )?;
+        let font = LoadedFont::load(
+            content,
+            descriptor
+                .alien_font_res
+                .ok_or_else(|| uqm_engine::resource::Cause::from("alien font not defined"))?,
+        )?;
         let palette = descriptor
             .alien_colormap_res
-            .and_then(|key| PaletteCycle::load(content, key));
+            .and_then(|key| PaletteCycle::load(content, key).ok());
         let song = if descriptor.alien_song_flags & 1 != 0 {
             descriptor
                 .alien_alt_song_res
-                .and_then(|key| LoadedMusic::load(content, key))
+                .and_then(|key| LoadedMusic::load(content, key).ok())
         } else {
             None
         }
         .or_else(|| {
             descriptor
                 .alien_song_res
-                .and_then(|key| LoadedMusic::load(content, key))
+                .and_then(|key| LoadedMusic::load(content, key).ok())
         });
         let cache_context = LoadedContext::create(c"TextCacheContext");
         let cache_frame = LoadedDrawable::create(
@@ -60,7 +63,7 @@ impl Assets {
             (dimensions.1 - 13 - 107 - 15 + 2) as i16,
             1,
         )
-        .ok_or("subtitle cache failed to allocate")?;
+        .ok_or_else(|| uqm_engine::resource::Cause::from("subtitle cache failed to allocate"))?;
         let context = cache_context.lease();
         let target = cache_frame.lease().context_frame(0);
         let background = Color {

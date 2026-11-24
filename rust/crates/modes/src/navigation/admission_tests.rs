@@ -50,7 +50,7 @@ fn with_campaign(test: impl FnOnce(&mut Cx<'_>, &ContentMount)) {
 #[serial_test::serial]
 fn missing_misc_never_becomes_ready_on_kernel_retry() {
     with_content(|content| {
-        assert!(LoadedDrawable::load(&content.content(), c"graphics.flagshipstatus").is_some());
+        assert!(LoadedDrawable::load(&content.content(), c"graphics.flagshipstatus").is_ok());
         let mut kernel = uqm_engine::Kernel::new();
         kernel.admit_content(content.content());
         remove_resource(&mut kernel, "graphics.miscdata");

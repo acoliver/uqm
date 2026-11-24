@@ -297,7 +297,7 @@ pub mod live {
                 std::ffi::CStr::from_bytes_with_nul(MELEE_PICK_MASK_PMAP_ANIM)
                     .unwrap_or_else(|error| panic!("fleet mask resource: {error}")),
             )
-            .unwrap_or_else(|| panic!("fleet picker mask"));
+            .unwrap_or_else(|error| panic!("fleet picker mask: {error}"));
             context.with_selected(|| {
                 for player in 0..2 {
                     context.set_frame(drawable.lease().context_frame(player));

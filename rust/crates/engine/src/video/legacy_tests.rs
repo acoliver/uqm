@@ -63,7 +63,7 @@ fn a_movie_plays_reports_and_stops_on_drop() {
         "video::legacy::tests::a_movie_plays_reports_and_stops_on_drop",
         || {
             let (_mount, content) = logo_content();
-            assert!(LoadedVideo::load(&content, c"fixture.unknown").is_none());
+            assert!(LoadedVideo::load(&content, c"fixture.unknown").is_err());
             let descriptor =
                 LoadedVideo::load(&content, c"fixture.video").expect("logo descriptor");
             let playback = descriptor.play().expect("logo playback");
@@ -93,7 +93,7 @@ fn missing_unsupported_and_corrupt_movies_do_not_start() {
                 c"fixture.broken",
             ] {
                 let descriptor = LoadedVideo::load(&content, resource).expect("descriptor");
-                assert!(descriptor.play().is_none(), "{resource:?}");
+                assert!(descriptor.play().is_err(), "{resource:?}");
                 assert!(!started());
             }
         },

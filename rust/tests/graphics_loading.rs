@@ -22,7 +22,8 @@ fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8>
 }
 
 fn check_font(files: &uqm_engine::io::Dir, path: &std::ffi::CStr, alpha: &[u8]) {
-    let font = LoadedFont::load_file(files, path).unwrap_or_else(|| panic!("font loads"));
+    let font =
+        LoadedFont::load_file(files, path).unwrap_or_else(|error| panic!("font loads: {error}"));
     native_probe::with_font(font.font(), |font| {
         assert_eq!((font.leading, font.leading_width), (10, 4));
         assert_eq!(font.page_layout(), [(0, 65, 2)]);
@@ -57,8 +58,8 @@ fn check_font(files: &uqm_engine::io::Dir, path: &std::ffi::CStr, alpha: &[u8]) 
 }
 
 fn check_animation(files: &uqm_engine::io::Dir, path: &std::ffi::CStr) {
-    let drawable =
-        LoadedDrawable::load_file(files, path).unwrap_or_else(|| panic!("animation loads"));
+    let drawable = LoadedDrawable::load_file(files, path)
+        .unwrap_or_else(|error| panic!("animation loads: {error}"));
     let first = drawable.first_frame();
     assert_eq!(first.count(), 2);
     for i in 0..2u16 {
@@ -151,7 +152,7 @@ sprite.png -1 0 0 0
         let _graphics = native_probe::DrawQueue::init();
         check_font(mount.content_directory(), c"font", &alpha);
         check_font(mount.content_directory(), c"font.zip", &alpha);
-        assert!(LoadedDrawable::load_file(mount.content_directory(), c"missing.ani").is_none());
+        assert!(LoadedDrawable::load_file(mount.content_directory(), c"missing.ani").is_err());
         check_animation(mount.content_directory(), c"frames.ani");
         check_animation(mount.content_directory(), c"/animation/packed.ani");
         drop(mount);

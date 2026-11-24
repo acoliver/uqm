@@ -101,9 +101,9 @@ pub mod live {
         let data = &crate::planets::tables::PLANET_ARRAY[usize::from(index)];
         let variant = temperature_index(temperature);
         let colors = load_binary_entry(content, data.cmap_instance, variant)
-            .unwrap_or_else(|| panic!("planet color map is missing"));
+            .unwrap_or_else(|error| panic!("planet color map: {error}"));
         let translation = load_binary_entry(content, data.xlat_tab_instance, variant)
-            .unwrap_or_else(|| panic!("planet translation table is missing"));
+            .unwrap_or_else(|error| panic!("planet translation table: {error}"));
         SurfacePalette::from_bytes(index, &translation, colors)
             .unwrap_or_else(|error| panic!("planet palette: {error:?}"))
     }

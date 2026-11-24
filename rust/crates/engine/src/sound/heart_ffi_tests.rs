@@ -472,9 +472,9 @@ fn loading_files_that_are_not_there_gives_nothing() {
     let mount = crate::io::fixture::TempMount::new();
     let files = mount.dir();
     let _engine = Engine::start();
-    assert!(load_sound_bank(&files, "no/such/bank.snd").is_none());
-    assert!(load_music(&files, "no/such/music.ogg").is_none());
-    assert!(load_music(&files, "noextension").is_none());
+    assert!(load_sound_bank(&files, "no/such/bank.snd").is_err());
+    assert!(load_music(&files, "no/such/music.ogg").is_err());
+    assert!(load_music(&files, "noextension").is_err());
 }
 
 #[test]
@@ -487,4 +487,31 @@ fn music_destruction_releases_the_sample_and_its_mixer_buffers() {
     destroy_music(super::types::MusicRef(sample));
     assert!(weak.upgrade().is_none());
     assert!(!super::mixer::buffer::mixer_is_buffer(buffer));
+}
+
+#[test]
+fn sound_bank_skips_failed_samples_without_losing_a_good_relative_sample() {
+    let _engine = Engine::start();
+    let mount = crate::io::fixture::TempMount::new();
+    mount.write("sounds/bank.snd", b"missing.wav\nbad.wav\ngood.wav\n");
+    mount.write("sounds/bad.wav", b"corrupt WAV");
+    let mut wave = b"RIFF".to_vec();
+    wave.extend_from_slice(&38u32.to_le_bytes());
+    wave.extend_from_slice(b"WAVEfmt ");
+    wave.extend_from_slice(&16u32.to_le_bytes());
+    for word in [1u16, 1] {
+        wave.extend_from_slice(&word.to_le_bytes());
+    }
+    for word in [22050u32, 22050] {
+        wave.extend_from_slice(&word.to_le_bytes());
+    }
+    for word in [1u16, 8] {
+        wave.extend_from_slice(&word.to_le_bytes());
+    }
+    wave.extend_from_slice(b"data");
+    wave.extend_from_slice(&2u32.to_le_bytes());
+    wave.extend_from_slice(&[128, 129]);
+    mount.write("sounds/good.wav", &wave);
+    let bank = load_sound_bank(&mount.dir(), "sounds/bank.snd").unwrap();
+    assert_eq!(bank.len(), 1);
 }

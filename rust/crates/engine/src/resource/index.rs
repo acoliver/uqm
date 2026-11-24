@@ -323,16 +323,6 @@ impl Content {
             files: &self.0.files,
         })
     }
-    pub fn descriptor(&self, key: &CStr, expected: AssetKind) -> Option<&str> {
-        match self.resolve(key, expected) {
-            Ok(resolved) => Some(resolved.descriptor),
-            Err(ResolveError::Missing { .. }) => None,
-            Err(error @ ResolveError::WrongKind { .. }) => panic!("{error}"),
-        }
-    }
-    pub fn path_of(&self, key: &CStr, expected: AssetKind) -> Option<CString> {
-        CString::new(self.descriptor(key, expected)?).ok()
-    }
 }
 
 #[cfg(test)]

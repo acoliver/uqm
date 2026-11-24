@@ -17,7 +17,7 @@ impl CapturedSurface {
     /// Load a graphic resource.
     pub fn load(content: &crate::resource::Content, resource: &std::ffi::CStr) -> Self {
         Self {
-            drawable: LoadedDrawable::load(content, resource),
+            drawable: LoadedDrawable::load(content, resource).ok(),
         }
     }
 

@@ -51,6 +51,7 @@ impl CffiSurfaceVisuals {
         if self.canister.is_none() {
             self.canister = Some(
                 LoadedDrawable::load(&self.content, c"graphics.lifecan")
+                    .ok()
                     .ok_or(AdapterError::new("load_resource"))?,
             );
         }
@@ -82,6 +83,7 @@ impl CffiSurfaceVisuals {
             let key = std::ffi::CString::new(format!("graphics.life.{creature}"))
                 .unwrap_or_else(|_| unreachable!());
             let owner = LoadedDrawable::load(&self.content, &key)
+                .ok()
                 .ok_or(AdapterError::new("life_frame_missing"))?;
             self.life[index] = Some(owner.lease().context_frame(0));
             self.owned_life.push(owner);

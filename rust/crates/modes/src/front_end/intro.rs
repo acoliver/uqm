@@ -99,7 +99,7 @@ fn presentation_frame(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut Presentation
                 show_slides(
                     cx,
                     io,
-                    LoadedTextTable::load_file(cx.kernel.content().files(), &path),
+                    LoadedTextTable::load_file(cx.kernel.content().files(), &path).ok(),
                     false,
                 );
             }
@@ -169,13 +169,13 @@ pub fn show_presentation(cx: &mut Cx<'_>, io: &mut Io<'_>, presentation: &CStr) 
         "STRTAB" => show_slides(
             cx,
             io,
-            LoadedTextTable::load(&cx.kernel.content(), presentation),
+            LoadedTextTable::load(&cx.kernel.content(), presentation).ok(),
             presentation == c"slides.ending",
         ),
         "3DOVID" => show_video(
             cx,
             io,
-            LoadedVideo::load(&cx.kernel.content(), presentation),
+            LoadedVideo::load(&cx.kernel.content(), presentation).ok(),
         ),
         _ => {
             log::warn!(
@@ -227,7 +227,13 @@ fn fade_clear_screen(cx: &mut Cx<'_>) {
 
 fn show_video(cx: &mut Cx<'_>, io: &mut Io<'_>, video: Option<LoadedVideo>) -> bool {
     fade_clear_screen(cx);
-    let Some(playback) = video.as_ref().and_then(LoadedVideo::play) else {
+    let Some(playback) = video.as_ref().and_then(|video| match video.play() {
+        Ok(playback) => Some(playback),
+        Err(error) => {
+            log::warn!("Video unavailable: {error}");
+            None
+        }
+    }) else {
         return false;
     };
     cx.kernel.input_controls().set_menu_sounds(0, 0);

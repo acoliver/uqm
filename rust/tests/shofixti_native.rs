@@ -832,7 +832,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                 content.content_directory(),
                 c"font",
             )
-            .unwrap_or_else(|| panic!("font fixture"));
+            .unwrap_or_else(|error| panic!("font fixture: {error}"));
             drop(content);
             let context = uqm_engine::graphics::context::LoadedContext::create(c"melee-death-test");
             let screens = uqm_engine::test_support::native_probe::DrawQueue::init();

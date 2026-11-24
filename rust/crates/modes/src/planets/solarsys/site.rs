@@ -106,6 +106,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         {
             system.report = ReportSlot::new(
                 LoadedTextTable::load(self.content(), strings)
+                    .ok()
                     .and_then(|table| table.entry(report)),
             );
         };
@@ -117,9 +118,10 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         use uqm_engine::world::generation::ReportSlot;
         self.report_resources.load(self.content());
         {
-            system.frames[1] = LoadedDrawable::load(self.content(), graphics);
+            system.frames[1] = LoadedDrawable::load(self.content(), graphics).ok();
             system.report = ReportSlot::new(
                 LoadedTextTable::load(self.content(), strings)
+                    .ok()
                     .and_then(|table| table.entry(report)),
             );
         };

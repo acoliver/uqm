@@ -420,13 +420,14 @@ pub(crate) mod engine {
         let music = uqm_engine::sound::resource_types::LoadedMusic::load(
             &cx.kernel.content(),
             c"music.redalert",
-        );
+        )
+        .ok();
         crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
         let segue = uqm_engine::graphics::drawable::LoadedDrawable::load(
             &cx.kernel.content(),
             c"graphics.segue",
         )
-        .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
+        .unwrap_or_else(|error| panic!("encounter requires the red alert backdrop: {error}"));
         uqm_engine::sound::heart_ffi::wait_for_sound_end(u16::MAX);
         crate::ui::settings::stop_loaded_music(music.as_ref());
         drop(music);
@@ -579,7 +580,8 @@ pub(crate) mod engine {
         cx.kernel.game_sounds = uqm_engine::sound::owned_bank::LoadedSoundBank::load(
             &cx.kernel.content(),
             c"sounds.battle",
-        );
+        )
+        .ok();
         battle(cx, io, None);
         cx.kernel.game_sounds = None;
         if cx.world.activity() & CHECK_ABORT != 0 {

@@ -74,7 +74,7 @@ fn command(
                 drop(state.music.take());
             }
             state.music =
-                LoadedMusic::load_file(cx.kernel.content().files(), &bounded(source, 511));
+                LoadedMusic::load_file(cx.kernel.content().files(), &bounded(source, 511)).ok();
             music::remember_music(
                 state
                     .music
@@ -173,7 +173,8 @@ fn text_command(cx: &mut Cx<'_>, state: &mut PresentationState, opcode: &[u8], s
             let font = &mut state.fonts[index as usize];
             if let Some(path) = args.line(255) {
                 drop(font.take());
-                *font = LoadedFont::load_file(cx.kernel.content().files(), &bounded(path, 255));
+                *font =
+                    LoadedFont::load_file(cx.kernel.content().files(), &bounded(path, 255)).ok();
             }
             state
                 .context
@@ -248,7 +249,7 @@ fn graphics_command(
         }
         b"ANI" => {
             drop(state.frame.take());
-            state.frame = LoadedDrawable::load_file(files, &bounded(source, 511));
+            state.frame = LoadedDrawable::load_file(files, &bounded(source, 511)).ok();
         }
         b"LINE" => {
             if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (

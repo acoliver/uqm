@@ -5,7 +5,7 @@ use super::{
     types::{SoundPosition, SoundSample},
 };
 use crate::strings::owned_table::EntryRef;
-use std::{ffi::CStr, rc::Rc};
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub struct LoadedSoundBank(Rc<Bank>);
@@ -47,9 +47,13 @@ impl LoadedSoundBank {
         }))
     }
 
-    pub fn load(content: &crate::resource::Content, resource: &CStr) -> Option<Self> {
-        let path = content.path_of(resource, crate::resource::AssetKind::Sound)?;
-        super::heart_ffi::load_sound_bank(content.files(), path.to_str().ok()?)
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Sound)?;
+        super::heart_ffi::load_sound_bank(resolved.files, resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))
     }
 
     pub fn len(&self) -> usize {

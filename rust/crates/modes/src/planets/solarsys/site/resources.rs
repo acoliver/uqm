@@ -70,8 +70,8 @@ impl andro::AndrosynthSite for Site<'_, '_, '_> {
         use uqm_engine::world::generation::ReportSlot;
         self.report_resources.load(self.content());
         {
-            system.frames[1] = LoadedDrawable::load(self.content(), c"graphics.ruins");
-            let table = LoadedTextTable::load(self.content(), c"text.androsynthruins");
+            system.frames[1] = LoadedDrawable::load(self.content(), c"graphics.ruins").ok();
+            let table = LoadedTextTable::load(self.content(), c"text.androsynthruins").ok();
             system.report = ReportSlot::new(table.and_then(|table| {
                 if visits >= table.len() as u32 {
                     None

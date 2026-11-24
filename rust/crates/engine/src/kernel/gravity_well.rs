@@ -107,6 +107,7 @@ impl Kernel {
         for (frame, key) in self.planet.iter_mut().zip(gravity_keys(selector)) {
             *frame = key.map_or(crate::graphics::drawable::FrameId::NULL, |key| {
                 crate::battle::frames::load_graphic(&content, key)
+                    .unwrap_or(crate::graphics::drawable::FrameId::NULL)
             });
         }
         crate::collections::observation::observe_views(

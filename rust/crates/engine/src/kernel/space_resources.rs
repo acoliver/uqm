@@ -40,10 +40,13 @@ impl Kernel {
         if old == 0 && loads_space_graphics(activity) {
             let content = self.content();
             let stars = &mut self.stars_in_space;
-            *stars = load_graphic(&content, c"graphics.stars");
-            if stars.is_null() {
-                return false;
-            }
+            *stars = match load_graphic(&content, c"graphics.stars") {
+                Ok(frame) => frame,
+                Err(error) => {
+                    log::error!("InitSpace: {error}");
+                    return false;
+                }
+            };
             observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
                 f.bits()
             });
@@ -61,7 +64,12 @@ impl Kernel {
                         frames,
                         [Some(big), Some(medium), Some(small)],
                         role,
-                    ) == 0
+                    )
+                    .map(|loaded| !loaded)
+                    .unwrap_or_else(|error| {
+                        log::error!("InitSpace: {error}");
+                        true
+                    })
                 })
             {
                 return false;

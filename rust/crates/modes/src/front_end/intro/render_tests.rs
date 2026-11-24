@@ -272,7 +272,8 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
                 false,
             );
             state.fonts[0] =
-                uqm_engine::graphics::font::LoadedFont::load(&cx.kernel.content(), c"fixture.tiny");
+                uqm_engine::graphics::font::LoadedFont::load(&cx.kernel.content(), c"fixture.tiny")
+                    .ok();
             assert!(matches!(
                 commands::advance(&mut cx, &mut io, &mut state),
                 commands::Step::Input(true)

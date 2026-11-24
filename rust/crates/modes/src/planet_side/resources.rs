@@ -97,7 +97,7 @@ pub(crate) mod tests {
                 observation::drain();
                 uqm_engine::test_support::native_session::remove_resource(&mut game.kernel, key);
                 assert!(
-                    matches!(LanderResources::load(&game.kernel.content()), Err(failed) if failed == key)
+                    matches!(LanderResources::load(&game.kernel.content()), Err(failed) if failed.key == key)
                 );
                 uqm_engine::test_support::native_probe::flush_graphics();
                 let events = observation::drain();

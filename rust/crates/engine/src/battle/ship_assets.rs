@@ -128,21 +128,32 @@ impl RaceDescriptor {
 fn load_animation_set(
     content: &crate::resource::Content,
     keys: [Option<&'static std::ffi::CStr>; 3],
-) -> Option<FrameArray> {
+) -> Result<Option<FrameArray>, crate::resource::AssetLoadError> {
     let mut raw = [FrameId::NULL; 3];
-    if load_animation(content, &mut raw, keys, "animation") == 0 {
-        free_image(&mut raw, "animation");
-        return None;
+    match load_animation(content, &mut raw, keys, "animation") {
+        Ok(true) => {}
+        result => {
+            free_image(&mut raw, "animation");
+            return result.map(|_| None);
+        }
     }
     let array = FrameArray::from_native(raw);
     array.observe("animation");
-    Some(array)
+    Ok(Some(array))
 }
 
 impl RaceDesc {
-    pub fn initialize_assets(&mut self, content: &crate::resource::Content, battle: bool) -> bool {
+    pub fn initialize_assets(
+        &mut self,
+        content: &crate::resource::Content,
+        battle: bool,
+    ) -> Result<bool, crate::resource::AssetLoadError> {
         let navigation = self.initialize_icons(content);
-        let loaded = !battle || self.initialize_battle_assets(content);
+        let loaded = if battle {
+            self.initialize_battle_assets(content)
+        } else {
+            Ok(true)
+        };
         let data = &self.raw.ship_data;
         self.raw.assets = Some(Box::new(ShipAssets {
             navigation,
@@ -158,13 +169,13 @@ impl RaceDesc {
         let resources = &self.raw.resources;
         let icons = resources
             .icons
-            .and_then(|key| LoadedDrawable::load(content, key));
+            .and_then(|key| LoadedDrawable::load(content, key).ok());
         let melee_icon = resources
             .melee_icon
-            .and_then(|key| LoadedDrawable::load(content, key));
+            .and_then(|key| LoadedDrawable::load(content, key).ok());
         let strings = resources
             .strings
-            .and_then(|key| LoadedTextTable::load(content, key));
+            .and_then(|key| LoadedTextTable::load(content, key).ok());
         let info = &mut self.raw.ship_info;
         info.icons = icon_frame(&icons);
         info.melee_icon = icon_frame(&melee_icon);
@@ -176,10 +187,13 @@ impl RaceDesc {
         }
     }
 
-    fn initialize_battle_assets(&mut self, content: &crate::resource::Content) -> bool {
+    fn initialize_battle_assets(
+        &mut self,
+        content: &crate::resource::Content,
+    ) -> Result<bool, crate::resource::AssetLoadError> {
         let data = &mut self.raw.ship_data;
-        let Some(ship) = load_animation_set(content, self.raw.resources.ship) else {
-            return false;
+        let Some(ship) = load_animation_set(content, self.raw.resources.ship)? else {
+            return Ok(false);
         };
         data.ship = ship;
         for (keys, frames) in [
@@ -187,46 +201,45 @@ impl RaceDesc {
             (self.raw.resources.special, &mut data.special),
         ] {
             if keys[0].is_some() {
-                let Some(loaded) = load_animation_set(content, keys) else {
-                    return false;
+                let Some(loaded) = load_animation_set(content, keys)? else {
+                    return Ok(false);
                 };
                 *frames = loaded;
             }
         }
-        self.initialize_battle_audio_and_captain(content)
+        self.initialize_battle_audio_and_captain(content)?;
+        Ok(true)
     }
 
-    fn initialize_battle_audio_and_captain(&mut self, content: &crate::resource::Content) -> bool {
+    fn initialize_battle_audio_and_captain(
+        &mut self,
+        content: &crate::resource::Content,
+    ) -> Result<(), crate::resource::AssetLoadError> {
         let data = &mut self.raw.ship_data;
         if let Some(key) = self.raw.resources.captain {
-            data.captain_control.background = crate::battle::frames::load_graphic(content, key);
-            if data.captain_control.background.is_null() {
-                return false;
-            }
+            data.captain_control.background = crate::battle::frames::load_graphic(content, key)?;
         }
         if let Some(key) = self.raw.resources.victory {
-            self.raw.loaded_victory = crate::sound::resource_types::LoadedMusic::load(content, key);
+            self.raw.loaded_victory = Some(crate::sound::resource_types::LoadedMusic::load(
+                content, key,
+            )?);
             data.victory_ditty = self
                 .raw
                 .loaded_victory
                 .as_ref()
                 .map_or(std::ptr::null_mut(), |music| music.identity().cast());
-            if self.raw.loaded_victory.is_none() {
-                return false;
-            }
         }
         if let Some(key) = self.raw.resources.sounds {
-            self.raw.loaded_sounds = crate::sound::owned_bank::LoadedSoundBank::load(content, key);
+            self.raw.loaded_sounds = Some(crate::sound::owned_bank::LoadedSoundBank::load(
+                content, key,
+            )?);
             data.ship_sounds = self
                 .raw
                 .loaded_sounds
                 .as_ref()
                 .map(|bank| bank.entry_ref(0));
-            if self.raw.loaded_sounds.is_none() {
-                return false;
-            }
         }
-        true
+        Ok(())
     }
 
     pub fn unload(mut self, world: &mut crate::World, battle: bool) {

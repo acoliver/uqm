@@ -15,7 +15,9 @@ pub(super) fn load_conversation_text(content: &uqm_engine::resource::Content, co
         .data
         .definition
         .conversation_phrases_res
-        .and_then(|key| uqm_engine::strings::conversation::ConversationTable::load(content, key));
+        .and_then(|key| {
+            uqm_engine::strings::conversation::ConversationTable::load(content, key).ok()
+        });
     comm.set_conversation_phrases(phrases);
 }
 
@@ -25,19 +27,18 @@ pub fn prepare(
     world: &uqm_engine::World,
     kernel: &uqm_engine::Kernel,
     dimensions: (i32, i32),
-) -> Result<(), String> {
+) -> Result<(), uqm_engine::resource::Cause> {
     assert!(
         comm.display.assets.is_none(),
         "conversation assets already loaded"
     );
     comm.presentation = super::presentation::Presentation::from(kernel);
-    let mut retained = ConversationResources::new(world).map_err(|error| error.to_string())?;
+    let mut retained = ConversationResources::new(world)?;
     comm.reset_for_encounter();
     comm.set_talking_finished(false);
     let space = ContextLease::require(comm.presentation.space_context);
     let mut assets = space
-        .with_selected(|| Assets::load(&kernel.content(), &comm.data.definition, dimensions))
-        .map_err(str::to_owned)?;
+        .with_selected(|| Assets::load(&kernel.content(), &comm.data.definition, dimensions))?;
     let display = ConversationDisplay::new(comm, &assets, kernel)?;
     load_conversation_text(&kernel.content(), comm);
     comm.set_comm_data(super::locdata::session_view(&comm.data));

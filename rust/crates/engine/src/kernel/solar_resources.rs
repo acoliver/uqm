@@ -25,11 +25,13 @@ pub struct SolarResources {
 }
 
 impl SolarResources {
-    pub fn load(content: &crate::resource::Content) -> Result<Self, &'static str> {
+    pub fn load(
+        content: &crate::resource::Content,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
         Self::load_with(
             |key| LoadedDrawable::load(content, key),
             |key| load_binary_entries(content, key),
-            |key| LoadedMusic::load(content, key),
+            |key| LoadedMusic::load(content, key).ok(),
         )
     }
 
@@ -37,26 +39,26 @@ impl SolarResources {
         Self::retain_with(slot, || Self::load(content))
     }
 
-    fn retain_with(
+    fn retain_with<E: std::fmt::Display>(
         slot: &mut Option<Self>,
-        load: impl FnOnce() -> Result<Self, &'static str>,
+        load: impl FnOnce() -> Result<Self, E>,
     ) -> &Self {
         slot.get_or_insert_with(|| {
             load().unwrap_or_else(|key| panic!("missing interplanetary resource {key}"))
         })
     }
 
-    fn load_with(
-        mut graphic: impl FnMut(&CStr) -> Option<LoadedDrawable>,
-        mut palettes: impl FnMut(&CStr) -> Option<Vec<Vec<u8>>>,
+    fn load_with<E>(
+        mut graphic: impl FnMut(&CStr) -> Result<LoadedDrawable, E>,
+        mut palettes: impl FnMut(&CStr) -> Result<Vec<Vec<u8>>, E>,
         mut music: impl FnMut(&CStr) -> Option<LoadedMusic>,
-    ) -> Result<Self, &'static str> {
-        let junk = graphic(c"graphics.orbitbackground").ok_or("graphics.orbitbackground")?;
-        let flagship = graphic(c"graphics.flagship").ok_or("graphics.flagship")?;
-        let orbital_palettes = palettes(c"colortable.orbplan").ok_or("colortable.orbplan")?;
-        let orbital = graphic(c"graphics.planets").ok_or("graphics.planets")?;
-        let sun_palettes = palettes(c"colortable.truespace").ok_or("colortable.truespace")?;
-        let sun = graphic(c"graphics.truespacesun").ok_or("graphics.truespacesun")?;
+    ) -> Result<Self, E> {
+        let junk = graphic(c"graphics.orbitbackground")?;
+        let flagship = graphic(c"graphics.flagship")?;
+        let orbital_palettes = palettes(c"colortable.orbplan")?;
+        let orbital = graphic(c"graphics.planets")?;
+        let sun_palettes = palettes(c"colortable.truespace")?;
+        let sun = graphic(c"graphics.truespacesun")?;
         let music = music(c"music.space");
         Ok(Self {
             flagship,
@@ -111,7 +113,7 @@ mod tests {
                 &crate::resource::CatalogBuilder::new(crate::io::fixture::TempMount::new().dir())
                     .finish()
             ),
-            Err("graphics.orbitbackground")
+            Err(error) if error.key == "graphics.orbitbackground"
         ));
         for failed in 0..6 {
             let calls = std::cell::Cell::new(0);
@@ -121,8 +123,13 @@ mod tests {
                 current != failed
             };
             let result = SolarResources::load_with(
-                |_| next().then(|| LoadedDrawable::create(2, 0, 0, 1)).flatten(),
-                |_| next().then(|| vec![vec![0, 0]]),
+                |_| {
+                    next()
+                        .then(|| LoadedDrawable::create(2, 0, 0, 1))
+                        .flatten()
+                        .ok_or("graphic")
+                },
+                |_| next().then(|| vec![vec![0, 0]]).ok_or("palette"),
                 |_| panic!("music must not load after an asset failure"),
             );
             assert!(result.is_err());
@@ -134,8 +141,8 @@ mod tests {
     #[serial_test::serial]
     fn retained_cache_keeps_real_drawables_and_owned_palette_bytes() {
         let resources = SolarResources::load_with(
-            |_| LoadedDrawable::create(2, 0, 0, 2),
-            |_| Some(vec![vec![0, 0]]),
+            |_| LoadedDrawable::create(2, 0, 0, 2).ok_or("graphic"),
+            |_| Ok(vec![vec![0, 0]]),
             |_| None,
         )
         .unwrap_or_else(|key| panic!("fixture resource {key}"));
@@ -163,8 +170,8 @@ mod tests {
             let resources = SolarResources::retain_with(&mut slot, || {
                 loads.set(loads.get() + 1);
                 SolarResources::load_with(
-                    |_| LoadedDrawable::create(2, 0, 0, 2),
-                    |_| Some(vec![vec![0, 0]]),
+                    |_| LoadedDrawable::create(2, 0, 0, 2).ok_or("graphic"),
+                    |_| Ok(vec![vec![0, 0]]),
                     |_| None,
                 )
             });

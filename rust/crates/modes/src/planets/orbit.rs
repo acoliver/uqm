@@ -183,7 +183,7 @@ pub(crate) mod live {
                     &cx.kernel.content(),
                     c"graphics.orbitenter",
                 )
-                .unwrap_or_else(|| panic!("missing orbit entry graphic"));
+                .unwrap_or_else(|error| panic!("missing orbit entry graphic: {error}"));
                 scan.context().draw_stamp(
                     &frame.lease().context_frame(0),
                     uqm_engine::graphics::geometry::Point { x: 0, y: 0 },

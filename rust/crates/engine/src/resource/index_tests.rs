@@ -87,8 +87,11 @@ fn index_files_define_typed_values_and_file_entries() {
     import(&mut builder, &mount.dir(), c"missing.rmp", None);
     let content = builder.finish();
     assert_eq!(
-        content.path_of(c"p.text", AssetKind::Text).as_deref(),
-        Some(c"base/text.txt")
+        content
+            .require(c"p.text", AssetKind::Text)
+            .unwrap()
+            .descriptor,
+        "base/text.txt"
     );
     assert_eq!(content.kind("p.odd"), Some("WEIRD"));
     assert!(content.kind("broken").is_none());
@@ -97,7 +100,7 @@ fn index_files_define_typed_values_and_file_entries() {
         Err(ResolveError::WrongKind { .. })
     ));
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-        || content.path_of(c"p.text", AssetKind::Binary)
+        || content.require(c"p.text", AssetKind::Binary)
     ))
     .is_err());
     assert!(matches!(
@@ -205,7 +208,16 @@ fn sibling_revisions_with_equal_edit_counts_have_distinct_identities() {
         &base.revision().session,
         &left.revision().session
     ));
-    assert_eq!(left.descriptor(c"same", AssetKind::Text), Some("left"));
-    assert_eq!(right.descriptor(c"same", AssetKind::Text), Some("right"));
-    assert_eq!(base.descriptor(c"same", AssetKind::Text), Some("base"));
+    assert_eq!(
+        left.require(c"same", AssetKind::Text).unwrap().descriptor,
+        "left"
+    );
+    assert_eq!(
+        right.require(c"same", AssetKind::Text).unwrap().descriptor,
+        "right"
+    );
+    assert_eq!(
+        base.require(c"same", AssetKind::Text).unwrap().descriptor,
+        "base"
+    );
 }

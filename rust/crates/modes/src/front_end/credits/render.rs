@@ -30,14 +30,14 @@ pub(super) struct Resources {
 impl Resources {
     pub fn load(content: &uqm_engine::resource::Content) -> Option<Self> {
         Some(Self {
-            table: LoadedTextTable::load(content, c"credits.credits")?,
-            background: LoadedDrawable::load(content, c"credits.background"),
+            table: LoadedTextTable::load(content, c"credits.credits").ok()?,
+            background: LoadedDrawable::load(content, c"credits.background").ok(),
             fonts: [
                 c"credits.font.pt13",
                 c"credits.font.pt17",
                 c"credits.font.pt45",
             ]
-            .map(|key| LoadedFont::load(content, key)),
+            .map(|key| LoadedFont::load(content, key).ok()),
         })
     }
     pub fn background_frame(&self) -> ContextFrame {
