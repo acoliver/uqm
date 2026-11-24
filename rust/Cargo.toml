@@ -58,6 +58,7 @@ name = "uqm-gameplay-proof"
 path = "src/bin/uqm_gameplay_proof.rs"
 
 [dependencies]
+uqm-process-support = { path = "crates/process-support", version = "=0.9.0" }
 uqm-engine = { path = "crates/engine", version = "=0.9.0", default-features = false }
 uqm-save = { path = "crates/save", version = "=0.9.0" }
 uqm-content = { path = "crates/content", version = "=0.9.0", default-features = false }

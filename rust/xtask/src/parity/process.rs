@@ -2,7 +2,7 @@ use super::*;
 use std::process::{Command, ExitStatus};
 use std::time::{Duration, Instant};
 #[cfg(unix)]
-use uqm_rust::automation::child_session::{
+use uqm_process_support::child_session::{
     command_executable_digest, ChildSession, ChildSessionConfig, ChildSessionError,
 };
 
@@ -97,7 +97,7 @@ fn supervise(
         .stdout(fs::File::create(logs.join("stdout.log")).map_err(|error| error.to_string())?)
         .stderr(fs::File::create(logs.join("stderr.log")).map_err(|error| error.to_string())?);
     let child = crate::quality::tool::spawn(command)?;
-    let (status, timeout) = uqm_rust::automation::child_session::finish_outer_child(child, budget)?;
+    let (status, timeout) = uqm_process_support::child_session::finish_outer_child(child, budget)?;
     *timed_out = timeout;
     Ok(Completion {
         status,

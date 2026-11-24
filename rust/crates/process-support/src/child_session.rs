@@ -20,16 +20,18 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-PROOF-002
 
+#![forbid(unsafe_code)]
+
 use std::path::PathBuf;
 
+#[cfg(unix)]
+use crate::os as sys;
 #[cfg(unix)]
 use std::io;
 #[cfg(unix)]
 use std::os::fd::RawFd;
 #[cfg(unix)]
 use sys::clock::monotonic_millis;
-#[cfg(unix)]
-use uqm_platform::os as sys;
 
 /// Environment variable carrying the full-duplex nested-group registration descriptor.
 #[cfg(unix)]
@@ -68,7 +70,7 @@ impl ChangeWait for SleepWait {
 }
 
 #[cfg(unix)]
-pub use uqm_platform::os::descriptor::{guard_descriptor_inheritance, DescriptorInheritanceGuard};
+pub use crate::os::descriptor::{guard_descriptor_inheritance, DescriptorInheritanceGuard};
 
 /// Spawn `command` while no other thread is between creating a descriptor and
 /// marking it close-on-exec.
@@ -758,8 +760,8 @@ mod os {
     use std::thread::{self, JoinHandle};
     use std::time::{Duration, Instant};
 
-    use crate::automation::identity::{digest_hex, sha256_file};
-    use uqm_platform::os as sys;
+    use crate::identity::{digest_hex, sha256_file};
+    use crate::os as sys;
 
     pub(super) use super::output::DrainResult;
     use super::output::{
@@ -3223,28 +3225,6 @@ mod os {
 
             sleeper.kill().expect("stop bystander");
             let _ = sleeper.wait();
-        }
-
-        #[test]
-        fn a_departed_process_leaves_a_clean_preflight() {
-            let parent = TempDir::new().expect("tempdir");
-            let root = run_root_in(&parent);
-            let (mut departed, identity) = spawn_sleeper();
-            departed.kill().expect("stop fixture");
-            departed.wait().expect("reap fixture");
-            record_owned_process(&root, &identity).expect("record owned process");
-
-            let (preflight, scan) = crate::automation::proof::PreflightCheck::establish(
-                &root,
-                Duration::from_secs(1),
-                true,
-                true,
-            )
-            .expect("establish preflight");
-            assert!(matches!(scan, StaleProcessScan::Departed { .. }));
-            assert_eq!(scan.identity(), Some(&identity));
-            assert!(preflight.no_matching_processes);
-            assert!(preflight.passes());
         }
 
         #[test]

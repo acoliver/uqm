@@ -2,7 +2,7 @@
 
 use std::process::Command;
 use std::time::Duration;
-use uqm_rust::automation::child_session::{ChildSession, ChildSessionError, ChildSessionReceipt};
+use uqm_process_support::child_session::{ChildSession, ChildSessionError, ChildSessionReceipt};
 
 /// Bytes of a child's output kept in memory; the rest is counted and dropped.
 const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;

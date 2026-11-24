@@ -14,6 +14,7 @@ pub const UNSAFE_ALLOWED: &[&str] = &[
     "crates/platform/src/qos.rs",
     // Process, descriptor, fd-relative file, signal, lock and errno calls.
     "crates/platform/src/os",
+    "crates/process-support/src/os",
 ];
 
 fn allowed(file: &str) -> bool {
@@ -77,10 +78,13 @@ mod tests {
             "crates/platform/src/macos/sandbox.rs",
             "crates/platform/src/qos.rs",
             "crates/platform/src/os/fd.rs",
+            "crates/process-support/src/os/fd.rs",
         ] {
             assert!(allowed(file), "{file}");
         }
         for file in [
+            "crates/process-support/src/os_extra.rs",
+            "crates/process-support/src/child_session.rs",
             "crates/platform/src/sdlx.rs",
             "crates/platform/src/qos_extra.rs",
             "crates/platform/src/lib.rs",

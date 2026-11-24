@@ -24,15 +24,15 @@ pub mod sdl;
 pub mod stderr;
 
 #[cfg(unix)]
-pub mod clock;
+pub use uqm_process_support::os::clock;
 #[cfg(unix)]
-pub mod descriptor;
+pub use uqm_process_support::os::descriptor;
 #[cfg(unix)]
 pub mod fd;
 #[cfg(unix)]
 pub mod fs;
 #[cfg(unix)]
-pub mod lock;
+pub use uqm_process_support::os::lock;
 #[cfg(unix)]
 pub mod process;
 #[cfg(unix)]

@@ -346,6 +346,36 @@ mod tests {
     use super::*;
     use crate::automation::child_session::ProofType;
 
+    #[cfg(unix)]
+    #[test]
+    fn a_departed_process_leaves_a_clean_preflight() {
+        use crate::automation::child_session::{
+            capture_identity, command_executable_digest, record_owned_process, StaleProcessScan,
+        };
+
+        let parent = tempfile::TempDir::new().expect("tempdir");
+        let root = parent.path().join("output");
+        std::fs::create_dir(&root).expect("create run root");
+        let mut departed = std::process::Command::new("/bin/sleep")
+            .arg("60")
+            .spawn()
+            .expect("spawn sleeper");
+        let digest = command_executable_digest(&std::process::Command::new("/bin/sleep"))
+            .expect("sleep digest");
+        let identity = capture_identity(departed.id(), &digest).expect("capture sleeper identity");
+        departed.kill().expect("stop fixture");
+        departed.wait().expect("reap fixture");
+        record_owned_process(&root, &identity).expect("record owned process");
+
+        let (preflight, scan) =
+            PreflightCheck::establish(&root, std::time::Duration::from_secs(1), true, true)
+                .expect("establish preflight");
+        assert!(matches!(scan, StaleProcessScan::Departed { .. }));
+        assert_eq!(scan.identity(), Some(&identity));
+        assert!(preflight.no_matching_processes);
+        assert!(preflight.passes());
+    }
+
     fn valid_identity() -> ProofIdentity {
         let d = "a".repeat(64);
         ProofIdentity {
