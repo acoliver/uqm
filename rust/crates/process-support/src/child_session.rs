@@ -4513,6 +4513,64 @@ mod os_tests {
     }
 
     #[test]
+    fn byte_budgets_are_inclusive_and_independent_for_each_stream() {
+        for (stdout_budget, stderr_budget, script, expected_overflow) in [
+            (10, 10, "printf 'AAAAAAAAAA'; printf 'BBBBBBBBBB' >&2", None),
+            (9, 10, "printf 'AAAAAAAAAA'", Some(StreamKind::Stdout)),
+            (10, 9, "printf 'BBBBBBBBBB' >&2", Some(StreamKind::Stderr)),
+        ] {
+            let dir = TempDir::new().expect("tempdir");
+            let mut config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+            config.stdout_budget = stdout_budget;
+            config.stderr_budget = stderr_budget;
+            let session = ChildSession::spawn(delayed_command(script), config).expect("spawn");
+            let receipt = match (expected_overflow, session.finish()) {
+                (None, Ok(receipt)) => {
+                    assert_eq!(receipt.exit_code, Some(0));
+                    assert!(!receipt.term_sent);
+                    assert!(!receipt.kill_sent);
+                    assert!(receipt.cleanup_diagnostics.is_empty());
+                    receipt
+                }
+                (Some(expected), Err(failure)) => {
+                    assert!(matches!(
+                        failure.error,
+                        ChildSessionError::BudgetExceeded { stream } if stream == expected
+                    ));
+                    *failure.receipt
+                }
+                (expected, result) => {
+                    panic!("expected overflow {expected:?}, got {result:?}")
+                }
+            };
+            let (expected_stdout, expected_stderr): (&[u8], &[u8]) = match expected_overflow {
+                None => (b"AAAAAAAAAA", b"BBBBBBBBBB"),
+                Some(StreamKind::Stdout) => (b"AAAAAAAAA", b""),
+                Some(StreamKind::Stderr) => (b"", b"BBBBBBBBB"),
+            };
+            assert_eq!(
+                std::fs::read(dir.path().join("out.log")).unwrap(),
+                expected_stdout
+            );
+            assert_eq!(
+                std::fs::read(dir.path().join("err.log")).unwrap(),
+                expected_stderr
+            );
+            assert_eq!(
+                receipt.stdout_bytes,
+                u64::try_from(expected_stdout.len()).unwrap()
+            );
+            assert_eq!(
+                receipt.stderr_bytes,
+                u64::try_from(expected_stderr.len()).unwrap()
+            );
+            assert!(receipt.reaped_status.is_some());
+            assert!(receipt.output_drained);
+            assert!(receipt.orphan_check_passed);
+        }
+    }
+
+    #[test]
     fn byte_budget_exceeded_on_stdout() {
         let dir = TempDir::new().expect("tempdir");
         let mut config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));

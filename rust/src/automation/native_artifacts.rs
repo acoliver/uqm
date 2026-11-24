@@ -358,6 +358,39 @@ impl SharedInputs {
         read_identity(&directory, member)
     }
 
+    /// Verify a descriptor-bound object without retaining its payload.
+    pub(super) fn verify_member(
+        &self,
+        root: &Path,
+        logical: &str,
+        limit: u64,
+    ) -> Result<(), String> {
+        let (_, directory) = Self::shared_directory(root)?;
+        let member = self.members.get(logical).ok_or("unknown shared input")?;
+        if member.byte_length > limit {
+            return Err("shared member exceeds consumer bound".into());
+        }
+        let mut file = open_relative(&directory, &member.relative_path, false)
+            .map_err(|error| error.to_string())?;
+        let metadata = file.metadata().map_err(|error| error.to_string())?;
+        if !metadata.is_file() || metadata.len() > member.byte_length {
+            return Err("shared input exceeds regular-file bound".into());
+        }
+        let sha256 = super::native_window::digest_exact_bounded(
+            &mut file,
+            metadata.len(),
+            member.byte_length,
+        )
+        .map_err(|error| error.to_string())?;
+        if metadata.len() != member.byte_length || sha256 != member.sha256 {
+            return Err(format!(
+                "shared object identity changed: {}",
+                member.relative_path
+            ));
+        }
+        Ok(())
+    }
+
     /// Obtain a launch path after descriptor validation. Candidate isolation keeps it immutable.
     pub fn path(&self, root: &Path, logical: &str, limit: u64) -> Result<PathBuf, String> {
         self.validate(root)?;

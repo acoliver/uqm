@@ -2046,7 +2046,7 @@ impl NativeInventoryBudget {
         Ok(())
     }
 }
-fn digest_exact_bounded<R: std::io::Read>(
+pub(super) fn digest_exact_bounded<R: std::io::Read>(
     reader: &mut R,
     expected: u64,
     limit: u64,
@@ -2145,7 +2145,7 @@ fn native_acceptance_inventory_excluding(
                 budget.admit_path(member.relative_path.len())?;
                 budget.admit_file(member.byte_length)?;
                 shared
-                    .read(root, &member.relative_path, limits.member_bytes)
+                    .verify_member(root, &member.relative_path, limits.member_bytes)
                     .map_err(|_| NativeWindowProofError::Receipt)?;
                 files.push(member);
             }
@@ -4431,6 +4431,61 @@ mod tests {
         assert_eq!(receipt.stable_presentations, 300);
         assert!(receipt.passed);
         assert!(manifest.passed);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shared_virtual_inventory_preserves_identity_and_empty_objects() {
+        use super::super::native_artifacts::{ArtifactBudget, SharedSnapshot};
+
+        let suite = tempfile::tempdir().unwrap();
+        let scenario = suite.path().join("scenarios/0000");
+        fs::create_dir_all(&scenario).unwrap();
+        let limits = runtime_contract().inventory_limits;
+        let mut store =
+            SharedSnapshot::create(&suite.path().join("shared"), ArtifactBudget::new(limits))
+                .unwrap();
+        store.insert("inputs/uqm", b"binary").unwrap();
+        store.insert("inputs/empty", b"").unwrap();
+        store.seal().unwrap();
+        let references = store
+            .references(&["inputs/uqm".into(), "inputs/empty".into()])
+            .unwrap();
+        let reference_bytes = serde_json::to_vec(&references).unwrap();
+        fs::write(scenario.join("shared-inputs.json"), &reference_bytes).unwrap();
+        let expected: Vec<_> = [
+            ("inputs/empty", b"".as_slice()),
+            ("inputs/uqm", b"binary".as_slice()),
+            ("shared-inputs.json", reference_bytes.as_slice()),
+        ]
+        .into_iter()
+        .map(|(path, bytes)| NativeRetainedInput {
+            relative_path: path.into(),
+            byte_length: bytes.len() as u64,
+            sha256: format!("{:x}", Sha256::digest(bytes)),
+        })
+        .collect();
+        let object = suite
+            .path()
+            .join("shared")
+            .join(&references.members["inputs/uqm"].relative_path);
+        for inventory in [
+            native_acceptance_inventory,
+            native_acceptance_failure_inventory,
+        ] {
+            assert_eq!(inventory(&scenario, limits).unwrap(), expected);
+            for bytes in [b"mutant".as_slice(), b"binary!", b"bin"] {
+                fs::remove_file(&object).unwrap();
+                fs::write(&object, bytes).unwrap();
+                assert_eq!(
+                    inventory(&scenario, limits),
+                    Err(NativeWindowProofError::Receipt)
+                );
+            }
+            fs::remove_file(&object).unwrap();
+            fs::write(&object, b"binary").unwrap();
+            assert_eq!(inventory(&scenario, limits).unwrap(), expected);
+        }
     }
 
     #[test]
