@@ -151,6 +151,9 @@ mod tests {
             output_drained,
             orphan_check_passed,
             cleanup_diagnostics: Vec::new(),
+            reaped_status: None,
+            captured: Default::default(),
+            descendants_observed: false,
             identity: identity(pid),
         }
     }

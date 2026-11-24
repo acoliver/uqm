@@ -1,9 +1,10 @@
 use super::*;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Command, ExitStatus};
 use std::time::{Duration, Instant};
-#[cfg(test)]
-#[path = "tests/process_tests.rs"]
-mod tests;
+#[cfg(unix)]
+use uqm_rust::automation::child_session::{
+    command_executable_digest, ChildSession, ChildSessionConfig, ChildSessionError,
+};
 
 pub(super) struct Completion {
     pub status: ExitStatus,
@@ -12,100 +13,96 @@ pub(super) struct Completion {
 
 pub(super) fn run(command: &mut Command, budget: Duration, logs: &Path) -> Result<Completion> {
     fs::create_dir_all(logs).map_err(|error| error.to_string())?;
-    let stdout = fs::File::create(logs.join("stdout.log")).map_err(|error| error.to_string())?;
-    let stderr = fs::File::create(logs.join("stderr.log")).map_err(|error| error.to_string())?;
-    command.stdin(Stdio::null()).stdout(stdout).stderr(stderr);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
+    // Existing invocations overwrite their diagnostic files, not their evidence.
+    for name in ["stdout.log", "stderr.log"] {
+        match fs::remove_file(logs.join(name)) {
+            Ok(()) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error.to_string()),
+        }
     }
     let started = Instant::now();
-    let mut child = crate::quality::tool::spawn(command)?;
-    let result = supervise(&mut child, budget);
+    let mut timed_out = false;
+    let result = supervise(command, budget, logs, &mut timed_out);
     eprintln!(
         "parity process {}: {:.3}s",
         logs.display(),
         started.elapsed().as_secs_f64()
     );
-    write_json(
+    let publication = write_json(
         &logs.join("duration.json"),
         &serde_json::json!({
             "elapsed_seconds": started.elapsed().as_secs_f64(), "budget_seconds": budget.as_secs_f64(),
-            "timed_out": result.as_ref().is_ok_and(|result| result.timed_out),
+            "timed_out": timed_out,
         }),
-    )?;
-    result
-}
-
-fn supervise(child: &mut Child, budget: Duration) -> Result<Completion> {
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                return Ok(Completion {
-                    status,
-                    timed_out: false,
-                })
-            }
-            Ok(None) => (),
-            Err(error) => {
-                terminate(child)?;
-                return Err(format!("poll replay process: {error}"));
-            }
+    );
+    match (result, publication) {
+        (Err(error), Err(publication)) => {
+            Err(format!("{error}; duration publication: {publication}"))
         }
-        if started.elapsed() >= budget {
-            let status = terminate(child)?;
-            return Ok(Completion {
-                status,
-                timed_out: true,
-            });
-        }
-        std::thread::sleep(Duration::from_millis(5).min(budget.saturating_sub(started.elapsed())));
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+        (Ok(result), Ok(())) => Ok(result),
     }
-}
-
-/// The process group a child leads. Callers create it with `process_group(0)`.
-#[cfg(unix)]
-pub(crate) fn child_group(child: &Child) -> std::io::Result<rustix::process::Pid> {
-    i32::try_from(child.id())
-        .ok()
-        .and_then(rustix::process::Pid::from_raw)
-        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))
 }
 
 #[cfg(unix)]
-pub(crate) fn kill_group(child: &Child) -> std::io::Result<()> {
-    rustix::process::kill_process_group(child_group(child)?, rustix::process::Signal::KILL)?;
-    Ok(())
+fn supervise(
+    command: &mut Command,
+    budget: Duration,
+    logs: &Path,
+    timed_out: &mut bool,
+) -> Result<Completion> {
+    let config = ChildSessionConfig {
+        stdout_log: logs.join("stdout.log"),
+        stderr_log: logs.join("stderr.log"),
+        stdout_budget: u64::MAX,
+        stderr_budget: u64::MAX,
+        timeout: budget,
+        grace: Duration::from_secs(2),
+        executable_digest: command_executable_digest(command).map_err(|error| error.to_string())?,
+    };
+    let session = ChildSession::spawn_outer_logged(command, config)
+        .map_err(|error| format!("{command:?}: {error}"))?;
+    let (receipt, timed_out) = match session.finish() {
+        Ok(receipt) => (receipt, false),
+        Err(failure) => {
+            *timed_out = matches!(failure.error, ChildSessionError::Timeout { .. });
+            // A timeout is an ordinary unsuccessful completion only when cleanup was observed.
+            if !matches!(failure.error, ChildSessionError::Timeout { .. })
+                || !failure.receipt.cleanup_diagnostics.is_empty()
+                || !failure.receipt.orphan_check_passed
+                || !failure.receipt.output_drained
+            {
+                return Err(failure.to_string());
+            }
+            (*failure.receipt, true)
+        }
+    };
+    let status = receipt
+        .reaped_status
+        .ok_or("replay child has no observed exit/reap status")?;
+    Ok(Completion { status, timed_out })
 }
 
-fn terminate(child: &mut Child) -> Result<ExitStatus> {
-    #[cfg(unix)]
-    {
-        // The process group belongs to this invocation, never a name-wide game kill.
-        if let Err(error) = kill_group(child) {
-            if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
-                return Ok(status);
-            }
-            return Err(format!(
-                "kill owned process group {} failed: {error}",
-                child.id()
-            ));
-        }
-    }
-    #[cfg(not(unix))]
-    child.kill().map_err(|error| error.to_string())?;
-    let started = Instant::now();
-    loop {
-        if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
-            return Ok(status);
-        }
-        if started.elapsed() >= Duration::from_secs(2) {
-            return Err(format!("process {} did not reap after SIGKILL", child.id()));
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
+#[cfg(not(unix))]
+fn supervise(
+    command: &mut Command,
+    budget: Duration,
+    logs: &Path,
+    timed_out: &mut bool,
+) -> Result<Completion> {
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(fs::File::create(logs.join("stdout.log")).map_err(|error| error.to_string())?)
+        .stderr(fs::File::create(logs.join("stderr.log")).map_err(|error| error.to_string())?);
+    let child = crate::quality::tool::spawn(command)?;
+    let (status, timeout) = uqm_rust::automation::child_session::finish_outer_child(child, budget)?;
+    *timed_out = timeout;
+    Ok(Completion {
+        status,
+        timed_out: timeout,
+    })
 }
 
 pub(super) fn require_success(result: Completion, label: &str, logs: &Path) -> Result<()> {
@@ -119,3 +116,7 @@ pub(super) fn require_success(result: Completion, label: &str, logs: &Path) -> R
     }
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+#[path = "tests/process_tests.rs"]
+mod tests;

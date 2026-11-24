@@ -745,9 +745,13 @@ impl ProofResult {
 // rooted at that child through reader completion and orphan verification.
 
 #[cfg(unix)]
+#[path = "child_session/output.rs"]
+mod output;
+
+#[cfg(unix)]
 mod os {
     use std::fs::{File, OpenOptions};
-    use std::io::{self, ErrorKind, Read, Write};
+    use std::io::{self, ErrorKind, Write};
     use std::os::fd::AsFd;
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command, ExitStatus, Stdio};
@@ -757,6 +761,11 @@ mod os {
     use crate::automation::identity::{digest_hex, sha256_file};
     use uqm_platform::os as sys;
 
+    pub(super) use super::output::DrainResult;
+    use super::output::{
+        fault_error, join_reader_until, output_targets, partial_reader_error, reader_error,
+        reader_failure, ReaderFault, Readers,
+    };
     use super::{
         ChangeWait, NestedGroupOperation, NestedGroupProtocol, ProcessIdentity, SleepWait,
     };
@@ -780,6 +789,11 @@ mod os {
     pub enum ChildSessionError {
         /// `spawn` failed before any child existed.
         Spawn(io::Error),
+        /// Setup failed after launch, followed by a cleanup failure.
+        PartialSpawn {
+            primary: Box<ChildSessionError>,
+            cleanup: Box<ChildSessionError>,
+        },
         /// Creating or writing a log file failed.
         LogOpen {
             stream: StreamKind,
@@ -863,6 +877,9 @@ mod os {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Self::Spawn(e) => write!(f, "spawn failed: {e}"),
+                Self::PartialSpawn { primary, cleanup } => {
+                    write!(f, "{primary}; cleanup: {cleanup}")
+                }
                 Self::LogOpen { stream, error } => {
                     write!(f, "log open failed for {stream:?}: {error}")
                 }
@@ -875,9 +892,7 @@ mod os {
                 Self::Reader { stream, error } => {
                     write!(f, "reader error on {stream:?}: {error}")
                 }
-                Self::JoinPanic { stream } => {
-                    write!(f, "reader thread panic on {stream:?}")
-                }
+                Self::JoinPanic { stream } => write!(f, "reader thread panic on {stream:?}"),
                 Self::ReaderCompletionTimeout { stream } => {
                     write!(f, "reader completion timed out on {stream:?}")
                 }
@@ -948,9 +963,7 @@ mod os {
                     write!(f, "process group observation failed: {error}")
                 }
                 Self::Wait(error) => write!(f, "wait failed: {error}"),
-                Self::ReapTimeout { pid } => {
-                    write!(f, "child reap deadline expired for pid {pid}")
-                }
+                Self::ReapTimeout { pid } => write!(f, "child reap deadline expired for pid {pid}"),
                 Self::CleanupState { detail } => {
                     write!(f, "invalid child cleanup state: {detail}")
                 }
@@ -962,6 +975,7 @@ mod os {
     impl std::error::Error for ChildSessionError {
         fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
             match self {
+                Self::PartialSpawn { primary, .. } => Some(primary.as_ref()),
                 Self::Spawn(e)
                 | Self::ExecutableIdentity { error: e, .. }
                 | Self::RunLockIo { error: e, .. }
@@ -1993,113 +2007,13 @@ mod os {
 
     // --- Transactional readers and receipt-bearing supervision ------------
 
-    #[derive(Debug, Clone)]
-    enum ReaderFaultKind {
-        BudgetExceeded,
-        Io { message: String },
-    }
-
-    #[derive(Debug, Clone)]
-    struct ReaderFault {
-        stream: StreamKind,
-        kind: ReaderFaultKind,
-    }
-
+    /// Bounded prefixes and total observed bytes for an outer controller.
     #[derive(Debug, Default)]
-    pub(super) struct DrainResult {
-        bytes_written: u64,
-        reached_eof: bool,
-        fault: Option<ReaderFaultKind>,
-    }
-
-    fn notify_fault(
-        sender: &std::sync::mpsc::Sender<ReaderFault>,
-        stream: StreamKind,
-        fault: &ReaderFaultKind,
-    ) {
-        let _ = sender.send(ReaderFault {
-            stream,
-            kind: fault.clone(),
-        });
-    }
-
-    fn drain_stream(
-        mut reader: Box<dyn Read + Send>,
-        mut file: File,
-        budget: u64,
-        stream: StreamKind,
-        sender: std::sync::mpsc::Sender<ReaderFault>,
-    ) -> DrainResult {
-        let mut result = DrainResult::default();
-        let mut discard = false;
-        let mut buffer = [0_u8; 8192];
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => {
-                    result.reached_eof = true;
-                    break;
-                }
-                Ok(read) if discard => {
-                    let _ = read;
-                }
-                Ok(read) => {
-                    let remaining = budget.saturating_sub(result.bytes_written);
-                    let writable = read.min(usize::try_from(remaining).unwrap_or(usize::MAX));
-                    if writable > 0 {
-                        if let Err(error) = file.write_all(&buffer[..writable]) {
-                            let fault = ReaderFaultKind::Io {
-                                message: error.to_string(),
-                            };
-                            notify_fault(&sender, stream, &fault);
-                            result.fault = Some(fault);
-                            discard = true;
-                            continue;
-                        }
-                        result.bytes_written = result
-                            .bytes_written
-                            .saturating_add(u64::try_from(writable).unwrap_or(u64::MAX));
-                    }
-                    if writable < read {
-                        let fault = ReaderFaultKind::BudgetExceeded;
-                        notify_fault(&sender, stream, &fault);
-                        result.fault = Some(fault);
-                        discard = true;
-                    }
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => {
-                    let fault = ReaderFaultKind::Io {
-                        message: error.to_string(),
-                    };
-                    notify_fault(&sender, stream, &fault);
-                    result.fault = Some(fault);
-                    break;
-                }
-            }
-        }
-        if let Err(error) = file.flush() {
-            if result.fault.is_none() {
-                let fault = ReaderFaultKind::Io {
-                    message: error.to_string(),
-                };
-                notify_fault(&sender, stream, &fault);
-                result.fault = Some(fault);
-            }
-        }
-        result
-    }
-
-    fn spawn_reader(
-        name: &str,
-        reader: Box<dyn Read + Send>,
-        file: File,
-        budget: u64,
-        stream: StreamKind,
-        sender: std::sync::mpsc::Sender<ReaderFault>,
-    ) -> io::Result<JoinHandle<DrainResult>> {
-        thread::Builder::new()
-            .name(name.to_string())
-            .spawn(move || drain_stream(reader, file, budget, stream, sender))
+    pub struct CapturedOutput {
+        pub stdout: Vec<u8>,
+        pub stderr: Vec<u8>,
+        pub stdout_bytes_seen: u64,
+        pub stderr_bytes_seen: u64,
     }
 
     /// Detailed receipt from a completed [`ChildSession`] run, including
@@ -2109,6 +2023,7 @@ mod os {
     pub struct ChildSessionReceipt {
         pub exit_code: Option<i32>,
         pub signal: Option<i32>,
+        pub reaped_status: Option<ExitStatus>,
         pub term_sent: bool,
         pub kill_sent: bool,
         pub stdout_bytes: u64,
@@ -2119,6 +2034,30 @@ mod os {
         /// (such as the run timeout) remains the primary failure.
         pub cleanup_diagnostics: Vec<String>,
         pub identity: ProcessIdentity,
+        pub captured: CapturedOutput,
+        /// Live descendants were observed after the exact child exited.
+        pub descendants_observed: bool,
+    }
+
+    impl ChildSessionReceipt {
+        /// No exit, drain or group observation has been obtained for this identity.
+        pub fn unobserved(identity: ProcessIdentity) -> Self {
+            Self {
+                exit_code: None,
+                signal: None,
+                reaped_status: None,
+                term_sent: false,
+                kill_sent: false,
+                stdout_bytes: 0,
+                stderr_bytes: 0,
+                output_drained: false,
+                orphan_check_passed: false,
+                cleanup_diagnostics: Vec::new(),
+                identity,
+                captured: CapturedOutput::default(),
+                descendants_observed: false,
+            }
+        }
     }
 
     /// A post-spawn failure coupled to the trustworthy cleanup receipt.
@@ -2164,7 +2103,8 @@ mod os {
 
     #[derive(Debug)]
     struct WaitOutcome {
-        status: ExitStatus,
+        status: Option<ExitStatus>,
+        descendants_observed: bool,
         term_sent: bool,
         kill_sent: bool,
         group_empty: bool,
@@ -2180,9 +2120,9 @@ mod os {
         protocol: Option<NestedGroupProtocol>,
         registration_active: bool,
         cleanup_complete: bool,
-        reader_faults: std::sync::mpsc::Receiver<ReaderFault>,
-        stdout_handle: Option<JoinHandle<DrainResult>>,
-        stderr_handle: Option<JoinHandle<DrainResult>>,
+        readers: Readers,
+        timeout: Option<Duration>,
+        kill_immediately: bool,
     }
 
     impl ChildSession {
@@ -2232,6 +2172,46 @@ mod os {
             )
         }
 
+        /// Outer tooling retains its immediate SIGKILL policy and file logs.
+        pub fn spawn_outer_logged(
+            command: &mut Command,
+            config: ChildSessionConfig,
+        ) -> Result<Self, ChildSessionError> {
+            let protocol =
+                NestedGroupProtocol::inherited().map_err(ChildSessionError::Registration)?;
+            let handshake = super::monitor_handshake_timeout(config.timeout);
+            let mut session =
+                Self::spawn_prepared(command, config, true, protocol, handshake, None)?;
+            session.kill_immediately = true;
+            Ok(session)
+        }
+
+        /// Capture bounded prefixes without imposing an output quota on build tools.
+        /// An absent timeout keeps the caller's unbounded execution policy; cleanup is bounded.
+        pub fn spawn_outer_captured(
+            command: &mut Command,
+            timeout: Option<Duration>,
+            limit: usize,
+        ) -> Result<Self, ChildSessionError> {
+            let config = ChildSessionConfig {
+                stdout_log: PathBuf::new(),
+                stderr_log: PathBuf::new(),
+                stdout_budget: u64::MAX,
+                stderr_budget: u64::MAX,
+                timeout: timeout.unwrap_or_default(),
+                grace: Duration::from_secs(2),
+                executable_digest: command_executable_digest(command)?,
+            };
+            let protocol =
+                NestedGroupProtocol::inherited().map_err(ChildSessionError::Registration)?;
+            let handshake = super::monitor_handshake_timeout(config.timeout);
+            let mut session =
+                Self::spawn_prepared(command, config, true, protocol, handshake, Some(limit))?;
+            session.timeout = timeout;
+            session.kill_immediately = true;
+            Ok(session)
+        }
+
         /// Spawn under an explicit protocol and monitor handshake budget.
         pub(super) fn spawn_with_handshake(
             mut command: Command,
@@ -2240,184 +2220,71 @@ mod os {
             protocol: Option<NestedGroupProtocol>,
             handshake_timeout: Duration,
         ) -> Result<Self, ChildSessionError> {
-            if !inherit_protocol {
-                for name in [
-                    super::NESTED_GROUP_REGISTRATION_FD_ENV,
-                    super::NESTED_GROUP_TOKEN_READ_FD_ENV,
-                    super::NESTED_GROUP_TOKEN_WRITE_FD_ENV,
-                ] {
-                    command.env_remove(name);
-                }
-            }
-            let stdout_file = create_log(&config.stdout_log, StreamKind::Stdout)?;
-            let stderr_file = match create_log(&config.stderr_log, StreamKind::Stderr) {
-                Ok(file) => file,
-                Err(error) => {
-                    drop(stdout_file);
-                    let _ = std::fs::remove_file(&config.stdout_log);
-                    return Err(error);
-                }
-            };
-            command
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .stdin(Stdio::null());
-            // Captured by value so the hook only reads a Copy Duration after fork.
-            let exchange_timeout = handshake_timeout;
-            // The hook is async-signal-safe: setsid, setpgid, fcntl, poll, read,
-            // write and getpid. A nested group stays in the monitor's session so
-            // its stable anchor can join; an unmonitored child owns a session.
-            sys::process::before_exec(&mut command, move || {
-                let Some(protocol) = protocol else {
-                    return sys::process::start_new_session();
-                };
-                sys::process::start_new_process_group()?;
-                protocol.make_inheritable()?;
-                let pid = sys::Pid::try_from(std::process::id())
-                    .map_err(|_| io::Error::from_raw_os_error(sys::EOVERFLOW))?;
-                protocol.exchange_with_timeout(
-                    NestedGroupOperation::Register,
-                    pid,
-                    exchange_timeout,
-                )?;
-                if !inherit_protocol {
-                    for descriptor in protocol.descriptors() {
-                        sys::fd::set_close_on_exec(descriptor)?;
-                    }
-                }
-                Ok(())
-            });
-            let mut child = super::spawn_guarded(&mut command).map_err(ChildSessionError::Spawn)?;
-            let pid = child.id();
-            let monitor_anchor_pid = match protocol {
-                Some(protocol) => match sys::Pid::try_from(pid)
-                    .map_err(|_| io::Error::other("child PID does not fit pid_t"))
-                    .and_then(|pid| {
-                        protocol.exchange_with_timeout(
-                            NestedGroupOperation::Query,
-                            pid,
-                            exchange_timeout,
-                        )
-                    }) {
-                    Ok(anchor_pid) => Some(anchor_pid),
-                    Err(error) => {
-                        let mut anchor = LeaderAnchor::new(pid, None)?;
-                        let cleanup = cleanup_partial_spawn(
-                            &mut child,
-                            &mut anchor,
-                            Some(protocol),
-                            config.grace,
-                            None,
-                            None,
-                        );
-                        return Err(cleanup
-                            .err()
-                            .unwrap_or(ChildSessionError::Registration(error)));
-                    }
-                },
-                None => None,
-            };
-            let mut anchor = LeaderAnchor::new(pid, monitor_anchor_pid)?;
-            let identity = match capture_identity(pid, &config.executable_digest) {
-                Ok(identity) => identity,
-                Err(error) => {
-                    let cleanup = cleanup_partial_spawn(
-                        &mut child,
-                        &mut anchor,
-                        protocol,
-                        config.grace,
-                        None,
-                        None,
-                    );
-                    return Err(cleanup.err().unwrap_or(error));
-                }
-            };
-            let stdout = match child.stdout.take() {
-                Some(stdout) => stdout,
-                None => {
-                    let cleanup = cleanup_partial_spawn(
-                        &mut child,
-                        &mut anchor,
-                        protocol,
-                        config.grace,
-                        None,
-                        None,
-                    );
-                    return Err(cleanup.err().unwrap_or(ChildSessionError::PipeUnavailable {
-                        stream: StreamKind::Stdout,
-                    }));
-                }
-            };
-            let stderr = match child.stderr.take() {
-                Some(stderr) => stderr,
-                None => {
-                    let cleanup = cleanup_partial_spawn(
-                        &mut child,
-                        &mut anchor,
-                        protocol,
-                        config.grace,
-                        None,
-                        None,
-                    );
-                    return Err(cleanup.err().unwrap_or(ChildSessionError::PipeUnavailable {
-                        stream: StreamKind::Stderr,
-                    }));
-                }
-            };
-            let (sender, receiver) = std::sync::mpsc::channel();
-            let stdout_handle = spawn_reader(
-                "uqm-child-stdout",
-                Box::new(stdout),
-                stdout_file,
-                config.stdout_budget,
-                StreamKind::Stdout,
-                sender.clone(),
+            Self::spawn_prepared(
+                &mut command,
+                config,
+                inherit_protocol,
+                protocol,
+                handshake_timeout,
+                None,
             )
-            .map_err(|error| {
-                let original = ChildSessionError::ReaderStart {
-                    stream: StreamKind::Stdout,
+        }
+
+        fn spawn_prepared(
+            command: &mut Command,
+            config: ChildSessionConfig,
+            inherit_protocol: bool,
+            protocol: Option<NestedGroupProtocol>,
+            handshake_timeout: Duration,
+            capture_limit: Option<usize>,
+        ) -> Result<Self, ChildSessionError> {
+            let (stdout_file, stderr_file) = output_targets(&config, capture_limit)?;
+            prepare_child_command(command, inherit_protocol, protocol, handshake_timeout);
+            let exchange_timeout = handshake_timeout;
+            let mut child = super::spawn_guarded(command).map_err(ChildSessionError::Spawn)?;
+            let pid = child.id();
+            let mut anchor = LeaderAnchor::new(pid, None)?;
+            let mut readers = Readers::new();
+            let admission = (|| {
+                if let Some(protocol) = protocol {
+                    anchor.monitor_anchor_pid = Some(
+                        protocol
+                            .exchange_with_timeout(
+                                NestedGroupOperation::Query,
+                                anchor.pid,
+                                exchange_timeout,
+                            )
+                            .map_err(ChildSessionError::Registration)?,
+                    );
+                }
+                let identity = capture_identity(pid, &config.executable_digest)?;
+                readers.start(&mut child, stdout_file, stderr_file, &config)?;
+                Ok(identity)
+            })();
+            let identity = admission.map_err(|error| {
+                partial_spawn_failure(
                     error,
-                };
-                cleanup_partial_spawn(&mut child, &mut anchor, protocol, config.grace, None, None)
-                    .err()
-                    .unwrap_or(original)
-            })?;
-            let stderr_handle = match spawn_reader(
-                "uqm-child-stderr",
-                Box::new(stderr),
-                stderr_file,
-                config.stderr_budget,
-                StreamKind::Stderr,
-                sender,
-            ) {
-                Ok(handle) => handle,
-                Err(error) => {
-                    let original = ChildSessionError::ReaderStart {
-                        stream: StreamKind::Stderr,
-                        error,
-                    };
-                    let cleanup = cleanup_partial_spawn(
+                    cleanup_partial_spawn(
                         &mut child,
                         &mut anchor,
                         protocol,
                         config.grace,
-                        Some(stdout_handle),
-                        None,
-                    );
-                    return Err(cleanup.err().unwrap_or(original));
-                }
-            };
+                        readers.stdout.take(),
+                        readers.stderr.take(),
+                    ),
+                )
+            })?;
             Ok(Self {
                 child,
                 anchor,
                 identity,
+                timeout: Some(config.timeout),
+                kill_immediately: false,
                 config,
                 protocol,
                 registration_active: protocol.is_some(),
                 cleanup_complete: false,
-                reader_faults: receiver,
-                stdout_handle: Some(stdout_handle),
-                stderr_handle: Some(stderr_handle),
+                readers,
             })
         }
 
@@ -2476,7 +2343,7 @@ mod os {
             F: FnMut(&ProcessIdentity) -> io::Result<()>,
             W: ChangeWait,
         {
-            let event = self.wait_for_event(self.config.timeout, &mut observer, wake, now);
+            let event = self.wait_for_event(&mut observer, wake, now);
             let outcome = match event {
                 Ok(SupervisorEvent::Exited) => self.teardown_and_reap(None),
                 Ok(SupervisorEvent::Reader(fault)) => {
@@ -2493,18 +2360,29 @@ mod os {
             let reader_deadline = Instant::now()
                 .checked_add(self.config.grace)
                 .unwrap_or_else(Instant::now);
-            let stdout = join_reader_until(
-                self.stdout_handle.take(),
+            let mut stdout = join_reader_until(
+                self.readers.stdout.take(),
                 StreamKind::Stdout,
                 reader_deadline,
             );
-            let stderr = join_reader_until(
-                self.stderr_handle.take(),
+            let mut stderr = join_reader_until(
+                self.readers.stderr.take(),
                 StreamKind::Stderr,
                 reader_deadline,
             );
             let orphan_ok = outcome.group_empty;
-            let receipt = receipt_from(&self.identity, &outcome, &stdout, &stderr, orphan_ok);
+            let mut receipt = receipt_from(
+                &self.identity,
+                &outcome,
+                &mut stdout,
+                &mut stderr,
+                orphan_ok,
+            );
+            for (stream, result) in [(StreamKind::Stdout, &stdout), (StreamKind::Stderr, &stderr)] {
+                if let Some(error) = reader_failure(result, stream) {
+                    receipt.cleanup_diagnostics.push(error.to_string());
+                }
+            }
             let failure = outcome
                 .failure
                 .or_else(|| reader_error(stdout, StreamKind::Stdout))
@@ -2525,23 +2403,32 @@ mod os {
 
         fn wait_for_event(
             &mut self,
-            duration: Duration,
             observer: &mut impl FnMut(&ProcessIdentity) -> io::Result<()>,
             wake: &impl ChangeWait,
             now: &impl Fn() -> Instant,
         ) -> Result<SupervisorEvent, ChildSessionError> {
-            let deadline = now()
-                .checked_add(duration)
-                .ok_or_else(|| ChildSessionError::Wait(io::Error::other("deadline overflow")))?;
+            let deadline = self
+                .timeout
+                .map(|duration| {
+                    now().checked_add(duration).ok_or_else(|| {
+                        ChildSessionError::Wait(io::Error::other("deadline overflow"))
+                    })
+                })
+                .transpose()?;
             loop {
-                if now() >= deadline {
+                if self.kill_immediately
+                    && self.anchor.observe().map_err(ChildSessionError::Wait)?
+                {
+                    return Ok(SupervisorEvent::Exited);
+                }
+                if deadline.is_some_and(|deadline| now() >= deadline) {
                     return Ok(SupervisorEvent::Deadline);
                 }
                 observer(&self.identity).map_err(ChildSessionError::Observer)?;
-                if now() >= deadline {
+                if deadline.is_some_and(|deadline| now() >= deadline) {
                     return Ok(SupervisorEvent::Deadline);
                 }
-                match self.reader_faults.try_recv() {
+                match self.readers.faults.try_recv() {
                     Ok(fault) => return Ok(SupervisorEvent::Reader(fault)),
                     Err(std::sync::mpsc::TryRecvError::Disconnected)
                     | Err(std::sync::mpsc::TryRecvError::Empty) => {}
@@ -2550,10 +2437,13 @@ mod os {
                     Ok(true) => return Ok(SupervisorEvent::Exited),
                     Ok(false) => {
                         let now = now();
-                        if now >= deadline {
+                        if deadline.is_some_and(|deadline| now >= deadline) {
                             return Ok(SupervisorEvent::Deadline);
                         }
-                        match wake.wait(poll_timeout(deadline, now, wake.poll_interval())) {
+                        let timeout = deadline.map_or(wake.poll_interval(), |deadline| {
+                            poll_timeout(deadline, now, wake.poll_interval())
+                        });
+                        match wake.wait(timeout) {
                             Ok(()) => {}
                             Err(error) if error.kind() == ErrorKind::Interrupted => {}
                             Err(error) => return Err(ChildSessionError::Observer(error)),
@@ -2575,15 +2465,35 @@ mod os {
                 );
             }
 
+            let descendants_observed = self.anchor.observed
+                && match process_group_has_other_members(
+                    self.identity.pid,
+                    &self.anchor.ignored_group_members(),
+                ) {
+                    Ok(present) => present,
+                    Err(error) => {
+                        remember_cleanup_failure(
+                            &mut failure,
+                            &mut cleanup_diagnostics,
+                            ChildSessionError::ProcessGroup(error),
+                        );
+                        false
+                    }
+                };
             let mut term_sent = false;
-            self.record_group_signal(
-                sys::SIGTERM,
-                &mut term_sent,
-                &mut failure,
-                &mut cleanup_diagnostics,
-            );
-
-            let mut group_empty = self.record_group_wait(&mut failure, &mut cleanup_diagnostics);
+            if !self.kill_immediately {
+                self.record_group_signal(
+                    sys::SIGTERM,
+                    &mut term_sent,
+                    &mut failure,
+                    &mut cleanup_diagnostics,
+                );
+            }
+            let mut group_empty = if self.kill_immediately {
+                self.anchor.observed && !descendants_observed && failure.is_none()
+            } else {
+                self.record_group_wait(&mut failure, &mut cleanup_diagnostics)
+            };
             let mut kill_sent = false;
             if !group_empty {
                 self.record_group_signal(
@@ -2610,21 +2520,7 @@ mod os {
                 }
             }
 
-            let status =
-                match reap_until(&mut self.child, self.anchor.pid as u32, self.config.grace) {
-                    Ok(status) => {
-                        if let Err(error) = self.anchor.mark_reaped() {
-                            remember_cleanup_failure(&mut failure, &mut cleanup_diagnostics, error);
-                        } else {
-                            self.cleanup_complete = true;
-                        }
-                        status
-                    }
-                    Err(error) => {
-                        remember_cleanup_failure(&mut failure, &mut cleanup_diagnostics, error);
-                        synthetic_failure_status()
-                    }
-                };
+            let status = self.record_reap(&mut failure, &mut cleanup_diagnostics);
 
             if matches!(failure, Some(ChildSessionError::Timeout { .. })) {
                 failure = Some(ChildSessionError::Timeout {
@@ -2634,11 +2530,33 @@ mod os {
             }
             WaitOutcome {
                 status,
+                descendants_observed,
                 term_sent,
                 kill_sent,
                 group_empty,
                 failure,
                 cleanup_diagnostics,
+            }
+        }
+
+        fn record_reap(
+            &mut self,
+            failure: &mut Option<ChildSessionError>,
+            cleanup_diagnostics: &mut Vec<String>,
+        ) -> Option<ExitStatus> {
+            match reap_until(&mut self.child, self.anchor.pid as u32, self.config.grace) {
+                Ok(status) => {
+                    if let Err(error) = self.anchor.mark_reaped() {
+                        remember_cleanup_failure(failure, cleanup_diagnostics, error);
+                    } else {
+                        self.cleanup_complete = true;
+                    }
+                    Some(status)
+                }
+                Err(error) => {
+                    remember_cleanup_failure(failure, cleanup_diagnostics, error);
+                    None
+                }
             }
         }
 
@@ -2746,6 +2664,65 @@ mod os {
         }
     }
 
+    fn prepare_child_command(
+        command: &mut Command,
+        inherit_protocol: bool,
+        protocol: Option<NestedGroupProtocol>,
+        handshake_timeout: Duration,
+    ) {
+        if !inherit_protocol {
+            for name in [
+                super::NESTED_GROUP_REGISTRATION_FD_ENV,
+                super::NESTED_GROUP_TOKEN_READ_FD_ENV,
+                super::NESTED_GROUP_TOKEN_WRITE_FD_ENV,
+            ] {
+                command.env_remove(name);
+            }
+        }
+        command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
+        // Captured by value so the hook only reads a Copy Duration after fork.
+        let exchange_timeout = handshake_timeout;
+        // The hook is async-signal-safe: setsid, setpgid, fcntl, poll, read,
+        // write and getpid. A nested group stays in the monitor's session so
+        // its stable anchor can join; an unmonitored child owns a session.
+        sys::process::before_exec(command, move || {
+            let Some(protocol) = protocol else {
+                return sys::process::start_new_session();
+            };
+            sys::process::start_new_process_group()?;
+            protocol.make_inheritable()?;
+            let pid = sys::Pid::try_from(std::process::id())
+                .map_err(|_| io::Error::from_raw_os_error(sys::EOVERFLOW))?;
+            protocol.exchange_with_timeout(
+                NestedGroupOperation::Register,
+                pid,
+                exchange_timeout,
+            )?;
+            if !inherit_protocol {
+                for descriptor in protocol.descriptors() {
+                    sys::fd::set_close_on_exec(descriptor)?;
+                }
+            }
+            Ok(())
+        });
+    }
+
+    fn partial_spawn_failure(
+        primary: ChildSessionError,
+        cleanup: Result<(), ChildSessionError>,
+    ) -> ChildSessionError {
+        match cleanup {
+            Ok(()) => primary,
+            Err(cleanup) => ChildSessionError::PartialSpawn {
+                primary: Box::new(primary),
+                cleanup: Box::new(cleanup),
+            },
+        }
+    }
+
     fn remember_cleanup_failure(
         failure: &mut Option<ChildSessionError>,
         cleanup_diagnostics: &mut Vec<String>,
@@ -2755,18 +2732,17 @@ mod os {
         remember_first_failure(failure, error);
     }
 
+    fn append_cleanup_failure(failure: &mut Option<ChildSessionError>, error: ChildSessionError) {
+        *failure = Some(match failure.take() {
+            None => error,
+            Some(first) => partial_spawn_failure(first, Err(error)),
+        });
+    }
+
     fn remember_first_failure(failure: &mut Option<ChildSessionError>, error: ChildSessionError) {
         if failure.is_none() {
             *failure = Some(error);
         }
-    }
-
-    fn create_log(path: &Path, stream: StreamKind) -> Result<File, ChildSessionError> {
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|error| ChildSessionError::LogOpen { stream, error })
     }
 
     pub(super) fn cleanup_partial_spawn(
@@ -2809,18 +2785,18 @@ mod os {
                 Ok(has_others) => group_empty = !has_others,
                 Err(error) if error.raw_os_error() == Some(sys::ESRCH) => group_empty = true,
                 Err(error) => {
-                    remember_first_failure(&mut failure, ChildSessionError::ProcessGroup(error));
+                    append_cleanup_failure(&mut failure, ChildSessionError::ProcessGroup(error));
                 }
             },
             Ok(_) => {}
             Err(error) => {
-                remember_first_failure(&mut failure, ChildSessionError::Observer(error));
+                append_cleanup_failure(&mut failure, ChildSessionError::Observer(error));
             }
         }
         if !group_empty {
             if let Err(error) = signal_process_group(anchor, sys::SIGTERM) {
                 if error.raw_os_error() != Some(sys::ESRCH) {
-                    remember_first_failure(
+                    append_cleanup_failure(
                         &mut failure,
                         ChildSessionError::Signal {
                             pid: process_group,
@@ -2839,7 +2815,7 @@ mod os {
             ) {
                 Ok(empty) => empty,
                 Err(error) => {
-                    remember_first_failure(&mut failure, ChildSessionError::ProcessGroup(error));
+                    append_cleanup_failure(&mut failure, ChildSessionError::ProcessGroup(error));
                     false
                 }
             };
@@ -2847,7 +2823,7 @@ mod os {
         if !group_empty {
             if let Err(error) = signal_process_group(anchor, sys::SIGKILL) {
                 if error.raw_os_error() != Some(sys::ESRCH) {
-                    remember_first_failure(
+                    append_cleanup_failure(
                         &mut failure,
                         ChildSessionError::Signal {
                             pid: process_group,
@@ -2866,7 +2842,7 @@ mod os {
             ) {
                 Ok(empty) => empty,
                 Err(error) => {
-                    remember_first_failure(&mut failure, ChildSessionError::ProcessGroup(error));
+                    append_cleanup_failure(&mut failure, ChildSessionError::ProcessGroup(error));
                     false
                 }
             };
@@ -2874,27 +2850,20 @@ mod os {
         let reader_deadline = Instant::now()
             .checked_add(grace)
             .unwrap_or_else(Instant::now);
-        if let Some(stdout) = stdout {
-            if let Err(error) = join_reader_until(Some(stdout), StreamKind::Stdout, reader_deadline)
-            {
-                remember_first_failure(&mut failure, error);
-            }
-        }
-        if let Some(stderr) = stderr {
-            if let Err(error) = join_reader_until(Some(stderr), StreamKind::Stderr, reader_deadline)
-            {
-                remember_first_failure(&mut failure, error);
+        for (handle, stream) in [(stdout, StreamKind::Stdout), (stderr, StreamKind::Stderr)] {
+            if let Some(error) = partial_reader_error(handle, stream, reader_deadline) {
+                append_cleanup_failure(&mut failure, error);
             }
         }
         if group_empty {
             if let Some(protocol) = protocol {
                 if let Err(error) = protocol.exchange(NestedGroupOperation::Unregister, anchor.pid)
                 {
-                    remember_first_failure(&mut failure, ChildSessionError::Registration(error));
+                    append_cleanup_failure(&mut failure, ChildSessionError::Registration(error));
                 }
             }
         } else {
-            remember_first_failure(
+            append_cleanup_failure(
                 &mut failure,
                 ChildSessionError::Orphan { pid: process_group },
             );
@@ -2902,10 +2871,10 @@ mod os {
         match reap_until(child, anchor.pid as u32, grace) {
             Ok(_) => {
                 if let Err(error) = anchor.mark_reaped() {
-                    remember_first_failure(&mut failure, error);
+                    append_cleanup_failure(&mut failure, error);
                 }
             }
-            Err(error) => remember_first_failure(&mut failure, error),
+            Err(error) => append_cleanup_failure(&mut failure, error),
         }
         failure.map_or(Ok(()), Err)
     }
@@ -2970,66 +2939,18 @@ mod os {
         }
     }
 
-    #[cfg(unix)]
-    fn synthetic_failure_status() -> ExitStatus {
-        use std::os::unix::process::ExitStatusExt;
-        ExitStatus::from_raw(1 << 8)
-    }
-
-    fn fault_error(fault: ReaderFault) -> ChildSessionError {
-        match fault.kind {
-            ReaderFaultKind::BudgetExceeded => ChildSessionError::BudgetExceeded {
-                stream: fault.stream,
-            },
-            ReaderFaultKind::Io { message } => ChildSessionError::Reader {
-                stream: fault.stream,
-                error: io::Error::other(message),
-            },
-        }
-    }
-
-    fn join_reader_until(
-        handle: Option<JoinHandle<DrainResult>>,
-        stream: StreamKind,
-        deadline: Instant,
-    ) -> Result<DrainResult, ChildSessionError> {
-        let handle = handle.ok_or(ChildSessionError::JoinPanic { stream })?;
-        while !handle.is_finished() {
-            if Instant::now() >= deadline {
-                return Err(ChildSessionError::ReaderCompletionTimeout { stream });
-            }
-            thread::sleep(
-                Duration::from_millis(5).min(deadline.saturating_duration_since(Instant::now())),
-            );
-        }
-        handle
-            .join()
-            .map_err(|_| ChildSessionError::JoinPanic { stream })
-    }
-
-    fn reader_error(
-        result: Result<DrainResult, ChildSessionError>,
-        stream: StreamKind,
-    ) -> Option<ChildSessionError> {
-        match result {
-            Err(error) => Some(error),
-            Ok(result) => result
-                .fault
-                .map(|kind| fault_error(ReaderFault { stream, kind })),
-        }
-    }
-
     fn receipt_from(
         identity: &ProcessIdentity,
         outcome: &WaitOutcome,
-        stdout: &Result<DrainResult, ChildSessionError>,
-        stderr: &Result<DrainResult, ChildSessionError>,
+        stdout: &mut Result<DrainResult, ChildSessionError>,
+        stderr: &mut Result<DrainResult, ChildSessionError>,
         orphan_ok: bool,
     ) -> ChildSessionReceipt {
         use std::os::unix::process::ExitStatusExt;
         ChildSessionReceipt {
-            exit_code: outcome.status.code(),
-            signal: outcome.status.signal(),
+            reaped_status: outcome.status,
+            exit_code: outcome.status.and_then(|status| status.code()),
+            signal: outcome.status.and_then(|status| status.signal()),
             term_sent: outcome.term_sent,
             kill_sent: outcome.kill_sent,
             stdout_bytes: stdout.as_ref().map_or(0, |result| result.bytes_written),
@@ -3039,6 +2960,19 @@ mod os {
             orphan_check_passed: orphan_ok,
             cleanup_diagnostics: outcome.cleanup_diagnostics.clone(),
             identity: identity.clone(),
+            captured: CapturedOutput {
+                stdout_bytes_seen: stdout.as_ref().map_or(0, |result| result.bytes_written),
+                stderr_bytes_seen: stderr.as_ref().map_or(0, |result| result.bytes_written),
+                stdout: stdout.as_mut().map_or_else(
+                    |_| Vec::new(),
+                    |result| std::mem::take(&mut result.captured),
+                ),
+                stderr: stderr.as_mut().map_or_else(
+                    |_| Vec::new(),
+                    |result| std::mem::take(&mut result.captured),
+                ),
+            },
+            descendants_observed: outcome.descendants_observed,
         }
     }
 
@@ -3051,12 +2985,12 @@ mod os {
                 .checked_add(self.config.grace)
                 .unwrap_or_else(Instant::now);
             let _ = join_reader_until(
-                self.stdout_handle.take(),
+                self.readers.stdout.take(),
                 StreamKind::Stdout,
                 reader_deadline,
             );
             let _ = join_reader_until(
-                self.stderr_handle.take(),
+                self.readers.stderr.take(),
                 StreamKind::Stderr,
                 reader_deadline,
             );
@@ -3442,7 +3376,8 @@ mod os {
             );
 
             let outcome = WaitOutcome {
-                status: ExitStatus::from_raw(sys::SIGKILL),
+                status: Some(ExitStatus::from_raw(sys::SIGKILL)),
+                descendants_observed: false,
                 term_sent: true,
                 kill_sent: true,
                 group_empty,
@@ -3460,7 +3395,13 @@ mod os {
                     ..DrainResult::default()
                 })
             };
-            let receipt = receipt_from(&identity, &outcome, &drained(), &drained(), group_empty);
+            let receipt = receipt_from(
+                &identity,
+                &outcome,
+                &mut drained(),
+                &mut drained(),
+                group_empty,
+            );
             assert!(!receipt.orphan_check_passed);
             assert!(receipt.output_drained);
             assert_eq!(receipt.signal, Some(sys::SIGKILL));
@@ -3527,6 +3468,55 @@ mod os {
         }
 
         #[test]
+        fn missing_reap_observation_cannot_become_an_exit_code() {
+            let identity = ProcessIdentity {
+                pid: 123,
+                start_time: "test".into(),
+                executable_digest: "test".into(),
+            };
+            let outcome = WaitOutcome {
+                status: None,
+                descendants_observed: false,
+                term_sent: false,
+                kill_sent: true,
+                group_empty: false,
+                failure: Some(ChildSessionError::ReapTimeout { pid: 123 }),
+                cleanup_diagnostics: vec!["reap failed".into()],
+            };
+            let receipt = receipt_from(
+                &identity,
+                &outcome,
+                &mut Err(ChildSessionError::JoinPanic {
+                    stream: StreamKind::Stdout,
+                }),
+                &mut Err(ChildSessionError::ReaderCompletionTimeout {
+                    stream: StreamKind::Stderr,
+                }),
+                false,
+            );
+            assert!(receipt.reaped_status.is_none());
+            assert!(receipt.exit_code.is_none() && receipt.signal.is_none());
+            assert!(!receipt.orphan_check_passed && !receipt.output_drained);
+            assert_eq!(receipt.cleanup_diagnostics, ["reap failed"]);
+        }
+
+        #[test]
+        fn partial_reader_admission_keeps_first_failure_and_cleanup_diagnostic() {
+            let error = partial_spawn_failure(
+                ChildSessionError::ReaderStart {
+                    stream: StreamKind::Stderr,
+                    error: io::Error::other("injected reader admission failure"),
+                },
+                Err(ChildSessionError::ReapTimeout { pid: 123 }),
+            );
+            let detail = error.to_string();
+            assert!(detail.starts_with(
+                "reader thread start failed for Stderr: injected reader admission failure"
+            ));
+            assert!(detail.contains("cleanup: child reap deadline expired for pid 123"));
+        }
+
+        #[test]
         fn reaped_anchor_observation_returns_io_failure() {
             let mut anchor = LeaderAnchor {
                 pid: 123,
@@ -3548,10 +3538,55 @@ pub use os::process_start_micros;
 #[cfg(unix)]
 pub use os::{
     capture_identity, clear_owned_process, command_executable_digest, ownership_artifacts,
-    record_owned_process, scan_stale_owned_process, verified_command_digest, ChildSession,
-    ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt,
+    record_owned_process, scan_stale_owned_process, verified_command_digest, CapturedOutput,
+    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt,
     OwnedProcessRecord, RunLock, RunLockRecovery, StaleProcessScan, StreamKind,
 };
+
+/// Non-Unix outer tooling retains its leader-only exit observation. It makes
+/// no process-group or pipe-drain claim; those capabilities belong to the Unix supervisor.
+#[cfg(any(not(unix), test))]
+pub fn finish_outer_child(
+    mut child: std::process::Child,
+    budget: std::time::Duration,
+) -> Result<(std::process::ExitStatus, bool), String> {
+    let started = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok((status, false)),
+            Ok(None) => (),
+            Err(error) => {
+                let cleanup = terminate_outer_child(&mut child);
+                return Err(match cleanup {
+                    Ok(_) => format!("poll replay process: {error}"),
+                    Err(cleanup) => format!("poll replay process: {error}; cleanup: {cleanup}"),
+                });
+            }
+        }
+        if started.elapsed() >= budget {
+            return terminate_outer_child(&mut child).map(|status| (status, true));
+        }
+        std::thread::sleep(
+            std::time::Duration::from_millis(5).min(budget.saturating_sub(started.elapsed())),
+        );
+    }
+}
+
+#[cfg(any(not(unix), test))]
+fn terminate_outer_child(
+    child: &mut std::process::Child,
+) -> Result<std::process::ExitStatus, String> {
+    let signal_error = child.kill().err();
+    let started = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) if started.elapsed() < std::time::Duration::from_secs(2) => (),
+            result => return Err(format!("process {} failed to reap after kill (kill_error={signal_error:?}, wait={result:?})", child.id())),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
 
 // ===========================================================================
 //  Unit tests
@@ -4025,6 +4060,25 @@ mod os_tests {
     use std::process::Command;
     use std::time::Duration;
     use tempfile::TempDir;
+
+    #[test]
+    fn leader_only_outer_completion_preserves_non_unix_exit_and_timeout_policy() {
+        let child = Command::new("sh").args(["-c", "exit 7"]).spawn().unwrap();
+        let (status, timed_out) = finish_outer_child(child, Duration::from_secs(5)).unwrap();
+        assert_eq!(status.code(), Some(7));
+        assert!(!timed_out);
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let (status, timed_out) = finish_outer_child(child, Duration::from_millis(20)).unwrap();
+        assert!(!status.success());
+        assert!(timed_out);
+    }
+
+    fn first_error(mut error: &ChildSessionError) -> &ChildSessionError {
+        while let ChildSessionError::PartialSpawn { primary, .. } = error {
+            error = primary;
+        }
+        error
+    }
 
     #[test]
     fn linux_stat_parser_handles_spaces_parentheses_and_field_22() {
@@ -4789,9 +4843,15 @@ mod os_tests {
         )
         .expect_err("inspection failure must be retained");
         assert!(
-            matches!(error, super::os::ChildSessionError::ProcessGroup(_)),
+            matches!(
+                first_error(&error),
+                super::os::ChildSessionError::ProcessGroup(_)
+            ),
             "the retained failure must be the inspection error, got {error:?}"
         );
+        assert!(error
+            .to_string()
+            .contains("cleanup: process group still has members"));
     }
 
     fn assert_exact_child_reaped(pid: u32) {
@@ -4876,9 +4936,15 @@ mod os_tests {
         )
         .expect_err("inspection failure must be retained");
         assert!(
-            matches!(error, super::os::ChildSessionError::ProcessGroup(_)),
+            matches!(
+                first_error(&error),
+                super::os::ChildSessionError::ProcessGroup(_)
+            ),
             "the retained failure must be the inspection error, got {error:?}"
         );
+        assert!(error
+            .to_string()
+            .contains("cleanup: process group still has members"));
         assert_exact_child_reaped(pid);
     }
 

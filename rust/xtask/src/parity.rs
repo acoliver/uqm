@@ -1,4 +1,4 @@
-//! Release replay parity. The xtask never links the game or writes committed goldens.
+//! Release replay parity. The xtask supervises a separate game and never writes committed goldens.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 #[cfg(unix)]
 fn termination_does_not_need_another_process() {
-    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    use std::os::unix::process::ExitStatusExt;
 
     const HELPER: &str = "UQM_WATCHDOG_PROCESS_LIMIT_HELPER";
     if std::env::var_os(HELPER).is_none() {
@@ -25,14 +25,19 @@ fn termination_does_not_need_another_process() {
         return;
     }
 
-    let mut child = Command::new("sleep")
-        .arg("30")
-        .process_group(0)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    let command = Command::new("sleep");
+    let config = ChildSessionConfig {
+        stdout_log: logs.path().join("out"),
+        stderr_log: logs.path().join("err"),
+        stdout_budget: u64::MAX,
+        stderr_budget: u64::MAX,
+        timeout: Duration::from_millis(20),
+        grace: Duration::from_secs(2),
+        executable_digest: command_executable_digest(&command).unwrap(),
+    };
+    let session =
+        ChildSession::spawn_outer_logged(Command::new("sleep").arg("30"), config).unwrap();
     let limited = rustix::process::setrlimit(
         rustix::process::Resource::Nproc,
         rustix::process::Rlimit {
@@ -44,14 +49,15 @@ fn termination_does_not_need_another_process() {
         .arg("--list")
         .status();
     let started = Instant::now();
-    let result = terminate(&mut child);
+    let failure = session.finish().unwrap_err();
     let elapsed = started.elapsed();
-    // Clean up even when the implementation still tries to spawn /bin/kill.
-    let _ = child.kill();
-    let _ = child.wait();
 
     assert_eq!(limited, Ok(()));
     assert_eq!(extra.unwrap_err().raw_os_error(), Some(libc::EAGAIN));
-    assert_eq!(result.unwrap().signal(), Some(libc::SIGKILL));
+    assert_eq!(
+        failure.receipt.reaped_status.unwrap().signal(),
+        Some(libc::SIGKILL)
+    );
+    assert!(failure.receipt.orphan_check_passed && failure.receipt.output_drained);
     assert!(elapsed < Duration::from_secs(3));
 }
