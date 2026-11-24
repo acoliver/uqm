@@ -1,0 +1,57 @@
+{
+  "landed-main": {
+    "commit": "ebe362e5109374379e355d4df9ac4628111e8f7d",
+    "preimage_sha256": "4a0ed73af1b32156652b19e6ca7b01520cbf8759d60f020623cab02958463d96",
+    "patched_sha256": "9697aafaac1ab8eb559189c2758c648c10b3f10c61a56a8661fe694dc3444be2",
+    "exact_expected_single_deletion": true,
+    "application": [
+      {
+        "args": [
+          "--check",
+          "--verbose",
+          "--whitespace=error-all"
+        ],
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "Checking patch rust/crates/engine/src/sound/mod.rs...\n"
+      },
+      {
+        "args": [
+          "--verbose",
+          "--whitespace=error-all"
+        ],
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "Checking patch rust/crates/engine/src/sound/mod.rs...\nApplied patch rust/crates/engine/src/sound/mod.rs cleanly.\n"
+      }
+    ]
+  },
+  "published-1033": {
+    "commit": "d3b5b628da84dcbc8527ca58e0ed313003a59938",
+    "preimage_sha256": "4a0ed73af1b32156652b19e6ca7b01520cbf8759d60f020623cab02958463d96",
+    "patched_sha256": "9697aafaac1ab8eb559189c2758c648c10b3f10c61a56a8661fe694dc3444be2",
+    "exact_expected_single_deletion": true,
+    "application": [
+      {
+        "args": [
+          "--check",
+          "--verbose",
+          "--whitespace=error-all"
+        ],
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "Checking patch rust/crates/engine/src/sound/mod.rs...\n"
+      },
+      {
+        "args": [
+          "--verbose",
+          "--whitespace=error-all"
+        ],
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "Checking patch rust/crates/engine/src/sound/mod.rs...\nApplied patch rust/crates/engine/src/sound/mod.rs cleanly.\n"
+      }
+    ]
+  },
+  "preimages_byte_identical": true
+}

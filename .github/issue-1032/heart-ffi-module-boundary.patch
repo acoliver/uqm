@@ -1,0 +1,11 @@
+diff --git a/rust/crates/engine/src/sound/mod.rs b/rust/crates/engine/src/sound/mod.rs
+--- a/rust/crates/engine/src/sound/mod.rs
++++ b/rust/crates/engine/src/sound/mod.rs
+@@ -28,7 +28,6 @@
+ pub mod audio_init;
+ pub mod control;
+ pub mod fileinst;
+-#[cfg(feature = "audio_heart")]
+ pub mod heart_ffi;
+ pub mod music;
+ pub mod sfx;
