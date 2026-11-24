@@ -9,13 +9,27 @@ use uqm_engine::{
 
 struct NoLifecycle;
 impl RestartHost for NoLifecycle {
-    fn melee(&mut self, _: &mut Cx<'_>, _: &mut Io<'_>) {
+    fn setup(
+        &mut self,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
+        _: uqm_engine::graphics::context::ContextLease,
+        _: uqm_engine::graphics::font::FontLease,
+    ) {
+        panic!("unexpected setup");
+    }
+    fn melee(&mut self, _: &mut uqm_engine::battle::Cx<'_>, _: &mut uqm_engine::observe::Io<'_>) {
         panic!("unexpected melee request");
     }
-    fn credits(&mut self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool) {
+    fn credits(
+        &mut self,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
+        _: bool,
+    ) {
         panic!("unexpected credits request");
     }
-    fn free_game_data(&mut self, _: &mut Cx<'_>) {
+    fn free_game_data(&mut self, _: &mut uqm_engine::battle::Cx<'_>) {
         panic!("unexpected campaign teardown");
     }
 }

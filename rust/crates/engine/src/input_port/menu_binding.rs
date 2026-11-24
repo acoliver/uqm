@@ -42,12 +42,15 @@ pub struct MenuBindingResult {
 ///
 /// MUST be called from an initialized child after the resource system is
 /// initialized and the `menu.*` index is loaded.
-pub fn query_menu_binding(menu_name: &str) -> MenuBindingResult {
+pub fn query_menu_binding(
+    bindings: &crate::resource::settings::Bindings,
+    menu_name: &str,
+) -> MenuBindingResult {
     let mut result = MenuBindingResult::default();
     let mut index: u32 = 1;
     loop {
         let full_key = format!("menu.{menu_name}.{index}");
-        let Some(spec) = crate::resource::string(truncate_resource_key(&full_key)) else {
+        let Some(spec) = bindings.string(truncate_resource_key(&full_key)) else {
             break;
         };
         let gesture = Gesture::parse(&spec);
@@ -81,18 +84,6 @@ fn truncate_resource_key(full: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
-
-    /// Reset the resource system to a pristine initialized state so tests do
-    /// not observe each other's strings.
-    fn reset_resource_state() {
-        crate::resource::uninit();
-        crate::resource::init();
-    }
-
-    fn put_string(key: &str, value: &str) {
-        crate::resource::settings::Settings.put_string(key, value);
-    }
 
     /// The historical accessor's 38-byte truncation.
     #[test]
@@ -108,13 +99,12 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_first_key_binding_selected() {
-        reset_resource_state();
-        put_string("menu.zqk.1", "key Down");
-        put_string("menu.zqk.2", "joystick 0 button 0");
+        let mut bindings = crate::resource::settings::Bindings::default();
+        bindings.put_string("menu.zqk.1", "key Down");
+        bindings.put_string("menu.zqk.2", "joystick 0 button 0");
 
-        let result = query_menu_binding("zqk");
+        let result = query_menu_binding(&bindings, "zqk");
         assert!(result.found);
         assert_eq!(result.key_code, 0x4000_0051); // SDLK_DOWN
         assert_eq!(result.binding_id, 1);
@@ -122,13 +112,12 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_joystick_first_selects_later_key() {
-        reset_resource_state();
-        put_string("menu.zqj.1", "joystick 0 axis 1 positive");
-        put_string("menu.zqj.2", "key Down");
+        let mut bindings = crate::resource::settings::Bindings::default();
+        bindings.put_string("menu.zqj.1", "joystick 0 axis 1 positive");
+        bindings.put_string("menu.zqj.2", "key Down");
 
-        let result = query_menu_binding("zqj");
+        let result = query_menu_binding(&bindings, "zqj");
         assert!(result.found);
         assert_eq!(result.key_code, 0x4000_0051);
         assert_eq!(result.binding_id, 2);
@@ -136,35 +125,32 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_missing_binding_returns_default() {
-        reset_resource_state();
-        let result = query_menu_binding("nosuchcontrol");
+        let bindings = crate::resource::settings::Bindings::default();
+        let result = query_menu_binding(&bindings, "nosuchcontrol");
         assert_eq!(result, MenuBindingResult::default());
     }
 
     #[test]
-    #[serial]
     fn test_missing_alternate_stops_iteration() {
-        reset_resource_state();
-        put_string("menu.zqg.1", "key Down");
+        let mut bindings = crate::resource::settings::Bindings::default();
+        bindings.put_string("menu.zqg.1", "key Down");
         // menu.zqg.2 is absent; menu.zqg.3 must not be consulted.
-        put_string("menu.zqg.3", "key Down");
+        bindings.put_string("menu.zqg.3", "key Down");
 
-        let result = query_menu_binding("zqg");
+        let result = query_menu_binding(&bindings, "zqg");
         assert!(result.found);
         assert_eq!(result.binding_id, 1);
         assert_eq!(result.num_alternates, 1);
     }
 
     #[test]
-    #[serial]
     fn test_unparseable_spec_counts_but_is_not_selected() {
-        reset_resource_state();
-        put_string("menu.zqu.1", "banana pudding");
-        put_string("menu.zqu.2", "key Down");
+        let mut bindings = crate::resource::settings::Bindings::default();
+        bindings.put_string("menu.zqu.1", "banana pudding");
+        bindings.put_string("menu.zqu.2", "key Down");
 
-        let result = query_menu_binding("zqu");
+        let result = query_menu_binding(&bindings, "zqu");
         assert!(result.found);
         assert_eq!(result.key_code, 0x4000_0051);
         assert_eq!(result.binding_id, 2);

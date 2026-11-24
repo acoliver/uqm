@@ -49,7 +49,13 @@ fixture.broken = 3DOVID:broken.duk
 ",
     );
     mount.write("broken.duk", b"bad");
-    crate::resource::load_index(&mount.dir(), c"video.rmp", None);
+    crate::resource::load_index(
+        &mount.dir(),
+        c"video.rmp",
+        None,
+        &mut Default::default(),
+        &mut Default::default(),
+    );
     mount
 }
 
@@ -141,7 +147,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
             }
             directory.write("3dovideo.rmp", &addon("3dovideo.rmp"));
             assert!(crate::sound::audio_device::start());
-            crate::resource::load_index(&directory.dir(), c"3dovideo.rmp", None);
+            crate::resource::load_index(&directory.dir(), c"3dovideo.rmp", None, &mut Default::default(), &mut Default::default());
             let descriptor =
                 LoadedVideo::load(c"slides.spins.00").expect("shipped spin descriptor");
             let playback = descriptor.play().expect("shipped spin playback");

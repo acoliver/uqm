@@ -32,7 +32,12 @@ impl Fixture {
         let mount = uqm_engine::test_support::native_session::ContentMount::new(files.path())
             .with_config(files.path());
         mount.init_resources("fixture.rmp");
-        let native_input = uqm_engine::test_support::native_session::NativeInput::bind(&input);
+        let native_input = uqm_engine::test_support::native_session::NativeInput::bind(
+            &input,
+            &mut mount.bindings.borrow_mut(),
+            Some(mount.content_directory()),
+            mount.config_directory().as_ref(),
+        );
         let font = LoadedFont::load(c"fixture.font").unwrap();
         let context = LoadedContext::create(c"setup fixture");
         let screen = LoadedDrawable::create(8, 320, 240, 1).unwrap();
@@ -63,11 +68,20 @@ impl Fixture {
             strings: SetupStrings::parse(&table),
         }
     }
-    fn configuration(&self) -> SetupConfiguration {
+    fn _mount_config(&self) -> uqm_engine::io::Dir {
+        self._mount.config_directory().expect("fixture config")
+    }
+    fn configuration<'a>(
+        &self,
+        settings: &'a mut Settings,
+        bindings: &'a mut Bindings,
+    ) -> SetupConfiguration<'a> {
         SetupConfiguration {
             input: self.input.clone(),
             runtime: RuntimeSettings::capture(&self.context.as_ref().unwrap().lease()),
-            settings: Settings,
+            settings,
+            bindings,
+            directory: self._mount_config(),
             names: templates::input_templates(),
         }
     }
@@ -169,6 +183,8 @@ impl uqm_engine::input::InputRuntime for Driver {
 #[serial_test::serial]
 fn root_cancel_applies_and_persists_on_the_actual_input_loop() {
     let fixture = Fixture::new();
+    let mut settings = Settings::default();
+    let mut bindings = std::mem::take(&mut *fixture._mount.bindings.borrow_mut());
     let driver = Rc::new(Driver {
         input: fixture.input.clone(),
         keys: RefCell::new([10].into()),
@@ -180,7 +196,7 @@ fn root_cancel_applies_and_persists_on_the_actual_input_loop() {
     let mut io = Io {
         observer: &mut observer,
     };
-    let configuration = fixture.configuration();
+    let configuration = fixture.configuration(&mut settings, &mut bindings);
     let resources = fixture.resources();
     game.with_context(|cx| setup_menu(cx, &mut io, configuration, resources));
     assert!(driver.keys.borrow().is_empty());
@@ -197,7 +213,12 @@ fn root_cancel_applies_and_persists_on_the_actual_input_loop() {
 #[serial_test::serial]
 fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_values() {
     let mut fixture = Fixture::new();
-    let mut session = SetupSession::new(fixture.configuration(), fixture.resources());
+    let mut settings = Settings::default();
+    let mut bindings = std::mem::take(&mut *fixture._mount.bindings.borrow_mut());
+    let mut session = SetupSession::new(
+        fixture.configuration(&mut settings, &mut bindings),
+        fixture.resources(),
+    );
     drop(fixture.font.take());
     let mut game = uqm_engine::Game::new();
     game.kernel.install_input_runtime(Rc::new(Driver {
@@ -214,10 +235,17 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
         assert_eq!(session.controls[0][0], c"Up");
         session.act(Action::Rebind(0), cx, &mut io);
         assert_eq!(session.controls[0][0], c"w");
-        assert_eq!(Settings.string("keys.1.up.1").as_deref(), Some("key w"));
+        assert_eq!(
+            session
+                .configuration
+                .bindings
+                .string("keys.1.up.1")
+                .as_deref(),
+            Some("key w")
+        );
         session.act(Action::Clear(0), cx, &mut io);
         assert_eq!(session.controls[0][0], c"");
-        assert_eq!(Settings.string("keys.1.up.1"), None);
+        assert_eq!(session.configuration.bindings.string("keys.1.up.1"), None);
         for page in 0..8 {
             session.menu.enter(page, true);
             session.draw();
@@ -231,7 +259,7 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
     assert_eq!((title.r, title.g, title.b), (255, 255, 255));
     let active = frame.pixel(Point { x: 160, y: 67 });
     assert_eq!((active.r, active.g, active.b), (255, 255, 0));
-    let _retained = fixture.configuration().runtime.directory.clone();
+    let _retained = session.configuration.directory.clone();
     drop(_retained);
 }
 
@@ -240,7 +268,12 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
 fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
     use uqm_engine::input::frames::{KEY_MENU_EDIT_CANCEL, KEY_MENU_SELECT};
     let fixture = Fixture::new();
-    let mut session = SetupSession::new(fixture.configuration(), fixture.resources());
+    let mut settings = Settings::default();
+    let mut bindings = std::mem::take(&mut *fixture._mount.bindings.borrow_mut());
+    let mut session = SetupSession::new(
+        fixture.configuration(&mut settings, &mut bindings),
+        fixture.resources(),
+    );
     session.populate_keys();
     session.menu.enter(7, true);
     let driver = Rc::new(Driver {
@@ -278,6 +311,8 @@ fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
 fn scripted_audio_changes_apply_on_return_and_abort_clears_the_activity_bit() {
     for abort in [false, true] {
         let fixture = Fixture::new();
+        let mut settings = Settings::default();
+        let mut bindings = std::mem::take(&mut *fixture._mount.bindings.borrow_mut());
         RuntimeSettings::apply(
             &fixture.context.as_ref().unwrap().lease(),
             None,
@@ -302,11 +337,11 @@ fn scripted_audio_changes_apply_on_return_and_abort_clears_the_activity_bit() {
         let mut io = Io {
             observer: &mut observer,
         };
-        let configuration = fixture.configuration();
+        let configuration = fixture.configuration(&mut settings, &mut bindings);
         let resources = fixture.resources();
         game.with_context(|cx| setup_menu(cx, &mut io, configuration, resources));
         assert_eq!(
-            Settings.integer("config.musicvol"),
+            settings.integer("config.musicvol"),
             Some(if abort { 25 } else { 30 })
         );
         assert_eq!(game.world.activity() & 0x4000, 0);

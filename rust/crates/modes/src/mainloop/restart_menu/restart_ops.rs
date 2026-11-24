@@ -22,6 +22,7 @@ pub fn seed_new_campaign(automation_seed: u32, clock_seed: impl FnOnce()) {
 }
 
 pub trait RestartHost {
+    fn setup(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, context: ContextLease, font: FontLease);
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>);
     fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool);
     fn free_game_data(&mut self, cx: &mut Cx<'_>);
@@ -403,23 +404,9 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         self.host.melee(self.cx, self.io);
     }
     fn setup_menu(&mut self) {
-        use crate::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
-        use uqm_engine::{configuration::runtime::RuntimeSettings, resource::settings::Settings};
         let context = self.menu.context().clone();
-        let runtime = RuntimeSettings::capture(&context);
-        let font = self
-            .cx
-            .kernel
-            .battle_font()
-            .unwrap_or_else(|| panic!("setup font not loaded"));
-        let resources = SetupResources::load(context, font);
-        let configuration = SetupConfiguration {
-            input: self.cx.kernel.input_runtime().input().clone(),
-            runtime,
-            settings: Settings,
-            names: uqm_engine::input_port::templates::input_templates(),
-        };
-        setup_menu(self.cx, self.io, configuration, resources);
+        let font = self.cx.kernel.battle_font().expect("setup font not loaded");
+        self.host.setup(self.cx, self.io, context, font);
     }
     fn free_game_data(&mut self) {
         self.host.free_game_data(self.cx);

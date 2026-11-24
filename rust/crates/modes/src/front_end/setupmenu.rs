@@ -5,7 +5,7 @@ use uqm_engine::{battle::Cx, input::InputSession, observe::Io};
 use uqm_engine::{
     configuration::runtime::RuntimeSettings,
     input_port::{sdl_input, templates},
-    resource::settings::Settings,
+    resource::settings::{Bindings, Settings},
     time::counter_abi::get_time_counter,
 };
 
@@ -24,10 +24,12 @@ use widgets::{Action, Event, MenuState};
 
 const FRAME: u32 = 840 / 20;
 
-pub struct SetupConfiguration {
+pub struct SetupConfiguration<'a> {
     pub input: InputSession,
     pub runtime: RuntimeSettings,
-    pub settings: Settings,
+    pub settings: &'a mut Settings,
+    pub bindings: &'a mut Bindings,
+    pub directory: uqm_engine::io::Dir,
     pub names: [CString; 6],
 }
 
@@ -39,8 +41,8 @@ struct NameEntry {
     block: bool,
 }
 
-struct SetupSession {
-    configuration: SetupConfiguration,
+struct SetupSession<'a> {
+    configuration: SetupConfiguration<'a>,
     resources: SetupResources,
     menu: MenuState,
     gamma: GammaRange,
@@ -53,8 +55,8 @@ struct SetupSession {
     done: bool,
 }
 
-impl SetupSession {
-    fn new(configuration: SetupConfiguration, resources: SetupResources) -> Self {
+impl<'a> SetupSession<'a> {
+    fn new(configuration: SetupConfiguration<'a>, resources: SetupResources) -> Self {
         let mut gamma = GammaRange {
             min: 0.4,
             max: 2.5,
@@ -149,6 +151,7 @@ impl SetupSession {
                 runtime.flush();
                 self.resources.binding_prompt();
                 sdl_input::rebind_input_state(
+                    self.configuration.bindings,
                     self.menu.choices[20] as i32,
                     control as i32,
                     self.menu.binding_column as i32,
@@ -159,6 +162,7 @@ impl SetupSession {
             }
             Action::Clear(control) => {
                 sdl_input::remove_input_state(
+                    self.configuration.bindings,
                     self.menu.choices[20] as i32,
                     control as i32,
                     self.menu.binding_column as i32,
@@ -197,9 +201,9 @@ impl SetupSession {
         self.draw();
     }
 
-    fn finish(&self) {
+    fn finish(&mut self) {
         let input = &self.configuration.input;
-        let settings = &self.configuration.settings;
+        let settings = &mut *self.configuration.settings;
         let options = GlobalOptions::from_widgets(&self.menu.choices, self.menu.sliders);
         let current = RuntimeSettings::capture(&self.resources.context);
         let display = options::prepare_display(&options, current.display, settings);
@@ -225,24 +229,29 @@ impl SetupSession {
             ]),
         );
         for (index, name) in self.names.iter().enumerate() {
-            settings.put_string(
+            self.configuration.bindings.put_string(
                 &format!("keys.{}.name", index + 1),
                 name.to_str().unwrap_or_else(|_| panic!("template UTF-8")),
             );
         }
-        for (file, prefix) in [(c"uqm.cfg", "config."), (c"flight.cfg", "keys.")] {
-            if let Err(error) = settings.save(&self.configuration.runtime.directory, file, prefix) {
-                log::warn!("Could not save {}: {error}", file.to_string_lossy());
-            }
+        if let Err(error) = settings.save(&self.configuration.directory, c"uqm.cfg", "config.") {
+            log::warn!("Could not save uqm.cfg: {error}");
+        }
+        if let Err(error) =
+            self.configuration
+                .bindings
+                .save(&self.configuration.directory, c"flight.cfg", "keys.")
+        {
+            log::warn!("Could not save flight.cfg: {error}");
         }
     }
 }
 
-struct SetupEditor<'a> {
-    session: &'a mut SetupSession,
+struct SetupEditor<'a, 'settings> {
+    session: &'a mut SetupSession<'settings>,
     next_time: u32,
 }
-impl TextEntryCallbacks for SetupEditor<'_> {
+impl TextEntryCallbacks for SetupEditor<'_, '_> {
     fn changed(
         &mut self,
         entry: TextEntryView<'_>,
@@ -268,7 +277,7 @@ impl TextEntryCallbacks for SetupEditor<'_> {
     }
 }
 
-fn do_setup_menu(state: &mut SetupSession, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+fn do_setup_menu(state: &mut SetupSession<'_>, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
     state.configuration.input.set_paused(false);
     if !state.initialized {
         state
@@ -309,7 +318,7 @@ fn do_setup_menu(state: &mut SetupSession, cx: &mut Cx<'_>, io: &mut Io<'_>) -> 
 pub fn setup_menu(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
-    configuration: SetupConfiguration,
+    configuration: SetupConfiguration<'_>,
     resources: SetupResources,
 ) {
     configuration.input.set_menu_sounds(15, 1 << 4);

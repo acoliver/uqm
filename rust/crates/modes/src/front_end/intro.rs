@@ -156,7 +156,7 @@ fn show_slides(
 }
 
 pub fn show_presentation(cx: &mut Cx<'_>, io: &mut Io<'_>, presentation: &CStr) -> bool {
-    let Some(kind) = uqm_engine::resource::settings::Settings.kind(presentation) else {
+    let Some(kind) = uqm_engine::resource::kind(presentation.to_str().unwrap_or("")) else {
         return false;
     };
     match kind.as_str() {

@@ -19,6 +19,15 @@ use uqm_rust::{
 
 struct NoLifecycle;
 impl RestartHost for NoLifecycle {
+    fn setup(
+        &mut self,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
+        _: uqm_engine::graphics::context::ContextLease,
+        _: uqm_engine::graphics::font::FontLease,
+    ) {
+        panic!("unexpected setup");
+    }
     fn melee(&mut self, _: &mut uqm_engine::battle::Cx<'_>, _: &mut uqm_engine::observe::Io<'_>) {
         panic!("unexpected melee");
     }

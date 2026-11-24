@@ -76,6 +76,8 @@ pub struct ContentMount {
     vfs: Vfs,
     content: Dir,
     previous: Option<Vfs>,
+    pub settings: std::cell::RefCell<crate::resource::settings::Settings>,
+    pub bindings: std::cell::RefCell<crate::resource::settings::Bindings>,
 }
 
 impl ContentMount {
@@ -90,6 +92,8 @@ impl ContentMount {
             vfs,
             content,
             previous,
+            settings: Default::default(),
+            bindings: Default::default(),
         }
     }
 
@@ -102,6 +106,14 @@ impl ContentMount {
         self
     }
 
+    pub fn content_directory(&self) -> &Dir {
+        &self.content
+    }
+
+    pub fn config_directory(&self) -> Option<Dir> {
+        self.vfs.config_dir()
+    }
+
     /// Reset the resource system and load `index` from the content directory.
     pub fn init_resources(&self, index: &str) {
         crate::resource::init();
@@ -110,7 +122,13 @@ impl ContentMount {
 
     /// Load `index` from the content directory into the live resource system.
     pub fn load_index(&self, index: &str) {
-        crate::resource::load_index(&self.content, &cstring(index, "index name"), None);
+        crate::resource::load_index(
+            &self.content,
+            &cstring(index, "index name"),
+            None,
+            &mut self.settings.borrow_mut(),
+            &mut self.bindings.borrow_mut(),
+        );
     }
 }
 
@@ -131,8 +149,13 @@ impl Drop for ContentMount {
 pub struct NativeInput(InputSession);
 
 impl NativeInput {
-    pub fn bind(input: &InputSession) -> Self {
-        if let Err(error) = sdl_input::init_input(input.controls()) {
+    pub fn bind(
+        input: &InputSession,
+        bindings: &mut crate::resource::settings::Bindings,
+        content: Option<&Dir>,
+        config: Option<&Dir>,
+    ) -> Self {
+        if let Err(error) = sdl_input::init_input(input.controls(), bindings, content, config) {
             panic!("native input did not start: {error}");
         }
         Self(input.clone())
@@ -163,7 +186,13 @@ pub fn text_input(text: &str) {
 /// Reload `index` from whatever directory is currently the content directory.
 pub fn reload_content_index(index: &str) {
     let content = crate::io::content_dir().unwrap_or_else(|| panic!("no content directory"));
-    crate::resource::load_index(&content, &cstring(index, "index name"), None);
+    crate::resource::load_index(
+        &content,
+        &cstring(index, "index name"),
+        None,
+        &mut Default::default(),
+        &mut Default::default(),
+    );
 }
 
 /// Drop one entry from the live resource map.

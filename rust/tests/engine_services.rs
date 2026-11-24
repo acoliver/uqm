@@ -85,7 +85,13 @@ fixture.broken = 3DOVID:broken.duk
         let options = GraphicsOptions::default();
         uqm_engine::graphics::present::init_graphics(1, 0, options, 320, 240);
         uqm_engine::resource::init();
-        uqm_engine::resource::load_index(&dir, c"video.rmp", None);
+        uqm_engine::resource::load_index(
+            &dir,
+            c"video.rmp",
+            None,
+            &mut Default::default(),
+            &mut Default::default(),
+        );
         retained_playback_keeps_its_clip_after_descriptor_drop();
         assert!(uqm_engine::graphics::present::present_video(
             &[0xff00_00ff, 0xff00_ff00],

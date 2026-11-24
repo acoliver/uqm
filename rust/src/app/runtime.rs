@@ -17,14 +17,14 @@ pub fn run(
 ) -> i32 {
     let runtime = application.game.kernel.input_runtime();
     let observer = application.observer().cloned();
-    let initialized =
-        crate::mainloop::startup::initialize(runtime.input(), parsed, arguments, observer);
-    if initialized != 0 {
-        return initialized.max(0);
-    }
+    let mut prepared =
+        match crate::mainloop::startup::initialize(runtime.input(), parsed, arguments, observer) {
+            Ok(prepared) => prepared,
+            Err(status) => return status.max(0),
+        };
 
     let observer = application.observer().cloned();
-    let result = match run_game(&mut application.game, observer) {
+    let result = match run_game(&mut application.game, observer, &mut prepared) {
         Ok(()) => 0,
         Err(error) => {
             eprintln!("app::run: fatal error: {error}");
@@ -38,6 +38,7 @@ pub fn run(
 fn run_game(
     game: &mut uqm_engine::Game,
     observer: Option<Arc<crate::automation::AutomationObserver>>,
+    prepared: &mut crate::mainloop::startup::Prepared,
 ) -> Result<(), MainLoopError> {
     let mut battle = Battle::new();
     let mut cx = Cx::new(
@@ -47,7 +48,7 @@ fn run_game(
         uqm_engine::math::random,
     );
     uqm_engine::sound::audio_init::init_audio();
-    if crate::game_init::kernel_abi::load_kernel(cx.kernel, cx.world) == 0 {
+    if crate::game_init::kernel_abi::load_kernel(cx.kernel, cx.world, prepared) == 0 {
         return Err(MainLoopError::LoadKernelFailed);
     }
     cx.world.set_activity(0);
@@ -60,7 +61,7 @@ fn run_game(
     let mut result = Ok(());
     while {
         let mut menu = crate::mainloop::restart_menu::restart_ops::RestartMenu::default();
-        let mut host = RestartServices;
+        let mut host = RestartServices { prepared };
         let started = crate::mainloop::restart_menu::orchestration::start_game_impl(
             &mut menu.operations(&mut cx, &mut io, &mut host),
         );
@@ -78,13 +79,35 @@ fn run_game(
     result
 }
 
-struct RestartServices;
+struct RestartServices<'a> {
+    prepared: &'a mut crate::mainloop::startup::Prepared,
+}
 
-impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
+impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices<'_> {
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        let config = uqm_engine::io::config_dir().unwrap_or_else(|| panic!("config directory"));
-        let teams = uqm_engine::io::melee_dir().unwrap_or_else(|| panic!("melee directory"));
+        let config = self.prepared.config.clone();
+        let teams = self.prepared.teams.clone();
         uqm_modes::supermelee::native::menu::live::melee(cx, io, config, teams);
+    }
+    fn setup(
+        &mut self,
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        context: uqm_engine::graphics::context::ContextLease,
+        font: uqm_engine::graphics::font::FontLease,
+    ) {
+        use uqm_modes::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
+        let runtime = uqm_engine::configuration::runtime::RuntimeSettings::capture(&context);
+        let resources = SetupResources::load(context, font);
+        let configuration = SetupConfiguration {
+            input: cx.kernel.input_runtime().input().clone(),
+            runtime,
+            settings: &mut self.prepared.settings,
+            bindings: &mut self.prepared.bindings,
+            directory: self.prepared.config.clone(),
+            names: uqm_engine::input_port::templates::input_templates(),
+        };
+        setup_menu(cx, io, configuration, resources);
     }
     fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool) {
         uqm_modes::front_end::credits::credits(cx, io, victory);

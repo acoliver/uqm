@@ -23,6 +23,19 @@ use crate::automation::input_ffi::graphics_options;
 use crate::mainloop::{dir_prep, options, options_abi as globals};
 use std::ffi::CString;
 use uqm_engine::sound::volume_globals::update_sound_options;
+use uqm_engine::{
+    io::Dir,
+    resource::settings::{Bindings, Settings},
+};
+
+pub struct Prepared {
+    pub settings: Settings,
+    pub bindings: Bindings,
+    pub content: Dir,
+    pub config: Dir,
+    pub saves: Dir,
+    pub teams: Dir,
+}
 
 /// Bring every subsystem up on the SDL owner thread, once, after command-line
 /// parsing. Returns the process exit status: zero when the game may start.
@@ -31,20 +44,33 @@ pub fn initialize(
     parsed: &options::ParsedOptions,
     args: &[String],
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
-) -> i32 {
+) -> Result<Prepared, i32> {
     if !start_services(parsed, args) {
-        return 1;
+        return Err(1);
     }
     let vfs = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk());
     uqm_engine::io::install(vfs.clone());
-    apply_options(input, parsed);
+    let mut settings = Settings::default();
+    let mut bindings = Bindings::default();
+    apply_options(input, parsed, &mut settings);
     if !prepare_directories(&vfs, input, parsed) {
-        return 1;
+        return Err(1);
     }
-    if !start_media(input, parsed, observer) {
-        return 1;
+    let content = vfs.content_dir().expect("prepared content").snapshot();
+    let config = vfs.config_dir().expect("prepared config").snapshot();
+    let saves = vfs.save_dir().expect("prepared saves").snapshot();
+    let teams = vfs.melee_dir().expect("prepared teams").snapshot();
+    if !start_media(input, parsed, observer, &mut bindings, &content, &config) {
+        return Err(1);
     }
-    0
+    Ok(Prepared {
+        settings,
+        bindings,
+        content,
+        config,
+        saves,
+        teams,
+    })
 }
 
 /// Logging, SDL, memory and the game thread.
@@ -126,10 +152,14 @@ fn prepare_directories(
 
 /// Copy the parsed options into the sound options, the player controls and the
 /// preferences the game reads.
-fn apply_options(input: &uqm_engine::input::InputSession, parsed: &options::ParsedOptions) {
+fn apply_options(
+    input: &uqm_engine::input::InputSession,
+    parsed: &options::ParsedOptions,
+    settings: &mut Settings,
+) {
     input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
     input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
-    uqm_engine::input_port::sdl_input::forget_template_names();
+    uqm_engine::input_port::sdl_input::forget_template_names(settings);
     update_sound_options(|options| {
         options.driver = parsed.sound_driver;
         options.flags = parsed.sound_quality;
@@ -162,6 +192,9 @@ fn start_media(
     input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+    bindings: &mut Bindings,
+    content: &Dir,
+    config: &Dir,
 ) -> bool {
     let (driver, flags) = graphics_config(parsed);
     uqm_engine::graphics::present::init_graphics(
@@ -179,7 +212,12 @@ fn start_media(
     input
         .configuration
         .update_preferences(|preferences| preferences.gamma = gamma);
-    if let Err(error) = uqm_engine::input_port::sdl_input::init_input(input.controls()) {
+    if let Err(error) = uqm_engine::input_port::sdl_input::init_input(
+        input.controls(),
+        bindings,
+        Some(content),
+        Some(config),
+    ) {
         log::error!("{error}");
         return false;
     }

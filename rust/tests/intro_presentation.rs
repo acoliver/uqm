@@ -90,6 +90,8 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
             &uqm_engine::io::content_dir().unwrap(),
             c"video.rmp",
             None,
+            &mut Default::default(),
+            &mut Default::default(),
         );
         let playback = LoadedVideo::load(c"fixture.logo")
             .and_then(|video| video.play())

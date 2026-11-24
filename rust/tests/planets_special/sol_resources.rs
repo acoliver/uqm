@@ -19,7 +19,13 @@ pub fn check(h: &mut Harness) {
         panic!("checked-in content directory must open");
     };
     uqm_engine::resource::init();
-    uqm_engine::resource::load_index(&dir, c"uqm.rmp", None);
+    uqm_engine::resource::load_index(
+        &dir,
+        c"uqm.rmp",
+        None,
+        &mut Default::default(),
+        &mut Default::default(),
+    );
     names(h);
     binary_palettes();
     scenes(h);

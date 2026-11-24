@@ -49,7 +49,18 @@ mod tests {
     #[serial_test::serial]
     fn music_loading_rejects_another_resource_type_before_ownership_transfer() {
         let key = c"test.sound.resource-types.not-music";
-        crate::resource::settings::Settings.put_integer(key.to_str().unwrap(), 42);
+        let mount = crate::io::fixture::TempMount::new();
+        mount.write(
+            "wrong.rmp",
+            b"test.sound.resource-types.not-music = INT32:42\n",
+        );
+        crate::resource::load_index(
+            &mount.dir(),
+            c"wrong.rmp",
+            None,
+            &mut Default::default(),
+            &mut Default::default(),
+        );
         let rejected = std::panic::catch_unwind(|| LoadedMusic::load(key));
         assert!(rejected.is_err());
         assert!(crate::resource::remove(key.to_str().unwrap()));

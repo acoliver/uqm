@@ -30,10 +30,10 @@ const FILE_TYPES: [&str; 8] = [
 /// One index entry: its type name, its descriptor, and for the integer-like
 /// value types (`INT32`, `BOOLEAN`, `COLOR`) the parsed value.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Entry {
-    kind: String,
-    descriptor: String,
-    value: u32,
+pub(super) struct Entry {
+    pub(super) kind: String,
+    pub(super) descriptor: String,
+    pub(super) value: u32,
 }
 
 impl Entry {
@@ -79,7 +79,7 @@ fn with_index<R>(access: impl FnOnce(&mut HashMap<String, Entry>) -> R) -> R {
 }
 
 /// Define `key` from a `TYPE:descriptor` index value, replacing any entry.
-fn define(index: &mut HashMap<String, Entry>, key: &str, value: &str) {
+pub(super) fn define(index: &mut HashMap<String, Entry>, key: &str, value: &str) {
     let Some((kind, descriptor)) = value.split_once(':') else {
         log::warn!("Invalid resource descriptor '{value}' for key '{key}'");
         return;
@@ -105,43 +105,74 @@ pub fn uninit() {
 
 /// Read the index file `file` in `dir`, prefixing every key with `prefix`
 /// (C: `LoadResourceIndex`). A missing, empty or non-UTF-8 file adds nothing.
-pub fn load_index(dir: &Dir, file: &CStr, prefix: Option<&CStr>) {
+pub fn load_index(
+    dir: &Dir,
+    file: &CStr,
+    prefix: Option<&CStr>,
+    settings: &mut super::settings::Settings,
+    bindings: &mut super::settings::Bindings,
+) {
+    read_index(dir, file, prefix, |key, value| {
+        if key.starts_with("config.") {
+            settings.define(key, value);
+        } else if key.starts_with("keys.") || key.starts_with("menu.") {
+            bindings.define(key, value);
+        } else {
+            with_index(|index| define(index, key, value));
+        }
+    });
+}
+
+pub(super) fn read_index(
+    dir: &Dir,
+    file: &CStr,
+    prefix: Option<&CStr>,
+    mut accept: impl FnMut(&str, &str),
+) {
     let Ok(name) = file.to_str() else {
         return;
     };
     let mut text = String::new();
-    let read = dir
+    if let Err(error) = dir
         .open_read(Path::new(name))
-        .and_then(|mut stream| stream.read_to_string(&mut text));
-    if let Err(error) = read {
+        .and_then(|mut stream| stream.read_to_string(&mut text))
+    {
         log::warn!("load_resource_index: cannot read {name}: {error}");
         return;
     }
-    let prefix = prefix.and_then(|prefix| prefix.to_str().ok());
-    with_index(|index| {
-        parse_propfile(&text, &mut |key, value| define(index, key, value), prefix);
-    });
+    parse_propfile(
+        &text,
+        &mut accept,
+        prefix.and_then(|prefix| prefix.to_str().ok()),
+    );
 }
 
 /// The index lines of the value entries under `prefix`, sorted by key and
 /// with the prefix removed when `strip` (C: `SaveResourceIndex`).
+#[cfg(test)]
 pub(super) fn serialize(prefix: &str, strip: bool) -> Vec<String> {
-    with_index(|index| {
-        let mut keys: Vec<_> = index.keys().filter(|key| key.starts_with(prefix)).collect();
-        keys.sort();
-        keys.into_iter()
-            .filter_map(|key| {
-                let entry = &index[key];
-                let value = entry.serialize()?;
-                let key = if strip {
-                    key.strip_prefix(prefix).unwrap_or(key)
-                } else {
-                    key
-                };
-                Some(format!("{key} = {}:{value}\n", entry.kind))
-            })
-            .collect()
-    })
+    with_index(|index| serialize_entries(index, prefix, strip))
+}
+
+pub(super) fn serialize_entries(
+    index: &HashMap<String, Entry>,
+    prefix: &str,
+    strip: bool,
+) -> Vec<String> {
+    let mut keys: Vec<_> = index.keys().filter(|key| key.starts_with(prefix)).collect();
+    keys.sort();
+    keys.into_iter()
+        .filter_map(|key| {
+            let entry = &index[key];
+            let value = entry.serialize()?;
+            let key = if strip {
+                key.strip_prefix(prefix).unwrap_or(key)
+            } else {
+                key
+            };
+            Some(format!("{key} = {}:{value}\n", entry.kind))
+        })
+        .collect()
 }
 
 /// The type name of `key`.
@@ -173,6 +204,7 @@ pub fn string(key: &str) -> Option<String> {
 }
 
 /// The value of an entry of type `kind` (`INT32`, `BOOLEAN` or `COLOR`).
+#[cfg(test)]
 pub(super) fn value(key: &str, kind: &str) -> Option<u32> {
     with_index(|index| {
         let entry = index.get(key).filter(|entry| entry.kind == kind)?;
@@ -185,6 +217,7 @@ pub fn has_key(key: &str) -> bool {
 }
 
 /// Define `key` as `kind:descriptor` (C: `res_Put*`).
+#[cfg(test)]
 pub(super) fn put(key: &str, kind: &str, descriptor: &str) {
     assert!(
         !key.contains('\0') && !descriptor.contains('\0'),
@@ -219,7 +252,13 @@ mod tests {
               tint = COLOR:rgb15(31, 0, 16)\ntext = STRTAB:base/text.txt\n\
               odd = WEIRD:thing\nbroken\n",
         );
-        load_index(&mount.dir(), c"a.rmp", Some(c"p."));
+        load_index(
+            &mount.dir(),
+            c"a.rmp",
+            Some(c"p."),
+            &mut Default::default(),
+            &mut Default::default(),
+        );
         assert_eq!(string("p.name").as_deref(), Some("hello"));
         assert_eq!(value("p.count", "INT32"), Some(-7i32 as u32));
         assert_eq!(value("p.flag", "BOOLEAN"), Some(1));
@@ -233,7 +272,13 @@ mod tests {
         assert_eq!(kind("p.odd").as_deref(), Some("WEIRD"));
         assert!(!has_key("broken"));
         assert!(std::panic::catch_unwind(|| path_of(c"p.text", "BINTAB")).is_err());
-        load_index(&mount.dir(), c"missing.rmp", None);
+        load_index(
+            &mount.dir(),
+            c"missing.rmp",
+            None,
+            &mut Default::default(),
+            &mut Default::default(),
+        );
         uninit();
         assert!(!has_key("p.name"));
     }

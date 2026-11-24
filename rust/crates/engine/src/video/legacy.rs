@@ -173,7 +173,7 @@ pub struct LoadedVideo(Descriptor);
 
 impl LoadedVideo {
     pub fn load(resource: &CStr) -> Option<Self> {
-        let descriptor = crate::resource::settings::Settings.descriptor(resource, "3DOVID")?;
+        let descriptor = crate::resource::descriptor(resource, "3DOVID")?;
         Some(Self(Descriptor::parse(descriptor.as_bytes())))
     }
 

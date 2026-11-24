@@ -227,7 +227,13 @@ mod tests {
         mount.write("text.rmp", b"test.strings = STRTAB:strings.txt\n");
         mount.write("strings.txt", b"#(first)\nhello\n#(second)\nworld\n");
         crate::resource::init();
-        crate::resource::load_index(&mount.dir(), c"text.rmp", None);
+        crate::resource::load_index(
+            &mount.dir(),
+            c"text.rmp",
+            None,
+            &mut Default::default(),
+            &mut Default::default(),
+        );
         for _ in 0..2 {
             let table = LoadedTextTable::load(c"test.strings")
                 .unwrap_or_else(|| panic!("indexed string table"));

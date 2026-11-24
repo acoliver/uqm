@@ -32,8 +32,12 @@ fn editor_keeps_initial_49_bytes_but_inserts_only_up_to_48_utf8_bytes() {
             ),
             sleeps: std::cell::Cell::new(0),
         });
-        let _characters =
-            uqm_engine::test_support::native_session::NativeInput::bind(&driver.input);
+        let _characters = uqm_engine::test_support::native_session::NativeInput::bind(
+            &driver.input,
+            &mut Default::default(),
+            None,
+            None,
+        );
         game.kernel.install_input_runtime(driver.clone());
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
         let mut observer = Unobserved;

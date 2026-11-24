@@ -10,31 +10,35 @@ use uqm_modes::battle::status_native::init_status_offsets;
 
 /// Load the display, the resource indices and addons the preferences ask for,
 /// and the main colour map. Returns zero when the kernel could not load.
-pub fn load_kernel(kernel: &mut uqm_engine::Kernel, world: &mut uqm_engine::World) -> u32 {
+pub fn load_kernel(
+    kernel: &mut uqm_engine::Kernel,
+    world: &mut uqm_engine::World,
+    prepared: &mut crate::mainloop::startup::Prepared,
+) -> u32 {
     if !kernel.open_screen() || !kernel.init_resources() {
         return 0;
     }
-    let Some(content) = uqm_engine::io::content_dir() else {
-        return 0;
-    };
-    if load_indices(&content) == 0 {
+    let content = &prepared.content;
+    let settings = &mut prepared.settings;
+    let bindings = &mut prepared.bindings;
+    if load_indices(content, settings, bindings) == 0 {
         return 0;
     }
     let preferences = kernel.configuration.preferences();
     if preferences.music_3do != 0 {
-        load_addon(&content, "3domusic");
+        load_addon(content, "3domusic", settings, bindings);
     }
     kernel.using_speech = preferences.speech;
-    if preferences.speech != 0 && !load_addon(&content, "3dovoice") {
+    if preferences.speech != 0 && !load_addon(content, "3dovoice", settings, bindings) {
         kernel.using_speech = 0;
     }
     if preferences.music_remix != 0 {
-        load_addon(&content, "remix");
+        load_addon(content, "remix", settings, bindings);
     }
     if preferences.intro == OPT_3DO as i32 {
-        load_addon(&content, "3dovideo");
+        load_addon(content, "3dovideo", settings, bindings);
     }
-    prepare_addons(&content, &kernel.configuration.addons());
+    prepare_addons(content, &kernel.configuration.addons(), settings, bindings);
     if !kernel.load_main_colormap() {
         return 0;
     }
