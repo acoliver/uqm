@@ -1,0 +1,175 @@
+--- a/rust/src/automation/coordinator.rs
++++ b/rust/src/automation/coordinator.rs
+@@ -2992,6 +2992,172 @@
+     }
+ 
+     #[test]
++    fn retained_seed_callback_after_finalize_parent_characterization() {
++        use crate::automation::lifecycle::TeardownReceipt;
++        use crate::automation::observer::Handle;
++        use uqm_engine::observe::{InputView, Observer};
++
++        fn application(output: &std::path::Path) -> crate::app::Application {
++            let source = br#"{"version":2,"name":"close-seed","seed":42,"fixture":"close-seed","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":60}}"#;
++            let script = crate::automation::validate_script(
++                crate::automation::parse_script(source, "test.json").unwrap(),
++                "test.json",
++            )
++            .unwrap();
++            let game = uqm_engine::Game::new();
++            let observer = AutomationObserver::new(
++                script,
++                output.into(),
++                game.world.activity_control(),
++                Default::default(),
++                Default::default(),
++            );
++            crate::app::Application::new(game, Some(observer))
++        }
++
++        assert!(!uqm_engine::host::is_replay());
++        let closed_output = tempfile::tempdir().unwrap();
++        let live_output = tempfile::tempdir().unwrap();
++        let closed_app = application(closed_output.path());
++        let mut retained = Handle(closed_app.observer().unwrap().clone());
++        let mut live_app = application(live_output.path());
++        let mut live = Handle(live_app.observer().unwrap().clone());
++        let finalize_result = closed_app.observer().unwrap().finalize(0);
++        assert_eq!(finalize_result, Ok(1));
++        drop(closed_app);
++        assert_eq!(Arc::strong_count(&retained.0), 1);
++
++        let snapshot = |owner: &AutomationObserver| {
++            let inner = owner.inner.lock();
++            (
++                inner.sched_state,
++                inner.input_seen,
++                inner.present_seen,
++                inner.accepted_player_inputs,
++                inner.terminal_class,
++                inner.finalized,
++                owner.activity.activity(),
++            )
++        };
++        let closed_before = snapshot(&retained.0);
++        let live_before = snapshot(&live.0);
++        assert!(closed_before.5);
++        assert!(!live_before.5);
++        assert_eq!(live_before.4, None);
++        assert!(!retained.0.runtime.mirror.is_active());
++        assert!(!retained.0.runtime.can_write());
++        assert!(live.0.runtime.mirror.is_active());
++        assert!(live.0.runtime.can_write());
++
++        let trace_path = closed_output.path().join("trace.jsonl");
++        let receipt_path = closed_output.path().join("teardown-complete.json");
++        let trace_before = std::fs::read(&trace_path).unwrap();
++        let receipt_before = std::fs::read(&receipt_path).unwrap();
++        let receipt: TeardownReceipt = serde_json::from_slice(&receipt_before).unwrap();
++        assert_eq!(receipt.terminal, Some(TerminalClass::SemanticMismatch));
++        assert_eq!((receipt.game_status, receipt.process_status), (0, 1));
++        assert!(receipt.runtime_finalized && receipt.runtime_deactivated);
++        assert!(receipt.callbacks_quiescent && receipt.trace_durable);
++        let records = |bytes: &[u8]| -> Vec<TraceRecord> {
++            std::str::from_utf8(bytes)
++                .unwrap()
++                .lines()
++                .map(|line| TraceRecord::from_jsonl(line).unwrap())
++                .collect()
++        };
++        let durable = records(&trace_before);
++        assert_eq!(
++            durable
++                .iter()
++                .filter(|r| r.kind == RecordKind::RunEnd)
++                .count(),
++            1
++        );
++        assert!(durable.iter().all(|r| r.seed_application.is_none()));
++        let mut pending_before = Vec::new();
++        retained
++            .0
++            .runtime
++            .commit
++            .publish_all(&mut pending_before)
++            .unwrap();
++        assert!(pending_before.is_empty());
++        let closed_sequence = retained.0.runtime.commit.next_sequence();
++        let live_sequence = live.0.runtime.commit.next_sequence();
++
++        let view = InputView::Seed {
++            domain: SeedDomain::NEW_GAME_ID,
++            fallback: 999,
++        };
++        let late = uqm_engine::Game::new().with_context(|cx| retained.input_admitted(&view, cx));
++        let control = live_app
++            .game
++            .with_context(|cx| live.input_admitted(&view, cx));
++        assert_eq!(late.seed, Some(42));
++        assert_eq!(control.seed, Some(42));
++        for injected in [&late, &control] {
++            assert!(!injected.stop);
++            assert!(injected.planet_side.is_none());
++            assert!(injected.comm_response.is_none());
++        }
++        assert_eq!(snapshot(&retained.0), closed_before);
++        assert_eq!(snapshot(&live.0), live_before);
++        assert_eq!(
++            retained.0.runtime.commit.next_sequence(),
++            closed_sequence + 1
++        );
++        assert_eq!(live.0.runtime.commit.next_sequence(), live_sequence + 1);
++        assert!(!retained.0.runtime.commit.has_failed());
++        assert!(!live.0.runtime.commit.has_failed());
++
++        // Drain only to memory: inspect the actual record, not just its reservation.
++        let mut late_bytes = Vec::new();
++        retained
++            .0
++            .runtime
++            .commit
++            .publish_all(&mut late_bytes)
++            .unwrap();
++        let late_records = records(&late_bytes);
++        assert_eq!(late_records.len(), 1);
++        let late_record = &late_records[0];
++        assert_eq!(late_record.sequence, closed_sequence);
++        assert_eq!(late_record.kind, RecordKind::SeedApplication);
++        assert_eq!(
++            late_record.seed_application,
++            Some(SeedApplication {
++                domain: SeedDomain::NewGame,
++                seed: 42
++            })
++        );
++        assert_eq!(
++            (late_record.input_seen, late_record.present_seen),
++            (closed_before.1, closed_before.2)
++        );
++        let mut control_bytes = Vec::new();
++        live.0
++            .runtime
++            .commit
++            .publish_all(&mut control_bytes)
++            .unwrap();
++        let control_records = records(&control_bytes);
++        assert_eq!(control_records.len(), 2);
++        assert_eq!(control_records[0].kind, RecordKind::RunStart);
++        assert_eq!(control_records[1].sequence, live_sequence);
++        assert_eq!(control_records[1].kind, RecordKind::SeedApplication);
++        assert_eq!(
++            control_records[1].seed_application,
++            late_record.seed_application
++        );
++
++        assert_eq!(std::fs::read(&trace_path).unwrap(), trace_before);
++        assert_eq!(std::fs::read(&receipt_path).unwrap(), receipt_before);
++        assert!(!live_output.path().join("trace.jsonl").exists());
++        assert!(!live_output.path().join("teardown-complete.json").exists());
++        eprintln!("parent characterization: finalize={finalize_result:?}, closed={closed_before:?}, live={live_before:?}, late_seed={:?}, live_seed={:?}, late_sequence={}, late_records={}, durable_trace_changed=false, durable_receipt_changed=false", late.seed, control.seed, late_record.sequence, late_records.len());
++    }
++
++    #[test]
+     fn initialization_without_a_scene_never_enters_the_owner_slot() {
+         let source = br#"{"version":1,"name":"no-scene","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":60}}"#;
+         let script = crate::automation::validate_script(
