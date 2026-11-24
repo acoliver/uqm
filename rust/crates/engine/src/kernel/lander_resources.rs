@@ -40,17 +40,13 @@ impl LanderResources {
             sounds: None,
         };
         for key in GRAPHICS {
-            let graphic = LoadedDrawable::load(content, key).map_err(|error| {
-                while owner.graphics.pop().is_some() {}
-                error
-            })?;
+            let graphic = LoadedDrawable::load(content, key)
+                .inspect_err(|_| while owner.graphics.pop().is_some() {})?;
             owner.graphics.push(graphic);
         }
         owner.sounds = Some(
-            LoadedSoundBank::load(content, c"sounds.lander").map_err(|error| {
-                while owner.graphics.pop().is_some() {}
-                error
-            })?,
+            LoadedSoundBank::load(content, c"sounds.lander")
+                .inspect_err(|_| while owner.graphics.pop().is_some() {})?,
         );
         Ok(owner)
     }

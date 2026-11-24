@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn missing_empty_and_non_utf8_paths_preserve_read_and_error_order() {
         let mut fixture = Fixture::default();
-        assert!(matches!(open(&fixture, "missing.duk"), Err(_)));
+        assert!(open(&fixture, "missing.duk").is_err());
         assert_eq!(
             *fixture.reads.borrow(),
             vec![PathBuf::from("missing.duk"), PathBuf::from("/missing.duk")]
@@ -73,10 +73,10 @@ mod tests {
         fixture.reads.borrow_mut().clear();
         fixture.files.insert("empty.duk".into(), vec![]);
         fixture.files.insert("/empty.duk".into(), vec![1]);
-        assert!(matches!(open(&fixture, "empty.duk"), Err(_)));
+        assert!(open(&fixture, "empty.duk").is_err());
         assert_eq!(*fixture.reads.borrow(), vec![PathBuf::from("empty.duk")]);
         fixture.reads.borrow_mut().clear();
-        assert!(matches!(open(&fixture, "\u{fffd}"), Err(_)));
+        assert!(open(&fixture, "\u{fffd}").is_err());
     }
 
     #[test]
