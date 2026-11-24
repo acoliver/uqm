@@ -335,12 +335,15 @@ fn binary_palettes(content: &uqm_engine::resource::Content) {
     use uqm_engine::strings::sresins;
     for planet in &uqm_modes::planets::tables::PLANET_ARRAY {
         for resource in [planet.cmap_instance, planet.xlat_tab_instance] {
-            let entries = sresins::load_binary_entries(content, resource)
-                .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
+            let entries = sresins::load_binary_entries(content, resource).unwrap_or_else(|error| {
+                panic!("packaged binary palette {resource:?} did not load: {error}")
+            });
             assert!(!entries.is_empty());
             for index in [0, 1, 2, 3, u16::MAX] {
-                let owned = sresins::load_binary_entry(content, resource, index)
-                    .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
+                let owned =
+                    sresins::load_binary_entry(content, resource, index).unwrap_or_else(|error| {
+                        panic!("packaged binary palette {resource:?} did not load: {error}")
+                    });
                 assert_eq!(
                     owned,
                     entries[usize::from(index) % entries.len()],
