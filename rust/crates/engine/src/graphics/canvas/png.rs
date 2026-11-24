@@ -122,22 +122,27 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, crate::resource::Cause> {
         }
     }
     if format == PixelFormat::Indexed {
-        let colors: Vec<Color> = if info.color_type == ColorType::Grayscale {
-            (0..=255).map(|v| Color::rgb(v, v, v)).collect()
-        } else {
-            palette
-                .unwrap_or_default()
-                .as_chunks::<3>()
-                .0
-                .iter()
-                .take(1 << info.bit_depth as u8)
-                .map(|c| Color::rgb(c[0], c[1], c[2]))
-                .collect()
-        };
+        let colors = palette_colors(&info);
         canvas.set_palette_colors(0, &colors);
     }
     canvas.set_color_key(key);
     Ok(Decoded { canvas })
+}
+
+fn palette_colors(info: &png::Info<'_>) -> Vec<Color> {
+    if info.color_type == ColorType::Grayscale {
+        (0..=255).map(|v| Color::rgb(v, v, v)).collect()
+    } else {
+        info.palette
+            .as_deref()
+            .unwrap_or_default()
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .take(1 << info.bit_depth as u8)
+            .map(|c| Color::rgb(c[0], c[1], c[2]))
+            .collect()
+    }
 }
 
 fn rgba(r: u8, g: u8, b: u8, a: u8) -> u32 {

@@ -85,13 +85,8 @@ fn create_per_page_decoders(
     track_text: Option<&str>,
     timestamp: Option<&str>,
 ) -> Vec<Box<dyn Decoder>> {
-    let name = match track_name {
-        Some(n) => n,
-        None => return Vec::new(),
-    };
-    let text = match track_text {
-        Some(t) => t,
-        None => return Vec::new(),
+    let (Some(name), Some(text)) = (track_name, track_text) else {
+        return Vec::new();
     };
 
     // Parse pages with same delimiter behavior as C trackplayer (split on CR or LF runs).

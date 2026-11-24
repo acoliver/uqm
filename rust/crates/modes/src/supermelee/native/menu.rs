@@ -168,6 +168,24 @@ pub mod live {
             _ => {}
         }
     }
+    fn initialize_menu(state: &mut MeleeSession, cx: &mut uqm_engine::battle::Cx<'_>) {
+        if state.h_music.is_some() {
+            crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
+            drop(state.h_music.take());
+        }
+        let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
+            .unwrap_or_else(|error| panic!("melee music resource name: {error}"));
+        state.h_music =
+            uqm_engine::sound::resource_types::LoadedMusic::load(&cx.kernel.content(), music_name)
+                .ok();
+        state.initialized = 1;
+        state.melee_option = 4;
+        crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
+        init_screen(cx, state);
+        screen_context(cx.kernel).fade_screen(FADE_ALL_TO_COLOR, 840 / 2);
+        state.last_input_time = get_time_counter();
+    }
+
     /// State and its graphics remain live through this synchronous menu frame.
     pub fn do_melee(
         state: &mut MeleeSession,
@@ -182,25 +200,7 @@ pub mod live {
         }
         input.set_menu_sounds(15, 16);
         if state.initialized == 0 {
-            if state.h_music.is_some() {
-                crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
-                drop(state.h_music.take());
-            }
-            let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
-                .unwrap_or_else(|error| panic!("melee music resource name: {error}"));
-            state.h_music = uqm_engine::sound::resource_types::LoadedMusic::load(
-                &cx.kernel.content(),
-                music_name,
-            )
-            .ok();
-            state.initialized = 1;
-            state.melee_option = 4;
-            crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
-            {
-                init_screen(cx, state);
-                screen_context(cx.kernel).fade_screen(FADE_ALL_TO_COLOR, 840 / 2);
-            };
-            state.last_input_time = get_time_counter();
+            initialize_menu(state, cx);
             return 1;
         }
         poll_menu(state, cx, io, 0);
