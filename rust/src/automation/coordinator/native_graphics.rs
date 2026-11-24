@@ -40,12 +40,13 @@ impl AutomationObserver {
                 {
                     return false;
                 }
-                self.write_committed_menu_ready(inner, frame);
+                if self.write_committed_menu_ready(inner, frame) {
+                    return true;
+                }
             }
             let id = checkpoint.id.clone();
-            let reservation = self.runtime.commit.reserve();
             let mut record = crate::automation::capture::capture_trace_record(
-                reservation.sequence(),
+                0,
                 self.elapsed_ms(),
                 CaptureGeneration(frame.generation),
                 &id,
@@ -56,26 +57,18 @@ impl AutomationObserver {
             record.present_seen = inner.present_seen;
             record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
             record.checkpoint = Some(crate::automation::trace::CheckpointEvidence { id });
-            match record.to_jsonl() {
-                Ok(line) => {
-                    reservation.commit_record(line);
-                    inner.native_publication_pending = true;
-                }
-                Err(error) => {
-                    reservation.cancel();
-                    self.capture_failure(inner, error);
-                    return true;
-                }
+            if self.append_trace(inner, record) {
+                return true;
             }
+            inner.native_publication_pending = true;
         }
         inner.checkpoint_step = inner.sched_state.step_index;
         false
     }
 
-    fn write_committed_menu_ready(&self, inner: &CoordInner, frame: &PresentedFrame) {
-        let reservation = self.runtime.commit.reserve();
+    fn write_committed_menu_ready(&self, inner: &mut CoordInner, frame: &PresentedFrame) -> bool {
         let mut record = crate::automation::capture::capture_trace_record(
-            reservation.sequence(),
+            0,
             self.elapsed_ms(),
             CaptureGeneration(frame.generation),
             "",
@@ -90,18 +83,14 @@ impl AutomationObserver {
             subject: MAIN_MENU_READINESS_SUBJECT.into(),
             observation: MAIN_MENU_COMMITTED_OBSERVATION.into(),
         });
-        reservation.commit_record(
-            record
-                .to_jsonl()
-                .unwrap_or_else(|error| panic!("serialize committed menu readiness: {error}")),
-        );
+        self.append_trace(inner, record)
     }
 
     pub(crate) fn trace_native_graphics(&self, count: u64, samples: &[PresentationSample]) {
         if !self.native_diagnostics() {
             return;
         }
-        let inner = self.inner.lock();
+        let mut inner = self.inner.lock();
         let unchanged = self
             .native_trace
             .as_ref()
@@ -109,9 +98,8 @@ impl AutomationObserver {
         if inner.terminal_class.is_some() || unchanged {
             return;
         }
-        let reservation = self.runtime.commit.reserve();
         let mut record = crate::automation::capture::capture_trace_record(
-            reservation.sequence(),
+            0,
             self.elapsed_ms(),
             CaptureGeneration(self.runtime.mirror.capture_generation()),
             "",
@@ -124,11 +112,7 @@ impl AutomationObserver {
         record.presentation = None;
         record.label =
             Some(serde_json::json!({"readback_count": count, "samples": samples}).to_string());
-        reservation.commit_record(
-            record
-                .to_jsonl()
-                .unwrap_or_else(|error| panic!("serialize native graphics samples: {error}")),
-        );
+        self.append_trace(&mut inner, record);
     }
 }
 

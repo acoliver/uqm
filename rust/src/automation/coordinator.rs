@@ -2205,12 +2205,10 @@ impl AutomationObserver {
         let word = world.activity;
         let evidence = activity_evidence(assertion, word);
         let passed = evidence.passed;
-        let reservation = self.runtime.commit.reserve();
-        let seq = reservation.sequence();
         let record = TraceRecord {
             schema: TraceRecord::SCHEMA,
             run: 1,
-            sequence: seq,
+            sequence: 0,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
             elapsed_ms: self.elapsed_ms(),
@@ -2232,13 +2230,8 @@ impl AutomationObserver {
             failure: None,
             native_battle: None,
         };
-        match record.to_jsonl() {
-            Ok(jsonl) => reservation.commit_record(jsonl),
-            Err(_) => {
-                reservation.cancel();
-                self.set_terminal(inner, TerminalClass::TraceFailure);
-                return true;
-            }
+        if self.append_trace(inner, record) {
+            return true;
         }
         if !passed {
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -2763,9 +2756,8 @@ impl AutomationObserver {
             return self.capture_failure(inner, format!("durable PNG publication failed: {error}"));
         }
 
-        let reservation = self.runtime.commit.reserve();
         let mut record = crate::automation::capture::capture_trace_record(
-            reservation.sequence(),
+            0,
             self.elapsed_ms(),
             generation,
             label,
@@ -2774,16 +2766,7 @@ impl AutomationObserver {
         record.input_seen = inner.input_seen;
         record.present_seen = inner.present_seen;
         record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
-        match record.to_jsonl() {
-            Ok(jsonl) => reservation.commit_record(jsonl),
-            Err(error) => {
-                reservation.cancel();
-                self.capture_failure(
-                    inner,
-                    format!("cannot serialize capture trace record: {error}"),
-                );
-            }
-        }
+        self.append_trace(inner, record);
     }
 
     fn capture_failure(&self, inner: &mut CoordInner, error: impl std::fmt::Display) {
@@ -2827,12 +2810,10 @@ impl AutomationObserver {
         };
         let coord = self;
         let mut inner = coord.inner.lock();
-        let reservation = coord.runtime.commit.reserve();
-        let seq = reservation.sequence();
         let record = TraceRecord {
             schema: TraceRecord::SCHEMA,
             run: 1,
-            sequence: seq,
+            sequence: 0,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
             elapsed_ms: coord.elapsed_ms(),
@@ -2853,13 +2834,7 @@ impl AutomationObserver {
             failure: None,
             native_battle: None,
         };
-        match record.to_jsonl() {
-            Ok(jsonl) => reservation.commit_record(jsonl),
-            Err(_) => {
-                reservation.cancel();
-                coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
-            }
-        }
+        coord.append_trace(&mut inner, record);
         coord.seed
     }
 }

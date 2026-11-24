@@ -12,7 +12,6 @@ use crate::automation::artifact::{write_durable, DurableResult};
 use crate::automation::error::AutomationError;
 use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::RuntimeModel;
-use crate::automation::trace::{OrderedCommit, RecordKind, TraceRecord};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -237,49 +236,6 @@ pub fn run_lifecycle<L: GameLifecycle>(
         terminal,
         receipt_written,
     }
-}
-
-// ===========================================================================
-//  Lifecycle trace integration (REQ-TRACE-001)
-// ===========================================================================
-
-/// Write lifecycle trace records (run_start, run_end) through the ordered
-/// commit protocol.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P05
-/// @requirement REQ-TRACE-001
-pub fn write_lifecycle_trace(
-    commit: &OrderedCommit,
-    run_id: u64,
-    records: &[(RecordKind, u64, u64, u64)],
-) -> Result<(), AutomationError> {
-    for (kind, sequence, input_seen, present_seen) in records {
-        let record = TraceRecord {
-            schema: TraceRecord::SCHEMA,
-            run: run_id,
-            sequence: *sequence,
-            input_seen: *input_seen,
-            present_seen: *present_seen,
-            elapsed_ms: 0,
-            kind: kind.clone(),
-            label: None,
-            from: None,
-            to: None,
-            terminal_reason: None,
-            seed_application: None,
-            presentation: None,
-            activity: None,
-            readiness: None,
-            command_acknowledgement: None,
-            checkpoint: None,
-            failure: None,
-            native_battle: None,
-        };
-        let jsonl = record.to_jsonl()?;
-        let res = commit.reserve_sequence(*sequence);
-        res.commit_record(jsonl);
-    }
-    Ok(())
 }
 
 // ===========================================================================

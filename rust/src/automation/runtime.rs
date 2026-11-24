@@ -247,8 +247,8 @@ impl RuntimeModel {
             return None;
         }
         let new_version = state.state_version.checked_add(1)?;
+        let reservation = self.commit.reserve().ok()?;
         state.state_version = new_version;
-        let reservation = self.commit.reserve();
         Some((new_version, reservation))
     }
 
