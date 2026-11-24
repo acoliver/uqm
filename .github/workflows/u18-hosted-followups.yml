@@ -1,0 +1,182 @@
+name: Disposable U18 hosted follow-ups
+on:
+  push:
+    branches: ['tmp/qualification/u18-82dc645d-20261124T230335Z-22ba396a']
+permissions:
+  contents: read
+concurrency:
+  group: u18-followups-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CARGO_TERM_COLOR: never
+  SOURCE_COMMIT: '79ca9ba83fcebe58642282e111e29a888cef43a3'
+  SOURCE_TREE: 'f335ea47d5239adeaf7d8d44157d0afd76f3128a'
+  LANDED_COMMIT: '82dc645dde622835c73431d471d1333191bf403a'
+  SOURCE_FILES: '{"rust/crates/process-support/src/child_session.rs": "68069ba54ea35226ca335bc602cf59acba6d8ace4a725082285c723a89b35b44", "rust/src/automation/native_artifacts.rs": "828e4b6180c15a73e83eb6d8c6ebd81419b0d331203b0e1b44952bdd5164d25c", "rust/src/automation/native_window.rs": "ff4521e34c515d966bffcac1536fe1b24265995a1a25c3373d356e3ef8b95ce9", "scripts/release/test_package.py": "360edc1b0f7f5726d9fee64924afeaeb81e6c65ad6cf586a5be71f2a27cc3aeb"}'
+  PATCH_DIGESTS: '{"distribution": "ef1f07e0d992e56768c16e01b6045e1c76f37ce2efa3257dddb8bcafef0e54e8", "inventory": "d4134630c6a0543c115c15fd6d5ec095dd35738d40b5e51af1e81553c426032e", "quota": "25cdfcf564e7cdcbd2cb7f7fdfa4023a0dbf5d97d7a46cbef987b599bb05a715"}'
+jobs:
+  focused:
+    name: Seven exact Rust filters
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: '79ca9ba83fcebe58642282e111e29a888cef43a3'
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Verify exact source and native ARM runner
+        id: source
+        shell: python
+        run: |
+          import hashlib, json, os, pathlib, platform, subprocess
+          root = pathlib.Path.cwd()
+          assert platform.system() == 'Darwin' and platform.machine() == 'arm64'
+          assert os.environ['RUNNER_OS'] == 'macOS' and os.environ['RUNNER_ARCH'] == 'ARM64'
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          assert git('rev-parse', 'HEAD') == os.environ['SOURCE_COMMIT']
+          assert git('rev-parse', 'HEAD^{tree}') == os.environ['SOURCE_TREE']
+          assert git('rev-parse', 'HEAD^') == os.environ['LANDED_COMMIT']
+          for name, expected in json.loads(os.environ['SOURCE_FILES']).items():
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected, name
+          out = root / 'tmp/u18-qualification'
+          out.mkdir(parents=True)
+          receipt = {key: os.environ[key] for key in ['SOURCE_COMMIT', 'SOURCE_TREE', 'LANDED_COMMIT', 'PATCH_DIGESTS', 'RUNNER_OS', 'RUNNER_ARCH', 'GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT']}
+          receipt.update(platform=platform.platform(), machine=platform.machine(), source_files=json.loads(os.environ['SOURCE_FILES']))
+          (out / 'source-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+      - name: Install native dependencies and exact Rust toolchain
+        run: |
+          set -euo pipefail
+          brew install pkg-config sdl2 cmake
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup override set 1.98.0
+          rustc -vV | tee tmp/u18-qualification/toolchain.log
+          test "$(rustc -vV | sed -n 's/^host: //p')" = aarch64-apple-darwin
+      - name: Seven exact Rust filters
+        shell: python
+        run: |
+          import json, os, pathlib, re, subprocess
+          root = pathlib.Path.cwd()
+          out = root / 'tmp/u18-qualification'
+          scratch = out / 'scratch'
+          scratch.mkdir()
+          os.environ['TMPDIR'] = str(scratch)
+          results = []
+          for number, (package, selector) in enumerate([('uqm-process-support', 'child_session::os_tests::byte_budgets_are_inclusive_and_independent_for_each_stream'), ('uqm', 'automation::native_window::tests::shared_virtual_inventory_preserves_identity_and_empty_objects'), ('uqm', 'automation::native_window::tests::shared_native_receipt_replays_retained_inputs_after_relocation'), ('uqm', 'automation::native_artifacts::tests::shared_reuse_mutation_and_descriptor_substitution_are_refused'), ('uqm', 'automation::native_artifacts::tests::descriptor_bound_store_rejects_replaced_root_and_symlink_members'), ('uqm', 'automation::native_window::tests::native_inventory_enforces_each_authority_budget'), ('uqm', 'automation::native_window::tests::retained_file_digest_rejects_deterministic_growth_and_truncation')], 1):
+              command = ['cargo', 'test', '--locked', '-p', package, '--lib']
+              if package == 'uqm':
+                  command += ['--features', 'debug-process']
+              command += [selector, '--', '--exact']
+              log = out / f'focused-{number:02d}.log'
+              with log.open('wb') as output:
+                  result = subprocess.run(command, cwd=root / 'rust', stdout=output, stderr=subprocess.STDOUT)
+              text = log.read_text(errors='replace')
+              one = len(re.findall(r'^running 1 test$', text, re.M)) == 1
+              passed = result.returncode == 0 and one and f'test {selector} ... ok' in text and 'test result: ok. 1 passed; 0 failed; 0 ignored;' in text
+              results.append(dict(command=command, exit_code=result.returncode, exactly_one_test=one, passed=passed, log=log.name))
+              (out / 'focused-receipt.json').write_text(json.dumps(results, indent=2) + '\n')
+              print(selector, 'PASS' if passed else 'FAIL', flush=True)
+          assert len(results) == 7 and all(row['passed'] for row in results)
+      - name: Retain only focused or package logs and receipts
+        if: ${{ always() && steps.source.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: u18-focused-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            tmp/u18-qualification/*.log
+            tmp/u18-qualification/*receipt.json
+            tmp/u18-qualification/SHA256SUMS-*
+          if-no-files-found: error
+          retention-days: 3
+  package:
+    name: Real Apple Silicon distribution
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: '79ca9ba83fcebe58642282e111e29a888cef43a3'
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Verify exact source and native ARM runner
+        id: source
+        shell: python
+        run: |
+          import hashlib, json, os, pathlib, platform, subprocess
+          root = pathlib.Path.cwd()
+          assert platform.system() == 'Darwin' and platform.machine() == 'arm64'
+          assert os.environ['RUNNER_OS'] == 'macOS' and os.environ['RUNNER_ARCH'] == 'ARM64'
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          assert git('rev-parse', 'HEAD') == os.environ['SOURCE_COMMIT']
+          assert git('rev-parse', 'HEAD^{tree}') == os.environ['SOURCE_TREE']
+          assert git('rev-parse', 'HEAD^') == os.environ['LANDED_COMMIT']
+          for name, expected in json.loads(os.environ['SOURCE_FILES']).items():
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected, name
+          out = root / 'tmp/u18-qualification'
+          out.mkdir(parents=True)
+          receipt = {key: os.environ[key] for key in ['SOURCE_COMMIT', 'SOURCE_TREE', 'LANDED_COMMIT', 'PATCH_DIGESTS', 'RUNNER_OS', 'RUNNER_ARCH', 'GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT']}
+          receipt.update(platform=platform.platform(), machine=platform.machine(), source_files=json.loads(os.environ['SOURCE_FILES']))
+          (out / 'source-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+      - name: Install native dependencies and exact Rust toolchain
+        run: |
+          set -euo pipefail
+          brew install pkg-config sdl2 cmake
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup override set 1.98.0
+          rustc -vV | tee tmp/u18-qualification/toolchain.log
+          test "$(rustc -vV | sed -n 's/^host: //p')" = aarch64-apple-darwin
+      - name: Run existing Python package tests including the distribution regression
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/release -p test_package.py -v 2>&1 | tee tmp/u18-qualification/package-unit.log
+      - name: Real Apple Silicon distribution
+        shell: python
+        run: |
+          import hashlib, json, pathlib, subprocess, tomllib
+          root = pathlib.Path.cwd()
+          out = root / 'tmp/u18-qualification'
+          version = tomllib.loads((root / 'rust/Cargo.toml').read_text())['workspace']['package']['version']
+          command = ['python3', 'scripts/release/package.py', 'v' + version, 'aarch64-apple-darwin']
+          with (out / 'package.log').open('wb') as log:
+              result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT)
+          assets = {}
+          for path in (root / 'artifacts/release').glob('*'):
+              if path.is_file():
+                  with path.open('rb') as stream:
+                      digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+                  assets[path.name] = dict(byte_length=path.stat().st_size, sha256=digest)
+          checksums = root / 'artifacts/release/SHA256SUMS-aarch64-apple-darwin'
+          if checksums.exists():
+              (out / checksums.name).write_bytes(checksums.read_bytes())
+          receipt = dict(command=command, exit_code=result.returncode, assets=assets, source_commit='79ca9ba83fcebe58642282e111e29a888cef43a3', source_tree='f335ea47d5239adeaf7d8d44157d0afd76f3128a', real_tools=True, gui_required=False)
+          (out / 'package-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          assert result.returncode == 0, 'Real distribution package failed; see package.log'
+          assert checksums.is_file() and len(assets) == 2
+          archive = f'uqm-v{version}-aarch64-apple-darwin.tar.gz'
+          assert checksums.read_bytes() == (assets[archive]['sha256'] + '  ' + archive + '\n').encode('ascii')
+          print('Real Apple Silicon distribution package and both CLI smoke entry points passed')
+      - name: Retain only focused or package logs and receipts
+        if: ${{ always() && steps.source.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: u18-package-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            tmp/u18-qualification/*.log
+            tmp/u18-qualification/*receipt.json
+            tmp/u18-qualification/SHA256SUMS-*
+          if-no-files-found: error
+          retention-days: 3
