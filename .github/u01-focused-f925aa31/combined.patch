@@ -1,0 +1,383 @@
+--- a/rust/crates/engine/src/strings/conversation.rs
++++ b/rust/crates/engine/src/strings/conversation.rs
+@@ -81,6 +81,44 @@
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn indexed_positive_conversation_loads_companions_and_retains_text_on_reload() {
++        use crate::resource::AssetKind;
++
++        let mount = crate::io::fixture::TempMount::new();
++        mount.write(
++            "dialogue.rmp",
++            b"test.dialogue = CONVERSATION:talk.txt:voice/:talk.ts\n",
++        );
++        mount.write("talk.txt", b"#(GREET) hello.wav\nHello, captain.\n");
++        mount.write("talk.ts", b"#(GREET) 1000,2000\n");
++        let content = mount.content(c"dialogue.rmp");
++        let resolved = content
++            .resolve(c"test.dialogue", AssetKind::Conversation)
++            .unwrap();
++        assert_eq!(resolved.descriptor, "talk.txt:voice/:talk.ts");
++        assert_eq!(resolved.source.index.as_c_str(), c"dialogue.rmp");
++        assert_eq!(resolved.revision, content.revision());
++
++        let first = ConversationTable::load(&content, c"test.dialogue").unwrap();
++        let retained = first.strings.entry(0).unwrap();
++        assert_eq!(first.phrase(0).unwrap().clip, Some(c"voice/hello.wav"));
++        drop(first);
++        assert_eq!(retained.current_label(), (c"Hello, captain.", 15));
++
++        let reloaded = ConversationTable::load(&content, c"test.dialogue").unwrap();
++        drop(content);
++        drop(mount);
++        assert_eq!(reloaded.len(), 1);
++        let phrase = reloaded.phrase(0).unwrap();
++        assert_eq!(phrase.text, Some(c"Hello, captain."));
++        assert_eq!(phrase.name, Some(c"GREET"));
++        assert_eq!(phrase.clip, Some(c"voice/hello.wav"));
++        assert_eq!(phrase.timestamp, Some(c"1000,2000\n"));
++        drop(reloaded);
++        assert_eq!(retained.current_label(), (c"Hello, captain.", 15));
++    }
++
+     fn column(values: &[Option<&CStr>]) -> Vec<Vec<u8>> {
+         values
+             .iter()
+--- a/rust/crates/engine/src/sound/owned_bank.rs
++++ b/rust/crates/engine/src/sound/owned_bank.rs
+@@ -92,6 +92,117 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++
++    const INDEXED_WAVE: &[u8] = b"RIFF\x26\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0\x22\x56\0\0\x22\x56\0\0\x01\0\x08\0data\x02\0\0\0\x80\x81";
++
++    #[test]
++    fn indexed_positive_sound_bank_loads_entries_and_keeps_clips_on_reload() {
++        use crate::resource::AssetKind;
++        use crate::sound::mixer::buffer::{mixer_get_buffer, mixer_is_buffer};
++
++        let _guard = crate::sound::test_support::ENGINE_TEST_LOCK.lock();
++        let mount = crate::io::fixture::TempMount::new();
++        mount.write("sounds.rmp", b"test.bank = SNDRES:sounds/bank.snd\n");
++        mount.write("sounds/bank.snd", b"first.wav\nsecond.wav\n");
++        for name in ["sounds/first.wav", "sounds/second.wav"] {
++            mount.write(name, INDEXED_WAVE);
++        }
++        let content = mount.content(c"sounds.rmp");
++        let resolved = content.resolve(c"test.bank", AssetKind::Sound).unwrap();
++        assert_eq!(resolved.descriptor, "sounds/bank.snd");
++        assert_eq!(resolved.source.index.as_c_str(), c"sounds.rmp");
++        assert_eq!(resolved.revision, content.revision());
++
++        let bank = LoadedSoundBank::load(&content, c"test.bank").unwrap();
++        assert_eq!(bank.len(), 2);
++        let handles: Vec<_> = bank
++            .0
++            .samples
++            .iter()
++            .map(|sample| sample.buffers[0])
++            .collect();
++        for sample in &bank.0.samples {
++            assert_eq!(sample.length, 2.0 / 22050.0);
++            let buffer = mixer_get_buffer(sample.buffers[0]).unwrap();
++            let buffer = buffer.lock();
++            assert_eq!(buffer.org_data.as_deref(), Some([128, 129].as_slice()));
++            assert_eq!(
++                (buffer.org_freq, buffer.org_channels, buffer.org_chansize),
++                (22050, 1, 1)
++            );
++            assert!(!buffer.bytes().is_empty());
++        }
++        let weak = Rc::downgrade(&bank.0);
++        let clip = bank.clip(0);
++        assert_eq!(clip.identity(), bank.clip(2).identity());
++        assert_ne!(clip.identity(), bank.clip(1).identity());
++        drop(bank);
++        assert!(weak.upgrade().is_some());
++        let reloaded = LoadedSoundBank::load(&content, c"test.bank").unwrap();
++        assert_eq!(reloaded.len(), 2);
++        assert_ne!(clip.identity(), reloaded.clip(0).identity());
++        drop(reloaded);
++        drop(content);
++        drop(mount);
++        assert_eq!(clip.bank.0.samples[0].length, 2.0 / 22050.0);
++        let buffer = mixer_get_buffer(handles[0]).unwrap();
++        assert_eq!(
++            buffer.lock().org_data.as_deref(),
++            Some([128, 129].as_slice())
++        );
++        drop(buffer);
++        drop(clip);
++        assert!(weak.upgrade().is_none());
++        assert!(handles.iter().all(|&handle| !mixer_is_buffer(handle)));
++    }
++
++    #[test]
++    fn indexed_positive_music_loads_metadata_and_releases_before_reload() {
++        use crate::resource::AssetKind;
++        use crate::sound::{formats::AudioFormat, resource_types::LoadedMusic};
++        use std::sync::Arc;
++
++        let _guard = crate::sound::test_support::ENGINE_TEST_LOCK.lock();
++        let mount = crate::io::fixture::TempMount::new();
++        mount.write("music.rmp", b"test.music = MUSICRES:music/theme.wav\n");
++        mount.write("music/theme.wav", INDEXED_WAVE);
++        let content = mount.content(c"music.rmp");
++        let resolved = content.resolve(c"test.music", AssetKind::Music).unwrap();
++        assert_eq!(resolved.descriptor, "music/theme.wav");
++        assert_eq!(resolved.source.index.as_c_str(), c"music.rmp");
++        assert_eq!(resolved.revision, content.revision());
++
++        for _ in 0..2 {
++            let music = LoadedMusic::load(&content, c"test.music").unwrap();
++            let retained = music.playback();
++            let weak = Arc::downgrade(&retained.0);
++            let buffers = {
++                let mut sample = retained.0.lock();
++                assert_eq!(sample.num_buffers, 64);
++                let decoder = sample.decoder.as_mut().unwrap();
++                assert_eq!(decoder.name(), "Wave");
++                assert_eq!(decoder.frequency(), 22050);
++                assert_eq!(decoder.format(), AudioFormat::Mono8);
++                assert_eq!(decoder.length(), 2.0 / 22050.0);
++                let mut pcm = [0; 2];
++                assert_eq!(decoder.decode(&mut pcm).unwrap(), 2);
++                assert_eq!(pcm, [128, 129]);
++                sample.buffers.clone()
++            };
++            drop(music);
++            assert!(weak.upgrade().is_some());
++            {
++                let sample = retained.0.lock();
++                assert!(sample.decoder.is_none());
++                assert!(sample.buffers.is_empty());
++            }
++            assert!(buffers
++                .iter()
++                .all(|&handle| !crate::sound::mixer::buffer::mixer_is_buffer(handle)));
++            drop(retained);
++            assert!(weak.upgrade().is_none());
++        }
++    }
+ 
+     #[test]
+     fn clips_retain_their_bank_and_keep_wrapping_entry_selection() {
+diff --git a/rust/tests/startup_addons.rs b/rust/tests/startup_addons.rs
+new file mode 100644
+--- /dev/null
++++ b/rust/tests/startup_addons.rs
+@@ -0,0 +1,211 @@
++//! Addon policy through the same startup entries the application calls.
++#![forbid(unsafe_code)]
++use std::{ffi::CString, io::Write, path::Path};
++use uqm_engine::{
++    host::Files, input::InputSession, resource::AssetKind, strings::owned_table::LoadedTextTable,
++    test_support::native_session::FixtureFiles, Game,
++};
++use uqm_rust::mainloop::{options::ParsedOptions, startup, teardown};
++
++fn write(root: &Path, name: &str, bytes: impl AsRef<[u8]>) {
++    let path = root.join(name);
++    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++    std::fs::write(path, bytes).unwrap();
++}
++
++fn zip(root: &Path, name: &str, entries: &[(&str, &[u8])]) {
++    let path = root.join(name);
++    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++    let mut archive = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
++    let options =
++        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
++    for (name, bytes) in entries {
++        archive.start_file(*name, options).unwrap();
++        archive.write_all(bytes).unwrap();
++    }
++    archive.finish().unwrap();
++}
++
++fn text(content: &uqm_engine::resource::Content, key: &str) -> String {
++    let table = LoadedTextTable::load(content, &CString::new(key).unwrap()).unwrap();
++    table.text(0).unwrap().to_str().unwrap().to_owned()
++}
++
++fn check_startup(selected: usize, voice: &str, users: &[&str], winner: &str) {
++    let files = FixtureFiles::new();
++    let root = files.path().join("content");
++    write(&root, "version", "0.8.0\n");
++    zip(
++        &root,
++        "packages/base.uqm",
++        &[
++            ("00-base.rmp", b"colortable.main = BINTAB:main.ct\nfixture.winner = STRTAB:base.txt\nfixture.order = STRTAB:base.txt\nfixture.package = STRTAB:package.txt\nfixture.overlay = STRTAB:payload.txt\nslides.logo = STRTAB:base.txt\n"),
++            ("package.txt", b"#(A)\npackage\n"),
++            ("payload.txt", b"#(A)\npackage\n"),
++        ],
++    );
++    write(&root, "base.txt", "#(A)\nbase\n");
++    write(&root, "payload.txt", "#(A)\nloose\n");
++    write(&root, "late.txt", "#(A)\nlate\n");
++    write(&root, "99-last.rmp", "fixture.order = STRTAB:late.txt\n");
++    let mut palette = Vec::new();
++    for word in [u32::MAX, 1, 0, 770] {
++        palette.extend_from_slice(&word.to_be_bytes());
++    }
++    palette.extend_from_slice(&[0; 770]);
++    write(&root, "main.ct", palette);
++    let names = ["3domusic", "3dovoice", "remix", "3dovideo"];
++    for name in names.into_iter().chain(["alpha", "beta"]) {
++        if name == "3dovoice" && voice != "present" {
++            if voice == "empty" {
++                std::fs::create_dir_all(root.join("addons/3dovoice")).unwrap();
++            }
++            continue;
++        }
++        write(&root, &format!("{name}.txt"), format!("#(A)\n{name}\n"));
++        let mut index =
++            format!("fixture.{name} = STRTAB:{name}.txt\nfixture.winner = STRTAB:{name}.txt\n");
++        if name == "3dovideo" {
++            index.push_str("slides.logo = 3DOVID:addons/3dovideo/logo/logo.duk\n");
++        } else if matches!(name, "alpha" | "beta") {
++            index.push_str(&format!("slides.logo = STRTAB:{name}.txt\n"));
++        }
++        zip(
++            &root,
++            &format!("addons/{name}/pack.uqm"),
++            &[("addon.rmp", index.as_bytes())],
++        );
++    }
++    std::fs::create_dir_all(root.join("addons/empty")).unwrap();
++    write(
++        &root,
++        "addons/alpha/shadow-content/payload.txt",
++        "#(A)\nshadow\n",
++    );
++    let config = files.path().join("config");
++    let options = ParsedOptions {
++        content_dir: Some(root.to_str().unwrap().into()),
++        config_dir: Some(config.to_str().unwrap().into()),
++        addons: users.iter().map(|name| (*name).to_owned()).collect(),
++        use_3do_music: selected >= 1,
++        use_speech: selected >= 2,
++        use_remix_music: selected >= 3,
++        which_intro: if selected >= 4 { 1 } else { 2 },
++        scaler: 0,
++        resolution_width: 320,
++        resolution_height: 240,
++        ..Default::default()
++    };
++    // Startup exports these paths; keep every write inside this fixture.
++    std::env::set_var("UQM_SAVE_DIR", config.join("save"));
++    std::env::set_var("UQM_MELEE_DIR", config.join("teams"));
++    let mut game = Game::new();
++    let input = InputSession::new(Default::default(), game.kernel.configuration.clone());
++    let mut prepared = startup::initialize(&input, &options, &[], None).unwrap();
++    assert_eq!(
++        uqm_rust::game_init::kernel_abi::load_kernel(
++            &mut game.kernel,
++            &mut game.world,
++            &mut prepared,
++        ),
++        1
++    );
++    let content = game.kernel.content();
++    assert_eq!(game.world.activity(), u16::MAX);
++    assert_eq!(text(&content, "fixture.winner"), winner);
++    assert_eq!(text(&content, "fixture.package"), "package");
++    assert_eq!(text(&content, "fixture.order"), "late");
++    assert_eq!(
++        text(&content, "fixture.overlay"),
++        if users.contains(&"alpha") {
++            "shadow"
++        } else {
++            "loose"
++        }
++    );
++    for (index, name) in names.iter().enumerate() {
++        let imported = (index < selected && (*name != "3dovoice" || voice == "present"))
++            || users.contains(name);
++        assert_eq!(content.kind(&format!("fixture.{name}")).is_some(), imported);
++    }
++    assert_eq!(
++        content.kind("fixture.alpha").is_some(),
++        matches!(winner, "alpha" | "beta")
++    );
++    assert_eq!(content.kind("fixture.beta").is_some(), winner == "beta");
++    assert_eq!(
++        game.kernel.using_speech,
++        u32::from(selected >= 2 && voice == "present")
++    );
++    let preferences = game.kernel.configuration.preferences();
++    assert_eq!(preferences.speech, u32::from(selected >= 2));
++    assert_eq!(preferences.subtitles, 1);
++    let video_logo = winner == "3dovideo";
++    assert_eq!(
++        content.kind("slides.logo"),
++        Some(if video_logo { "3DOVID" } else { "STRTAB" })
++    );
++    if video_logo {
++        let logo = content.resolve(c"slides.logo", AssetKind::Video).unwrap();
++        assert_eq!(logo.descriptor, "addons/3dovideo/logo/logo.duk");
++        assert_eq!(logo.source.index, c"addon.rmp");
++        assert!(logo.source.directory.read(Path::new("addon.rmp")).is_ok());
++    } else {
++        let expected = if matches!(winner, "alpha" | "beta") {
++            winner
++        } else {
++            "base"
++        };
++        assert_eq!(text(&content, "slides.logo"), expected);
++    }
++    game.kernel.close_screen();
++    drop(content);
++    drop(prepared);
++    drop(game);
++    teardown::teardown_subsystems();
++}
++
++fn isolated(case: &str) -> bool {
++    if !uqm_engine::test_support::native_process::own_graphics_process(case) {
++        return false;
++    }
++    std::env::set_var("SDL_VIDEODRIVER", "dummy");
++    std::env::set_var("SDL_AUDIODRIVER", "dummy");
++    uqm_platform::install(false);
++    true
++}
++
++#[test]
++fn selected_addons_follow_production_startup_order() {
++    if !isolated("selected_addons_follow_production_startup_order") {
++        return;
++    }
++    for (selected, winner) in ["base", "3domusic", "3dovoice", "remix", "3dovideo"]
++        .into_iter()
++        .enumerate()
++    {
++        check_startup(selected, "present", &[], winner);
++    }
++    check_startup(0, "present", &["3dovideo"], "3dovideo");
++}
++
++#[test]
++fn missing_voice_disables_only_active_speech_and_continues_startup() {
++    if !isolated("missing_voice_disables_only_active_speech_and_continues_startup") {
++        return;
++    }
++    for voice in ["missing", "empty"] {
++        check_startup(4, voice, &[], "3dovideo");
++    }
++}
++
++#[test]
++fn user_addons_override_selected_indices_and_stop_at_first_failure() {
++    if !isolated("user_addons_override_selected_indices_and_stop_at_first_failure") {
++        return;
++    }
++    check_startup(4, "present", &["alpha", "beta"], "beta");
++    check_startup(4, "present", &["alpha", "missing", "beta"], "alpha");
++    check_startup(4, "present", &["alpha", "empty", "beta"], "alpha");
++    check_startup(4, "present", &["missing", "alpha"], "3dovideo");
++}
