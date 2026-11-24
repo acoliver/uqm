@@ -348,18 +348,10 @@ impl TransportState {
         let Some(commit) = &self.trace else {
             return;
         };
-        let reservation = commit.reserve();
-        let record = ack_trace_record(
-            reservation.sequence(),
-            context,
-            packet.command_id,
-            &packet.nonce,
-            ack,
-        );
-        match record.to_jsonl() {
-            Ok(jsonl) => reservation.commit_record(jsonl),
-            Err(_) => reservation.cancel(),
-        }
+        let record = ack_trace_record(0, context, packet.command_id, &packet.nonce, ack);
+        // Authentication has no terminal owner. The appender retains failures
+        // so the publication/finalization caller cannot certify this trace.
+        let _ = commit.append(record);
     }
 }
 
@@ -698,17 +690,17 @@ mod tests {
         // Reserve an input-tick slot, authenticate, then reserve the following
         // input tick. Commit the surrounding records in reverse so publication
         // order proves the ordered commit, not completion order.
-        let before = commit.reserve_sequence(0);
+        let before = commit.reserve().unwrap();
         let packet = make_packet(test_nonce(), CommandId::TapDown.as_u8());
         let ack = state.authenticate(&packet, trace_context());
         assert_eq!(ack.kind, AckKind::Accepted);
-        let after = commit.reserve();
+        let after = commit.reserve().unwrap();
 
         let before_record = crate::automation::input::input_trace_record(0, 1, 0, 1, 0);
         let after_record = crate::automation::input::input_trace_record(2, 3, 2, 1, 1);
 
-        after.commit_record(after_record.to_jsonl().unwrap());
-        before.commit_record(before_record.to_jsonl().unwrap());
+        after.append(after_record).unwrap();
+        before.append(before_record).unwrap();
 
         let records = publish_records(&commit);
         assert_eq!(records.len(), 3);

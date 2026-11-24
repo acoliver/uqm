@@ -13,7 +13,7 @@ use crate::automation::error::AutomationError;
 use parking_lot::{Condvar, Mutex};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::io::Write;
+use std::io::{self, Write};
 use std::sync::Arc;
 
 // ===========================================================================
@@ -263,6 +263,10 @@ impl TraceRecord {
 //  OrderedCommit synchronization primitive (REQ-IO-001)
 // ===========================================================================
 
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+struct TraceFailure(#[source] Arc<io::Error>);
+
 /// Internal state of the ordered commit object.
 #[derive(Debug)]
 struct OrderedCommitState {
@@ -272,8 +276,8 @@ struct OrderedCommitState {
     next_to_reserve: u64,
     /// Submitted records keyed by sequence number.
     pending: BTreeMap<u64, SubmitEntry>,
-    /// Whether the sink has experienced a fatal error.
-    sink_failed: bool,
+    /// The first append or publication failure, retained for every later caller.
+    failure: Option<Arc<io::Error>>,
 }
 
 /// An entry submitted to the ordered commit object.
@@ -294,7 +298,7 @@ enum SubmitEntry {
 pub struct Reservation {
     sequence: u64,
     committed: Option<String>,
-    commit: Option<Arc<OrderedCommitInner>>,
+    commit: Arc<OrderedCommitInner>,
 }
 
 impl Reservation {
@@ -304,10 +308,22 @@ impl Reservation {
         self.sequence
     }
 
-    /// Commit a record payload for this reservation.
-    pub fn commit_record(mut self, jsonl: String) {
+    /// Serialize one record with this reservation's sequence. Failure cancels
+    /// the slot and remains fatal to the run's publication and finalization.
+    pub fn append(mut self, mut record: TraceRecord) -> io::Result<()> {
+        record.sequence = self.sequence;
+        let inner = &self.commit;
+        inner.check_failure()?;
+        let jsonl = record
+            .to_jsonl()
+            .map_err(|error| inner.fail(io::Error::other(error)))?;
         self.committed = Some(jsonl);
-        // Drop will publish.
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(super) fn commit_raw(mut self, jsonl: String) {
+        self.committed = Some(jsonl);
     }
 
     /// Explicitly cancel this reservation.
@@ -319,14 +335,11 @@ impl Reservation {
 
 impl Drop for Reservation {
     fn drop(&mut self) {
-        if let Some(inner) = self.commit.take() {
-            let entry = match self.committed.take() {
-                Some(jsonl) => SubmitEntry::Record(jsonl),
-                None => SubmitEntry::Cancelled,
-            };
-            let (sequence, entry_data) = (self.sequence, entry);
-            inner.submit(sequence, entry_data);
-        }
+        let entry = match self.committed.take() {
+            Some(jsonl) => SubmitEntry::Record(jsonl),
+            None => SubmitEntry::Cancelled,
+        };
+        self.commit.submit(self.sequence, entry);
     }
 }
 
@@ -344,25 +357,15 @@ impl OrderedCommitInner {
         self.cv.notify_all();
     }
 
-    fn run_publisher(&self, sink: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn run_publisher(&self, sink: &mut dyn Write) -> io::Result<()> {
         loop {
-            let to_publish = {
-                let state = self.state.lock();
-                if state.sink_failed {
-                    return Ok(());
-                }
-                state.next_to_publish
-            };
-
-            let entry = {
+            let (sequence, entry) = {
                 let mut state = self.state.lock();
                 loop {
-                    if state.sink_failed {
-                        return Ok(());
-                    }
+                    Self::state_result(&state)?;
                     let next = state.next_to_publish;
                     if let Some(entry) = state.pending.remove(&next) {
-                        break entry;
+                        break (next, entry);
                     }
                     if state.pending.is_empty() {
                         return Ok(());
@@ -371,52 +374,54 @@ impl OrderedCommitInner {
                 }
             };
 
-            match entry {
-                SubmitEntry::Record(jsonl) => {
-                    if let Err(e) = sink.write_all(jsonl.as_bytes()) {
-                        let mut state = self.state.lock();
-                        state.sink_failed = true;
-                        state.pending.insert(to_publish, SubmitEntry::Record(jsonl));
-                        self.cv.notify_all();
-                        return Err(e);
-                    }
-                    if let Err(e) = sink.flush() {
-                        let mut state = self.state.lock();
-                        state.sink_failed = true;
-                        state.pending.insert(to_publish, SubmitEntry::Record(jsonl));
-                        self.cv.notify_all();
-                        return Err(e);
-                    }
-                }
-                SubmitEntry::Cancelled => {
-                    // Advance cursor without writing.
+            if let SubmitEntry::Record(jsonl) = &entry {
+                if let Err(error) = sink.write_all(jsonl.as_bytes()).and_then(|()| sink.flush()) {
+                    let error = self.fail(error);
+                    self.state.lock().pending.insert(sequence, entry);
+                    return Err(error);
                 }
             }
 
-            {
-                let mut state = self.state.lock();
-                state.next_to_publish = to_publish + 1;
-                self.cv.notify_all();
-            }
+            let mut state = self.state.lock();
+            // Reservations reject MAX, so every admitted slot has a successor.
+            state.next_to_publish = sequence + 1;
+            self.cv.notify_all();
         }
     }
 
-    fn is_sink_failed(&self) -> bool {
-        self.state.lock().sink_failed
+    fn state_result(state: &OrderedCommitState) -> io::Result<()> {
+        match &state.failure {
+            Some(error) => Err(io::Error::new(
+                error.kind(),
+                TraceFailure(Arc::clone(error)),
+            )),
+            None => Ok(()),
+        }
     }
 
-    fn reserve_next_sequence(&self) -> u64 {
+    fn check_failure(&self) -> io::Result<()> {
+        Self::state_result(&self.state.lock())
+    }
+
+    fn fail(&self, error: io::Error) -> io::Error {
         let mut state = self.state.lock();
+        let error = state.failure.get_or_insert_with(|| Arc::new(error));
+        self.cv.notify_all();
+        io::Error::new(error.kind(), TraceFailure(Arc::clone(error)))
+    }
+
+    fn reserve_next_sequence(&self) -> io::Result<u64> {
+        let mut state = self.state.lock();
+        Self::state_result(&state)?;
         let sequence = state.next_to_reserve;
-        state.next_to_reserve = sequence.checked_add(1).unwrap_or(sequence);
-        sequence
-    }
-
-    fn reserve_sequence(&self, sequence: u64) {
-        let mut state = self.state.lock();
-        state.next_to_reserve = state
-            .next_to_reserve
-            .max(sequence.checked_add(1).unwrap_or(sequence));
+        let Some(next) = sequence.checked_add(1) else {
+            let error = Arc::new(io::Error::other("trace sequence exhausted"));
+            state.failure = Some(Arc::clone(&error));
+            self.cv.notify_all();
+            return Err(io::Error::new(error.kind(), TraceFailure(error)));
+        };
+        state.next_to_reserve = next;
+        Ok(sequence)
     }
 
     fn next_sequence(&self) -> u64 {
@@ -447,7 +452,7 @@ impl OrderedCommit {
                     next_to_publish: 0,
                     next_to_reserve: 0,
                     pending: BTreeMap::new(),
-                    sink_failed: false,
+                    failure: None,
                 }),
                 cv: Condvar::new(),
             }),
@@ -456,25 +461,18 @@ impl OrderedCommit {
 
     /// Reserve the next sequence number. Returns an RAII guard that publishes
     /// on commit or drop.
-    #[must_use]
-    pub fn reserve(&self) -> Reservation {
-        let sequence = self.inner.reserve_next_sequence();
-        Reservation {
+    pub fn reserve(&self) -> io::Result<Reservation> {
+        let sequence = self.inner.reserve_next_sequence()?;
+        Ok(Reservation {
             sequence,
             committed: None,
-            commit: Some(Arc::clone(&self.inner)),
-        }
+            commit: Arc::clone(&self.inner),
+        })
     }
 
-    /// Reserve a specific sequence number (for checked-add callers).
-    #[must_use]
-    pub fn reserve_sequence(&self, sequence: u64) -> Reservation {
-        self.inner.reserve_sequence(sequence);
-        Reservation {
-            sequence,
-            committed: None,
-            commit: Some(Arc::clone(&self.inner)),
-        }
+    /// Append a typed record through the run's single reservation/serialization path.
+    pub fn append(&self, record: TraceRecord) -> io::Result<()> {
+        self.reserve()?.append(record)
     }
 
     /// Publish all pending records in order to the given sink. Blocks until
@@ -486,10 +484,14 @@ impl OrderedCommit {
         self.inner.run_publisher(sink)
     }
 
-    /// Whether the sink has experienced a fatal error.
+    pub(super) fn fail(&self, error: io::Error) -> io::Error {
+        self.inner.fail(error)
+    }
+
+    /// Whether append or publication has experienced a fatal error.
     #[must_use]
-    pub fn is_sink_failed(&self) -> bool {
-        self.inner.is_sink_failed()
+    pub fn has_failed(&self) -> bool {
+        self.inner.state.lock().failure.is_some()
     }
 
     /// The next sequence number that would be reserved.
@@ -860,18 +862,129 @@ mod tests {
         }
     }
 
+    #[test]
+    fn typed_append_preserves_legacy_bytes_across_a_canceled_gap() {
+        let commit = OrderedCommit::new();
+        let first = commit.reserve().unwrap();
+        let canceled = commit.reserve().unwrap();
+        let last = commit.reserve().unwrap();
+        let record = |sequence| crate::automation::input::input_trace_record(sequence, 7, 3, 2, 4);
+        assert_eq!(
+            record(0).to_jsonl().unwrap(),
+            concat!(
+                r#"{"schema":2,"run":0,"sequence":0,"input_seen":3,"present_seen":0,"elapsed_ms":7,"kind":"input_tick","label":"key_2=4"}"#,
+                "\n"
+            )
+        );
+        last.append(record(999)).unwrap();
+        first.append(record(999)).unwrap();
+        drop(canceled);
+        let mut bytes = Vec::new();
+        commit.publish_all(&mut bytes).unwrap();
+        let expected = record(0).to_jsonl().unwrap() + &record(2).to_jsonl().unwrap();
+        assert_eq!(bytes, expected.as_bytes());
+        commit.append(record(999)).unwrap();
+        commit.publish_all(&mut bytes).unwrap();
+        assert_eq!(
+            bytes,
+            (expected + &record(3).to_jsonl().unwrap()).as_bytes()
+        );
+    }
+
+    #[test]
+    fn last_representable_sequence_publishes_before_exhaustion_is_fatal() {
+        let commit = OrderedCommit::new();
+        {
+            let mut state = commit.inner.state.lock();
+            state.next_to_reserve = u64::MAX - 1;
+            state.next_to_publish = u64::MAX - 1;
+        }
+        let record = crate::automation::input::input_trace_record(u64::MAX - 1, 1, 0, 0, 0);
+        commit.append(record.clone()).unwrap();
+        let mut bytes = Vec::new();
+        commit.publish_all(&mut bytes).unwrap();
+        assert_eq!(bytes, record.to_jsonl().unwrap().as_bytes());
+        assert_eq!(commit.next_sequence(), u64::MAX);
+        assert_eq!(commit.inner.state.lock().next_to_publish, u64::MAX);
+        assert_eq!(
+            commit.append(record.clone()).unwrap_err().to_string(),
+            "trace sequence exhausted"
+        );
+        assert!(commit.append(record).is_err());
+        assert!(commit.publish_all(&mut Vec::new()).is_err());
+        assert!(commit.inner.state.lock().pending.is_empty());
+    }
+
+    #[test]
+    fn flush_failure_rejects_reserved_and_future_appends_with_the_original_cause() {
+        struct FlushFailure;
+        impl Write for FlushFailure {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "trace flush denied",
+                ))
+            }
+        }
+        let commit = OrderedCommit::new();
+        let record = crate::automation::input::input_trace_record(0, 1, 0, 0, 0);
+        commit.append(record.clone()).unwrap();
+        let outstanding = commit.reserve().unwrap();
+        let first = commit.publish_all(&mut FlushFailure).unwrap_err();
+        let late = outstanding.append(record.clone()).unwrap_err();
+        let future = commit.append(record).unwrap_err();
+        for error in [
+            first,
+            late,
+            future,
+            commit.publish_all(&mut Vec::new()).unwrap_err(),
+        ] {
+            assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(error.to_string(), "trace flush denied");
+            assert!(std::error::Error::source(&error).is_some());
+        }
+        assert_eq!(commit.next_sequence(), 2);
+    }
+
     // --- OrderedCommit: sequential publication ---
+    #[test]
+    fn latched_sink_failure_never_reports_success() {
+        let commit = OrderedCommit::new();
+        commit
+            .append(crate::automation::input::input_trace_record(0, 1, 0, 0, 0))
+            .unwrap();
+        let mut sink = [0_u8; 0].as_mut_slice();
+        let error = commit.publish_all(&mut sink).unwrap_err();
+        let mut later_sink = Vec::new();
+        let later_error = commit.publish_all(&mut later_sink).unwrap_err();
+        assert_eq!(error.to_string(), later_error.to_string());
+        assert!(later_sink.is_empty());
+    }
+
+    #[test]
+    fn sequence_exhaustion_never_reuses_a_reservation() {
+        let commit = OrderedCommit::new();
+        commit.inner.state.lock().next_to_reserve = u64::MAX;
+        assert!(commit.reserve().is_err());
+        assert!(commit.reserve().is_err());
+        assert_eq!(commit.next_sequence(), u64::MAX);
+        let error = commit.publish_all(&mut Vec::new()).unwrap_err();
+        assert_eq!(error.to_string(), "trace sequence exhausted");
+    }
 
     #[test]
     fn ordered_commit_sequential() {
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        let r1 = oc.reserve();
-        let r2 = oc.reserve();
+        let r0 = oc.reserve().unwrap();
+        let r1 = oc.reserve().unwrap();
+        let r2 = oc.reserve().unwrap();
 
-        r0.commit_record("rec0\n".into());
-        r1.commit_record("rec1\n".into());
-        r2.commit_record("rec2\n".into());
+        r0.commit_raw("rec0\n".into());
+        r1.commit_raw("rec1\n".into());
+        r2.commit_raw("rec2\n".into());
 
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
@@ -884,14 +997,14 @@ mod tests {
     #[test]
     fn ordered_commit_out_of_order() {
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        let r1 = oc.reserve();
-        let r2 = oc.reserve();
+        let r0 = oc.reserve().unwrap();
+        let r1 = oc.reserve().unwrap();
+        let r2 = oc.reserve().unwrap();
 
         // Drop in reverse order.
-        r2.commit_record("rec2\n".into());
-        r1.commit_record("rec1\n".into());
-        r0.commit_record("rec0\n".into());
+        r2.commit_raw("rec2\n".into());
+        r1.commit_raw("rec1\n".into());
+        r0.commit_raw("rec0\n".into());
 
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
@@ -904,13 +1017,13 @@ mod tests {
     #[test]
     fn dropped_reservation_cancels_no_gap() {
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        let _r1 = oc.reserve(); // will be dropped (cancelled)
-        let r2 = oc.reserve();
+        let r0 = oc.reserve().unwrap();
+        let _r1 = oc.reserve().unwrap(); // will be dropped (cancelled)
+        let r2 = oc.reserve().unwrap();
 
-        r0.commit_record("rec0\n".into());
+        r0.commit_raw("rec0\n".into());
         drop(_r1); // cancelled
-        r2.commit_record("rec2\n".into());
+        r2.commit_raw("rec2\n".into());
 
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
@@ -935,15 +1048,15 @@ mod tests {
         }
 
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        let r1 = oc.reserve();
+        let r0 = oc.reserve().unwrap();
+        let r1 = oc.reserve().unwrap();
 
-        r0.commit_record("rec0\n".into());
-        r1.commit_record("rec1\n".into());
+        r0.commit_raw("rec0\n".into());
+        r1.commit_raw("rec1\n".into());
 
         let mut sink = FailingWriter;
         let _ = oc.publish_all(&mut sink);
-        assert!(oc.is_sink_failed());
+        assert!(oc.has_failed());
     }
 
     // --- OrderedCommit: cancelled slots advance cursor ---
@@ -951,13 +1064,13 @@ mod tests {
     #[test]
     fn cancelled_slots_advance_cursor() {
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        let r1 = oc.reserve();
-        let r2 = oc.reserve();
+        let r0 = oc.reserve().unwrap();
+        let r1 = oc.reserve().unwrap();
+        let r2 = oc.reserve().unwrap();
 
-        r0.commit_record("rec0\n".into());
+        r0.commit_raw("rec0\n".into());
         r1.cancel();
-        r2.commit_record("rec2\n".into());
+        r2.commit_raw("rec2\n".into());
 
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
@@ -973,8 +1086,8 @@ mod tests {
         // runtime mutex. The ordered commit uses its own internal Mutex +
         // Condvar.
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        r0.commit_record("rec0\n".into());
+        let r0 = oc.reserve().unwrap();
+        r0.commit_raw("rec0\n".into());
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
     }
@@ -984,13 +1097,13 @@ mod tests {
     #[test]
     fn explicit_cancel_no_gap() {
         let oc = OrderedCommit::new();
-        let r0 = oc.reserve();
-        let r1 = oc.reserve();
-        let r2 = oc.reserve();
+        let r0 = oc.reserve().unwrap();
+        let r1 = oc.reserve().unwrap();
+        let r2 = oc.reserve().unwrap();
 
-        r0.commit_record("rec0\n".into());
+        r0.commit_raw("rec0\n".into());
         r1.cancel();
-        r2.commit_record("rec2\n".into());
+        r2.commit_raw("rec2\n".into());
 
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
@@ -1005,9 +1118,9 @@ mod tests {
         assert_eq!(commit.next_sequence(), 0);
         assert_eq!(commit.next_sequence(), 0);
 
-        let first = commit.reserve_sequence(0);
+        let first = commit.reserve().unwrap();
         assert_eq!(commit.next_sequence(), 1);
-        let second = commit.reserve();
+        let second = commit.reserve().unwrap();
         assert_eq!(second.sequence(), 1);
         assert_eq!(commit.next_sequence(), 2);
 

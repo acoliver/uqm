@@ -50,11 +50,10 @@ impl AutomationObserver {
         let delta_ms = inner.native_battle_previous_ms[phase].map(|previous| now - previous);
         inner.native_battle_previous_ms[phase] = Some(now);
         let (generation, active) = self.ui.ship_picker_observation();
-        let reservation = self.runtime.commit.reserve();
         let record = TraceRecord {
             schema: TraceRecord::NATIVE_SCHEMA,
             run: 1,
-            sequence: reservation.sequence(),
+            sequence: 0,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
             elapsed_ms: now,
@@ -79,11 +78,7 @@ impl AutomationObserver {
                 delta_ms,
             }),
         };
-        reservation.commit_record(
-            record
-                .to_jsonl()
-                .unwrap_or_else(|error| panic!("serialize native battle sample: {error}")),
-        );
+        self.append_trace(&mut inner, record);
     }
 }
 

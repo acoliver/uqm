@@ -49,8 +49,10 @@ impl NativeTraceJournal {
     /// controller still syncs the finished trace before hashing it.
     pub(super) fn publish(&mut self, commit: &OrderedCommit) -> io::Result<()> {
         self.stage(commit)?;
-        self.file.write_all(&self.pending)?;
-        self.file.flush()?;
+        self.file
+            .write_all(&self.pending)
+            .and_then(|()| self.file.flush())
+            .map_err(|error| commit.fail(error))?;
         self.pending.clear();
         Ok(())
     }
@@ -79,17 +81,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_file_publication_failure_remains_fatal_after_the_file_is_repaired() {
+        let root = tempfile::tempdir().unwrap();
+        let commit = OrderedCommit::new();
+        let mut journal = NativeTraceJournal::create(root.path(), 4096).unwrap();
+        let record = crate::automation::input::input_trace_record(0, 1, 0, 0, 0);
+        commit.append(record.clone()).unwrap();
+        journal.file = File::open(root.path().join("trace.jsonl")).unwrap();
+        let first = journal.publish(&commit).unwrap_err();
+        assert!(!journal.pending.is_empty());
+        journal.file = OpenOptions::new()
+            .write(true)
+            .open(root.path().join("trace.jsonl"))
+            .unwrap();
+        let later = journal.publish(&commit).unwrap_err();
+        assert_eq!(first.to_string(), later.to_string());
+        assert_eq!(first.kind(), later.kind());
+        assert!(commit.append(record).is_err());
+        assert!(std::fs::read(root.path().join("trace.jsonl"))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
     fn live_prefix_is_readable_before_finalization_and_preserves_sequence() {
         let root = tempfile::tempdir().unwrap();
         let commit = OrderedCommit::new();
         let mut journal = NativeTraceJournal::create(root.path(), 64).unwrap();
-        commit.reserve().commit_record("first\n".into());
+        commit.reserve().unwrap().commit_raw("first\n".into());
         journal.publish(&commit).unwrap();
         assert_eq!(
             std::fs::read(root.path().join("trace.jsonl")).unwrap(),
             b"first\n"
         );
-        commit.reserve().commit_record("second\n".into());
+        commit.reserve().unwrap().commit_raw("second\n".into());
         journal.publish(&commit).unwrap();
         assert_eq!(
             std::fs::read(root.path().join("trace.jsonl")).unwrap(),
@@ -106,7 +131,7 @@ mod tests {
         for index in 0..100 {
             let line = format!("record:{index}\n");
             expected.extend_from_slice(line.as_bytes());
-            commit.reserve().commit_record(line);
+            commit.reserve().unwrap().commit_raw(line);
             journal.stage(&commit).unwrap();
             if index % 25 == 0 {
                 journal.publish(&commit).unwrap();
@@ -131,14 +156,14 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let commit = OrderedCommit::new();
         let mut journal = NativeTraceJournal::create(root.path(), 6).unwrap();
-        commit.reserve().commit_record("first\n".into());
+        commit.reserve().unwrap().commit_raw("first\n".into());
         journal.stage(&commit).unwrap();
         assert!(std::fs::read(root.path().join("trace.jsonl"))
             .unwrap()
             .is_empty());
-        commit.reserve().commit_record("second\n".into());
+        commit.reserve().unwrap().commit_raw("second\n".into());
         assert!(journal.stage(&commit).is_err());
-        assert!(commit.is_sink_failed());
+        assert!(commit.has_failed());
         assert_eq!(journal.pending, b"first\n");
     }
 
@@ -148,11 +173,11 @@ mod tests {
         let mut journal = NativeTraceJournal::create(root.path(), 6).unwrap();
         assert!(NativeTraceJournal::create(root.path(), 6).is_err());
         let commit = OrderedCommit::new();
-        commit.reserve().commit_record("first\n".into());
+        commit.reserve().unwrap().commit_raw("first\n".into());
         journal.publish(&commit).unwrap();
-        commit.reserve().commit_record("second\n".into());
+        commit.reserve().unwrap().commit_raw("second\n".into());
         assert!(journal.publish(&commit).is_err());
-        assert!(commit.is_sink_failed());
+        assert!(commit.has_failed());
         assert_eq!(
             std::fs::read(root.path().join("trace.jsonl")).unwrap(),
             b"first\n"
