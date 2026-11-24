@@ -4,6 +4,7 @@ mod display;
 mod gravity_well;
 pub mod lander_resources;
 mod navigation_resources;
+pub use navigation_resources::NavigationLoadError;
 mod pilot_flash;
 pub mod planet_animation;
 pub mod roster_flash;

@@ -13,7 +13,9 @@ use uqm_engine::world::activity::activity_flags::START_INTERPLANETARY;
 use uqm_engine::world::activity::ActivityKind;
 use uqm_engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
 
-fn load_sc2_data(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
+fn load_sc2_data(
+    cx: &mut uqm_engine::battle::Cx<'_>,
+) -> Result<(), uqm_engine::kernel::NavigationLoadError> {
     let (width, height) = cx.screen_dimensions();
     let radar_clip = Rect {
         corner: Point {
@@ -25,14 +27,12 @@ fn load_sc2_data(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
             height: RADAR_HEIGHT as i16,
         },
     };
-    if !cx.kernel.load_navigation_graphics(radar_clip) {
-        return 0;
-    }
+    cx.kernel.load_navigation_graphics(radar_clip)?;
     if cx.world.activity() as u8 == ActivityKind::InHyperspace as u8 {
         cx.world.data.game.ship_stamp.origin.x = -1;
         cx.world.data.game.ship_stamp.origin.y = -1;
     }
-    1
+    Ok(())
 }
 
 fn fleet_template(info: &ShipInfoRecord, fleet: &FleetRecord) -> FleetTemplate {
@@ -94,18 +94,20 @@ fn campaign_names(kernel: &uqm_engine::Kernel) -> ([u8; 16], [u8; 16]) {
 }
 
 /// Initialize campaign owners before allocating the new world queues.
-pub fn init_game_structures(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
+pub fn init_game_structures(
+    cx: &mut uqm_engine::battle::Cx<'_>,
+) -> Result<(), uqm_engine::kernel::NavigationLoadError> {
     let battle = &mut *cx.b;
     let kernel = &mut *cx.kernel;
     let rng = cx.rng;
-    cx.world.new_game(
+    let result = cx.world.new_game(
         |world| {
             let mut cx = uqm_engine::battle::Cx::new(battle, world, kernel, rng);
             cx.kernel.load_navigation_play();
             initialize_races(&mut cx);
             let dimensions = cx.screen_dimensions();
             init_siscontexts(cx.kernel, dimensions);
-            load_sc2_data(&mut cx);
+            load_sc2_data(&mut cx)?;
             let catalog = cx.world.catalog();
             uqm_engine::state::ffi::rust_init_planet_info(
                 cx.world,
@@ -113,7 +115,7 @@ pub fn init_game_structures(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
             );
             init_group_info(cx.world, 1);
             let (ship_name, commander_name) = campaign_names(cx.kernel);
-            NewGameInputs {
+            Ok(NewGameInputs {
                 activity: ActivityKind::InInterplanetary as u16 | START_INTERPLANETARY,
                 human_fleet: usize::from(uqm_engine::species::ship::HUMAN_SHIP),
                 log_position: (
@@ -122,11 +124,14 @@ pub fn init_game_structures(cx: &mut uqm_engine::battle::Cx<'_>) -> u32 {
                 ),
                 ship_name,
                 commander_name,
-            }
+            })
         },
         crate::comm::dispatch::production_captain_name,
     );
-    1
+    if result.is_err() {
+        uninit_game_structures(cx);
+    }
+    result
 }
 
 /// Release campaign resources after the active game has stopped using them.

@@ -30,37 +30,39 @@ fn new_game_prepares_resources_after_reset_and_installs_the_owned_campaign() {
     let stages = RefCell::new(Vec::new());
     let mut loaded = Vec::new();
 
-    world.new_game(
-        |world| {
-            stages.borrow_mut().push("prepare");
-            assert_eq!(world.data.game.glob_flags, 0xa4);
-            assert_eq!(world.data.flagship.crew_enlisted, 0);
-            assert_eq!(world.story_value(StoryKey::STARBASE_AVAILABLE), Some(0));
-            assert_eq!(world.built_ships_ref().count(), 1);
-            world.initialize_fleets(roster(), |world, species| {
-                assert_eq!(world.avail_races_ref().count(), loaded.len());
-                loaded.push(species);
-                FleetTemplate {
-                    crew_level: 18,
-                    max_crew: 20,
-                    max_energy: 12,
-                    strength: 100,
-                    ..FleetTemplate::default()
-                }
-            });
-            NewGameInputs {
-                activity: 0x0804,
-                human_fleet: 1,
-                log_position: (123, 456),
-                ship_name: *b"Flagship\0\0\0\0\0\0\0\0",
-                commander_name: *b"Captain\0\0\0\0\0\0\0\0\0",
-            }
-        },
-        || {
-            stages.borrow_mut().push("captain");
-            7
-        },
-    );
+    world
+        .new_game(
+            |world| {
+                stages.borrow_mut().push("prepare");
+                assert_eq!(world.data.game.glob_flags, 0xa4);
+                assert_eq!(world.data.flagship.crew_enlisted, 0);
+                assert_eq!(world.story_value(StoryKey::STARBASE_AVAILABLE), Some(0));
+                assert_eq!(world.built_ships_ref().count(), 1);
+                world.initialize_fleets(roster(), |world, species| {
+                    assert_eq!(world.avail_races_ref().count(), loaded.len());
+                    loaded.push(species);
+                    FleetTemplate {
+                        crew_level: 18,
+                        max_crew: 20,
+                        max_energy: 12,
+                        strength: 100,
+                        ..FleetTemplate::default()
+                    }
+                });
+                Ok::<_, std::convert::Infallible>(NewGameInputs {
+                    activity: 0x0804,
+                    human_fleet: 1,
+                    log_position: (123, 456),
+                    ship_name: *b"Flagship\0\0\0\0\0\0\0\0",
+                    commander_name: *b"Captain\0\0\0\0\0\0\0\0\0",
+                })
+            },
+            || {
+                stages.borrow_mut().push("captain");
+                7
+            },
+        )
+        .unwrap();
 
     assert_eq!(loaded, [0, 1, 2, 1, 5]);
     assert_eq!(stages.into_inner(), ["prepare", "captain"]);
@@ -91,6 +93,25 @@ fn new_game_prepares_resources_after_reset_and_installs_the_owned_campaign() {
     assert_eq!(world.npc_built_ships_ref().count(), 0);
     assert_eq!(world.ip_groups_ref().count(), 0);
     assert_eq!(world.encounters_ref().count(), 0);
+}
+
+#[test]
+fn failed_preparation_does_not_install_campaign_values_or_pick_a_captain() {
+    let mut world = World::new();
+    world.data.game.glob_flags = 0xa4;
+    world.data.flagship.crew_enlisted = 999;
+    let result = world.new_game(
+        |world| {
+            assert_eq!(world.data.flagship.crew_enlisted, 0);
+            Err("missing required navigation art")
+        },
+        || panic!("failed admission must not pick a captain"),
+    );
+    assert_eq!(result, Err("missing required navigation art"));
+    assert_eq!(world.activity(), 0);
+    assert_eq!(world.data.game.glob_flags, 0xa4);
+    assert_eq!(world.data.flagship.crew_enlisted, 0);
+    assert_eq!(world.built_ships_ref().count(), 0);
 }
 
 #[test]
