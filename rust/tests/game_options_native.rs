@@ -110,8 +110,11 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
         keys: RefCell::new(keys.iter().map(|&key| key as usize).collect()),
     });
     game.kernel.install_input_runtime(runtime.clone());
+    let profile = uqm_engine::test_support::native_session::FixtureFiles::new();
+    let files = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk())
+        .open_host_dir(profile.path());
     game.kernel
-        .install_save_slots(uqm_rust::savegame::live::SLOTS);
+        .install_save_slots(uqm_rust::savegame::live::slots(files));
     let mut observer = Unobserved;
     let mut io = Io {
         observer: &mut observer,

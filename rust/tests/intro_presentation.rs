@@ -86,12 +86,8 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
         register_rect(bounds);
 
         let mount = uqm_engine::test_support::native_session::ContentMount::new(fixture.path());
-        uqm_engine::resource::load_index(
-            &uqm_engine::io::content_dir().unwrap(),
-            c"video.rmp",
-            None,
-        );
-        let playback = LoadedVideo::load(c"fixture.logo")
+        mount.load_index("video.rmp");
+        let playback = LoadedVideo::load(&mount.content(), c"fixture.logo")
             .and_then(|video| video.play())
             .expect("logo playback");
 

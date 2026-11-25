@@ -559,7 +559,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn history_pages_and_scroll_indicators_use_real_retained_resources() {
-        super::super::sis_graphics_font_tests::with_display("comm::sis_graphics::tests::history_pages_and_scroll_indicators_use_real_retained_resources", |comm, context| {
+        super::super::sis_graphics_font_tests::with_display("comm::sis_graphics::tests::history_pages_and_scroll_indicators_use_real_retained_resources", |comm, context, _content| {
             use uqm_engine::sound::trackplayer;
             trackplayer::stop_track().unwrap();
             for _ in 0..20 {
@@ -595,7 +595,7 @@ mod tests {
     fn text_wraps_at_the_measured_word_boundary_with_the_real_font() {
         super::super::sis_graphics_font_tests::with_display(
             "comm::sis_graphics::tests::text_wraps_at_the_measured_word_boundary_with_the_real_font",
-            |comm, context| {
+            |comm, context, _content| {
                 let font = player_font(comm);
                 let baseline = Point { x: 10, y: 135 };
                 let mut text = Text::new(c"AAA AAA", baseline, 0, u16::MAX);

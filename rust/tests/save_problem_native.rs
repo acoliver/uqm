@@ -140,8 +140,9 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         ClearDrawable();
         uqm_engine::graphics::state::flush();
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-        let font_owner = uqm_engine::graphics::font::LoadedFont::load_file(c"font")
-            .unwrap_or_else(|| panic!("one-glyph font fixture did not load"));
+        let font_owner =
+            uqm_engine::graphics::font::LoadedFont::load_file(content.content_directory(), c"font")
+                .unwrap_or_else(|error| panic!("one-glyph font fixture did not load: {error}"));
         let font = Some(font_owner.font());
         drop(content);
         native_probe::with_font_mut(font_owner.font(), |font| {

@@ -33,8 +33,8 @@ fn addon(path: &str) -> Vec<u8> {
     .unwrap()
 }
 
-fn logo_content() -> TempMount {
-    let mount = TempMount::new().as_content();
+fn logo_content() -> (TempMount, crate::resource::Content) {
+    let mount = TempMount::new();
     for extension in ["duk", "frm", "hdr", "tbl"] {
         let name = format!("logo.{extension}");
         mount.write(&name, &addon(&format!("logo/{name}")));
@@ -49,8 +49,8 @@ fixture.broken = 3DOVID:broken.duk
 ",
     );
     mount.write("broken.duk", b"bad");
-    crate::resource::load_index(&mount.dir(), c"video.rmp", None);
-    mount
+    let content = mount.content(c"video.rmp");
+    (mount, content)
 }
 
 fn started() -> bool {
@@ -62,9 +62,10 @@ fn a_movie_plays_reports_and_stops_on_drop() {
     in_child(
         "video::legacy::tests::a_movie_plays_reports_and_stops_on_drop",
         || {
-            let _content = logo_content();
-            assert!(LoadedVideo::load(c"fixture.unknown").is_none());
-            let descriptor = LoadedVideo::load(c"fixture.video").expect("logo descriptor");
+            let (_mount, content) = logo_content();
+            assert!(LoadedVideo::load(&content, c"fixture.unknown").is_err());
+            let descriptor =
+                LoadedVideo::load(&content, c"fixture.video").expect("logo descriptor");
             let playback = descriptor.play().expect("logo playback");
             drop(descriptor);
             assert!(started());
@@ -84,15 +85,15 @@ fn missing_unsupported_and_corrupt_movies_do_not_start() {
     in_child(
         "video::legacy::tests::missing_unsupported_and_corrupt_movies_do_not_start",
         || {
-            let _content = logo_content();
+            let (_mount, content) = logo_content();
             for resource in [
                 c"fixture.absent",
                 c"fixture.unsuffixed",
                 c"fixture.other",
                 c"fixture.broken",
             ] {
-                let descriptor = LoadedVideo::load(resource).expect("descriptor");
-                assert!(descriptor.play().is_none(), "{resource:?}");
+                let descriptor = LoadedVideo::load(&content, resource).expect("descriptor");
+                assert!(descriptor.play().is_err(), "{resource:?}");
                 assert!(!started());
             }
         },
@@ -104,8 +105,8 @@ fn starting_a_movie_stops_the_one_playing_and_stopping_the_player_ends_it() {
     in_child(
         "video::legacy::tests::starting_a_movie_stops_the_one_playing_and_stopping_the_player_ends_it",
         || {
-            let _content = logo_content();
-            let descriptor = LoadedVideo::load(c"fixture.video").expect("logo descriptor");
+            let (_mount, content) = logo_content();
+            let descriptor = LoadedVideo::load(&content, c"fixture.video").expect("logo descriptor");
             let first = descriptor.play().expect("first playback");
             let second = descriptor.play().expect("second playback");
             assert!(second.is_playing());
@@ -126,7 +127,7 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
     in_child(
         "video::legacy::tests::shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop",
         || {
-            let directory = TempMount::new().as_content();
+            let directory = TempMount::new();
             let ships = "addons/3dovideo/ships";
             std::fs::create_dir_all(directory.path_of(ships)).unwrap();
             for name in [
@@ -141,9 +142,9 @@ fn shipped_spin_retains_video_and_both_audio_tracks_after_descriptor_drop() {
             }
             directory.write("3dovideo.rmp", &addon("3dovideo.rmp"));
             assert!(crate::sound::audio_device::start());
-            crate::resource::load_index(&directory.dir(), c"3dovideo.rmp", None);
+            let content = directory.content(c"3dovideo.rmp");
             let descriptor =
-                LoadedVideo::load(c"slides.spins.00").expect("shipped spin descriptor");
+                LoadedVideo::load(&content, c"slides.spins.00").expect("shipped spin descriptor");
             let playback = descriptor.play().expect("shipped spin playback");
             let music = Arc::downgrade(&playback.audio.as_ref().expect("spin.aif").playback().0);
             let speech =

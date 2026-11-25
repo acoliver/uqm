@@ -1,12 +1,21 @@
 //! The resource index and the typed loaders that read through it.
 
-pub mod cache;
 mod color;
 mod index;
+mod load_error;
 pub mod propfile;
 pub mod settings;
 
-pub use index::{descriptor, has_key, init, kind, load_index, path_of, remove, string, uninit};
+#[cfg(test)]
+mod acquisition_tests;
+#[cfg(test)]
+mod qualification_tests;
+
+pub use index::{
+    AssetKind, CatalogBuilder, Content, IndexSource, ResolveError, Resolved, Revision,
+};
+
+pub use load_error::{AssetContext, AssetLoadError, AssetSource, Cause, FileError};
 
 /// A resource name as game records hold it (C: `RESOURCE`); `None` is `NULL_RESOURCE`.
 pub type ResourceKey = Option<&'static std::ffi::CStr>;

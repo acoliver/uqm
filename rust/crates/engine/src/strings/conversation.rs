@@ -43,8 +43,15 @@ fn column(entries: &Option<Vec<Vec<u8>>>, index: usize) -> Option<&CStr> {
 }
 
 impl ConversationTable {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        super::getstr::load_conversation(&crate::resource::path_of(resource, "CONVERSATION")?)
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Conversation)?;
+        let path = std::ffi::CString::new(resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))?;
+        super::getstr::load_conversation(resolved.files, &path)
+            .map_err(|error| resolved.load_error(resource, error))
     }
 
     pub fn len(&self) -> usize {

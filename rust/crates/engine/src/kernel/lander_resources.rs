@@ -31,24 +31,23 @@ pub struct LanderResources {
 }
 
 impl LanderResources {
-    pub fn load() -> Result<Self, &'static str> {
+    pub fn load(
+        content: &crate::resource::Content,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
         let mut owner = Self {
-            themes: THEMES.map(LoadedMusic::load),
+            themes: THEMES.map(|key| LoadedMusic::load(content, key).ok()),
             graphics: Vec::with_capacity(8),
             sounds: None,
         };
         for key in GRAPHICS {
-            let Some(graphic) = LoadedDrawable::load(key) else {
-                while owner.graphics.pop().is_some() {}
-                return Err(key.to_str().unwrap_or_else(|_| unreachable!()));
-            };
+            let graphic = LoadedDrawable::load(content, key)
+                .inspect_err(|_| while owner.graphics.pop().is_some() {})?;
             owner.graphics.push(graphic);
         }
-        owner.sounds = LoadedSoundBank::load(c"sounds.lander");
-        if owner.sounds.is_none() {
-            while owner.graphics.pop().is_some() {}
-            return Err("sounds.lander");
-        }
+        owner.sounds = Some(
+            LoadedSoundBank::load(content, c"sounds.lander")
+                .inspect_err(|_| while owner.graphics.pop().is_some() {})?,
+        );
         Ok(owner)
     }
 
@@ -87,6 +86,12 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn missing_graphics_fail_without_publishing_partial_assets() {
-        assert!(matches!(LanderResources::load(), Err("graphics.lander")));
+        assert!(matches!(
+            LanderResources::load(
+                &crate::resource::CatalogBuilder::new(crate::io::fixture::TempMount::new().dir())
+                    .finish()
+            ),
+            Err(error) if error.key == "graphics.lander"
+        ));
     }
 }

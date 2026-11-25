@@ -7,6 +7,7 @@ use crate::supermelee::setup::team::MeleeSetup;
 use crate::supermelee::types::{PlayerControl, NUM_SIDES};
 use std::io::{self, Read};
 use std::path::Path;
+use uqm_engine::host::Files;
 use uqm_save::mle::Team as TeamRecord;
 
 // ---------------------------------------------------------------------------
@@ -44,10 +45,10 @@ pub enum ConfigLoadResult {
 /// - Validates file size = `(1 + MeleeTeam_serialSize) * NUM_SIDES`
 /// - Reads per-side: 1 byte control mode + team payload
 /// - Sanitizes `NETWORK_CONTROL` → `HUMAN_CONTROL | STANDARD_RATING`
-pub fn load_melee_config(config_dir: &Path, setup: &mut MeleeSetup) -> ConfigLoadResult {
-    let path = config_dir.join("melee.cfg");
+pub fn load_melee_config(config_dir: &dyn Files, setup: &mut MeleeSetup) -> ConfigLoadResult {
+    let path = Path::new("melee.cfg");
 
-    let data = match uqm_engine::host::platform().disk().read(&path) {
+    let data = match config_dir.read(path) {
         Ok(d) => d,
         Err(_) => return ConfigLoadResult::Missing,
     };
@@ -108,8 +109,11 @@ pub fn load_melee_config(config_dir: &Path, setup: &mut MeleeSetup) -> ConfigLoa
 /// Matches `WriteMeleeConfig()` in `melee.c`:
 /// - Per-side: 1 byte control mode + team payload
 /// - On failure, removes the partial file
-pub fn save_melee_config(config_dir: &Path, setup: &MeleeSetup) -> Result<(), SuperMeleeError> {
-    let path = config_dir.join("melee.cfg");
+pub fn save_melee_config(
+    config_dir: &dyn Files,
+    setup: &MeleeSetup,
+) -> Result<(), SuperMeleeError> {
+    let path = Path::new("melee.cfg");
     let mut buf = Vec::with_capacity(MELEE_CFG_SIZE);
 
     for side in 0..NUM_SIDES {
@@ -119,9 +123,8 @@ pub fn save_melee_config(config_dir: &Path, setup: &MeleeSetup) -> Result<(), Su
             .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
     }
 
-    uqm_engine::host::platform()
-        .disk()
-        .write_or_remove(&path, &buf)
+    config_dir
+        .write_or_remove(path, &buf)
         .map_err(|e| SuperMeleeError::PersistenceError(format!("melee.cfg write failed: {}", e)))
 }
 
@@ -132,29 +135,32 @@ pub fn save_melee_config(config_dir: &Path, setup: &MeleeSetup) -> Result<(), Su
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn directory(path: &Path) -> uqm_engine::io::Dir {
+        uqm_engine::io::Vfs::new().open_host_dir(path)
+    }
 
     use crate::supermelee::types::MeleeShip;
 
     #[test]
     fn missing_config_returns_missing() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let mut setup = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut setup);
+        let result = load_melee_config(&directory(dir.path()), &mut setup);
         assert!(matches!(result, ConfigLoadResult::Missing));
     }
 
     #[test]
     fn invalid_config_size_returns_invalid() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         std::fs::write(dir.path().join("melee.cfg"), [0u8; 10]).unwrap();
         let mut setup = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut setup);
+        let result = load_melee_config(&directory(dir.path()), &mut setup);
         assert!(matches!(result, ConfigLoadResult::Invalid(_)));
     }
 
     #[test]
     fn valid_config_roundtrip() -> io::Result<()> {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let mut setup = MeleeSetup::new();
         setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
         setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
@@ -162,7 +168,7 @@ mod tests {
         setup.set_team_name(1, "Side B").unwrap();
         setup.player_control[0] = PlayerControl::HUMAN_CONTROL;
         setup.player_control[1] = PlayerControl::COMPUTER_CONTROL;
-        save_melee_config(dir.path(), &setup).unwrap();
+        save_melee_config(&directory(dir.path()), &setup).unwrap();
         let mut expected = [0; 140];
         expected[0] = 1;
         expected[1..15].fill(255);
@@ -174,7 +180,7 @@ mod tests {
         expected[85..91].copy_from_slice(b"Side B");
         assert_eq!(std::fs::read(dir.path().join("melee.cfg"))?, expected);
         let mut restored = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut restored);
+        let result = load_melee_config(&directory(dir.path()), &mut restored);
         assert!(matches!(result, ConfigLoadResult::Ok));
         assert_eq!(restored.teams[0].ships[0], MeleeShip::Chmmr);
         assert_eq!(restored.teams[1].ships[0], MeleeShip::Shofixti);
@@ -187,13 +193,13 @@ mod tests {
 
     #[test]
     fn network_control_is_sanitized_on_load() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let mut setup = MeleeSetup::new();
         setup.player_control[0] = PlayerControl::NETWORK_CONTROL;
         setup.player_control[1] = PlayerControl::HUMAN_CONTROL;
-        save_melee_config(dir.path(), &setup).unwrap();
+        save_melee_config(&directory(dir.path()), &setup).unwrap();
         let mut restored = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut restored);
+        let result = load_melee_config(&directory(dir.path()), &mut restored);
         assert!(matches!(result, ConfigLoadResult::Ok));
         // Network control should be sanitized to HUMAN + STANDARD_RATING
         assert!(restored.player_control[0].contains(PlayerControl::HUMAN_CONTROL));
@@ -205,15 +211,15 @@ mod tests {
     #[test]
     fn config_write_failure_returns_error() {
         let setup = MeleeSetup::new();
-        let result = save_melee_config(Path::new("/nonexistent/dir"), &setup);
+        let result = save_melee_config(&directory(Path::new("/nonexistent/dir")), &setup);
         assert!(result.is_err());
     }
 
     #[test]
     fn config_file_has_correct_size() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let setup = MeleeSetup::new();
-        save_melee_config(dir.path(), &setup).unwrap();
+        save_melee_config(&directory(dir.path()), &setup).unwrap();
         let data = std::fs::read(dir.path().join("melee.cfg")).unwrap();
         assert_eq!(data.len(), MELEE_CFG_SIZE);
     }

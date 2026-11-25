@@ -3,9 +3,15 @@ use std::{ffi::CString, path::Path};
 use uqm_engine::host::Files;
 pub use uqm_engine::input_port::templates::input_templates;
 use uqm_engine::io::{Dir, Match};
+use uqm_engine::resource::settings::{Bindings, Settings};
 
 /// Load every `.rmp` resource index in `dir`; returns how many were loaded.
-pub fn load_indices(dir: &Dir) -> usize {
+pub fn load_indices(
+    catalog: &mut uqm_engine::resource::CatalogBuilder,
+    dir: &Dir,
+    settings: &mut Settings,
+    bindings: &mut Bindings,
+) -> usize {
     let indices = dir.list_matching(Path::new(""), "\\.[rR][mM][pP]$", Match::Regex);
     for name in &indices {
         log::debug!("Loading resource index '{name}'");
@@ -13,13 +19,19 @@ pub fn load_indices(dir: &Dir) -> usize {
             log::warn!("Skipping resource index '{name}': name contains NUL");
             continue;
         };
-        uqm_engine::resource::load_index(dir, &name, None);
+        catalog.import_index(dir, &name, None, settings, bindings);
     }
     indices.len()
 }
 
 /// Load the resource indices of `addon` below the content directory's `addons` directory.
-pub fn load_addon(content: &Dir, addon: &str) -> bool {
+pub fn load_addon(
+    catalog: &mut uqm_engine::resource::CatalogBuilder,
+    content: &Dir,
+    addon: &str,
+    settings: &mut Settings,
+    bindings: &mut Bindings,
+) -> bool {
     let addons = content.open_relative(Path::new("addons"));
     if addons.list(Path::new("")).is_err() {
         log::warn!("There's no 'addons' directory in the 'content' directory; '--addon' options are ignored.");
@@ -30,7 +42,7 @@ pub fn load_addon(content: &Dir, addon: &str) -> bool {
         log::warn!("Addon '{addon}' not found");
         return false;
     }
-    let loaded = load_indices(&dir);
+    let loaded = load_indices(catalog, &dir, settings, bindings);
     if loaded == 0 {
         log::error!("No RMP index files were loaded for addon '{addon}'");
     }
@@ -38,11 +50,17 @@ pub fn load_addon(content: &Dir, addon: &str) -> bool {
 }
 
 /// Load each named addon in order, stopping at the first that fails.
-pub fn prepare_addons(content: &Dir, addons: &[CString]) {
+pub fn prepare_addons(
+    catalog: &mut uqm_engine::resource::CatalogBuilder,
+    content: &Dir,
+    addons: &[CString],
+    settings: &mut Settings,
+    bindings: &mut Bindings,
+) {
     for addon in addons {
         let name = addon.to_string_lossy();
         log::info!("Loading addon '{name}'");
-        if !load_addon(content, &name) {
+        if !load_addon(catalog, content, &name, settings, bindings) {
             break;
         }
     }

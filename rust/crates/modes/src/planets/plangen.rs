@@ -92,6 +92,7 @@ pub mod live {
     }
 
     fn load_surface_palette(
+        content: &uqm_engine::resource::Content,
         index: u8,
         temperature: i16,
     ) -> crate::planets::sphere::palette::SurfacePalette {
@@ -99,10 +100,10 @@ pub mod live {
         use uqm_engine::strings::sresins::load_binary_entry;
         let data = &crate::planets::tables::PLANET_ARRAY[usize::from(index)];
         let variant = temperature_index(temperature);
-        let colors = load_binary_entry(data.cmap_instance, variant)
-            .unwrap_or_else(|| panic!("planet color map is missing"));
-        let translation = load_binary_entry(data.xlat_tab_instance, variant)
-            .unwrap_or_else(|| panic!("planet translation table is missing"));
+        let colors = load_binary_entry(content, data.cmap_instance, variant)
+            .unwrap_or_else(|error| panic!("planet color map: {error}"));
+        let translation = load_binary_entry(content, data.xlat_tab_instance, variant)
+            .unwrap_or_else(|error| panic!("planet translation table: {error}"));
         SurfacePalette::from_bytes(index, &translation, colors)
             .unwrap_or_else(|error| panic!("planet palette: {error:?}"))
     }
@@ -202,7 +203,31 @@ pub mod live {
         }
     }
 
+    fn render_generated_topography(
+        state: &mut SphereState,
+        context: &uqm_engine::graphics::context::ContextLease,
+        width: usize,
+        content: &uqm_engine::resource::Content,
+        planet: &uqm_engine::world::planet::PlanetDesc,
+        info: &uqm_engine::world::planet::PlanetInfo,
+    ) -> crate::planets::sphere::palette::SurfacePalette {
+        let topography = crate::planets::sphere::images::image(2, width, 75, 1);
+        let palette = load_surface_palette(content, planet.data_index & !128, info.temperature);
+        render_native_topography(
+            context,
+            topography.lease().context_frame(0),
+            &state.elevation,
+            width as i32,
+            75,
+            Some(palette.view()),
+        )
+        .unwrap_or_else(|error| panic!("render planet topography: {error:?}"));
+        state.images_mut().topography = Some(topography);
+        palette
+    }
+
     pub struct SurfaceInputs<'a> {
+        pub content: &'a uqm_engine::resource::Content,
         pub rng: &'a mut uqm_engine::math::RandomContext,
         pub planet: &'a uqm_engine::world::planet::PlanetDesc,
         pub info: &'a uqm_engine::world::planet::PlanetInfo,
@@ -218,6 +243,7 @@ pub mod live {
         definition: Option<uqm_engine::graphics::drawable::LoadedDrawable>,
     ) {
         let SurfaceInputs {
+            content,
             rng,
             planet,
             info,
@@ -238,18 +264,14 @@ pub mod live {
             } else {
                 let depth = &mut state.elevation;
                 generate_elevation(rng, depth, width, &data);
-                let topography = crate::planets::sphere::images::image(2, width, 75, 1);
-                let palette = load_surface_palette(planet.data_index & !128, info.temperature);
-                render_native_topography(
+                let palette = render_generated_topography(
+                    state,
                     &retained_context,
-                    topography.lease().context_frame(0),
-                    depth,
-                    width as i32,
-                    75,
-                    Some(palette.view()),
-                )
-                .unwrap_or_else(|error| panic!("render planet topography: {error:?}"));
-                state.images_mut().topography = Some(topography);
+                    width,
+                    content,
+                    planet,
+                    info,
+                );
                 Some(palette)
             };
             if !shielded && info.atmo_density != 65535 {

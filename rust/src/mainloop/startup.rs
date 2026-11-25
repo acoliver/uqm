@@ -23,28 +23,70 @@ use crate::automation::input_ffi::graphics_options;
 use crate::mainloop::{dir_prep, options, options_abi as globals};
 use std::ffi::CString;
 use uqm_engine::sound::volume_globals::update_sound_options;
+use uqm_engine::{
+    io::Dir,
+    resource::settings::{Bindings, Settings},
+};
+
+pub struct Prepared {
+    pub settings: Settings,
+    pub bindings: Bindings,
+    pub content: Dir,
+    pub config: Dir,
+    pub saves: Dir,
+    pub teams: Dir,
+    pub addons: Vec<CString>,
+}
 
 /// Bring every subsystem up on the SDL owner thread, once, after command-line
-/// parsing. Returns the process exit status: zero when the game may start.
+/// parsing. Returns the prepared run, or the startup failure status.
 pub fn initialize(
     input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
     args: &[String],
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
-) -> i32 {
+) -> Result<Prepared, i32> {
     if !start_services(parsed, args) {
-        return 1;
+        return Err(1);
     }
-    let vfs = uqm_engine::io::Vfs::new();
-    uqm_engine::io::install(vfs.clone());
+    let vfs = uqm_engine::io::Vfs::with_disk(uqm_engine::host::platform().disk());
+    let settings = Settings::default();
+    let mut bindings = Bindings::default();
     apply_options(input, parsed);
-    if !prepare_directories(&vfs, input, parsed) {
-        return 1;
+    let addons = match prepare_directories(&vfs, parsed) {
+        Some(addons) => addons,
+        None => {
+            return Err(1);
+        }
+    };
+    let content = vfs
+        .content_dir()
+        .unwrap_or_else(|| panic!("prepared content"))
+        .snapshot();
+    let config = vfs
+        .config_dir()
+        .unwrap_or_else(|| panic!("prepared config"))
+        .snapshot();
+    let saves = vfs
+        .save_dir()
+        .unwrap_or_else(|| panic!("prepared saves"))
+        .snapshot();
+    let teams = vfs
+        .melee_dir()
+        .unwrap_or_else(|| panic!("prepared teams"))
+        .snapshot();
+    if !start_media(input, parsed, observer, &mut bindings, &content, &config) {
+        return Err(1);
     }
-    if !start_media(input, parsed, observer) {
-        return 1;
-    }
-    0
+    Ok(Prepared {
+        settings,
+        bindings,
+        content,
+        config,
+        saves,
+        teams,
+        addons,
+    })
 }
 
 /// Logging, SDL, memory and the game thread.
@@ -84,44 +126,42 @@ fn start_services(parsed: &options::ParsedOptions, args: &[String]) -> bool {
 /// The config, content, melee and save directories and the addon shadows.
 fn prepare_directories(
     vfs: &uqm_engine::io::Vfs,
-    input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
-) -> bool {
+) -> Option<Vec<CString>> {
     if let Err(error) = dir_prep::prepare_config_dir(vfs, parsed.config_dir.as_deref()) {
         log::error!("Config directory: {error:?}");
-        return false;
+        return None;
     }
     let addons: Result<Vec<_>, _> = parsed
         .addons
         .iter()
         .map(|name| CString::new(name.as_str()))
         .collect();
-    match addons {
-        Ok(addons) => input.configuration.set_addons(addons),
+    let addons = match addons {
+        Ok(addons) => addons,
         Err(error) => {
             log::error!("Addon name: {error}");
-            return false;
+            return None;
         }
-    }
+    };
     if let Err(error) = dir_prep::prepare_content_dir(
         vfs,
-        &input.configuration,
         parsed.content_dir.as_deref(),
         parsed.addon_dir.as_deref(),
     ) {
         log::error!("Content directory: {error:?}");
-        return false;
+        return None;
     }
     if let Err(error) = dir_prep::prepare_melee_dir(vfs) {
         log::error!("Melee directory: {error:?}");
-        return false;
+        return None;
     }
     if let Err(error) = dir_prep::prepare_save_dir(vfs) {
         log::error!("Save directory: {error:?}");
-        return false;
+        return None;
     }
     dir_prep::prepare_shadow_addons(vfs, &parsed.addons);
-    true
+    Some(addons)
 }
 
 /// Copy the parsed options into the sound options, the player controls and the
@@ -129,7 +169,6 @@ fn prepare_directories(
 fn apply_options(input: &uqm_engine::input::InputSession, parsed: &options::ParsedOptions) {
     input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
     input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
-    uqm_engine::input_port::sdl_input::forget_template_names();
     update_sound_options(|options| {
         options.driver = parsed.sound_driver;
         options.flags = parsed.sound_quality;
@@ -162,6 +201,9 @@ fn start_media(
     input: &uqm_engine::input::InputSession,
     parsed: &options::ParsedOptions,
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+    bindings: &mut Bindings,
+    content: &Dir,
+    config: &Dir,
 ) -> bool {
     let (driver, flags) = graphics_config(parsed);
     uqm_engine::graphics::present::init_graphics(
@@ -179,7 +221,12 @@ fn start_media(
     input
         .configuration
         .update_preferences(|preferences| preferences.gamma = gamma);
-    if let Err(error) = uqm_engine::input_port::sdl_input::init_input(input.controls()) {
+    if let Err(error) = uqm_engine::input_port::sdl_input::init_input(
+        input.controls(),
+        bindings,
+        Some(content),
+        Some(config),
+    ) {
         log::error!("{error}");
         return false;
     }

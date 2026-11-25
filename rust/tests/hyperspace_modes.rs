@@ -288,15 +288,16 @@ fn load_palette_fixture() -> Result<
         let content = uqm_engine::test_support::native_session::ContentMount::new(
             &directory.path().canonicalize()?,
         );
-        uqm_engine::resource::init();
         content.load_index("palettes.rmp");
         let palettes = [
             Some(
-                PaletteCycle::load(c"fixture.hyper")
+                PaletteCycle::load(&content.content(), c"fixture.hyper")
+                    .ok()
                     .ok_or("hyperspace fixture palette failed to load")?,
             ),
             Some(
-                PaletteCycle::load(c"fixture.quasi")
+                PaletteCycle::load(&content.content(), c"fixture.quasi")
+                    .ok()
                     .ok_or("quasispace fixture palette failed to load")?,
             ),
         ];

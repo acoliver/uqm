@@ -599,32 +599,30 @@ fn release_images<const N: usize>(
 }
 
 /// Load a graphic resource and hand its ownership to the returned frame.
-pub fn load_graphic(key: &std::ffi::CStr) -> FrameId {
-    LoadedDrawable::load(key).map_or(FrameId::NULL, LoadedDrawable::into_frame)
+pub fn load_graphic(
+    content: &crate::resource::Content,
+    key: &std::ffi::CStr,
+) -> Result<FrameId, crate::resource::AssetLoadError> {
+    LoadedDrawable::load(content, key).map(LoadedDrawable::into_frame)
 }
 
 pub fn load_animation(
+    content: &crate::resource::Content,
     frames: &mut [FrameId; 3],
     keys: [Option<&std::ffi::CStr>; 3],
     role: &str,
-) -> u32 {
-    let Some(big) = keys[0] else { return 0 };
-    let mut frame = load_graphic(big);
-    if frame.is_null() {
-        return 0;
-    }
+) -> Result<bool, crate::resource::AssetLoadError> {
+    let Some(big) = keys[0] else { return Ok(false) };
+    let mut frame = load_graphic(content, big)?;
     frames[0] = frame;
     for (index, key) in keys[1..].iter().enumerate() {
         if let Some(key) = key {
-            frame = load_graphic(key);
-            if frame.is_null() {
-                return 0;
-            }
+            frame = load_graphic(content, key)?;
         }
         frames[index + 1] = frame;
     }
     observe_views(frames, role, |frame| frame.bits());
-    1
+    Ok(true)
 }
 
 /// Release frames loaded by [`load_animation`] or [`load_graphic`].

@@ -25,11 +25,11 @@ impl ReportTypography {
 pub struct ReportResources(Rc<RefCell<Option<Rc<ReportTypography>>>>);
 
 impl ReportResources {
-    pub fn load(&self) {
-        let font = LoadedFont::load(c"font.lander")
-            .unwrap_or_else(|| panic!("lander report font is missing"));
-        let effect = LoadedDrawable::load(c"graphics.landerfonteffect")
-            .unwrap_or_else(|| panic!("lander report font effect is missing"));
+    pub fn load(&self, content: &uqm_engine::resource::Content) {
+        let font = LoadedFont::load(content, c"font.lander")
+            .unwrap_or_else(|error| panic!("lander report font is missing: {error}"));
+        let effect = LoadedDrawable::load(content, c"graphics.landerfonteffect")
+            .unwrap_or_else(|error| panic!("lander report font effect is missing: {error}"));
         self.0
             .replace(Some(Rc::new(ReportTypography { font, effect })));
     }
@@ -63,9 +63,9 @@ mod tests {
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
                 &mut game,
-                || {
-                    first.load();
-                    second.load();
+                |content| {
+                    first.load(content);
+                    second.load(content);
                 },
             )
             .unwrap();

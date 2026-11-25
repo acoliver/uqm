@@ -5,7 +5,6 @@
 //! Path resolution, env-var expansion and directory creation happen in pure
 //! Rust; mounts and the retained directories go into the process [`Vfs`].
 
-use std::ffi::CString;
 use std::path::{Path, PathBuf};
 
 use uqm_engine::host::Files;
@@ -222,20 +221,15 @@ pub fn prepare_melee_dir(vfs: &Vfs) -> Result<(), DirPrepError> {
 /// "/", mounts any `/packages/*.zip` files, and mounts addon packs.
 pub fn prepare_content_dir(
     vfs: &Vfs,
-    configuration: &uqm_engine::configuration::Configuration,
     content_dir: Option<&str>,
     addon_dir: Option<&str>,
-) -> Result<(), DirPrepError> {
+) -> Result<PathBuf, DirPrepError> {
     let content_path = super::content::locate(content_dir)
         .map_err(|error| DirPrepError::NotFound(error.to_string()))?;
 
     let path_str = content_path.to_string_lossy().to_string();
 
     tracing::debug!("Using '{}' as base content dir.", path_str);
-
-    let retained_path = CString::new(path_str.as_str())
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
-    configuration.set_content_path(retained_path);
 
     let mount = vfs.mount_dir("/", &content_path, Placement::Top, true);
     vfs.set_content_mount(mount);
@@ -251,7 +245,7 @@ pub fn prepare_content_dir(
 
     scan_addon_packs(vfs, &dir, mount);
 
-    Ok(())
+    Ok(content_path)
 }
 
 /// Mount zip files from /packages directory below content root.

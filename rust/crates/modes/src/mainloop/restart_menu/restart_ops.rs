@@ -22,6 +22,7 @@ pub fn seed_new_campaign(automation_seed: u32, clock_seed: impl FnOnce()) {
 }
 
 pub trait RestartHost {
+    fn setup(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, context: ContextLease, font: FontLease);
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>);
     fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool);
     fn free_game_data(&mut self, cx: &mut Cx<'_>);
@@ -260,7 +261,8 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
     }
     fn load_menu_graphic(&mut self) {
         self.menu.graphic = Some(
-            LoadedDrawable::load(c"graphics.newgame").unwrap_or_else(|| panic!("restart graphic")),
+            LoadedDrawable::load(&self.cx.kernel.content(), c"graphics.newgame")
+                .unwrap_or_else(|error| panic!("restart graphic: {error}")),
         );
         self.menu.font = Some(
             self.cx
@@ -350,7 +352,7 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         self.menu.music.is_some()
     }
     fn load_menu_music(&mut self) -> bool {
-        self.menu.music = LoadedMusic::load(c"music.mainmenu");
+        self.menu.music = LoadedMusic::load(&self.cx.kernel.content(), c"music.mainmenu").ok();
         self.menu.music.is_some()
     }
     fn play_music(&mut self) {
@@ -403,23 +405,13 @@ impl RestartMenuOps for Operations<'_, '_, '_> {
         self.host.melee(self.cx, self.io);
     }
     fn setup_menu(&mut self) {
-        use crate::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
-        use uqm_engine::{configuration::runtime::RuntimeSettings, resource::settings::Settings};
         let context = self.menu.context().clone();
-        let runtime = RuntimeSettings::capture(&context);
         let font = self
             .cx
             .kernel
             .battle_font()
             .unwrap_or_else(|| panic!("setup font not loaded"));
-        let resources = SetupResources::load(context, font);
-        let configuration = SetupConfiguration {
-            input: self.cx.kernel.input_runtime().input().clone(),
-            runtime,
-            settings: Settings,
-            names: uqm_engine::input_port::templates::input_templates(),
-        };
-        setup_menu(self.cx, self.io, configuration, resources);
+        self.host.setup(self.cx, self.io, context, font);
     }
     fn free_game_data(&mut self) {
         self.host.free_game_data(self.cx);

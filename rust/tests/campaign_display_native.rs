@@ -28,8 +28,8 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
     {
         uqm_engine::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
         let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-        content.init_resources("fixture.rmp");
-        let font = uqm_engine::graphics::font::LoadedFont::load(c"fixture.tiny").unwrap();
+        let catalog = content.load_index("fixture.rmp");
+        let font = uqm_engine::graphics::font::LoadedFont::load(&catalog, c"fixture.tiny").unwrap();
         let glyph = font
             .lease()
             .measure(c"A", Point { x: 27, y: 6 }, TextAlign::Center, u16::MAX)
@@ -206,7 +206,6 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         drop(game);
         drop(selected);
         drop((context_owner, previous_owner));
-        uqm_engine::resource::uninit();
         drop(drawable);
         uqm_engine::graphics::present::uninit_graphics();
     }

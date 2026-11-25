@@ -107,7 +107,7 @@ fn real_report_presents_before_nested_input_and_restores_retained_background() {
         let display =
             uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
                 &mut game,
-                || reports.load(),
+                |content| reports.load(content),
             )
             .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;

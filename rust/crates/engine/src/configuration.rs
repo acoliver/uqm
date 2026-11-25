@@ -1,7 +1,6 @@
 //! Application preferences and startup values retained by their consumers.
 pub mod runtime;
 
-use std::ffi::CString;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -25,8 +24,6 @@ pub struct Preferences {
 #[derive(Default)]
 struct Values {
     preferences: Preferences,
-    addons: Vec<CString>,
-    content_path: Option<CString>,
 }
 
 #[derive(Clone, Default)]
@@ -49,21 +46,5 @@ impl Configuration {
 
     pub fn update_preferences(&self, update: impl FnOnce(&mut Preferences)) {
         update(&mut self.values().preferences);
-    }
-
-    pub fn addons(&self) -> Vec<CString> {
-        self.values().addons.clone()
-    }
-
-    pub fn set_addons(&self, addons: Vec<CString>) {
-        self.values().addons = addons;
-    }
-
-    pub fn content_path(&self) -> Option<CString> {
-        self.values().content_path.clone()
-    }
-
-    pub fn set_content_path(&self, path: CString) {
-        self.values().content_path = Some(path);
     }
 }

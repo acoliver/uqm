@@ -96,7 +96,12 @@ fn presentation_frame(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut Presentation
         match commands::advance(cx, io, state) {
             commands::Step::Input(keep) => return keep,
             commands::Step::Call(path) => {
-                show_slides(cx, io, LoadedTextTable::load_file(&path), false);
+                show_slides(
+                    cx,
+                    io,
+                    LoadedTextTable::load_file(cx.kernel.content().files(), &path).ok(),
+                    false,
+                );
             }
         }
     }
@@ -156,17 +161,22 @@ fn show_slides(
 }
 
 pub fn show_presentation(cx: &mut Cx<'_>, io: &mut Io<'_>, presentation: &CStr) -> bool {
-    let Some(kind) = uqm_engine::resource::settings::Settings.kind(presentation) else {
+    let content = cx.kernel.content();
+    let Some(kind) = content.kind(presentation.to_str().unwrap_or("")) else {
         return false;
     };
-    match kind.as_str() {
+    match kind {
         "STRTAB" => show_slides(
             cx,
             io,
-            LoadedTextTable::load(presentation),
+            LoadedTextTable::load(&cx.kernel.content(), presentation).ok(),
             presentation == c"slides.ending",
         ),
-        "3DOVID" => show_video(cx, io, LoadedVideo::load(presentation)),
+        "3DOVID" => show_video(
+            cx,
+            io,
+            LoadedVideo::load(&cx.kernel.content(), presentation).ok(),
+        ),
         _ => {
             log::warn!(
                 "Tried to present '{}', of non-presentable type '{kind}'",
@@ -217,7 +227,13 @@ fn fade_clear_screen(cx: &mut Cx<'_>) {
 
 fn show_video(cx: &mut Cx<'_>, io: &mut Io<'_>, video: Option<LoadedVideo>) -> bool {
     fade_clear_screen(cx);
-    let Some(playback) = video.as_ref().and_then(LoadedVideo::play) else {
+    let Some(playback) = video.as_ref().and_then(|video| match video.play() {
+        Ok(playback) => Some(playback),
+        Err(error) => {
+            log::warn!("Video unavailable: {error}");
+            None
+        }
+    }) else {
         return false;
     };
     cx.kernel.input_controls().set_menu_sounds(0, 0);

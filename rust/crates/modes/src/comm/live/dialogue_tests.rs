@@ -220,7 +220,7 @@ fn with_fixture(mut body: impl FnMut(&mut Game, uqm_engine::graphics::drawable::
     let mut game = Game::new();
     let display = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_| {},
         |game| {
             let space = ContextLease::require(game.kernel.status_context);
             space.set_frame(ContextFrame::retain(game.kernel.screen));

@@ -118,7 +118,7 @@ fn resolutions_scaler_precedence_audio_defaults_and_explicit_driver_round_trip()
 #[test]
 #[serial_test::serial]
 fn writes_every_preference_and_persists_restart_only_audio_options() {
-    let settings = Settings;
+    let mut settings = Settings::default();
     let input = InputSession::default();
     let range = GammaRange::new(0.4, 2.5);
     for value in [0, 1] {
@@ -127,7 +127,7 @@ fn writes_every_preference_and_persists_restart_only_audio_options() {
         choices[19] = 5;
         let options =
             GlobalOptions::from_widgets(&choices, [20, 40, 60, range.gamma_to_slider(1.0)]);
-        set_global_options(&input, &options, &range, &settings);
+        set_global_options(&input, &options, &range, &mut settings);
         let p = input.preferences();
         let console = if value == 1 { 1 } else { 2 };
         assert_eq!(
@@ -193,7 +193,7 @@ fn writes_every_preference_and_persists_restart_only_audio_options() {
 #[test]
 #[serial_test::serial]
 fn display_mapping_preserves_custom_dimensions_and_unrelated_flags() {
-    let settings = Settings;
+    let mut settings = Settings::default();
     let original = DisplaySettings {
         driver: 0,
         flags: 2 | 1024 | 1016,
@@ -223,7 +223,7 @@ fn display_mapping_preserves_custom_dimensions_and_unrelated_flags() {
                 scanlines: 1,
                 ..Default::default()
             };
-            let result = super::super::options::prepare_display(&options, original, &settings);
+            let result = super::super::options::prepare_display(&options, original, &mut settings);
             assert_eq!(
                 result,
                 DisplaySettings {

@@ -177,7 +177,7 @@ mod tests {
     fn test_init_sets_play_state() {
         super::super::sis_graphics_font_tests::with_display(
             "comm::speech_graphics::tests::test_init_sets_play_state",
-            |comm, _| {
+            |comm, _, _content| {
                 SpeechGraphics::init(comm);
                 assert!(comm.speech_graphics().is_initialized());
                 assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
@@ -190,7 +190,7 @@ mod tests {
     fn test_slider_state_changes() {
         super::super::sis_graphics_font_tests::with_display(
             "comm::speech_graphics::tests::test_slider_state_changes",
-            |comm, _| {
+            |comm, _, _content| {
                 SpeechGraphics::init(comm);
 
                 SpeechGraphics::set_slider_state(comm, SliderState::Forward);
@@ -213,7 +213,7 @@ mod tests {
     fn test_update_rate_limited() {
         super::super::sis_graphics_font_tests::with_display(
             "comm::speech_graphics::tests::test_update_rate_limited",
-            |comm, _| {
+            |comm, _, _content| {
                 SpeechGraphics::init(comm);
 
                 // First update at t=0 — should proceed (last_update_ms starts at 0).
@@ -243,7 +243,7 @@ mod tests {
     fn test_clear_resets() {
         super::super::sis_graphics_font_tests::with_display(
             "comm::speech_graphics::tests::test_clear_resets",
-            |comm, _| {
+            |comm, _, _content| {
                 SpeechGraphics::init(comm);
                 SpeechGraphics::set_slider_state(comm, SliderState::Stop);
 

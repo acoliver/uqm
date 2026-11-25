@@ -19,6 +19,7 @@ type PhraseEvents = std::sync::Arc<parking_lot::Mutex<Vec<fn(&mut Comm)>>>;
 
 /// Communication state
 pub struct Comm {
+    pub(crate) phrase_files: Option<uqm_engine::io::Dir>,
     pub(crate) presentation: super::presentation::Presentation,
     phrase_events: PhraseEvents,
     pub(crate) race_scratch: super::races::RuntimeScratch,
@@ -113,6 +114,7 @@ impl Comm {
     /// Create a new communication state
     pub fn new() -> Self {
         Self {
+            phrase_files: None,
             presentation: Default::default(),
             phrase_events: Default::default(),
             race_scratch: Default::default(),

@@ -4,38 +4,44 @@ use uqm_engine::graphics::present::GraphicsOptions;
 use uqm_engine::strings::owned_table::LoadedTextTable;
 use uqm_engine::video::legacy::*;
 
-fn retained_playback_keeps_its_clip_after_descriptor_drop() {
-    assert!(LoadedVideo::load(c"fixture.unknown").is_none());
-    let absent =
-        LoadedVideo::load(c"fixture.absent").unwrap_or_else(|| panic!("missing-file descriptor"));
-    assert!(absent.play().is_none());
+fn retained_playback_keeps_its_clip_after_descriptor_drop(content: &uqm_engine::resource::Content) {
+    assert!(LoadedVideo::load(content, c"fixture.unknown").is_err());
+    let absent = LoadedVideo::load(content, c"fixture.absent")
+        .unwrap_or_else(|error| panic!("missing-file descriptor: {error}"));
+    assert!(absent.play().is_err());
     drop(absent);
-    let descriptor =
-        LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
+    let descriptor = LoadedVideo::load(content, c"fixture.video")
+        .unwrap_or_else(|error| panic!("logo descriptor: {error}"));
     let playback_started = std::time::Instant::now();
-    let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
+    let playback = descriptor
+        .play()
+        .unwrap_or_else(|error| panic!("logo playback: {error}"));
     drop(descriptor);
     assert!(playback.is_playing());
     assert!(playback.process_frame());
     assert!(u128::from(playback.position()) <= playback_started.elapsed().as_millis());
     drop(playback);
-    let broken = LoadedVideo::load(c"fixture.broken").unwrap_or_else(|| panic!("broken"));
-    assert!(broken.play().is_none());
-    let replaced = descriptor_playback(c"fixture.video");
+    let broken = LoadedVideo::load(content, c"fixture.broken")
+        .unwrap_or_else(|error| panic!("broken: {error}"));
+    assert!(broken.play().is_err());
+    let replaced = descriptor_playback(content, c"fixture.video");
     stop_player();
     assert!(!replaced.is_playing());
 }
 
-fn descriptor_playback(resource: &std::ffi::CStr) -> VideoPlayback {
-    LoadedVideo::load(resource)
+fn descriptor_playback(
+    content: &uqm_engine::resource::Content,
+    resource: &std::ffi::CStr,
+) -> VideoPlayback {
+    LoadedVideo::load(content, resource)
         .and_then(|video| video.play())
-        .unwrap_or_else(|| panic!("{resource:?} playback"))
+        .unwrap_or_else(|error| panic!("{resource:?} playback: {error}"))
 }
 
-fn retained_string_table_loads_owned_text() {
-    assert!(LoadedTextTable::load_file(c"missing").is_none());
-    let table = LoadedTextTable::load_file(c"strings.txt")
-        .unwrap_or_else(|| panic!("owned strings fixture did not load"));
+fn retained_string_table_loads_owned_text(files: &uqm_engine::io::Dir) {
+    assert!(LoadedTextTable::load_file(files, c"missing").is_err());
+    let table = LoadedTextTable::load_file(files, c"strings.txt")
+        .unwrap_or_else(|error| panic!("owned strings fixture did not load: {error}"));
     assert_eq!(table.len(), 2);
     assert_eq!(
         table
@@ -80,13 +86,12 @@ fixture.broken = 3DOVID:broken.duk
     // SAFETY: this isolated test owns the repository, graphics state and every loaded resource.
     {
         let mount = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-        let dir = uqm_engine::io::content_dir().unwrap();
-        retained_string_table_loads_owned_text();
+        let dir = mount.content_directory();
+        retained_string_table_loads_owned_text(dir);
         let options = GraphicsOptions::default();
         uqm_engine::graphics::present::init_graphics(1, 0, options, 320, 240);
-        uqm_engine::resource::init();
-        uqm_engine::resource::load_index(&dir, c"video.rmp", None);
-        retained_playback_keeps_its_clip_after_descriptor_drop();
+        mount.load_index("video.rmp");
+        retained_playback_keeps_its_clip_after_descriptor_drop(&mount.content());
         assert!(uqm_engine::graphics::present::present_video(
             &[0xff00_00ff, 0xff00_ff00],
             1,

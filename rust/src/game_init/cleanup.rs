@@ -4,7 +4,6 @@ use uqm_engine::battle::access::lifecycle;
 
 /// Release the display, the resource system and the video player.
 pub fn free_kernel(kernel: &mut uqm_engine::Kernel) {
-    kernel.uninit_resources();
     kernel.close_screen();
 }
 

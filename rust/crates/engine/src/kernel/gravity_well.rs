@@ -103,11 +103,12 @@ impl Kernel {
     /// Loads the planet graphic sizes of `selector`: a planet type, the
     /// Samatra (one past the last type) or a slave-shielded world (bit 7).
     pub fn load_gravity_well(&mut self, selector: u8) {
+        let content = self.content();
         for (frame, key) in self.planet.iter_mut().zip(gravity_keys(selector)) {
-            *frame = key.map_or(
-                crate::graphics::drawable::FrameId::NULL,
-                crate::battle::frames::load_graphic,
-            );
+            *frame = key.map_or(crate::graphics::drawable::FrameId::NULL, |key| {
+                crate::battle::frames::load_graphic(&content, key)
+                    .unwrap_or(crate::graphics::drawable::FrameId::NULL)
+            });
         }
         crate::collections::observation::observe_views(
             &self.planet,

@@ -70,14 +70,14 @@ pub(crate) mod runtime {
     pub fn credits(cx: &mut Cx<'_>, io: &mut Io<'_>, with_outtakes: bool) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        let music = LoadedMusic::load(c"music.credits");
+        let music = LoadedMusic::load(&cx.kernel.content(), c"music.credits").ok();
         let context = ContextLease::require(cx.kernel.screen_context);
         context.select();
         context.clear_clip();
         let screen = context.clip_rect();
         context.set_background(super::super::intro::BLACK_COLOR);
         context.clear();
-        let Some(resources) = Resources::load().map(Rc::new) else {
+        let Some(resources) = Resources::load(&cx.kernel.content()).map(Rc::new) else {
             return;
         };
         context.draw_stamp(&resources.background_frame(), Point { x: 0, y: 0 });

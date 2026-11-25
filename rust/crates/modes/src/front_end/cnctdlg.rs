@@ -517,8 +517,8 @@ pub fn melee_connect_dialog(
     session: &mut NetplaySession,
     side: usize,
 ) -> bool {
-    let player_font = LoadedFont::load(c"font.player")
-        .unwrap_or_else(|| panic!("connection player font not loaded"));
+    let player_font = LoadedFont::load(&cx.kernel.content(), c"font.player")
+        .unwrap_or_else(|error| panic!("connection player font not loaded: {error}"));
     let mut state =
         ConnectDialogState::new(session, side, DialogResources::new(cx.kernel, &player_font));
     cx.run_input(io, true, |cx, io| {

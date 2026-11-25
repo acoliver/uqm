@@ -33,7 +33,7 @@ fn with_game_options(
     let fixture =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared_with_options(
             &mut game,
-            || {},
+            |_| {},
             |game| {
                 let space = ContextLease::require(game.kernel.status_context);
                 space.set_frame(ContextFrame::retain(game.kernel.screen));
@@ -126,10 +126,16 @@ fn failed_loads_drop_partial_owners_and_duplicate_admission_is_rejected() {
             comm.data.definition.alien_font_res = Some(c"missing.font");
             space.select();
             let before = space.selected_context().unwrap().context();
-            assert_eq!(
-                hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)),
-                Err("alien font failed to load".into())
-            );
+            let error =
+                hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)).unwrap_err();
+            let asset = error
+                .downcast_ref::<uqm_engine::resource::AssetLoadError>()
+                .unwrap();
+            assert_eq!(asset.key, "missing.font");
+            assert!(asset
+                .source
+                .downcast_ref::<uqm_engine::resource::ResolveError>()
+                .is_some());
             assert!(comm.display.assets.is_none());
             assert_eq!(space.selected_context().unwrap().context(), before);
             comm.data.definition = descriptor();

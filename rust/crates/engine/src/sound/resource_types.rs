@@ -9,12 +9,24 @@ use super::types::MusicRef;
 pub struct LoadedMusic(MusicRef);
 
 impl LoadedMusic {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        Self::load_file(&crate::resource::path_of(resource, "MUSICRES")?)
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Music)?;
+        let path = std::ffi::CString::new(resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))?;
+        Self::load_file(resolved.files, &path).map_err(|error| resolved.load_error(resource, error))
     }
 
-    pub fn load_file(path: &CStr) -> Option<Self> {
-        load_music(path.to_str().ok()?).map(Self)
+    pub fn load_file(
+        files: &crate::io::Dir,
+        path: &CStr,
+    ) -> Result<Self, crate::resource::FileError> {
+        let name = path.to_str().map_err(|error| {
+            crate::resource::FileError::at(path.to_string_lossy().as_ref(), error)
+        })?;
+        load_music(files, name).map(Self)
     }
 
     pub fn playback(&self) -> MusicRef {
@@ -49,10 +61,18 @@ mod tests {
     #[serial_test::serial]
     fn music_loading_rejects_another_resource_type_before_ownership_transfer() {
         let key = c"test.sound.resource-types.not-music";
-        crate::resource::settings::Settings.put_integer(key.to_str().unwrap(), 42);
-        let rejected = std::panic::catch_unwind(|| LoadedMusic::load(key));
+        let mount = crate::io::fixture::TempMount::new();
+        mount.write(
+            "wrong.rmp",
+            b"test.sound.resource-types.not-music = INT32:42\n",
+        );
+        let content = mount.content(c"wrong.rmp");
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            LoadedMusic::load(&content, key).ok()
+        }));
         assert!(rejected.is_err());
-        assert!(crate::resource::remove(key.to_str().unwrap()));
+        let mut revised = content.revise();
+        assert!(revised.remove(key.to_str().unwrap()));
     }
 
     #[test]

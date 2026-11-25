@@ -442,7 +442,13 @@ pub fn npc_phrase(
         } else {
             resources.ship_name.as_c_str()
         };
-        uqm_engine::sound::heart_ffi::splice_track(None, Some(name), None, callback);
+        uqm_engine::sound::heart_ffi::splice_track(
+            comm.phrase_files.as_ref(),
+            None,
+            Some(name),
+            None,
+            callback,
+        );
     } else if index < 0 {
         let variant = world.story_state(StoryKey::NEW_ALLIANCE_NAME) as c_int;
         let adjusted = index - GLOBAL_ALLIANCE_NAME;
@@ -467,7 +473,13 @@ pub fn npc_phrase(
                 .map_while(std::num::NonZeroU8::new)
                 .collect::<Vec<_>>(),
         );
-        uqm_engine::sound::heart_ffi::splice_track(None, Some(&text), None, callback);
+        uqm_engine::sound::heart_ffi::splice_track(
+            comm.phrase_files.as_ref(),
+            None,
+            Some(&text),
+            None,
+            callback,
+        );
     } else {
         let Some(phrase) = comm
             .display
@@ -479,6 +491,7 @@ pub fn npc_phrase(
         };
         let Some(text) = phrase.text else { return };
         uqm_engine::sound::heart_ffi::splice_track(
+            comm.phrase_files.as_ref(),
             phrase.clip,
             Some(text),
             phrase.timestamp,
@@ -506,9 +519,19 @@ pub fn splice_phrase(world: &uqm_engine::World, comm: &mut Comm, index: c_int) {
     };
     let Some(text) = phrase.text else { return };
     if let Some(clip) = phrase.clip {
-        uqm_engine::sound::heart_ffi::splice_multi_track(&[clip], Some(text));
+        uqm_engine::sound::heart_ffi::splice_multi_track(
+            comm.phrase_files.as_ref(),
+            &[clip],
+            Some(text),
+        );
     } else {
-        uqm_engine::sound::heart_ffi::splice_track(None, Some(text), None, None);
+        uqm_engine::sound::heart_ffi::splice_track(
+            comm.phrase_files.as_ref(),
+            None,
+            Some(text),
+            None,
+            None,
+        );
     }
     comm.rebuild_summary();
 }

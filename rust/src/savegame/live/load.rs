@@ -2,7 +2,6 @@
 use super::super::{legacy, SaveSlots};
 use uqm_engine::{battle::Cx, save::summary_record::SummaryDesc};
 use uqm_modes::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
-use uqm_save::SlotError;
 
 pub enum LoadRequest<'a, 'game> {
     Summary(&'a mut SummaryDesc),
@@ -25,11 +24,10 @@ fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: u16) {
     }
 }
 
-pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
+pub fn load_game(files: &uqm_engine::io::Dir, slot: u16, request: LoadRequest<'_, '_>) -> u32 {
     let loading = matches!(&request, LoadRequest::Restore(_));
     let result = (|| -> anyhow::Result<()> {
-        let files = uqm_engine::io::save_dir().ok_or(SlotError::NoSaveDir)?;
-        let slots = SaveSlots::new(&files);
+        let slots = SaveSlots::new(files);
         let cx = match request {
             LoadRequest::Summary(summary) => {
                 let decoded = match slots.read_summary(usize::from(slot)) {
@@ -62,9 +60,12 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
 }
 
 /// Enumerate the original 50-slot picker list synchronously.
-pub fn load_game_descriptions(summaries: &mut [SummaryDesc; super::super::types::MAX_SAVED_GAMES]) {
+pub fn load_game_descriptions(
+    files: &uqm_engine::io::Dir,
+    summaries: &mut [SummaryDesc; super::super::types::MAX_SAVED_GAMES],
+) {
     for (i, summary) in (0..super::super::types::MAX_SAVED_GAMES as u16).zip(summaries) {
-        if load_game(i, LoadRequest::Summary(summary)) == 0 {
+        if load_game(files, i, LoadRequest::Summary(summary)) == 0 {
             summary.year_index = 0;
         }
         log::info!(

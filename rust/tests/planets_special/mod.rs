@@ -356,6 +356,15 @@ pub fn late_generators_match(frames: &[uqm_engine::world::planet::PlanetFrame]) 
 }
 
 pub fn sol_matches_the_c_original(table: &[uqm_engine::world::planet::PlanetFrame]) {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../sc2/content")
+        .canonicalize()
+        .unwrap_or_else(|error| panic!("canonical content directory: {error}"));
+    uqm_modes::planets::c_api::log_init(100);
+    let mount = uqm_engine::test_support::native_session::ContentMount::new(&directory);
+    // Earth loads its definition before the noninteractive orbit exit.
+    let content = mount.load_index("uqm.rmp");
+    crate::battle_context::with(|cx| cx.kernel.admit_content(content));
     sol::check(table);
     sol_abi::check();
 }

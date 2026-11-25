@@ -150,8 +150,9 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
     uqm_engine::graphics::present::init_graphics(1, 0, GraphicsOptions::default(), 320, 240);
     let content = uqm_engine::test_support::native_session::ContentMount::new(directory.path());
-    content.init_resources("fixture.rmp");
+    content.load_index("fixture.rmp");
     let mut game = campaign();
+    game.kernel.admit_content(content.content());
     check_scene(
         &mut game,
         BURVIXESE_DEFINED,
@@ -342,7 +343,6 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
     assert_eq!(game.world.activity(), 0);
     uqm_engine::graphics::state::flush();
     drop(game);
-    uqm_engine::resource::uninit();
     drop(content);
     uqm_engine::graphics::present::uninit_graphics();
 }

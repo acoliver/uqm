@@ -9,10 +9,13 @@ pub struct PaletteCycle {
     current: u16,
 }
 impl PaletteCycle {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        let table = LoadedBinaryTable::load(resource)?;
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let table = LoadedBinaryTable::load(content, resource)?;
         assert!(!table.entries().is_empty(), "palette table has no entries");
-        Some(Self { table, current: 0 })
+        Ok(Self { table, current: 0 })
     }
     /// Entry `index`, wrapping; validated as a colour-map range.
     fn bytes(&self, index: u16) -> &[u8] {

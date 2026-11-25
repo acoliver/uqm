@@ -54,8 +54,8 @@ fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
     let fixture =
         uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
             &mut game,
-            || {
-                loaded = Resources::load();
+            |content| {
+                loaded = Resources::load(content);
             },
         )
         .unwrap();

@@ -204,7 +204,7 @@ fn resolution_choice(display: DisplaySettings) -> (u32, u32) {
 pub(super) fn prepare_display(
     opts: &GlobalOptions,
     mut display: DisplaySettings,
-    settings: &Settings,
+    settings: &mut Settings,
 ) -> DisplaySettings {
     let resolutions = [
         (320, 240),
@@ -248,7 +248,7 @@ pub fn set_global_options(
     input: &InputSession,
     opts: &GlobalOptions,
     range: &GammaRange,
-    settings: &Settings,
+    settings: &mut Settings,
 ) {
     apply_preferences(input, opts, range);
     persist_preferences(input, opts, settings);
@@ -283,7 +283,7 @@ fn apply_preferences(input: &InputSession, o: &GlobalOptions, range: &GammaRange
     input.set_player_control(1, o.player2);
 }
 
-fn persist_preferences(input: &InputSession, o: &GlobalOptions, settings: &Settings) {
+fn persist_preferences(input: &InputSession, o: &GlobalOptions, settings: &mut Settings) {
     for (key, value) in [
         ("config.subtitles", o.subtitles == 1),
         ("config.textmenu", o.menu == 0),

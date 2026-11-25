@@ -29,8 +29,11 @@ fn destroy_frame(frame: &mut FrameId) {
     drop(LoadedDrawable::from_frame(std::mem::take(frame)));
 }
 
-fn load_frame(resource: &CStr) -> FrameId {
-    LoadedDrawable::load(resource).map_or(FrameId::NULL, LoadedDrawable::into_frame)
+fn load_frame(
+    content: &crate::resource::Content,
+    resource: &CStr,
+) -> Result<FrameId, crate::resource::AssetLoadError> {
+    LoadedDrawable::load(content, resource).map(LoadedDrawable::into_frame)
 }
 
 impl Kernel {
@@ -53,22 +56,11 @@ impl Kernel {
         crate::video::legacy::stop_player();
     }
 
-    pub fn init_resources(&mut self) -> bool {
-        crate::resource::init();
-        true
-    }
-
-    pub fn uninit_resources(&mut self) {
-        crate::resource::uninit();
-    }
-
     /// Make `colortable.main` the active colour map.
-    pub fn load_main_colormap(&mut self) -> bool {
-        let Some(map) = PaletteCycle::load(c"colortable.main") else {
-            return false;
-        };
+    pub fn load_main_colormap(&mut self) -> Result<(), crate::resource::AssetLoadError> {
+        let map = PaletteCycle::load(&self.content(), c"colortable.main")?;
         map.apply();
-        true
+        Ok(())
     }
 
     /// Create the status, space and off-screen contexts; the status context is
@@ -99,13 +91,10 @@ impl Kernel {
     }
 
     /// Load the activity and status frames.
-    pub fn load_status_frames(&mut self) -> bool {
-        self.activity_frame = load_frame(c"graphics.activity");
-        if self.activity_frame.is_null() {
-            return false;
-        }
-        self.status_frame = load_frame(c"graphics.status");
-        !self.status_frame.is_null()
+    pub fn load_status_frames(&mut self) -> Result<(), crate::resource::AssetLoadError> {
+        self.activity_frame = load_frame(&self.content(), c"graphics.activity")?;
+        self.status_frame = load_frame(&self.content(), c"graphics.status")?;
+        Ok(())
     }
 
     pub fn release_status_frames(&mut self) {

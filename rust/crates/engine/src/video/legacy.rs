@@ -4,6 +4,7 @@ use super::descriptor::Descriptor;
 use super::player::VideoPlayer;
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::io::Dir;
+use crate::resource::{AssetContext, AssetLoadError, FileError};
 use crate::sound::audio_device::{self, PcmClip};
 use crate::sound::decoder::Decoder;
 use crate::sound::dukaud::DukAudDecoder;
@@ -92,15 +93,16 @@ struct Clip {
 impl Clip {
     /// Probe the movie named by `path` in the content directory; only `.duk`
     /// movies have a decoder.
-    fn probe(path: &CStr) -> Option<Self> {
-        let dir = crate::io::content_dir()?;
-        let filename = path.to_str().ok()?;
-        let (_, extension) = filename.rsplit_once('.')?;
-        if extension != "duk" {
-            return None;
+    fn probe(files: &Dir, path: &CStr) -> Result<Self, FileError> {
+        let dir = files.clone();
+        let filename = path
+            .to_str()
+            .map_err(|error| FileError::at(path.to_string_lossy().as_ref(), error))?;
+        if !filename.ends_with(".duk") {
+            return Err(FileError::invalid(filename, "unsupported video extension"));
         }
-        let duk = super::files::open(&dir, filename).ok()?;
-        Some(Self {
+        let duk = super::files::open(&dir, filename)?;
+        Ok(Self {
             w: duk.width(),
             h: duk.height(),
             dir,
@@ -109,14 +111,14 @@ impl Clip {
     }
 
     /// Start the picture stream at `(x, y)` on the main screen.
-    fn start_player(&self, current: &mut Current, x: i32, y: i32, looping: bool) -> bool {
-        let decoder = match super::files::open(&self.dir, &self.filename) {
-            Ok(decoder) => decoder,
-            Err(error) => {
-                rust_bridge_log_msg(&format!("RUST_VIDEO: decoder init failed: {error:?}"));
-                return false;
-            }
-        };
+    fn start_player(
+        &self,
+        current: &mut Current,
+        x: i32,
+        y: i32,
+        looping: bool,
+    ) -> Result<(), FileError> {
+        let decoder = super::files::open(&self.dir, &self.filename)?;
         let (width, height) = (decoder.width(), decoder.height());
         let mut player = VideoPlayer::new(decoder);
         player.set_position(x, y);
@@ -127,7 +129,7 @@ impl Clip {
         ));
         player.play();
         current.player = Some(player);
-        true
+        Ok(())
     }
 
     /// Decode the soundtrack embedded in the movie and start it on the
@@ -136,7 +138,7 @@ impl Clip {
         let basename = self.filename.trim_end_matches(".duk");
         let duk = super::files::read(&self.dir, &format!("{basename}.duk"));
         let frm = super::files::read(&self.dir, &format!("{basename}.frm"));
-        let (Some(duk), Some(frm)) = (duk, frm) else {
+        let (Ok(duk), Ok(frm)) = (duk, frm) else {
             rust_bridge_log_msg(&format!(
                 "RUST_VIDEO: could not read .duk/.frm for audio from {}",
                 self.filename
@@ -169,21 +171,44 @@ impl Clip {
 
 /// A movie resource: the clip, its optional music and speech tracks and the
 /// frame it loops back to.
-pub struct LoadedVideo(Descriptor);
+pub struct LoadedVideo(Descriptor, Dir, AssetContext);
 
 impl LoadedVideo {
-    pub fn load(resource: &CStr) -> Option<Self> {
-        let descriptor = crate::resource::settings::Settings.descriptor(resource, "3DOVID")?;
-        Some(Self(Descriptor::parse(descriptor.as_bytes())))
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &CStr,
+    ) -> Result<Self, AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Video)?;
+        Ok(Self(
+            Descriptor::parse(resolved.descriptor.as_bytes()),
+            resolved.files.clone(),
+            resolved.context(resource),
+        ))
     }
 
     /// Stop the movie that is playing and start this one centred on the
     /// screen.
-    pub fn play(&self) -> Option<VideoPlayback> {
-        let clip = Clip::probe(&self.0.video)?;
+    pub fn play(&self) -> Result<VideoPlayback, AssetLoadError> {
+        let clip = Clip::probe(&self.1, &self.0.video).map_err(|error| self.2.error(error))?;
         let playback = VideoPlayback {
-            audio: self.0.audio.as_deref().and_then(LoadedMusic::load_file),
-            speech: self.0.speech.as_deref().and_then(LoadedMusic::load_file),
+            audio: self.0.audio.as_deref().and_then(|path| {
+                match LoadedMusic::load_file(&self.1, path) {
+                    Ok(music) => Some(music),
+                    Err(error) => {
+                        log::warn!("Optional movie track: {error}");
+                        None
+                    }
+                }
+            }),
+            speech: self.0.speech.as_deref().and_then(|path| {
+                match LoadedMusic::load_file(&self.1, path) {
+                    Ok(music) => Some(music),
+                    Err(error) => {
+                        log::warn!("Optional movie track: {error}");
+                        None
+                    }
+                }
+            }),
         };
         let mut current = current();
         current.stop();
@@ -193,16 +218,13 @@ impl LoadedVideo {
         let y = (height as u32).wrapping_sub(clip.h) / 2;
         rust_bridge_log_msg(&format!("RUST_VIDEO: TFB_PlayVideo {}", clip.filename));
         let looping = self.0.loop_frame != NO_LOOP;
-        if !clip.start_player(&mut current, x as i32, y as i32, looping) {
-            drop(current);
-            drop(playback);
-            return None;
-        }
+        clip.start_player(&mut current, x as i32, y as i32, looping)
+            .map_err(|error| self.2.error(error))?;
         audio_device::start();
         current.audio = clip.start_soundtrack(looping);
         current.started = true;
         current.speech = playback.speech.is_some();
-        Some(playback)
+        Ok(playback)
     }
 }
 

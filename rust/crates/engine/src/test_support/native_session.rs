@@ -7,7 +7,7 @@ use crate::{
     graphics::present::{init_graphics, uninit_graphics, GraphicsOptions},
     input::InputSession,
     input_port::sdl_input,
-    io::{install, uninstall, Dir, Placement, Vfs},
+    io::{Dir, Placement, Vfs},
 };
 use std::{ffi::CString, path::Path};
 
@@ -70,12 +70,13 @@ impl Drop for Graphics {
     }
 }
 
-/// A directory mounted as the content directory, and optionally the config
-/// directory, with the previous process file system restored on drop.
+/// Independent fixture content and an optional writable config directory.
 pub struct ContentMount {
     vfs: Vfs,
     content: Dir,
-    previous: Option<Vfs>,
+    catalog: std::cell::RefCell<Option<crate::resource::Content>>,
+    pub settings: std::cell::RefCell<crate::resource::settings::Settings>,
+    pub bindings: std::cell::RefCell<crate::resource::settings::Bindings>,
 }
 
 impl ContentMount {
@@ -85,11 +86,12 @@ impl ContentMount {
         vfs.mount_dir("/", directory, Placement::Top, false);
         let content = vfs.open_dir(Path::new("/"));
         vfs.set_content_dir(content.clone());
-        let previous = install(vfs.clone());
         Self {
             vfs,
             content,
-            previous,
+            catalog: Default::default(),
+            settings: Default::default(),
+            bindings: Default::default(),
         }
     }
 
@@ -102,28 +104,36 @@ impl ContentMount {
         self
     }
 
-    /// Reset the resource system and load `index` from the content directory.
-    pub fn init_resources(&self, index: &str) {
-        crate::resource::init();
-        self.load_index(index);
+    pub fn content_directory(&self) -> &Dir {
+        &self.content
     }
 
-    /// Load `index` from the content directory into the live resource system.
-    pub fn load_index(&self, index: &str) {
-        crate::resource::load_index(&self.content, &cstring(index, "index name"), None);
+    pub fn config_directory(&self) -> Option<Dir> {
+        self.vfs.config_dir()
     }
-}
 
-impl Drop for ContentMount {
-    fn drop(&mut self) {
-        match self.previous.take() {
-            Some(previous) => {
-                install(previous);
-            }
-            None => {
-                uninstall();
-            }
-        }
+    pub fn content(&self) -> crate::resource::Content {
+        self.catalog
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| panic!("fixture index not loaded"))
+    }
+
+    pub fn load_index(&self, index: &str) -> crate::resource::Content {
+        let mut builder = self.catalog.borrow().as_ref().map_or_else(
+            || crate::resource::CatalogBuilder::new(self.content.clone()),
+            crate::resource::Content::revise,
+        );
+        builder.import_index(
+            &self.content,
+            &cstring(index, "index name"),
+            None,
+            &mut self.settings.borrow_mut(),
+            &mut self.bindings.borrow_mut(),
+        );
+        let content = builder.finish();
+        self.catalog.replace(Some(content.clone()));
+        content
     }
 }
 
@@ -131,8 +141,13 @@ impl Drop for ContentMount {
 pub struct NativeInput(InputSession);
 
 impl NativeInput {
-    pub fn bind(input: &InputSession) -> Self {
-        if let Err(error) = sdl_input::init_input(input.controls()) {
+    pub fn bind(
+        input: &InputSession,
+        bindings: &mut crate::resource::settings::Bindings,
+        content: Option<&Dir>,
+        config: Option<&Dir>,
+    ) -> Self {
+        if let Err(error) = sdl_input::init_input(input.controls(), bindings, content, config) {
             panic!("native input did not start: {error}");
         }
         Self(input.clone())
@@ -160,15 +175,25 @@ pub fn text_input(text: &str) {
     sdl_input::process_input_event(&crate::host::HostEvent::TextInput(text.to_owned()));
 }
 
-/// Reload `index` from whatever directory is currently the content directory.
-pub fn reload_content_index(index: &str) {
-    let content = crate::io::content_dir().unwrap_or_else(|| panic!("no content directory"));
-    crate::resource::load_index(&content, &cstring(index, "index name"), None);
+/// Import a repaired fixture revision into only the supplied kernel.
+pub fn reload_content_index(kernel: &mut crate::Kernel, index: &str) {
+    let content = kernel.content();
+    let mut builder = content.revise();
+    builder.import_index(
+        content.files(),
+        &cstring(index, "index name"),
+        None,
+        &mut Default::default(),
+        &mut Default::default(),
+    );
+    kernel.admit_content(builder.finish());
 }
 
-/// Drop one entry from the live resource map.
-pub fn remove_resource(key: &str) {
-    crate::resource::remove(key);
+/// Remove a definition from only the supplied fixture kernel.
+pub fn remove_resource(kernel: &mut crate::Kernel, key: &str) {
+    let mut builder = kernel.content().revise();
+    assert!(builder.remove(key), "fixture key is missing: {key}");
+    kernel.admit_content(builder.finish());
 }
 
 fn cstring(text: &str, what: &str) -> CString {

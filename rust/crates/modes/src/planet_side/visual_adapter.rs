@@ -17,6 +17,7 @@ use super::scan_frames::ScanFrameError;
 use uqm_engine::graphics::{drawable::ContextFrame, drawable::LoadedDrawable};
 
 pub struct CffiSurfaceVisuals {
+    content: uqm_engine::resource::Content,
     misc_data: ContextFrame,
     energy: Option<ContextFrame>,
     life: [Option<ContextFrame>; 3],
@@ -27,6 +28,7 @@ pub struct CffiSurfaceVisuals {
 
 impl CffiSurfaceVisuals {
     pub fn new(
+        content: uqm_engine::resource::Content,
         misc_data: ContextFrame,
         energy: Option<ContextFrame>,
         life: [Option<ContextFrame>; 3],
@@ -35,6 +37,7 @@ impl CffiSurfaceVisuals {
             return Err(AdapterError::new("misc_data_frame"));
         }
         Ok(Self {
+            content,
             misc_data,
             energy,
             life,
@@ -47,7 +50,8 @@ impl CffiSurfaceVisuals {
     fn canister_frame(&mut self) -> Result<ContextFrame, AdapterError> {
         if self.canister.is_none() {
             self.canister = Some(
-                LoadedDrawable::load(c"graphics.lifecan")
+                LoadedDrawable::load(&self.content, c"graphics.lifecan")
+                    .ok()
                     .ok_or(AdapterError::new("load_resource"))?,
             );
         }
@@ -78,8 +82,9 @@ impl CffiSurfaceVisuals {
         if self.life[index].is_none() {
             let key = std::ffi::CString::new(format!("graphics.life.{creature}"))
                 .unwrap_or_else(|_| unreachable!());
-            let owner =
-                LoadedDrawable::load(&key).ok_or(AdapterError::new("life_frame_missing"))?;
+            let owner = LoadedDrawable::load(&self.content, &key)
+                .ok()
+                .ok_or(AdapterError::new("life_frame_missing"))?;
             self.life[index] = Some(owner.lease().context_frame(0));
             self.owned_life.push(owner);
         }
@@ -326,7 +331,15 @@ mod tests {
     #[test]
     fn visual_context_requires_misc_frame() {
         assert!(matches!(
-            CffiSurfaceVisuals::new(ContextFrame::default(), None, std::array::from_fn(|_| None)),
+            CffiSurfaceVisuals::new(
+                uqm_engine::resource::CatalogBuilder::new(
+                    uqm_engine::io::fixture::TempMount::new().dir()
+                )
+                .finish(),
+                ContextFrame::default(),
+                None,
+                std::array::from_fn(|_| None)
+            ),
             Err(AdapterError {
                 operation: "misc_data_frame",
                 batch_depth_corrections: 0
@@ -355,6 +368,7 @@ mod tests {
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
         let mut visuals = CffiSurfaceVisuals::new(
+            game.kernel.content(),
             frame(1),
             None,
             std::array::from_fn(|index| Some(frame(index as i16 + 3))),
@@ -385,6 +399,7 @@ mod tests {
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
         let mut visuals = CffiSurfaceVisuals::new(
+            game.kernel.content(),
             frame(1),
             None,
             std::array::from_fn(|index| Some(frame(index as i16 + 3))),

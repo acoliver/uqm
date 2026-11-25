@@ -12,9 +12,8 @@ use uqm_engine::{
 fn with_content(test: impl FnOnce(&ContentMount)) {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../sc2/content");
     let content = ContentMount::new(&directory);
-    content.init_resources("uqm.rmp");
+    content.load_index("uqm.rmp");
     test(&content);
-    uqm_engine::resource::uninit();
 }
 
 fn with_campaign(test: impl FnOnce(&mut Cx<'_>, &ContentMount)) {
@@ -23,6 +22,7 @@ fn with_campaign(test: impl FnOnce(&mut Cx<'_>, &ContentMount)) {
         let status = LoadedContext::create(c"admission status");
         let space = LoadedContext::create(c"admission space");
         let mut game = Game::new();
+        game.kernel.admit_content(content.content());
         let mut battle = Battle::new();
         game.kernel.screen = screen.first_frame();
         game.kernel.status_context = Some(status.context());
@@ -49,10 +49,11 @@ fn with_campaign(test: impl FnOnce(&mut Cx<'_>, &ContentMount)) {
 #[test]
 #[serial_test::serial]
 fn missing_misc_never_becomes_ready_on_kernel_retry() {
-    with_content(|_| {
-        assert!(LoadedDrawable::load(c"graphics.flagshipstatus").is_some());
-        remove_resource("graphics.miscdata");
+    with_content(|content| {
+        assert!(LoadedDrawable::load(&content.content(), c"graphics.flagshipstatus").is_ok());
         let mut kernel = uqm_engine::Kernel::new();
+        kernel.admit_content(content.content());
+        remove_resource(&mut kernel, "graphics.miscdata");
         assert_eq!(
             kernel
                 .load_navigation_graphics(Rect::default())
@@ -78,8 +79,9 @@ fn missing_misc_never_becomes_ready_on_kernel_retry() {
 #[serial_test::serial]
 fn repaired_misc_is_acquired_on_kernel_retry() {
     with_content(|content| {
-        remove_resource("graphics.miscdata");
         let mut kernel = uqm_engine::Kernel::new();
+        kernel.admit_content(content.content());
+        remove_resource(&mut kernel, "graphics.miscdata");
         assert_eq!(
             kernel
                 .load_navigation_graphics(Rect::default())
@@ -87,7 +89,7 @@ fn repaired_misc_is_acquired_on_kernel_retry() {
                 .resource,
             "graphics.miscdata"
         );
-        content.load_index("uqm.rmp");
+        kernel.admit_content(content.load_index("uqm.rmp"));
         kernel.load_navigation_graphics(Rect::default()).unwrap();
         assert!(!kernel.misc_data_frame.is_null(), "repair was never loaded");
         assert!(!kernel.flag_stat_frame.is_null());
@@ -102,7 +104,7 @@ fn repaired_misc_is_acquired_on_kernel_retry() {
 #[serial_test::serial]
 fn missing_misc_denies_campaign_and_repaired_retry_starts_it() {
     with_campaign(|cx, content| {
-        remove_resource("graphics.miscdata");
+        remove_resource(cx.kernel, "graphics.miscdata");
         assert_eq!(
             init_game_structures(cx).unwrap_err().resource,
             "graphics.miscdata",
@@ -117,7 +119,7 @@ fn missing_misc_denies_campaign_and_repaired_retry_starts_it() {
         assert_eq!(cx.world.built_ships_ref().count(), 0);
         assert!(cx.kernel.play_frame.is_null());
         assert!(cx.kernel.misc_data_frame.is_null());
-        content.load_index("uqm.rmp");
+        cx.kernel.admit_content(content.load_index("uqm.rmp"));
         init_game_structures(cx).unwrap();
         assert!(!cx.kernel.misc_data_frame.is_null());
         assert_eq!(cx.world.built_ships_ref().count(), 1);
@@ -128,7 +130,7 @@ fn missing_misc_denies_campaign_and_repaired_retry_starts_it() {
 #[serial_test::serial]
 fn missing_optional_gradient_allows_campaign_and_second_campaign() {
     with_campaign(|cx, _| {
-        remove_resource("graphics.fontgradient");
+        remove_resource(cx.kernel, "graphics.fontgradient");
         init_game_structures(cx).unwrap();
         assert!(!cx.kernel.flag_stat_frame.is_null());
         assert!(!cx.kernel.misc_data_frame.is_null());

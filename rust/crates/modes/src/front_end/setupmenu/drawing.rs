@@ -41,12 +41,17 @@ pub(super) struct View<'a> {
 }
 
 impl SetupResources {
-    pub fn load(context: ContextLease, font: FontLease) -> Self {
-        let table = uqm_engine::strings::owned_table::LoadedTextTable::load(c"text.setupmenu")
-            .unwrap_or_else(|| panic!("setup menu strings not loaded"));
+    pub fn load(
+        content: &uqm_engine::resource::Content,
+        context: ContextLease,
+        font: FontLease,
+    ) -> Self {
+        let table =
+            uqm_engine::strings::owned_table::LoadedTextTable::load(content, c"text.setupmenu")
+                .unwrap_or_else(|error| panic!("setup menu strings not loaded: {error}"));
         let strings = SetupStrings::parse(&table);
-        let background = LoadedDrawable::load(c"graphics.setupmenu")
-            .unwrap_or_else(|| panic!("setup background not loaded"));
+        let background = LoadedDrawable::load(content, c"graphics.setupmenu")
+            .unwrap_or_else(|error| panic!("setup background not loaded: {error}"));
         Self {
             context,
             font,

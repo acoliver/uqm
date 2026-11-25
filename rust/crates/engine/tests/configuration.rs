@@ -20,20 +20,6 @@ fn session_and_application_share_preferences_without_sharing_other_owners() {
 }
 
 #[test]
-fn startup_names_and_path_survive_their_original_owner() {
-    let application = Configuration::default();
-    application.set_addons(vec![c"remix".to_owned(), c"voice".to_owned()]);
-    application.set_content_path(c"/content/uqm".to_owned());
-    let retained = application.clone();
-    drop(application);
-    assert_eq!(
-        retained.addons(),
-        [c"remix".to_owned(), c"voice".to_owned()]
-    );
-    assert_eq!(retained.content_path().as_deref(), Some(c"/content/uqm"));
-}
-
-#[test]
 fn input_session_clones_keep_the_supplied_control_and_configuration_owners() {
     let controls = InputControls::default();
     let configuration = uqm_engine::configuration::Configuration::default();

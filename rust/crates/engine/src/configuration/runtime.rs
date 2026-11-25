@@ -1,7 +1,6 @@
 //! Serialized access to the application's native display and audio settings.
 use crate::{
     graphics::{context::ContextLease, state},
-    io::Dir,
     sound::{
         heart_ffi::{set_music_volume, set_speech_volume},
         volume_globals::{sound_options, update_sound_options},
@@ -27,7 +26,6 @@ pub struct AudioSettings {
 pub struct RuntimeSettings {
     pub display: DisplaySettings,
     pub audio: AudioSettings,
-    pub directory: Dir,
 }
 
 impl RuntimeSettings {
@@ -36,10 +34,7 @@ impl RuntimeSettings {
         let mode = state::video_mode();
         let display = [mode.driver, mode.flags, mode.width, mode.height];
         let sound = sound_options();
-        let directory = crate::io::config_dir()
-            .unwrap_or_else(|| panic!("configuration directory not initialized"));
         Self {
-            directory,
             display: DisplaySettings {
                 driver: display[0],
                 flags: display[1],

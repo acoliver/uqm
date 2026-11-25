@@ -206,9 +206,12 @@ pub(crate) mod engine {
     }
 
     pub fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> u32 {
-        let Some(descriptor) =
-            uqm_engine::battle::RaceDesc::load(cx.world, cx.ship(ship).species_id, true)
-        else {
+        let Some(descriptor) = uqm_engine::battle::RaceDesc::load(
+            &cx.kernel.content(),
+            cx.world,
+            cx.ship(ship).species_id,
+            true,
+        ) else {
             return 0;
         };
         cx.attach_descriptor(ship, descriptor);

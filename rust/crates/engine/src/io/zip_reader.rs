@@ -28,6 +28,30 @@ use zip::ZipArchive;
 /// The host file system an archive is read from.
 pub type Disk = Arc<dyn Files + Send + Sync>;
 
+#[derive(Debug, thiserror::Error)]
+#[error("ZIP {path:?} entry {entry:?}: {source}")]
+pub struct ArchiveError {
+    pub path: PathBuf,
+    pub entry: Option<usize>,
+    #[source]
+    pub source: Box<dyn std::error::Error + Send + Sync>,
+}
+
+fn archive_error(
+    path: &Path,
+    entry: Option<usize>,
+    source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        ArchiveError {
+            path: path.to_owned(),
+            entry,
+            source: source.into(),
+        },
+    )
+}
+
 /// Metadata for a single entry in a ZIP archive
 #[derive(Debug, Clone)]
 pub struct ZipEntry {
@@ -80,31 +104,21 @@ impl ZipIndex {
     /// Returns Err if the archive cannot be opened or parsed.
     pub fn new(disk: Disk, archive_path: &Path) -> Result<Self, std::io::Error> {
         let file = disk.open_read(archive_path)?;
-        let mut archive = ZipArchive::new(file).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to parse ZIP archive: {}", e),
-            )
-        })?;
+        let mut archive =
+            ZipArchive::new(file).map_err(|e| archive_error(archive_path, None, e))?;
 
         let mut entries = HashMap::new();
         let mut directories = HashSet::new();
 
         // Process all entries in the archive (last entry wins for duplicates)
         for i in 0..archive.len() {
-            let entry = archive.by_index(i).map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Failed to read ZIP entry {}: {}", i, e),
-                )
-            })?;
+            let entry = archive
+                .by_index(i)
+                .map_err(|e| archive_error(archive_path, Some(i), e))?;
 
-            let raw_name = entry.name().map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid name for ZIP entry {}: {}", i, e),
-                )
-            })?;
+            let raw_name = entry
+                .name()
+                .map_err(|e| archive_error(archive_path, Some(i), e))?;
             let normalized = normalize_zip_path(&raw_name);
 
             // Skip empty paths
@@ -176,7 +190,7 @@ impl ZipIndex {
     /// Check if a path is a directory
     pub fn is_directory(&self, path: &str) -> bool {
         let normalized = normalize_zip_path(path);
-        self.directories.contains(&normalized)
+        normalized.is_empty() || self.directories.contains(&normalized)
     }
 
     /// List all entries in a directory (non-recursive)
@@ -225,19 +239,12 @@ impl ZipIndex {
         }
 
         let file = self.disk.open_read(&self.archive_path)?;
-        let mut archive = ZipArchive::new(file).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to open ZIP archive: {}", e),
-            )
-        })?;
+        let mut archive = ZipArchive::new(file)
+            .map_err(|e| archive_error(&self.archive_path, Some(entry.index), e))?;
 
-        let mut zip_file = archive.by_index(entry.index).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to read ZIP entry: {}", e),
-            )
-        })?;
+        let mut zip_file = archive
+            .by_index(entry.index)
+            .map_err(|e| archive_error(&self.archive_path, Some(entry.index), e))?;
 
         let mut buffer = Vec::with_capacity(entry.uncompressed_size as usize);
         zip_file.read_to_end(&mut buffer)?;
@@ -287,29 +294,19 @@ pub struct ZipEntryReader {
 impl ZipEntryReader {
     fn new(disk: &dyn Files, archive_path: &Path, index: usize) -> Result<Self, std::io::Error> {
         let file = disk.open_read(archive_path)?;
-        let mut archive = ZipArchive::new(file).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to open ZIP archive: {}", e),
-            )
-        })?;
+        let mut archive =
+            ZipArchive::new(file).map_err(|e| archive_error(archive_path, Some(index), e))?;
 
         let expected_crc = {
-            let entry = archive.by_index_raw(index).map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Failed to read ZIP entry metadata: {}", e),
-                )
-            })?;
+            let entry = archive
+                .by_index_raw(index)
+                .map_err(|e| archive_error(archive_path, Some(index), e))?;
             entry.crc32()
         };
 
-        let mut zip_file = archive.by_index(index).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to read ZIP entry: {}", e),
-            )
-        })?;
+        let mut zip_file = archive
+            .by_index(index)
+            .map_err(|e| archive_error(archive_path, Some(index), e))?;
 
         let mut data = Vec::new();
         zip_file.read_to_end(&mut data)?;
@@ -339,7 +336,7 @@ impl ZipEntryReader {
 
 impl Read for ZipEntryReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let remaining = self.data.len() as u64 - self.position;
+        let remaining = (self.data.len() as u64).saturating_sub(self.position);
         if remaining == 0 {
             return Ok(0);
         }
@@ -354,19 +351,17 @@ impl Read for ZipEntryReader {
 impl Seek for ZipEntryReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let new_pos = match pos {
-            SeekFrom::Start(offset) => offset as i64,
-            SeekFrom::Current(offset) => self.position as i64 + offset,
-            SeekFrom::End(offset) => self.data.len() as i64 + offset,
+            SeekFrom::Start(offset) => i128::from(offset),
+            SeekFrom::Current(offset) => i128::from(self.position) + i128::from(offset),
+            SeekFrom::End(offset) => self.data.len() as i128 + i128::from(offset),
         };
-
-        if new_pos < 0 {
-            return Err(std::io::Error::new(
+        let new_pos = u64::try_from(new_pos).map_err(|_| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Invalid seek to negative position",
-            ));
-        }
-
-        self.position = new_pos as u64;
+                "ZIP seek outside u64 range",
+            )
+        })?;
+        self.position = new_pos;
         Ok(self.position)
     }
 }

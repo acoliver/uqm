@@ -44,7 +44,7 @@ pub use types::{activity_flags, ActivityKind, ActivityValue, CBoolean};
 /// Errors that can occur in the main loop FFI bridge.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum MainLoopError {
     /// An FFI call returned an unexpected value.
     #[error("main loop FFI error: {0}")]

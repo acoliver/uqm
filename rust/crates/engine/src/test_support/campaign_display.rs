@@ -21,19 +21,19 @@ pub struct CampaignDisplay {
 
 impl CampaignDisplay {
     pub fn install(game: &mut Game) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::install_with_resources(game, || {})
+        Self::install_with_resources(game, |_| {})
     }
 
     pub fn install_with_resources(
         game: &mut Game,
-        load: impl FnOnce(),
+        load: impl FnOnce(&crate::resource::Content),
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Self::install_prepared(game, load, |_| {})
     }
 
     pub fn install_prepared(
         game: &mut Game,
-        load: impl FnOnce(),
+        load: impl FnOnce(&crate::resource::Content),
         draw: impl FnOnce(&mut Game),
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Self::install_prepared_with_options(game, load, draw, GraphicsOptions::default())
@@ -41,7 +41,7 @@ impl CampaignDisplay {
 
     pub fn install_prepared_with_options(
         game: &mut Game,
-        load: impl FnOnce(),
+        load: impl FnOnce(&crate::resource::Content),
         draw: impl FnOnce(&mut Game),
         options: GraphicsOptions,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -80,17 +80,24 @@ impl CampaignDisplay {
         init_graphics(1, 0, options, 320, 240);
         {
             let content = crate::test_support::native_session::ContentMount::new(directory.path());
-            content.init_resources("fixture.rmp");
+            let content = content.load_index("fixture.rmp");
+            game.kernel.admit_content(content.clone());
             game.kernel.install_tiny_font(
-                LoadedFont::load(c"fixture.tiny").ok_or("tiny-font fixture did not load")?,
+                LoadedFont::load(&content, c"fixture.tiny")
+                    .ok()
+                    .ok_or("tiny-font fixture did not load")?,
             );
             game.kernel.install_micro_font(
-                LoadedFont::load(c"fixture.tiny").ok_or("micro-font fixture did not load")?,
+                LoadedFont::load(&content, c"fixture.tiny")
+                    .ok()
+                    .ok_or("micro-font fixture did not load")?,
             );
             game.kernel.install_battle_font(
-                LoadedFont::load(c"fixture.tiny").ok_or("battle-font fixture did not load")?,
+                LoadedFont::load(&content, c"fixture.tiny")
+                    .ok()
+                    .ok_or("battle-font fixture did not load")?,
             );
-            load();
+            load(&content);
             let owner = LoadedContext::create(c"campaign callback fixture");
             let context = owner.context();
             let previous = context::select(Some(context));

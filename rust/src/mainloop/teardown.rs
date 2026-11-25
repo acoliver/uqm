@@ -12,6 +12,5 @@ pub fn teardown_subsystems() {
     uqm_engine::sound::audio_init::uninit_audio();
     uqm_engine::graphics::present::uninit_graphics();
     uqm_engine::host::dispatch().clear();
-    uqm_engine::io::uninstall();
     uqm_engine::threading::uninit_game_thread();
 }

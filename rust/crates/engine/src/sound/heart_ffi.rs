@@ -17,14 +17,16 @@ use super::sfx;
 use super::stream;
 use super::trackplayer;
 use super::types::*;
+use crate::resource::FileError;
 
-/// The bytes of a content file, absent when unreadable or empty.
-fn read_content_file(path: &str) -> Option<Vec<u8>> {
-    use crate::host::Files;
-    crate::io::content_dir()?
+fn read_content_file(files: &dyn crate::host::Files, path: &str) -> Result<Vec<u8>, FileError> {
+    let data = files
         .read(Path::new(path))
-        .ok()
-        .filter(|data| !data.is_empty())
+        .map_err(|error| FileError::at(path, error))?;
+    if data.is_empty() {
+        return Err(FileError::invalid(path, "empty audio file"));
+    }
+    Ok(data)
 }
 
 #[derive(Clone, Copy)]
@@ -78,17 +80,13 @@ fn file_extension(name: &str) -> Option<&str> {
 /// Each page gets its own decoder that seeks to the correct offset and
 /// limits decoding to its timestamp duration.
 fn create_per_page_decoders(
+    files: Option<&crate::io::Dir>,
     track_name: Option<&str>,
     track_text: Option<&str>,
     timestamp: Option<&str>,
 ) -> Vec<Box<dyn Decoder>> {
-    let name = match track_name {
-        Some(n) => n,
-        None => return Vec::new(),
-    };
-    let text = match track_text {
-        Some(t) => t,
-        None => return Vec::new(),
+    let (Some(name), Some(text)) = (track_name, track_text) else {
+        return Vec::new();
     };
 
     // Parse pages with same delimiter behavior as C trackplayer (split on CR or LF runs).
@@ -161,7 +159,13 @@ fn create_per_page_decoders(
         }
     }
 
-    let file_data = read_content_file(name);
+    let file_data = files.and_then(|files| match read_content_file(files, name) {
+        Ok(data) => Some(data),
+        Err(error) => {
+            log::warn!("Voice fallback: {error}");
+            None
+        }
+    });
     page_decoders(name, file_data.as_deref(), &page_run_times)
 }
 
@@ -283,6 +287,7 @@ pub fn set_music_stream_fade(how_long: i32, end_volume: c_int) -> bool {
 
 /// Decode and append speech while retaining the supplied callback for playback and seeking.
 pub fn splice_track(
+    files: Option<&crate::io::Dir>,
     track_name: Option<&CStr>,
     track_text: Option<&CStr>,
     timestamp: Option<&CStr>,
@@ -306,7 +311,12 @@ pub fn splice_track(
     );
 
     // Create per-page decoders with time-limited ranges (like C's SoundDecoder_Load)
-    let decoders = create_per_page_decoders(name.as_deref(), text.as_deref(), timestamp.as_deref());
+    let decoders = create_per_page_decoders(
+        files,
+        name.as_deref(),
+        text.as_deref(),
+        timestamp.as_deref(),
+    );
 
     let _ = trackplayer::splice_track(
         name.as_deref(),
@@ -318,7 +328,11 @@ pub fn splice_track(
 }
 
 /// Append complete number clips, preserving the timed null decoder for absent voice content.
-pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
+pub fn splice_multi_track(
+    files: Option<&crate::io::Dir>,
+    track_names: &[&CStr],
+    track_text: Option<&CStr>,
+) {
     let Some(text) = track_text
         .filter(|s| !s.is_empty())
         .map(CStr::to_string_lossy)
@@ -328,7 +342,13 @@ pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
     let mut decoders = Vec::new();
     for clip in track_names.iter().take(trackplayer::MAX_MULTI_TRACKS) {
         let name = clip.to_string_lossy();
-        let data = read_content_file(&name);
+        let data = files.and_then(|files| match read_content_file(files, &name) {
+            Ok(data) => Some(data),
+            Err(error) => {
+                log::warn!("Voice fallback: {error}");
+                None
+            }
+        });
         // C loads the complete clip, or its timed null decoder when voice
         // content is absent. Never append an audio chunk without a decoder.
         decoders.extend(page_decoders(
@@ -478,116 +498,84 @@ pub fn set_speech_volume(volume: f32) {
 // Content loading
 // =============================================================================
 
-/// Load a sound bank listing: each line names a clip next to the listing, and
-/// every clip is decoded to PCM up front.
-pub fn load_sound_bank(name: &str) -> Option<super::owned_bank::LoadedSoundBank> {
-    eprintln!("load_sound_bank: loading bank {name}");
-    let Some(listing) = read_content_file(name) else {
-        eprintln!("load_sound_bank({name}): failed to read file");
-        return None;
-    };
+/// Decode one effect before the bank decides whether to skip it.
+fn load_effect(
+    files: &dyn crate::host::Files,
+    name: &str,
+    decoder_name: &str,
+) -> Result<SoundSample, FileError> {
+    let mut decoder = open_audio(files, name, decoder_name)?;
+    let freq = decoder.frequency();
+    let format = decoder.format();
+    let length = decoder.length();
+    let pcm =
+        super::types::decode_all(decoder.as_mut()).map_err(|error| FileError::at(name, error))?;
+    let mut sample =
+        stream::create_sound_sample(None, 1, None).map_err(|error| FileError::at(name, error))?;
+    sample.length = length;
+    if !sample.buffers.is_empty() && !pcm.is_empty() {
+        let _ = mixer_buffer::mixer_buffer_data(
+            sample.buffers[0],
+            format.to_mixer_format(),
+            &pcm,
+            freq,
+            mixer_get_frequency(),
+            mixer_get_format(),
+        );
+    }
+    Ok(sample)
+}
+
+fn open_audio(
+    files: &dyn crate::host::Files,
+    name: &str,
+    decoder_name: &str,
+) -> Result<Box<dyn Decoder>, FileError> {
+    let kind = file_extension(name)
+        .and_then(Kind::of)
+        .ok_or_else(|| FileError::invalid(name, "unsupported audio extension"))?;
+    let data = read_content_file(files, name)?;
+    kind.open(&data, decoder_name)
+        .map_err(|error| FileError::at(name, error))
+}
+
+/// Load a listing, skipping individual failed samples as before.
+pub fn load_sound_bank(
+    files: &dyn crate::host::Files,
+    name: &str,
+) -> Result<super::owned_bank::LoadedSoundBank, FileError> {
+    let listing = read_content_file(files, name)?;
     let dir_prefix = match name.rfind('/').or_else(|| name.rfind('\\')) {
         Some(pos) => &name[..=pos],
         None => "",
     };
     let text = String::from_utf8_lossy(&listing);
-    let mut samples: Vec<SoundSample> = Vec::new();
-    for line in text.lines() {
-        let snd_name = line.trim();
-        if snd_name.is_empty() {
-            continue;
-        }
+    let mut samples = Vec::new();
+    let mut failure = None;
+    for snd_name in text.lines().map(str::trim).filter(|name| !name.is_empty()) {
         let full_path = format!("{dir_prefix}{snd_name}");
-        eprintln!("load_sound_bank: loading sound {full_path}");
-        let Some(ext) = file_extension(snd_name) else {
-            eprintln!("load_sound_bank: no extension for '{snd_name}', skipping");
-            continue;
-        };
-        let Some(kind) = Kind::of(ext) else {
-            eprintln!("load_sound_bank: no decoder for .{ext}, skipping {snd_name}");
-            continue;
-        };
-        let Some(snd_data) = read_content_file(&full_path) else {
-            eprintln!("load_sound_bank: couldn't read {full_path}");
-            continue;
-        };
-        let mut decoder = match kind.open(&snd_data, snd_name) {
-            Ok(decoder) => decoder,
-            Err(e) => {
-                eprintln!("load_sound_bank: decoder failed for {full_path}: {e:?}");
-                continue;
+        match load_effect(files, &full_path, snd_name) {
+            Ok(sample) => samples.push(sample),
+            Err(error) => {
+                log::warn!("Skipping sound sample: {error}");
+                failure = Some(error);
             }
-        };
-        let freq = decoder.frequency();
-        let format = decoder.format();
-        let length = decoder.length();
-        eprintln!("load_sound_bank: decoder {snd_name} rate={freq} format={format:?}");
-        let pcm = match super::types::decode_all(decoder.as_mut()) {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("load_sound_bank: decode_all failed for {full_path}: {e:?}");
-                continue;
-            }
-        };
-        eprintln!(
-            "load_sound_bank: decoded {} bytes for {snd_name}",
-            pcm.len()
-        );
-
-        // One buffer per effect: pre-decoded, no streaming decoder.
-        let mut sample = match stream::create_sound_sample(None, 1, None) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("load_sound_bank: create_sound_sample failed: {e}");
-                continue;
-            }
-        };
-        sample.length = length;
-        if !sample.buffers.is_empty() && !pcm.is_empty() {
-            let _ = mixer_buffer::mixer_buffer_data(
-                sample.buffers[0],
-                format.to_mixer_format(),
-                &pcm,
-                freq,
-                mixer_get_frequency(),
-                mixer_get_format(),
-            );
         }
-        samples.push(sample);
     }
     if samples.is_empty() {
-        eprintln!("load_sound_bank({name}): no sounds decoded");
-        return None;
+        return Err(
+            failure.unwrap_or_else(|| FileError::invalid(name, "sound bank has no samples"))
+        );
     }
-    eprintln!("load_sound_bank({name}): loaded {} sounds", samples.len());
-    Some(super::owned_bank::LoadedSoundBank::from_samples(samples))
+    Ok(super::owned_bank::LoadedSoundBank::from_samples(samples))
 }
 
 /// Load a streaming music file with 64 buffers.
-pub fn load_music(name: &str) -> Option<MusicRef> {
-    eprintln!("load_music: loading {name}");
-    let kind = Kind::of(file_extension(name)?)?;
-    let data = read_content_file(name)?;
-    let decoder = match kind.open(&data, name) {
-        Ok(decoder) => decoder,
-        Err(e) => {
-            eprintln!("load_music({name}): decoder open failed: {e:?}");
-            return None;
-        }
-    };
-    eprintln!(
-        "load_music: decoder rate={} format={:?} length={:.1}s",
-        decoder.frequency(),
-        decoder.format(),
-        decoder.length()
-    );
-    match stream::create_sound_sample(Some(decoder), 64, None) {
-        Ok(sample) => Some(MusicRef(Arc::new(Mutex::new(sample)))),
-        Err(e) => {
-            eprintln!("load_music({name}): create_sound_sample failed: {e}");
-            None
-        }
-    }
+pub fn load_music(files: &dyn crate::host::Files, name: &str) -> Result<MusicRef, FileError> {
+    let decoder = open_audio(files, name, name)?;
+    let sample = stream::create_sound_sample(Some(decoder), 64, None)
+        .map_err(|error| FileError::at(name, error))?;
+    Ok(MusicRef(Arc::new(Mutex::new(sample))))
 }
 
 /// Release a loaded music reference and its stream buffers.

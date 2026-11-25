@@ -7,7 +7,6 @@ use super::super::{SaveFile, SaveSlots};
 use uqm_engine::save::summary_record::SummaryDesc;
 use uqm_engine::world::generation::SolarSnapshot;
 use uqm_modes::navigation::groups::put_group_info;
-use uqm_save::SlotError;
 
 /// Capture the running game for a save; the game thread retains the active
 /// solar session and initialized star catalog.
@@ -30,6 +29,7 @@ pub(crate) fn capture(
 }
 
 pub fn save_game(
+    files: &uqm_engine::io::Dir,
     cx: &mut Cx<'_>,
     solar: Option<SolarSnapshot>,
     slot: u16,
@@ -37,8 +37,7 @@ pub fn save_game(
     name: &CStr,
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
-        let files = uqm_engine::io::save_dir().ok_or(SlotError::NoSaveDir)?;
-        let slots = SaveSlots::new(&files);
+        let slots = SaveSlots::new(files);
         let mut save = capture(cx, solar, name.to_bytes())?;
         *summary = SummaryDesc::from(&save.summary);
         runtime::prepare_summary_for_write(&mut save.summary);

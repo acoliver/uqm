@@ -14,7 +14,7 @@ use super::frames::{Target, FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
 use super::gesture::Gesture;
 use super::keynames::{key_name, sdl2_keys};
 use super::templates::bounded_template_name;
-use crate::io::Dir;
+use crate::{io::Dir, resource::settings::Bindings};
 
 const ALTERNATES: usize = 2;
 const MENU_NAMES: &[&str] = &[
@@ -158,8 +158,8 @@ fn flight_key(template: usize, name: &str, alternate: usize) -> CString {
 }
 
 /// The gesture text of a resource string, if the resource exists.
-fn resource_gesture(key: &CStr) -> Option<Option<Gesture>> {
-    let spec = crate::resource::string(key.to_str().ok()?)?;
+fn resource_gesture(bindings: &Bindings, key: &CStr) -> Option<Option<Gesture>> {
+    let spec = bindings.string(key.to_str().ok()?)?;
     Some(Gesture::parse(&spec))
 }
 
@@ -186,11 +186,11 @@ impl DriverState {
         )
     }
 
-    fn register_menu_controls(&self, controls: &InputControls) {
+    fn register_menu_controls(&self, bindings: &Bindings, controls: &InputControls) {
         for (index, name) in MENU_NAMES.iter().take(MENU_KEYS).enumerate() {
             for alternate in 1.. {
                 let key = resource_key(format!("menu.{name}.{alternate}"));
-                let Some(gesture) = resource_gesture(&key) else {
+                let Some(gesture) = resource_gesture(bindings, &key) else {
                     break;
                 };
                 if let Some(gesture) = gesture {
@@ -200,16 +200,16 @@ impl DriverState {
         }
     }
 
-    fn register_flight_controls(&mut self, controls: &InputControls) {
+    fn register_flight_controls(&mut self, bindings: &Bindings, controls: &InputControls) {
         for template in 0..TEMPLATES {
             let key = resource_key(format!("keys.{}.name", template + 1));
-            let name = resource_gesture_name(&key);
+            let name = resource_gesture_name(bindings, &key);
             self.names[template] = bounded_template_name(&name).to_string_lossy().into_owned();
             for (control, name) in FLIGHT_NAMES.iter().take(FLIGHT_KEYS).enumerate() {
                 for alternate in 0..ALTERNATES {
                     let key = flight_key(template, name, alternate);
                     let index = (template * FLIGHT_KEYS + control) * ALTERNATES + alternate;
-                    let Some(gesture) = resource_gesture(&key) else {
+                    let Some(gesture) = resource_gesture(bindings, &key) else {
                         self.configured[index] = None;
                         continue;
                     };
@@ -224,10 +224,10 @@ impl DriverState {
 }
 
 /// The value of a string resource, empty when it is absent.
-fn resource_gesture_name(key: &CStr) -> CString {
+fn resource_gesture_name(bindings: &Bindings, key: &CStr) -> CString {
     key.to_str()
         .ok()
-        .and_then(crate::resource::string)
+        .and_then(|key| bindings.string(key))
         .map_or_else(CString::default, |name| {
             CString::new(name).unwrap_or_else(|_| panic!("resource string contains NUL"))
         })
@@ -247,27 +247,35 @@ impl std::error::Error for InputInitError {}
 
 /// Start the driver: bring up SDL's joystick subsystem, load the configured
 /// gestures and bind them to `controls`.
-pub fn init_input(controls: &InputControls) -> Result<(), InputInitError> {
+pub fn init_input(
+    controls: &InputControls,
+    bindings: &mut Bindings,
+    content: Option<&Dir>,
+    config: Option<&Dir>,
+) -> Result<(), InputInitError> {
     init_joysticks()?;
-    install_controls(controls);
+    install_controls(controls, bindings, content, config);
     Ok(())
 }
 
-fn install_controls(controls: &InputControls) {
+fn install_controls(
+    controls: &InputControls,
+    bindings: &mut Bindings,
+    content: Option<&Dir>,
+    config: Option<&Dir>,
+) {
     let mut state = INPUT.lock();
     state.character_mode = false;
     controls.vcontrol(|vc| vc.init());
     state.configured = vec![None; TEMPLATES * FLIGHT_KEYS * ALTERNATES];
-    let content = crate::io::content_dir();
-    let config = crate::io::config_dir();
-    load_index(content.as_ref(), c"menu.key", c"menu.");
-    load_index(config.as_ref(), c"override.cfg", c"menu.");
-    state.register_menu_controls(controls);
-    load_index(config.as_ref(), c"flight.cfg", c"keys.");
-    if !crate::resource::has_key("keys.1.name") {
-        load_index(content.as_ref(), c"uqm.key", c"keys.");
+    load_index(bindings, content, c"menu.key", c"menu.");
+    load_index(bindings, config, c"override.cfg", c"menu.");
+    state.register_menu_controls(bindings, controls);
+    load_index(bindings, config, c"flight.cfg", c"keys.");
+    if !bindings.has_key("keys.1.name") {
+        load_index(bindings, content, c"uqm.key", c"keys.");
     }
-    state.register_flight_controls(controls);
+    state.register_flight_controls(bindings, controls);
     controls.vcontrol(|vc| vc.reset_states());
     state.controls = Some(controls.clone());
 }
@@ -299,9 +307,9 @@ fn init_joysticks() -> Result<(), InputInitError> {
 }
 
 /// Load a resource index from `dir`; an absent directory loads nothing.
-fn load_index(dir: Option<&Dir>, file: &CStr, prefix: &CStr) {
+fn load_index(bindings: &mut Bindings, dir: Option<&Dir>, file: &CStr, prefix: &CStr) {
     if let Some(dir) = dir {
-        crate::resource::load_index(dir, file, Some(prefix));
+        bindings.load_index(dir, file, Some(prefix));
     }
 }
 
@@ -311,14 +319,6 @@ pub fn uninit_input() {
         controls.vcontrol(|vc| vc.uninit());
     }
     state.configured = Vec::new();
-}
-
-/// Forget the template names the configuration file defined, so the
-/// resources loaded next provide them.
-pub fn forget_template_names() {
-    for template in 1..=TEMPLATES {
-        crate::resource::remove(&format!("config.keys.{template}.name"));
-    }
 }
 
 pub fn enter_character_mode() {
@@ -484,7 +484,7 @@ pub fn control_name(template: i32, control: i32, alternate: i32) -> String {
 }
 
 /// Unbind a flight control alternate and forget its configured resource.
-pub fn remove_input_state(template: i32, control: i32, alternate: i32) {
+pub fn remove_input_state(bindings: &mut Bindings, template: i32, control: i32, alternate: i32) {
     let mut state = INPUT.lock();
     let Some(index) = DriverState::control_index(template, control, alternate) else {
         crate::log_abi::log_message(
@@ -498,14 +498,18 @@ pub fn remove_input_state(template: i32, control: i32, alternate: i32) {
         controls.vcontrol(|vc| vc.unbind(gesture, flight_target(template, control)));
     }
     state.configured[index] = None;
-    crate::resource::remove(
-        &flight_key(template, FLIGHT_NAMES[control], alternate).to_string_lossy(),
-    );
+    bindings.remove(&flight_key(template, FLIGHT_NAMES[control], alternate).to_string_lossy());
 }
 
 /// Wait for the player to make a gesture and bind it to a flight control
 /// alternate. `poll` runs one frame of the caller's loop between checks.
-pub fn rebind_input_state(template: i32, control: i32, alternate: i32, mut poll: impl FnMut()) {
+pub fn rebind_input_state(
+    bindings: &mut Bindings,
+    template: i32,
+    control: i32,
+    alternate: i32,
+    mut poll: impl FnMut(),
+) {
     let Some(index) = DriverState::control_index(template, control, alternate) else {
         crate::log_abi::log_message(
             crate::logging::LogLevel::Warning,
@@ -513,7 +517,7 @@ pub fn rebind_input_state(template: i32, control: i32, alternate: i32, mut poll:
         );
         return;
     };
-    remove_input_state(template, control, alternate);
+    remove_input_state(bindings, template, control, alternate);
     let Some(controls) = INPUT.lock().controls.clone() else {
         return;
     };
@@ -528,7 +532,7 @@ pub fn rebind_input_state(template: i32, control: i32, alternate: i32, mut poll:
     controls.vcontrol(|vc| vc.bind(gesture, flight_target(template, control)));
     INPUT.lock().configured[index] = Some(gesture);
     let key = flight_key(template, FLIGHT_NAMES[control], alternate);
-    crate::resource::settings::Settings.put_string(&key.to_string_lossy(), &gesture.to_string());
+    bindings.put_string(&key.to_string_lossy(), &gesture.to_string());
 }
 
 #[cfg(test)]

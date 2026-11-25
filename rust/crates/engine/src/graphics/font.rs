@@ -505,13 +505,22 @@ impl LoadedFont {
     }
 
     /// Load a font resource.
-    pub fn load(resource: &CStr) -> Option<Self> {
-        crate::resource::cache::load_font(resource)
+    pub fn load(
+        content: &crate::resource::Content,
+        resource: &std::ffi::CStr,
+    ) -> Result<Self, crate::resource::AssetLoadError> {
+        let resolved = content.require(resource, crate::resource::AssetKind::Font)?;
+        let path = std::ffi::CString::new(resolved.descriptor)
+            .map_err(|error| resolved.load_error(resource, error))?;
+        Self::load_file(resolved.files, &path).map_err(|error| resolved.load_error(resource, error))
     }
 
     /// Load a font directory or package.
-    pub fn load_file(path: &CStr) -> Option<Self> {
-        super::load::load_font_file(path)
+    pub fn load_file(
+        files: &crate::io::Dir,
+        path: &CStr,
+    ) -> Result<Self, crate::resource::FileError> {
+        super::load::load_font_file(files, path)
     }
 
     pub fn lease(&self) -> FontLease {

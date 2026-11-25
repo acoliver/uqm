@@ -24,10 +24,12 @@ fn missing_player_font_aborts_resource_admission() -> Result<(), Box<dyn std::er
     space.select();
     let before = space.selected_context().unwrap().context();
     let mut comm = Comm::new();
-    assert_eq!(
-        uqm_modes::comm::hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)),
-        Err("font.player failed to load".into())
-    );
+    let error = uqm_modes::comm::hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240))
+        .unwrap_err();
+    let asset = error
+        .downcast_ref::<uqm_engine::resource::AssetLoadError>()
+        .unwrap();
+    assert_eq!(asset.key, "font.player");
     assert!(comm.comm_data().is_none());
     assert_eq!(space.selected_context().unwrap().context(), before);
     drop(comm);
@@ -149,7 +151,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
     let mut result = Ok(());
     let display = campaign_display_test::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_content| {},
         |game| {
             result = (|| -> Result<(), Box<dyn std::error::Error>> {
                 game.kernel.space_context = game.kernel.status_context;
@@ -250,7 +252,8 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                         );
                         let definition = descriptor.definition.clone();
                         comm.install_descriptor(descriptor);
-                        uqm_modes::comm::hail::prepare(&mut comm, cx.world, cx.kernel, (320, 240))?;
+                        uqm_modes::comm::hail::prepare(&mut comm, cx.world, cx.kernel, (320, 240))
+                            .map_err(|error| error as Box<dyn std::error::Error>)?;
                         comm.set_conversation_phrases(Some(phrases.into()));
                         intro(&mut comm, &mut cx);
                         // References below are the actual scripts' offered phrase indices.

@@ -57,9 +57,13 @@ pub(crate) mod tests {
             .canonicalize()
             .unwrap();
         let mount = uqm_engine::test_support::native_session::ContentMount::new(&content_root);
-        mount.load_index("uqm.rmp");
-        let palette =
-            uqm_engine::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
+        game.kernel.admit_content(mount.load_index("uqm.rmp"));
+        let palette = uqm_engine::strings::sresins::load_binary_entry(
+            &game.kernel.content(),
+            c"colortable.main",
+            0,
+        )
+        .unwrap();
         uqm_engine::test_support::native_probe::set_color_map(&palette);
         test(&mut game);
         uqm_engine::test_support::native_probe::flush_graphics();
@@ -71,7 +75,7 @@ pub(crate) mod tests {
     #[serial_test::serial]
     fn packaged_load_failures_release_each_acquired_graphic_in_reverse_order() {
         use uqm_engine::collections::observation::{self, Event};
-        with_packaged_resources(|_| {
+        with_packaged_resources(|game| {
             let keys = [
                 "graphics.lander",
                 "graphics.quake",
@@ -85,11 +89,16 @@ pub(crate) mod tests {
             ];
             observation::enable();
             for (successful, key) in keys.into_iter().enumerate() {
-                uqm_engine::test_support::native_session::reload_content_index("uqm.rmp");
+                uqm_engine::test_support::native_session::reload_content_index(
+                    &mut game.kernel,
+                    "uqm.rmp",
+                );
                 uqm_engine::test_support::native_probe::flush_graphics();
                 observation::drain();
-                uqm_engine::test_support::native_session::remove_resource(key);
-                assert!(matches!(LanderResources::load(), Err(failed) if failed == key));
+                uqm_engine::test_support::native_session::remove_resource(&mut game.kernel, key);
+                assert!(
+                    matches!(LanderResources::load(&game.kernel.content()), Err(failed) if failed.key == key)
+                );
                 uqm_engine::test_support::native_probe::flush_graphics();
                 let events = observation::drain();
                 let acquired: Vec<_> = events
@@ -120,8 +129,8 @@ pub(crate) mod tests {
     #[serial_test::serial]
     fn packaged_assets_retain_frames_sounds_and_music_after_independent_owner_release() {
         with_packaged_resources(|game| {
-            let first = LanderResources::load().unwrap();
-            let second = LanderResources::load().unwrap();
+            let first = LanderResources::load(&game.kernel.content()).unwrap();
+            let second = LanderResources::load(&game.kernel.content()).unwrap();
             let assets = PlanetSideAssets::retain(&first);
             let first_sound = first.sounds().clip(0);
             let second_sound = second.sounds().clip(0);
@@ -138,6 +147,7 @@ pub(crate) mod tests {
             drop(first);
             assert_eq!(frame.alpha_occupancy().unwrap(), expected);
             let mut visuals = crate::planet_side::visual_adapter::CffiSurfaceVisuals::new(
+                game.kernel.content(),
                 frame.clone(),
                 None,
                 std::array::from_fn(|_| None),

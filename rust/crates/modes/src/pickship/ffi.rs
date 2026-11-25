@@ -410,8 +410,8 @@ pub(crate) fn draw_armada_pick_ship_in(
                 .context_frame(3),
         )
     };
-    let owner = LoadedDrawable::load(c"graphics.pickship")
-        .unwrap_or_else(|| panic!("missing picker graphic"));
+    let owner = LoadedDrawable::load(&kernel.content(), c"graphics.pickship")
+        .unwrap_or_else(|error| panic!("missing picker graphic: {error}"));
     let frames = owner.lease();
     let frame = frames.context_frame(0);
     frame.replace_hotspot(uqm_engine::graphics::geometry::Point { x: 0, y: 0 });

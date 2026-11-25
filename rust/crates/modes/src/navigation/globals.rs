@@ -49,6 +49,7 @@ fn fleet_template(info: &ShipInfoRecord, fleet: &FleetRecord) -> FleetTemplate {
 }
 
 fn initialize_races(cx: &mut uqm_engine::battle::Cx<'_>) {
+    let content = cx.kernel.content();
     let kernel = &mut *cx.kernel;
     cx.world.initialize_fleets(
         FleetRoster {
@@ -60,7 +61,9 @@ fn initialize_races(cx: &mut uqm_engine::battle::Cx<'_>) {
         },
         |world, species| {
             if species == SpeciesId::UrQuanProbe as u32 {
-                if let Some(desc) = uqm_engine::battle::RaceDesc::load(world, species, false) {
+                if let Some(desc) =
+                    uqm_engine::battle::RaceDesc::load(&content, world, species, false)
+                {
                     let template = fleet_template(desc.info(), desc.fleet());
                     world.retain_fleet_resources(species, desc.picker_resources());
                     let assets = desc.into_campaign_probe(world);

@@ -18,6 +18,7 @@ use uqm_engine::world::generation::{ReportDisposition, SolarSys};
 use uqm_engine::world::StarId;
 
 pub struct Site<'a, 'game, 'observer> {
+    content: Option<uqm_engine::resource::Content>,
     pub(crate) game: &'a RefCell<Cx<'game>>,
     io: &'a RefCell<Io<'observer>>,
     pickup: &'a mut crate::planet_side::special_effects::PickupContext,
@@ -31,6 +32,12 @@ pub struct Site<'a, 'game, 'observer> {
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
+    fn content(&self) -> &uqm_engine::resource::Content {
+        self.content
+            .as_ref()
+            .unwrap_or_else(|| panic!("site content not admitted"))
+    }
+
     pub fn new(
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
@@ -40,7 +47,9 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         pickup: &'a mut crate::planet_side::special_effects::PickupContext,
         report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Self {
+        let content = game.borrow().kernel.admitted_content();
         Self {
+            content,
             game,
             io,
             pickup,
@@ -93,10 +102,12 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
 
     fn load_report(&self, system: &mut SolarSys<'_>, strings: &CStr, report: u16) {
         use uqm_engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
-        self.report_resources.load();
+        self.report_resources.load(self.content());
         {
             system.report = ReportSlot::new(
-                LoadedTextTable::load(strings).and_then(|table| table.entry(report)),
+                LoadedTextTable::load(self.content(), strings)
+                    .ok()
+                    .and_then(|table| table.entry(report)),
             );
         };
     }
@@ -105,11 +116,13 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         use uqm_engine::graphics::drawable::LoadedDrawable;
         use uqm_engine::strings::owned_table::LoadedTextTable;
         use uqm_engine::world::generation::ReportSlot;
-        self.report_resources.load();
+        self.report_resources.load(self.content());
         {
-            system.frames[1] = LoadedDrawable::load(graphics);
+            system.frames[1] = LoadedDrawable::load(self.content(), graphics).ok();
             system.report = ReportSlot::new(
-                LoadedTextTable::load(strings).and_then(|table| table.entry(report)),
+                LoadedTextTable::load(self.content(), strings)
+                    .ok()
+                    .and_then(|table| table.entry(report)),
             );
         };
     }

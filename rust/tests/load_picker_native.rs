@@ -19,6 +19,15 @@ use uqm_rust::{
 
 struct NoLifecycle;
 impl RestartHost for NoLifecycle {
+    fn setup(
+        &mut self,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
+        _: uqm_engine::graphics::context::ContextLease,
+        _: uqm_engine::graphics::font::FontLease,
+    ) {
+        panic!("unexpected setup");
+    }
     fn melee(&mut self, _: &mut uqm_engine::battle::Cx<'_>, _: &mut uqm_engine::observe::Io<'_>) {
         panic!("unexpected melee");
     }
@@ -175,20 +184,22 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                 assert!(vc.add_key_binding(ESCAPE, Target::Menu(CANCEL)));
             });
 
+            let vfs = uqm_engine::io::Vfs::new();
+            vfs.mount_dir("/", profile.path(), uqm_engine::io::Placement::Top, false);
+            let files = vfs.open_dir(std::path::Path::new("/save"));
+            battle_context::with(|cx| {
+                cx.kernel
+                    .install_save_slots(uqm_rust::savegame::live::slots(files.clone()))
+            });
             let mut summaries = [SUMMARY_DESC::default(); 50];
             assert!(!profile.path().join("save").exists());
-            load_game_descriptions(&mut summaries);
+            load_game_descriptions(&files, &mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             open_from_restart_while_select_is_held(input, false);
 
             let saves = profile.path().join("save");
             std::fs::create_dir(&saves).unwrap();
-            let vfs = uqm_engine::io::Vfs::new();
-            vfs.mount_dir("/", &saves, uqm_engine::io::Placement::Top, false);
-            let files = vfs.open_dir(std::path::Path::new("/"));
-            vfs.set_save_dir(files.clone());
-            let previous = uqm_engine::io::install(vfs);
-            load_game_descriptions(&mut summaries);
+            load_game_descriptions(&files, &mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             let slots = SaveSlots::new(&files);
             let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
@@ -211,7 +222,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
             for _ in 0..10 {
                 crate::battle_context::with(|cx| cx.world.set_activity(4));
-                load_game_descriptions(&mut summaries);
+                load_game_descriptions(&files, &mut summaries);
                 assert_eq!(
                     crate::battle_context::with(|cx| cx.world.activity()),
                     4,
@@ -239,14 +250,6 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                 picker_action(false, false, true, true, false),
                 PickerAction::Select
             );
-            match previous {
-                Some(previous) => {
-                    uqm_engine::io::install(previous);
-                }
-                None => {
-                    uqm_engine::io::uninstall();
-                }
-            }
             uqm_engine::input_port::sdl_input::uninit_input();
             uqm_engine::graphics::state::uninit_headless();
         }

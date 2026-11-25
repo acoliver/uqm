@@ -8,7 +8,7 @@ use crate::supermelee::setup::builtin::builtin_teams;
 use crate::supermelee::setup::config::{load_melee_config, save_melee_config, ConfigLoadResult};
 use crate::supermelee::setup::team::MeleeSetup;
 use crate::supermelee::types::{FleetShipIndex, MeleeShip, PlayerControl, NUM_SIDES};
-use std::path::Path;
+use uqm_engine::host::Files;
 
 // ---------------------------------------------------------------------------
 // Melee menu option (matches C MELEE_OPTIONS enum)
@@ -90,7 +90,7 @@ impl MeleeState {
     ///
     /// Matches C `Melee()` entry: tries `LoadMeleeConfig`, falls back to
     /// built-in teams 0 and 1 with HUMAN/COMPUTER control.
-    pub fn init(&mut self, config_dir: &Path) -> Result<(), SuperMeleeError> {
+    pub fn init(&mut self, config_dir: &dyn Files) -> Result<(), SuperMeleeError> {
         let result = load_melee_config(config_dir, &mut self.setup);
 
         match result {
@@ -127,7 +127,7 @@ impl MeleeState {
     // -----------------------------------------------------------------------
 
     /// Persists setup state and cleans up (matches C `Melee()` exit).
-    pub fn teardown(&self, config_dir: &Path) -> Result<(), SuperMeleeError> {
+    pub fn teardown(&self, config_dir: &dyn Files) -> Result<(), SuperMeleeError> {
         save_melee_config(config_dir, &self.setup)?;
         Ok(())
     }
@@ -197,14 +197,17 @@ impl MeleeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn directory(path: &std::path::Path) -> uqm_engine::io::Dir {
+        uqm_engine::io::Vfs::new().open_host_dir(path)
+    }
     use crate::supermelee::setup::config::save_melee_config;
     use crate::supermelee::types::MeleeShip;
 
     #[test]
     fn melee_entry_initializes_runtime_state() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let mut state = MeleeState::new();
-        state.init(dir.path()).unwrap();
+        state.init(&directory(dir.path())).unwrap();
         assert!(state.initialized);
         assert_eq!(state.side, 0);
         assert_eq!(state.current_ship, MeleeShip::MeleeNone);
@@ -212,10 +215,10 @@ mod tests {
 
     #[test]
     fn invalid_or_missing_config_uses_builtin_fallback() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let mut state = MeleeState::new();
-        state.init(dir.path()).unwrap(); // no melee.cfg → fallback
-                                         // Should have teams from built-in catalog
+        state.init(&directory(dir.path())).unwrap(); // no melee.cfg → fallback
+                                                     // Should have teams from built-in catalog
         assert!(state.setup.is_playable(0));
         assert!(state.setup.is_playable(1));
         // Side 0 should be HUMAN, side 1 COMPUTER
@@ -225,16 +228,16 @@ mod tests {
 
     #[test]
     fn valid_config_restores_state() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         // Save a config
         let mut setup = MeleeSetup::new();
         setup.set_ship(0, 0, MeleeShip::Urquan).unwrap();
         setup.set_ship(1, 0, MeleeShip::Pkunk).unwrap();
         setup.set_team_name(0, "Saved A").unwrap();
-        save_melee_config(dir.path(), &setup).unwrap();
+        save_melee_config(&directory(dir.path()), &setup).unwrap();
         // Init should restore it
         let mut state = MeleeState::new();
-        state.init(dir.path()).unwrap();
+        state.init(&directory(dir.path())).unwrap();
         assert_eq!(state.setup.teams[0].ships[0], MeleeShip::Urquan);
         assert_eq!(state.setup.teams[1].ships[0], MeleeShip::Pkunk);
         assert_eq!(state.setup.teams[0].name_str(), "Saved A");
@@ -276,14 +279,14 @@ mod tests {
 
     #[test]
     fn exit_path_persists_state() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = uqm_engine::test_support::native_session::FixtureFiles::new();
         let mut state = MeleeState::new();
-        state.init(dir.path()).unwrap();
+        state.init(&directory(dir.path())).unwrap();
         state.setup.set_ship(0, 0, MeleeShip::Vux).unwrap();
-        state.teardown(dir.path()).unwrap();
+        state.teardown(&directory(dir.path())).unwrap();
         // Reload and verify
         let mut state2 = MeleeState::new();
-        state2.init(dir.path()).unwrap();
+        state2.init(&directory(dir.path())).unwrap();
         assert_eq!(state2.setup.teams[0].ships[0], MeleeShip::Vux);
     }
 

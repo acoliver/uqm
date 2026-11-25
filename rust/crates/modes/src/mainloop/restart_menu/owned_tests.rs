@@ -9,13 +9,27 @@ use uqm_engine::{
 
 struct NoLifecycle;
 impl RestartHost for NoLifecycle {
-    fn melee(&mut self, _: &mut Cx<'_>, _: &mut Io<'_>) {
+    fn setup(
+        &mut self,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
+        _: uqm_engine::graphics::context::ContextLease,
+        _: uqm_engine::graphics::font::FontLease,
+    ) {
+        panic!("unexpected setup");
+    }
+    fn melee(&mut self, _: &mut uqm_engine::battle::Cx<'_>, _: &mut uqm_engine::observe::Io<'_>) {
         panic!("unexpected melee request");
     }
-    fn credits(&mut self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool) {
+    fn credits(
+        &mut self,
+        _: &mut uqm_engine::battle::Cx<'_>,
+        _: &mut uqm_engine::observe::Io<'_>,
+        _: bool,
+    ) {
         panic!("unexpected credits request");
     }
-    fn free_game_data(&mut self, _: &mut Cx<'_>) {
+    fn free_game_data(&mut self, _: &mut uqm_engine::battle::Cx<'_>) {
         panic!("unexpected campaign teardown");
     }
 }
@@ -158,7 +172,7 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
     };
     let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
-        || {},
+        |_| {},
         |game| {
             let context = ContextLease::require(game.kernel.status_context);
             game.kernel.screen_context = game.kernel.status_context;
@@ -205,7 +219,9 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
                     .any(|y| (300..320).any(|x| rgba(Point { x, y }) == (255, 255, 255, 255))),
                 "the version label must render with the retained tiny font"
             );
+            let content = game.kernel.content();
             drop(std::mem::replace(game, Game::new()));
+            game.kernel.admit_content(content);
             let mut cx = Cx::new(
                 &mut battle,
                 &mut game.world,
