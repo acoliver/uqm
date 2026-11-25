@@ -9,14 +9,7 @@ use uqm_modes::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_modes::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
 
 pub fn check(h: &mut Harness) {
-    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../sc2/content")
-        .canonicalize()
-        .unwrap_or_else(|error| panic!("canonical content directory: {error}"));
-    c_api::log_init(100);
-    let mount = uqm_engine::test_support::native_session::ContentMount::new(&content);
-    let content = mount.load_index("uqm.rmp");
-    crate::battle_context::with(|cx| cx.kernel.admit_content(content.clone()));
+    let content = crate::battle_context::with(|cx| cx.kernel.content());
     names(h, &content);
     binary_palettes(&content);
     scenes(h);
@@ -121,7 +114,6 @@ pub fn check(h: &mut Harness) {
         baseline,
         "real Earth generation/rescale/cleanup must release all graphics allocations"
     );
-    drop(mount);
 }
 
 fn frame_rgb(frame: uqm_engine::graphics::drawable::FrameId) -> Vec<[u8; 3]> {
