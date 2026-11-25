@@ -366,7 +366,10 @@ pub fn edit_text(
         return false;
     }
     let mut editor = Editor::new(buffer, capacity, cursor);
-    let alphabet = Alphabet::load(&cx.kernel.content());
+    let alphabet = cx
+        .kernel
+        .admitted_content()
+        .map_or_else(Alphabet::default, |content| Alphabet::load(&content));
     enter_character_mode();
     cx.run_input(io, true, |cx, io| {
         editor.frame(cx, io, input, &alphabet, callbacks)
